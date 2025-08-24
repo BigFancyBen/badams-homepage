@@ -2,6 +2,50 @@
 
 import { useState, useEffect } from "react";
 
+// Custom hook for window dimensions with SSR safety
+function useWindowSize() {
+  const [windowSize, setWindowSize] = useState({
+    width: 0,
+    height: 0,
+  });
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+    
+    function handleResize() {
+      setWindowSize({
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+    }
+
+    // Set initial size
+    handleResize();
+    
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
+    
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
+    };
+  }, []);
+
+  return { ...windowSize, isClient };
+}
+
+// Mobile detection utilities
+function useMobileDetection() {
+  const { width, height, isClient } = useWindowSize();
+  
+  const isMobileLandscape = isClient && height < 500 && width > height;
+  const isMobilePortrait = isClient && width < 768 && height > width;
+  const isLandscape = isClient && width > height;
+  
+  return { isMobileLandscape, isMobilePortrait, isLandscape, isClient };
+}
+
 interface HistoryEntry {
   action: string;
   timestamp: number;
@@ -17,28 +61,15 @@ interface PlayerState {
   isDead: boolean;
 }
 
-export default function CommanderPage() {
-  // Determine initial rotation based on mobile landscape
-  const getInitialRotation = () => {
-    if (typeof window !== "undefined") {
-      // Use height to detect mobile in landscape (height < 500 typically indicates mobile landscape)
-      const isMobileLandscape =
-        window.innerHeight < 500 && window.innerWidth > window.innerHeight;
-      const isMobilePortrait =
-        window.innerWidth < 768 && window.innerHeight > window.innerWidth;
-      const isLandscape = window.innerWidth > window.innerHeight;
-
-      // For mobile devices in landscape orientation, start rotated 90°
-      return isMobileLandscape || (isMobilePortrait && isLandscape) ? 90 : 0;
-    }
-    return 0;
-  };
+function CommanderPageContent() {
+  // Use custom hooks for mobile detection
+  const { isMobileLandscape, isMobilePortrait, isLandscape, isClient } = useMobileDetection();
 
   const [players, setPlayers] = useState<PlayerState[]>([
     {
       life: 40,
       commanderDamage: [0, 0, 0],
-      rotation: getInitialRotation(),
+      rotation: 0, // Will be set properly on client-side
       name: "Player 1",
       history: [],
       poison: 0,
@@ -47,7 +78,7 @@ export default function CommanderPage() {
     {
       life: 40,
       commanderDamage: [0, 0, 0],
-      rotation: getInitialRotation(),
+      rotation: 0, // Will be set properly on client-side
       name: "Player 2",
       history: [],
       poison: 0,
@@ -56,7 +87,7 @@ export default function CommanderPage() {
     {
       life: 40,
       commanderDamage: [0, 0, 0],
-      rotation: getInitialRotation(),
+      rotation: 0, // Will be set properly on client-side
       name: "Player 3",
       history: [],
       poison: 0,
@@ -65,7 +96,7 @@ export default function CommanderPage() {
     {
       life: 40,
       commanderDamage: [0, 0, 0],
-      rotation: getInitialRotation(),
+      rotation: 0, // Will be set properly on client-side
       name: "Player 4",
       history: [],
       poison: 0,
@@ -78,35 +109,18 @@ export default function CommanderPage() {
   const [rotatingPlayer, setRotatingPlayer] = useState<number | null>(null);
   const [saveNames, setSaveNames] = useState(false);
 
-  // Handle orientation changes on mobile
+  // Handle orientation changes for mobile devices
   useEffect(() => {
-    const handleOrientationChange = () => {
-      if (typeof window !== "undefined") {
-        const isMobileLandscape =
-          window.innerHeight < 500 && window.innerWidth > window.innerHeight;
-        const isMobilePortrait =
-          window.innerWidth < 768 && window.innerHeight > window.innerWidth;
-        const isLandscape = window.innerWidth > window.innerHeight;
-
-        if (isMobileLandscape || isMobilePortrait) {
-          setPlayers((prev) =>
-            prev.map((player) => ({
-              ...player,
-              rotation: isLandscape ? 90 : 0,
-            }))
-          );
-        }
-      }
-    };
-
-    window.addEventListener("resize", handleOrientationChange);
-    window.addEventListener("orientationchange", handleOrientationChange);
-
-    return () => {
-      window.removeEventListener("resize", handleOrientationChange);
-      window.removeEventListener("orientationchange", handleOrientationChange);
-    };
-  }, []);
+    if (isClient && (isMobileLandscape || isMobilePortrait)) {
+      // Update all players to face correctly for mobile
+      setPlayers((prev) =>
+        prev.map((player) => ({
+          ...player,
+          rotation: isLandscape ? 90 : 0,
+        }))
+      );
+    }
+  }, [isClient, isMobileLandscape, isMobilePortrait, isLandscape]);
 
   // Load saved settings and player names on component mount
   useEffect(() => {
@@ -284,12 +298,7 @@ export default function CommanderPage() {
     setPlayers((prev) =>
       prev.map((player, index) => {
         if (index === playerIndex) {
-          // Detect mobile using height for landscape detection
-          const isMobileLandscape =
-            window.innerHeight < 500 && window.innerWidth > window.innerHeight;
-          const isMobilePortrait =
-            window.innerWidth < 768 && window.innerHeight > window.innerWidth;
-          const isLandscape = window.innerWidth > window.innerHeight;
+          // Use client-side mobile detection state
 
           let newRotation: number;
           if (isMobileLandscape || isMobilePortrait) {
@@ -471,10 +480,7 @@ export default function CommanderPage() {
                 : ""
             }`}
             title={
-              (window.innerHeight < 500 &&
-                window.innerWidth > window.innerHeight) ||
-              (window.innerWidth < 768 &&
-                window.innerHeight > window.innerWidth)
+              isMobileLandscape || isMobilePortrait
                 ? "Flip view"
                 : "Rotate view"
             }
@@ -756,10 +762,7 @@ export default function CommanderPage() {
           <div
             className={`bg-[#2a2a2a] w-full max-h-[90vh] overflow-y-auto ${
               // Mobile-specific sizing
-              (window.innerHeight < 500 &&
-                window.innerWidth > window.innerHeight) ||
-              (window.innerWidth < 768 &&
-                window.innerHeight > window.innerWidth)
+              isMobileLandscape || isMobilePortrait
                 ? "max-w-[95vw] p-4" // Mobile: wider, less padding
                 : "max-w-md p-8 mx-4" // Desktop: normal
             }`}
@@ -767,10 +770,7 @@ export default function CommanderPage() {
             <h3
               className={`font-bold text-[#f5f5f5] mb-4 tracking-wide ${
                 // Mobile-specific text sizing
-                (window.innerHeight < 500 &&
-                  window.innerWidth > window.innerHeight) ||
-                (window.innerWidth < 768 &&
-                  window.innerHeight > window.innerWidth)
+                isMobileLandscape || isMobilePortrait
                   ? "text-lg" // Mobile: smaller header
                   : "text-2xl mb-6" // Desktop: larger header
               }`}
@@ -783,10 +783,7 @@ export default function CommanderPage() {
               <h4
                 className={`font-bold text-[#cccccc] tracking-wide mb-3 ${
                   // Mobile-specific text sizing
-                  (window.innerHeight < 500 &&
-                    window.innerWidth > window.innerHeight) ||
-                  (window.innerWidth < 768 &&
-                    window.innerHeight > window.innerWidth)
+                  isMobileLandscape || isMobilePortrait
                     ? "text-base" // Mobile: smaller subheader
                     : "text-lg" // Desktop: larger subheader
                 }`}
@@ -796,8 +793,7 @@ export default function CommanderPage() {
               <div
                 className={`${
                   // Mobile landscape: grid layout
-                  window.innerHeight < 500 &&
-                  window.innerWidth > window.innerHeight
+                  isMobileLandscape
                     ? "grid grid-cols-2 gap-2"
                     : "space-y-3"
                 }`}
@@ -807,8 +803,7 @@ export default function CommanderPage() {
                     key={index}
                     className={`flex items-center ${
                       // Mobile landscape: adjust layout
-                      window.innerHeight < 500 &&
-                      window.innerWidth > window.innerHeight
+                      isMobileLandscape
                         ? "flex-col gap-1"
                         : "gap-3"
                     }`}
@@ -816,8 +811,7 @@ export default function CommanderPage() {
                     <span
                       className={`text-[#b3b3b3] font-semibold ${
                         // Mobile-specific label sizing
-                        window.innerHeight < 500 &&
-                        window.innerWidth > window.innerHeight
+                        isMobileLandscape
                           ? "text-xs w-full text-center"
                           : "text-sm w-20"
                       }`}
@@ -837,10 +831,7 @@ export default function CommanderPage() {
                       }
                       className={`flex-1 bg-[#1a1a1a] text-[#e5e5e5] focus:border-[#4ade80] focus:ring-2 focus:ring-[#4ade80]/20 focus:outline-none transition-all duration-200 font-medium ${
                         // Mobile-specific input sizing
-                        (window.innerHeight < 500 &&
-                          window.innerWidth > window.innerHeight) ||
-                        (window.innerWidth < 768 &&
-                          window.innerHeight > window.innerWidth)
+                        isMobileLandscape || isMobilePortrait
                           ? "px-2 py-2 text-sm" // Mobile: smaller input
                           : "px-4 py-3" // Desktop: larger input
                       }`}
@@ -871,10 +862,7 @@ export default function CommanderPage() {
                   <span
                     className={`text-[#cccccc] font-medium ${
                       // Mobile-specific text sizing
-                      (window.innerHeight < 500 &&
-                        window.innerWidth > window.innerHeight) ||
-                      (window.innerWidth < 768 &&
-                        window.innerHeight > window.innerWidth)
+                      isMobileLandscape || isMobilePortrait
                         ? "text-sm" // Mobile: smaller text
                         : "text-base" // Desktop: normal text
                     }`}
@@ -1019,4 +1007,20 @@ export default function CommanderPage() {
       </div>
     </div>
   );
+}
+
+// Default export with loading state for SSR compatibility
+export default function CommanderPage() {
+  const { isClient } = useMobileDetection();
+  
+  // Show loading state during hydration
+  if (!isClient) {
+    return (
+      <div className="w-screen h-screen bg-[#1a1a1a] flex items-center justify-center">
+        <div className="text-[#cccccc] text-lg">Loading Commander...</div>
+      </div>
+    );
+  }
+  
+  return <CommanderPageContent />;
 }
