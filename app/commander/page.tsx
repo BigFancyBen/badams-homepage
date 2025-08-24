@@ -12,7 +12,7 @@ function useWindowSize() {
 
   useEffect(() => {
     setIsClient(true);
-    
+
     function handleResize() {
       setWindowSize({
         width: window.innerWidth,
@@ -22,13 +22,13 @@ function useWindowSize() {
 
     // Set initial size
     handleResize();
-    
-    window.addEventListener('resize', handleResize);
-    window.addEventListener('orientationchange', handleResize);
-    
+
+    window.addEventListener("resize", handleResize);
+    window.addEventListener("orientationchange", handleResize);
+
     return () => {
-      window.removeEventListener('resize', handleResize);
-      window.removeEventListener('orientationchange', handleResize);
+      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("orientationchange", handleResize);
     };
   }, []);
 
@@ -38,11 +38,11 @@ function useWindowSize() {
 // Mobile detection utilities
 function useMobileDetection() {
   const { width, height, isClient } = useWindowSize();
-  
+
   const isMobileLandscape = isClient && height < 500 && width > height;
   const isMobilePortrait = isClient && width < 768 && height > width;
   const isLandscape = isClient && width > height;
-  
+
   return { isMobileLandscape, isMobilePortrait, isLandscape, isClient };
 }
 
@@ -63,7 +63,8 @@ interface PlayerState {
 
 function CommanderPageContent() {
   // Use custom hooks for mobile detection
-  const { isMobileLandscape, isMobilePortrait, isLandscape, isClient } = useMobileDetection();
+  const { isMobileLandscape, isMobilePortrait, isLandscape, isClient } =
+    useMobileDetection();
 
   const [players, setPlayers] = useState<PlayerState[]>([
     {
@@ -793,9 +794,7 @@ function CommanderPageContent() {
               <div
                 className={`${
                   // Mobile landscape: grid layout
-                  isMobileLandscape
-                    ? "grid grid-cols-2 gap-2"
-                    : "space-y-3"
+                  isMobileLandscape ? "grid grid-cols-2 gap-2" : "space-y-3"
                 }`}
               >
                 {players.map((player, index) => (
@@ -803,9 +802,7 @@ function CommanderPageContent() {
                     key={index}
                     className={`flex items-center ${
                       // Mobile landscape: adjust layout
-                      isMobileLandscape
-                        ? "flex-col gap-1"
-                        : "gap-3"
+                      isMobileLandscape ? "flex-col gap-1" : "gap-3"
                     }`}
                   >
                     <span
@@ -1012,7 +1009,7 @@ function CommanderPageContent() {
 // Default export with loading state for SSR compatibility
 export default function CommanderPage() {
   const { isClient } = useMobileDetection();
-  
+
   // Show loading state during hydration
   if (!isClient) {
     return (
@@ -1021,6 +1018,6 @@ export default function CommanderPage() {
       </div>
     );
   }
-  
+
   return <CommanderPageContent />;
 }
