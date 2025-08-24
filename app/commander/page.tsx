@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 // Custom hook for window dimensions with SSR safety
 function useWindowSize() {
@@ -144,7 +144,7 @@ function CommanderPageContent() {
   }, []);
 
   // Save settings and player names to localStorage
-  const saveToLocalStorage = () => {
+  const saveToLocalStorage = useCallback(() => {
     if (typeof window !== "undefined" && saveNames) {
       const playerNames = players.map((player) => player.name);
       const settings = {
@@ -153,7 +153,7 @@ function CommanderPageContent() {
       };
       localStorage.setItem("commander-settings", JSON.stringify(settings));
     }
-  };
+  }, [saveNames, players]);
 
   // Update localStorage whenever saveNames or players change
   useEffect(() => {
@@ -1009,11 +1009,11 @@ function CommanderPageContent() {
 // Default export with loading state for SSR compatibility
 export default function CommanderPage() {
   const [isClient, setIsClient] = useState(false);
-  
+
   useEffect(() => {
     setIsClient(true);
   }, []);
-  
+
   // Show loading state during hydration
   if (!isClient) {
     return (
@@ -1022,6 +1022,6 @@ export default function CommanderPage() {
       </div>
     );
   }
-  
+
   return <CommanderPageContent />;
 }
