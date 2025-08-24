@@ -131,7 +131,7 @@ function CommanderPageContent() {
       const savedSettings = localStorage.getItem("commander-settings");
       const savedGameState = localStorage.getItem("commander-game-state");
 
-      // Load complete game state if it exists (this takes precedence)
+      // Load complete game state if it exists (this takes precedence for players)
       if (savedGameState) {
         try {
           const gameState = JSON.parse(savedGameState);
@@ -141,8 +141,8 @@ function CommanderPageContent() {
             gameState.players.length === 4
           ) {
             setPlayers(gameState.players);
-            setHasLoadedInitialState(true);
-            return; // Exit early if we loaded game state successfully
+            // Still need to load settings even if game state exists
+            // Don't return early, continue to settings loading
           }
         } catch (error) {
           console.error("Failed to load game state:", error);
@@ -151,11 +151,12 @@ function CommanderPageContent() {
         }
       }
 
-      // Only load player names if we didn't load a complete game state
+      // Load settings (player names and scoreboard setting)
       if (savedSettings) {
         try {
           const settings = JSON.parse(savedSettings);
-          if (settings.playerNames) {
+          // Only update player names if we didn't load them from game state
+          if (settings.playerNames && !savedGameState) {
             setPlayers((prev) =>
               prev.map((player, index) => ({
                 ...player,
@@ -848,8 +849,7 @@ function CommanderPageContent() {
                     <div className="p-2 pointer-events-none">
                       <div className="flex items-center justify-center mb-1 h-5">
                         <span className="text-xs text-[#e5e5e5] font-bold leading-none tracking-wide whitespace-nowrap">
-                          {playerAbbrevs[sourceIndex]}:{" "}
-                          {player.commanderDamage[i]}
+                          {playerAbbrevs[sourceIndex]} {player.commanderDamage[i]}
                         </span>
                       </div>
                       <div className="flex gap-1 justify-center items-center">
@@ -969,7 +969,9 @@ function CommanderPageContent() {
       {/* Menu Modal */}
       {isMenuOpen && (
         <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-40 p-4">
-          <div className="bg-[#222222] border border-[#333333] w-full max-w-md mx-4 p-6">
+          <div className={`bg-[#222222] border border-[#333333] w-full max-w-md mx-4 ${
+            isMobileLandscape || isMobilePortrait ? "p-4" : "p-6"
+          }`}>
             <h3 className="text-xl font-bold text-[#ffffff] mb-6 text-center tracking-wide">
               Game Settings
             </h3>
@@ -1007,15 +1009,20 @@ function CommanderPageContent() {
             {/* Scoreboard Settings - Desktop only */}
             {!isMobileLandscape && !isMobilePortrait && (
               <div className="mb-4">
-                <h4 className="text-sm font-bold text-[#a3a3a3] mb-3 tracking-wide">
-                  DISPLAY:
-                </h4>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-[#e5e5e5] font-medium">
                     Show Center Scoreboard
                   </span>
                   <button
-                    onClick={() => setShowScoreboard(!showScoreboard)}
+                    onClick={() => {
+                      console.log(
+                        "Toggle clicked, current state:",
+                        showScoreboard,
+                        "setting to:",
+                        !showScoreboard
+                      );
+                      setShowScoreboard(!showScoreboard);
+                    }}
                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${
                       showScoreboard ? "bg-[#4ade80]" : "bg-[#404040]"
                     }`}
