@@ -204,13 +204,7 @@ function CommanderPageContent() {
     }
   }, [players, saveGameStateToStorage, hasLoadedInitialState]);
 
-  // Clear saved data from localStorage (only used for complete reset)
-  const clearLocalStorage = () => {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("commander-settings");
-      // Note: We don't clear game state here since it's always saved automatically
-    }
-  };
+
 
   // Generate unique abbreviations for player names
   const generateAbbreviations = () => {
