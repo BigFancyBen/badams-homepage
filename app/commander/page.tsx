@@ -108,7 +108,8 @@ function CommanderPageContent() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [rotatingPlayer, setRotatingPlayer] = useState<number | null>(null);
-  const [saveNames, setSaveNames] = useState(false);
+
+  const [hasLoadedInitialState, setHasLoadedInitialState] = useState(false);
 
   // Handle orientation changes for mobile devices
   useEffect(() => {
@@ -123,15 +124,36 @@ function CommanderPageContent() {
     }
   }, [isClient, isMobileLandscape, isMobilePortrait, isLandscape]);
 
-  // Load saved settings and player names on component mount
+  // Load saved settings, player names, and game state on component mount
   useEffect(() => {
     if (typeof window !== "undefined") {
       const savedSettings = localStorage.getItem("commander-settings");
+      const savedGameState = localStorage.getItem("commander-game-state");
+
+      // Load complete game state if it exists (this takes precedence)
+      if (savedGameState) {
+        try {
+          const gameState = JSON.parse(savedGameState);
+          if (
+            gameState.players &&
+            Array.isArray(gameState.players) &&
+            gameState.players.length === 4
+          ) {
+            setPlayers(gameState.players);
+            setHasLoadedInitialState(true);
+            return; // Exit early if we loaded game state successfully
+          }
+        } catch (error) {
+          console.error("Failed to load game state:", error);
+          // If there's an error loading the game state, remove it
+          localStorage.removeItem("commander-game-state");
+        }
+      }
+
+      // Only load player names if we didn't load a complete game state
       if (savedSettings) {
         const settings = JSON.parse(savedSettings);
-        setSaveNames(settings.saveNames || false);
-
-        if (settings.saveNames && settings.playerNames) {
+        if (settings.playerNames) {
           setPlayers((prev) =>
             prev.map((player, index) => ({
               ...player,
@@ -140,32 +162,53 @@ function CommanderPageContent() {
           );
         }
       }
+
+      // Mark that we've finished loading initial state
+      setHasLoadedInitialState(true);
     }
   }, []);
 
-  // Save settings and player names to localStorage
+  // Save player names to localStorage
   const saveToLocalStorage = useCallback(() => {
-    if (typeof window !== "undefined" && saveNames) {
+    if (typeof window !== "undefined") {
       const playerNames = players.map((player) => player.name);
       const settings = {
-        saveNames: true,
         playerNames: playerNames,
       };
       localStorage.setItem("commander-settings", JSON.stringify(settings));
     }
-  }, [saveNames, players]);
+  }, [players]);
 
-  // Update localStorage whenever saveNames or players change
-  useEffect(() => {
-    if (saveNames) {
-      saveToLocalStorage();
+  // Save complete game state to localStorage
+  const saveGameStateToStorage = useCallback(() => {
+    if (typeof window !== "undefined") {
+      const gameState = {
+        players: players,
+        timestamp: Date.now(),
+      };
+
+      localStorage.setItem("commander-game-state", JSON.stringify(gameState));
     }
-  }, [saveNames, players, saveToLocalStorage]);
+  }, [players]);
 
-  // Clear saved data from localStorage
+  // Update localStorage whenever players change
+  useEffect(() => {
+    saveToLocalStorage();
+  }, [saveToLocalStorage]);
+
+  // Auto-save game state whenever players state changes
+  useEffect(() => {
+    // Only save if we're on the client and have finished loading initial state
+    if (typeof window !== "undefined" && hasLoadedInitialState) {
+      saveGameStateToStorage();
+    }
+  }, [players, saveGameStateToStorage, hasLoadedInitialState]);
+
+  // Clear saved data from localStorage (only used for complete reset)
   const clearLocalStorage = () => {
     if (typeof window !== "undefined") {
       localStorage.removeItem("commander-settings");
+      // Note: We don't clear game state here since it's always saved automatically
     }
   };
 
@@ -362,23 +405,11 @@ function CommanderPageContent() {
   };
 
   const updatePlayerName = (playerIndex: number, name: string) => {
-    setPlayers((prev) => {
-      const newPlayers = prev.map((player, index) =>
+    setPlayers((prev) =>
+      prev.map((player, index) =>
         index === playerIndex ? { ...player, name } : player
-      );
-
-      // Save to localStorage if persistence is enabled
-      if (saveNames && typeof window !== "undefined") {
-        const playerNames = newPlayers.map((player) => player.name);
-        const settings = {
-          saveNames: true,
-          playerNames: playerNames,
-        };
-        localStorage.setItem("commander-settings", JSON.stringify(settings));
-      }
-
-      return newPlayers;
-    });
+      )
+    );
   };
 
   const resetGame = () => {
@@ -395,6 +426,14 @@ function CommanderPageContent() {
     );
     setShowResetConfirm(false);
     setIsMenuOpen(false);
+
+    // Clear the saved game state but keep the settings
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("commander-game-state");
+    }
+
+    // Reset will trigger auto-save of the new clean state
+    setHasLoadedInitialState(true);
   };
 
   const handleResetClick = () => {
@@ -454,7 +493,11 @@ function CommanderPageContent() {
         )}
 
         {/* Corner Controls - positioned outside of rotated container */}
-        <div className="absolute top-2 right-2 flex flex-col gap-1 z-30">
+        <div
+          className={`absolute top-2 flex flex-col gap-1 z-30 ${
+            playerIndex === 3 ? "left-2" : "right-2"
+          }`}
+        >
           <button
             onClick={() => togglePlayerDead(playerIndex)}
             className={`bg-[#2a2a2a] hover:bg-[#3a3a3a] text-[#cccccc] text-xs font-bold py-1.5 px-1.5 transition-all duration-200 w-7 h-7 flex items-center justify-center ${
@@ -654,7 +697,13 @@ function CommanderPageContent() {
             </div>
 
             {/* Commander Damage & Poison Counters */}
-            <div className="shrink-0 pb-4">
+            <div
+              className={`shrink-0 ${
+                player.rotation === 90 || player.rotation === 270
+                  ? "pb-6"
+                  : "pb-1"
+              }`}
+            >
               <div className="flex flex-wrap gap-1 justify-center pb-2 w-full max-w-xs mx-auto">
                 {/* Commander Damage Counters */}
                 {commanderSources.map((sourceIndex, i) => (
@@ -752,68 +801,29 @@ function CommanderPageContent() {
           strokeLinecap="round"
           strokeLinejoin="round"
         >
+          <path d="M14 21h-4l-.551-2.48a6.991 6.991 0 0 1-1.819-1.05l-2.424.763-2-3.464 1.872-1.718a7.055 7.055 0 0 1 0-2.1L3.206 9.232l2-3.464 2.424.763A6.992 6.992 0 0 1 9.45 5.48L10 3h4l.551 2.48a6.992 6.992 0 0 1 1.819 1.05l2.424-.763 2 3.464-1.872 1.718a7.05 7.05 0 0 1 0 2.1l1.872 1.718-2 3.464-2.424-.763a6.99 6.99 0 0 1-1.819 1.052L14 21z" />
           <circle cx="12" cy="12" r="3" />
-          <path d="M12 1v6m0 6v6m11-7h-6m-6 0H1m15.5-3.5L19 10m-7 7l-2.5 2.5M5 14l2.5-2.5M9 10L6.5 7.5" />
         </svg>
       </button>
 
       {/* Menu Modal */}
       {isMenuOpen && (
         <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-40 p-4">
-          <div
-            className={`bg-[#2a2a2a] w-full max-h-[90vh] overflow-y-auto ${
-              // Mobile-specific sizing
-              isMobileLandscape || isMobilePortrait
-                ? "max-w-[95vw] p-4" // Mobile: wider, less padding
-                : "max-w-md p-8 mx-4" // Desktop: normal
-            }`}
-          >
-            <h3
-              className={`font-bold text-[#f5f5f5] mb-4 tracking-wide ${
-                // Mobile-specific text sizing
-                isMobileLandscape || isMobilePortrait
-                  ? "text-lg" // Mobile: smaller header
-                  : "text-2xl mb-6" // Desktop: larger header
-              }`}
-            >
+          <div className="bg-[#222222] border border-[#333333] w-full max-w-md mx-4 p-6">
+            <h3 className="text-xl font-bold text-[#ffffff] mb-6 text-center tracking-wide">
               Game Settings
             </h3>
 
             {/* Player Names */}
-            <div className="mb-2">
-              <h4
-                className={`font-bold text-[#cccccc] tracking-wide mb-3 ${
-                  // Mobile-specific text sizing
-                  isMobileLandscape || isMobilePortrait
-                    ? "text-base" // Mobile: smaller subheader
-                    : "text-lg" // Desktop: larger subheader
-                }`}
-              >
-                Player Names
+            <div className="mb-4">
+              <h4 className="text-sm font-bold text-[#a3a3a3] mb-3 tracking-wide">
+                PLAYER NAMES:
               </h4>
-              <div
-                className={`${
-                  // Mobile landscape: grid layout
-                  isMobileLandscape ? "grid grid-cols-2 gap-2" : "space-y-3"
-                }`}
-              >
+              <div className="space-y-2">
                 {players.map((player, index) => (
-                  <div
-                    key={index}
-                    className={`flex items-center ${
-                      // Mobile landscape: adjust layout
-                      isMobileLandscape ? "flex-col gap-1" : "gap-3"
-                    }`}
-                  >
-                    <span
-                      className={`text-[#b3b3b3] font-semibold ${
-                        // Mobile-specific label sizing
-                        isMobileLandscape
-                          ? "text-xs w-full text-center"
-                          : "text-sm w-20"
-                      }`}
-                    >
-                      Player {index + 1}:
+                  <div key={index} className="flex items-center gap-3">
+                    <span className="text-xs text-[#888888] font-semibold w-16">
+                      P{index + 1}:
                     </span>
                     <input
                       type="text"
@@ -826,12 +836,7 @@ function CommanderPageContent() {
                           e.target.value || `Player ${index + 1}`
                         )
                       }
-                      className={`flex-1 bg-[#1a1a1a] text-[#e5e5e5] focus:border-[#4ade80] focus:ring-2 focus:ring-[#4ade80]/20 focus:outline-none transition-all duration-200 font-medium ${
-                        // Mobile-specific input sizing
-                        isMobileLandscape || isMobilePortrait
-                          ? "px-2 py-2 text-sm" // Mobile: smaller input
-                          : "px-4 py-3" // Desktop: larger input
-                      }`}
+                      className="flex-1 bg-[#2a2a2a] text-[#e5e5e5] border border-[#404040] focus:border-[#4ade80] focus:ring-1 focus:ring-[#4ade80]/30 focus:outline-none transition-all duration-200 px-3 py-2 text-sm font-medium"
                       placeholder={`Player ${index + 1}`}
                     />
                   </div>
@@ -839,153 +844,99 @@ function CommanderPageContent() {
               </div>
             </div>
 
-            {/* Save Settings */}
-            <div>
-              <div className="flex items-center justify-between">
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={saveNames}
-                    onChange={(e) => {
-                      setSaveNames(e.target.checked);
-                      if (e.target.checked) {
-                        saveToLocalStorage();
-                      } else {
-                        clearLocalStorage();
-                      }
-                    }}
-                    className="w-4 h-4 text-[#4a90e2] bg-[#1a1a1a] border-[#555555] rounded focus:ring-[#4a90e2] focus:ring-2"
-                  />
-                  <span
-                    className={`text-[#cccccc] font-medium ${
-                      // Mobile-specific text sizing
-                      isMobileLandscape || isMobilePortrait
-                        ? "text-sm" // Mobile: smaller text
-                        : "text-base" // Desktop: normal text
-                    }`}
-                  >
-                    Save player names
-                  </span>
-                </label>
-                <button
-                  onClick={() => {
-                    setPlayers((prev) =>
-                      prev.map((player, index) => ({
-                        ...player,
-                        name: `Player ${index + 1}`,
-                      }))
-                    );
-                  }}
-                  className="bg-[#2a2a2a] hover:bg-[#1a1a1a] text-[#cccccc] text-xs font-bold py-1.5 px-1.5 transition-all duration-200 w-7 h-7 flex items-center justify-center"
-                  title="Reset player names to defaults"
-                >
-                  ↺
-                </button>
-              </div>
+            {/* Reset Confirmation Text */}
+            <div className="text-center mb-2">
+              <p
+                className={`text-sm text-[#f5f5f5] font-bold transition-opacity duration-200 ${
+                  showResetConfirm ? "opacity-100" : "opacity-0"
+                }`}
+              >
+                Are you sure you want to reset the entire game?
+              </p>
             </div>
 
-            {/* Actions */}
-            <div>
-              <div className="text-center">
-                <p
-                  className={`text-[#f5f5f5] font-bold mb-2 transition-opacity duration-200 ${
-                    showResetConfirm ? "opacity-100" : "opacity-0"
-                  } ${
-                    // Mobile-specific text sizing
-                    (window.innerHeight < 500 &&
-                      window.innerWidth > window.innerHeight) ||
-                    (window.innerWidth < 768 &&
-                      window.innerHeight > window.innerWidth)
-                      ? "text-xs" // Mobile: smaller confirmation text
-                      : "text-sm" // Desktop: normal size
-                  }`}
-                >
-                  Are you sure you want to reset the entire game?
-                </p>
-              </div>
+            {/* Action Buttons */}
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setPlayers((prev) =>
+                    prev.map((player, index) => ({
+                      ...player,
+                      name: `Player ${index + 1}`,
+                    }))
+                  );
+                }}
+                className="flex-1 bg-[#2a2a2a] hover:bg-[#3a3a3a] text-[#cccccc] text-sm font-bold py-3 px-4 transition-all duration-200"
+                title="Reset player names to defaults"
+              >
+                Reset Names
+              </button>
               {!showResetConfirm ? (
-                <div
-                  className={`flex ${
-                    // Mobile landscape: stack buttons vertically for space
-                    window.innerHeight < 500 &&
-                    window.innerWidth > window.innerHeight
-                      ? "flex-col gap-2"
-                      : "gap-4"
-                  }`}
+                <button
+                  onClick={handleResetClick}
+                  className="flex-1 bg-[#991b1b] hover:bg-[#b91c1c] text-white text-sm font-bold py-3 px-4 transition-all duration-200"
                 >
-                  <button
-                    onClick={handleResetClick}
-                    className={`flex-1 bg-[#991b1b] hover:bg-[#b91c1c] text-white font-bold transition-all duration-200 ${
-                      // Mobile-specific button sizing
-                      (window.innerHeight < 500 &&
-                        window.innerWidth > window.innerHeight) ||
-                      (window.innerWidth < 768 &&
-                        window.innerHeight > window.innerWidth)
-                        ? "py-3 px-4 text-sm" // Mobile: smaller buttons
-                        : "py-4 px-6" // Desktop: larger buttons
-                    }`}
-                  >
-                    Reset Game
-                  </button>
-                  <button
-                    onClick={() => setIsMenuOpen(false)}
-                    className={`flex-1 bg-[#404040] hover:bg-[#4a4a4a] text-[#e5e5e5] font-bold transition-all duration-200 ${
-                      // Mobile-specific button sizing
-                      (window.innerHeight < 500 &&
-                        window.innerWidth > window.innerHeight) ||
-                      (window.innerWidth < 768 &&
-                        window.innerHeight > window.innerWidth)
-                        ? "py-3 px-4 text-sm" // Mobile: smaller buttons
-                        : "py-4 px-6" // Desktop: larger buttons
-                    }`}
-                  >
-                    Close
-                  </button>
-                </div>
+                  Reset Game
+                </button>
               ) : (
-                <div
-                  className={`flex ${
-                    // Mobile landscape: stack buttons vertically for space
-                    window.innerHeight < 500 &&
-                    window.innerWidth > window.innerHeight
-                      ? "flex-col gap-2"
-                      : "gap-4"
-                  }`}
+                <button
+                  onClick={resetGame}
+                  className="flex-1 bg-[#991b1b] hover:bg-[#b91c1c] text-white text-sm font-bold py-3 px-4 transition-all duration-200"
                 >
-                  <button
-                    onClick={resetGame}
-                    className={`flex-1 bg-[#991b1b] hover:bg-[#b91c1c] text-white font-bold transition-all duration-200 ${
-                      // Mobile-specific button sizing
-                      (window.innerHeight < 500 &&
-                        window.innerWidth > window.innerHeight) ||
-                      (window.innerWidth < 768 &&
-                        window.innerHeight > window.innerWidth)
-                        ? "py-3 px-4 text-sm" // Mobile: smaller buttons
-                        : "py-4 px-6" // Desktop: larger buttons
-                    }`}
-                  >
-                    Yes, Reset
-                  </button>
-                  <button
-                    onClick={cancelReset}
-                    className={`flex-1 bg-[#404040] hover:bg-[#4a4a4a] text-[#e5e5e5] font-bold transition-all duration-200 ${
-                      // Mobile-specific button sizing
-                      (window.innerHeight < 500 &&
-                        window.innerWidth > window.innerHeight) ||
-                      (window.innerWidth < 768 &&
-                        window.innerHeight > window.innerWidth)
-                        ? "py-3 px-4 text-sm" // Mobile: smaller buttons
-                        : "py-4 px-6" // Desktop: larger buttons
-                    }`}
-                  >
-                    Cancel
-                  </button>
-                </div>
+                  Yes, Reset
+                </button>
               )}
+              <button
+                onClick={
+                  showResetConfirm ? cancelReset : () => setIsMenuOpen(false)
+                }
+                className="flex-1 bg-[#404040] hover:bg-[#4a4a4a] text-[#e5e5e5] text-sm font-bold py-3 px-4 transition-all duration-200"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* Center Scoreboard - Hidden on mobile, visible on larger screens */}
+      <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none hidden md:block">
+        <div className="bg-[#222222] shadow-lg">
+          <div className="grid grid-cols-2 grid-rows-4 gap-0">
+            {/* Row 1: Names */}
+            <div className="text-center border border-[#404040] px-1.5 py-1 text-xs font-bold text-[#cccccc]">
+              {playerAbbrevs[0]}
+            </div>
+            <div className="text-center border border-[#404040] px-1.5 py-1 text-xs font-bold text-[#cccccc]">
+              {playerAbbrevs[1]}
+            </div>
+
+            {/* Row 2: Scores */}
+            <div className="text-center border border-[#404040] px-1.5 py-1 text-sm font-bold text-[#ffffff]">
+              {players[0].life}
+            </div>
+            <div className="text-center border border-[#404040] px-1.5 py-1 text-sm font-bold text-[#ffffff]">
+              {players[1].life}
+            </div>
+
+            {/* Row 3: Scores */}
+            <div className="text-center border border-[#404040] px-1.5 py-1 text-sm font-bold text-[#ffffff]">
+              {players[3].life}
+            </div>
+            <div className="text-center border border-[#404040] px-1.5 py-1 text-sm font-bold text-[#ffffff]">
+              {players[2].life}
+            </div>
+
+            {/* Row 4: Names */}
+            <div className="text-center border border-[#404040] px-1.5 py-1 text-xs font-bold text-[#cccccc]">
+              {playerAbbrevs[3]}
+            </div>
+            <div className="text-center border border-[#404040] px-1.5 py-1 text-xs font-bold text-[#cccccc]">
+              {playerAbbrevs[2]}
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* 4 Player Quadrants - Perfect quarters of the screen */}
       <div className="grid grid-cols-2 grid-rows-2 h-full w-full">
