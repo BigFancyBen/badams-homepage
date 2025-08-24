@@ -204,8 +204,6 @@ function CommanderPageContent() {
     }
   }, [players, saveGameStateToStorage, hasLoadedInitialState]);
 
-
-
   // Generate unique abbreviations for player names
   const generateAbbreviations = () => {
     const abbreviations: string[] = [];
