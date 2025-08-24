@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 
 interface HistoryEntry {
   action: string;
@@ -145,7 +145,7 @@ export default function CommanderPage() {
     if (saveNames) {
       saveToLocalStorage();
     }
-  }, [saveNames, players]);
+  }, [saveNames, players, saveToLocalStorage]);
 
   // Clear saved data from localStorage
   const clearLocalStorage = () => {
@@ -228,7 +228,6 @@ export default function CommanderPage() {
     );
 
     const changeText = change > 0 ? `+${change}` : `${change}`;
-    const actionType = change > 0 ? "positive" : "negative";
     addHistory(playerIndex, `${changeText} poison|poison`);
   };
 
@@ -271,7 +270,6 @@ export default function CommanderPage() {
     const commanderSources = [0, 1, 2, 3].filter((i) => i !== playerIndex);
     const actualSourceIndex = commanderSources[sourceIndex];
     const changeText = change > 0 ? `+${change}` : `${change}`;
-    const actionType = change > 0 ? "positive" : "negative";
     const sourceName =
       players[actualSourceIndex]?.name || `P${actualSourceIndex + 1}`;
     addHistory(playerIndex, `${changeText} from ${sourceName}|commander`);
@@ -375,7 +373,7 @@ export default function CommanderPage() {
 
   const resetGame = () => {
     setPlayers((prev) =>
-      prev.map((player, index) => ({
+      prev.map((player) => ({
         life: 40,
         commanderDamage: [0, 0, 0] as [number, number, number],
         rotation: player.rotation, // Keep current rotation
@@ -404,13 +402,9 @@ export default function CommanderPage() {
     player: PlayerState;
     playerIndex: number;
   }) => {
-    const [lastActionTime, setLastActionTime] = useState<number>(0);
-
     // Track the most recent action for highlighting
     useEffect(() => {
-      if (player.history.length > 0) {
-        setLastActionTime(player.history[0].timestamp);
-      }
+      // This effect tracks history changes for potential future highlighting features
     }, [player.history]);
 
     const formatTime = (timestamp: number) => {
