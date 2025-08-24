@@ -76,6 +76,7 @@ export default function CommanderPage() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [rotatingPlayer, setRotatingPlayer] = useState<number | null>(null);
+  const [saveNames, setSaveNames] = useState(false);
 
   // Handle orientation changes on mobile
   useEffect(() => {
@@ -106,6 +107,52 @@ export default function CommanderPage() {
       window.removeEventListener("orientationchange", handleOrientationChange);
     };
   }, []);
+
+  // Load saved settings and player names on component mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedSettings = localStorage.getItem("commander-settings");
+      if (savedSettings) {
+        const settings = JSON.parse(savedSettings);
+        setSaveNames(settings.saveNames || false);
+
+        if (settings.saveNames && settings.playerNames) {
+          setPlayers((prev) =>
+            prev.map((player, index) => ({
+              ...player,
+              name: settings.playerNames[index] || player.name,
+            }))
+          );
+        }
+      }
+    }
+  }, []);
+
+  // Save settings and player names to localStorage
+  const saveToLocalStorage = () => {
+    if (typeof window !== "undefined" && saveNames) {
+      const playerNames = players.map((player) => player.name);
+      const settings = {
+        saveNames: true,
+        playerNames: playerNames,
+      };
+      localStorage.setItem("commander-settings", JSON.stringify(settings));
+    }
+  };
+
+  // Update localStorage whenever saveNames or players change
+  useEffect(() => {
+    if (saveNames) {
+      saveToLocalStorage();
+    }
+  }, [saveNames, players]);
+
+  // Clear saved data from localStorage
+  const clearLocalStorage = () => {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("commander-settings");
+    }
+  };
 
   // Generate unique abbreviations for player names
   const generateAbbreviations = () => {
@@ -182,7 +229,7 @@ export default function CommanderPage() {
 
     const changeText = change > 0 ? `+${change}` : `${change}`;
     const actionType = change > 0 ? "positive" : "negative";
-    addHistory(playerIndex, `Poison ${changeText}|poison`);
+    addHistory(playerIndex, `${changeText} poison|poison`);
   };
 
   const updateLife = (playerIndex: number, change: number) => {
@@ -196,7 +243,7 @@ export default function CommanderPage() {
 
     const changeText = change > 0 ? `+${change}` : `${change}`;
     const actionType = change > 0 ? "positive" : "negative";
-    addHistory(playerIndex, `${changeText}|${actionType}`);
+    addHistory(playerIndex, `${changeText} life|${actionType}`);
   };
 
   const updateCommanderDamage = (
@@ -227,10 +274,7 @@ export default function CommanderPage() {
     const actionType = change > 0 ? "positive" : "negative";
     const sourceName =
       players[actualSourceIndex]?.name || `P${actualSourceIndex + 1}`;
-    addHistory(
-      playerIndex,
-      `${sourceName} ${changeText} commander damage|commander`
-    );
+    addHistory(playerIndex, `${changeText} from ${sourceName}|commander`);
   };
 
   const updateRotation = (playerIndex: number) => {
@@ -301,17 +345,32 @@ export default function CommanderPage() {
     const sourceName = players[playerIndex]?.name || `P${playerIndex + 1}`;
     [0, 1, 2, 3].forEach((index) => {
       if (index !== playerIndex) {
-        addHistory(index, `${changeText} from ${sourceName}|${actionType}`);
+        addHistory(
+          index,
+          `${changeText} life from ${sourceName}|${actionType}`
+        );
       }
     });
   };
 
   const updatePlayerName = (playerIndex: number, name: string) => {
-    setPlayers((prev) =>
-      prev.map((player, index) =>
+    setPlayers((prev) => {
+      const newPlayers = prev.map((player, index) =>
         index === playerIndex ? { ...player, name } : player
-      )
-    );
+      );
+
+      // Save to localStorage if persistence is enabled
+      if (saveNames && typeof window !== "undefined") {
+        const playerNames = newPlayers.map((player) => player.name);
+        const settings = {
+          saveNames: true,
+          playerNames: playerNames,
+        };
+        localStorage.setItem("commander-settings", JSON.stringify(settings));
+      }
+
+      return newPlayers;
+    });
   };
 
   const resetGame = () => {
@@ -391,25 +450,31 @@ export default function CommanderPage() {
         )}
 
         {/* Corner Controls - positioned outside of rotated container */}
-        <div className="absolute top-2 right-2 flex gap-1 z-10">
+        <div className="absolute top-2 right-2 flex flex-col gap-1 z-30">
           <button
             onClick={() => togglePlayerDead(playerIndex)}
-            className={`text-xs font-bold py-1.5 px-1.5 transition-all duration-200 w-7 h-7 flex items-center justify-center ${
-              player.isDead
-                ? "bg-[#7a1a1a] hover:bg-[#8a2a2a] text-[#cccccc]"
-                : "bg-[#2a2a2a] hover:bg-[#3a3a3a] text-[#cccccc]"
+            className={`bg-[#2a2a2a] hover:bg-[#3a3a3a] text-[#cccccc] text-xs font-bold py-1.5 px-1.5 transition-all duration-200 w-7 h-7 flex items-center justify-center ${
+              player.isDead ? "!bg-[#7a1a1a] !hover:bg-[#8a2a2a]" : ""
             }`}
             title={player.isDead ? "Revive player" : "Mark as dead"}
           >
-            💀
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              stroke="none"
+            >
+              <path d="M12 2C8.13 2 5 5.13 5 9c0 1.74.5 3.37 1.41 4.84.91 1.47 2.18 2.79 3.71 3.92.63.47 1.32.88 2.05 1.24.73-.36 1.42-.77 2.05-1.24 1.53-1.13 2.8-2.45 3.71-3.92C18.5 12.37 19 10.74 19 9c0-3.87-3.13-7-7-7zM8.5 7c.83 0 1.5.67 1.5 1.5S9.33 10 8.5 10 7 9.33 7 8.5 7.67 7 8.5 7zm7 0c.83 0 1.5.67 1.5 1.5S16.33 10 15.5 10 14 9.33 14 8.5 14.67 7 15.5 7zM12 13c-1.21 0-2.25.86-2.45 2h4.9c-.2-1.14-1.24-2-2.45-2z" />
+            </svg>
           </button>
           <button
             onClick={() => updateRotation(playerIndex)}
             disabled={rotatingPlayer === playerIndex}
-            className={`text-xs font-bold py-1.5 px-1.5 transition-all duration-200 w-7 h-7 flex items-center justify-center ${
+            className={`bg-[#2a2a2a] hover:bg-[#3a3a3a] text-[#cccccc] text-xs font-bold py-1.5 px-1.5 transition-all duration-200 w-7 h-7 flex items-center justify-center ${
               rotatingPlayer === playerIndex
-                ? "bg-[#1a1a1a] text-[#666666] cursor-not-allowed"
-                : "bg-[#2a2a2a] hover:bg-[#3a3a3a] text-[#cccccc]"
+                ? "!bg-[#1a1a1a] !text-[#666666] cursor-not-allowed !hover:bg-[#1a1a1a]"
+                : ""
             }`}
             title={
               (window.innerHeight < 500 &&
@@ -507,11 +572,11 @@ export default function CommanderPage() {
             {/* History */}
             <div className="flex-1 mt-1 mb-1 w-full max-w-xs mx-auto flex flex-col min-h-0">
               <div className="bg-[#2a2a2a] p-2 flex-1 overflow-y-auto min-h-0">
-                <div className="text-[9px] text-[#a3a3a3] font-semibold mb-1 pb-1 border-b border-[#404040]">
+                <div className="text-[12px] text-[#a3a3a3] font-semibold mb-1 pb-1 border-b border-[#404040]">
                   Recent Actions:
                 </div>
                 {player.history.length === 0 ? (
-                  <div className="text-[8px] text-[#888888] italic mt-1">
+                  <div className="text-[12px] text-[#888888] italic mt-1">
                     No actions yet
                   </div>
                 ) : (
@@ -530,13 +595,53 @@ export default function CommanderPage() {
                         textColor = "text-[#3b82f6]";
                       }
 
+                      // Parse the action text to extract components
+                      const parseAction = (actionText: string) => {
+                        // Match patterns like "+5", "-1", "+2 commander damage", etc.
+                        const match = actionText.match(/^([+-])(\d+)\s*(.*)$/);
+                        if (match) {
+                          return {
+                            sign: match[1],
+                            number: match[2],
+                            label: match[3] || "",
+                          };
+                        }
+                        // Fallback for non-standard formats
+                        return {
+                          sign: "",
+                          number: "",
+                          label: actionText,
+                        };
+                      };
+
+                      const { sign, number, label } = parseAction(text);
+
+                      // Set sign color
+                      const signColor =
+                        sign === "+"
+                          ? "text-[#22c55e]"
+                          : sign === "-"
+                          ? "text-[#dc2626]"
+                          : "";
+
                       return (
                         <div
                           key={`${entry.timestamp}-${index}`}
-                          className={`flex justify-between items-center text-[8px] leading-tight font-medium py-1 border-b border-[#404040] ${textColor}`}
+                          className="grid grid-cols-[16px_auto_1fr_auto] items-center text-[12px] leading-tight font-medium py-1 border-b border-[#404040]"
+                          style={{ columnGap: "8px" }}
                         >
-                          <span className="truncate pr-1">{text}</span>
-                          <span className="text-[#888888] text-[7px] shrink-0">
+                          <span
+                            className={`font-bold text-center ${signColor}`}
+                          >
+                            {sign}
+                          </span>
+                          <span className={`font-bold ${textColor}`}>
+                            {number}
+                          </span>
+                          <span className={`truncate ${textColor}`}>
+                            {label}
+                          </span>
+                          <span className="text-[#888888] text-[11px] shrink-0">
                             {formatTime(entry.timestamp)}
                           </span>
                         </div>
@@ -633,15 +738,27 @@ export default function CommanderPage() {
       {/* Menu Button */}
       <button
         onClick={() => setIsMenuOpen(true)}
-        className="absolute top-4 left-4 z-30 bg-[#2a2a2a] hover:bg-[#3a3a3a] text-[#cccccc] font-bold py-1.5 px-1.5 transition-all duration-200 w-7 h-7 flex items-center justify-center"
+        className="absolute top-2 left-2 z-30 bg-[#2a2a2a] hover:bg-[#3a3a3a] text-[#cccccc] text-xs font-bold py-1.5 px-1.5 transition-all duration-200 w-7 h-7 flex items-center justify-center"
         title="Game Settings"
       >
-        ⚙️
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <circle cx="12" cy="12" r="3" />
+          <path d="M12 1v6m0 6v6m11-7h-6m-6 0H1m15.5-3.5L19 10m-7 7l-2.5 2.5M5 14l2.5-2.5M9 10L6.5 7.5" />
+        </svg>
       </button>
 
       {/* Menu Modal */}
       {isMenuOpen && (
-        <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-20 p-4">
+        <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-40 p-4">
           <div
             className={`bg-[#2a2a2a] w-full max-h-[90vh] overflow-y-auto ${
               // Mobile-specific sizing
@@ -737,6 +854,54 @@ export default function CommanderPage() {
                     />
                   </div>
                 ))}
+              </div>
+            </div>
+
+            {/* Save Settings */}
+            <div>
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={saveNames}
+                    onChange={(e) => {
+                      setSaveNames(e.target.checked);
+                      if (e.target.checked) {
+                        saveToLocalStorage();
+                      } else {
+                        clearLocalStorage();
+                      }
+                    }}
+                    className="w-4 h-4 text-[#4a90e2] bg-[#1a1a1a] border-[#555555] rounded focus:ring-[#4a90e2] focus:ring-2"
+                  />
+                  <span
+                    className={`text-[#cccccc] font-medium ${
+                      // Mobile-specific text sizing
+                      (window.innerHeight < 500 &&
+                        window.innerWidth > window.innerHeight) ||
+                      (window.innerWidth < 768 &&
+                        window.innerHeight > window.innerWidth)
+                        ? "text-sm" // Mobile: smaller text
+                        : "text-base" // Desktop: normal text
+                    }`}
+                  >
+                    Save player names
+                  </span>
+                </label>
+                <button
+                  onClick={() => {
+                    setPlayers((prev) =>
+                      prev.map((player, index) => ({
+                        ...player,
+                        name: `Player ${index + 1}`,
+                      }))
+                    );
+                  }}
+                  className="bg-[#2a2a2a] hover:bg-[#1a1a1a] text-[#cccccc] text-xs font-bold py-1.5 px-1.5 transition-all duration-200 w-7 h-7 flex items-center justify-center"
+                  title="Reset player names to defaults"
+                >
+                  ↺
+                </button>
               </div>
             </div>
 
