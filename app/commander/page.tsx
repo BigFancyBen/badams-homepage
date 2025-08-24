@@ -484,35 +484,72 @@ function CommanderPageContent() {
           <div className="absolute inset-0 bg-black/60 z-20 pointer-events-none" />
         )}
 
-        {/* Rotation Control - top corner */}
-        <div
-          className={`absolute z-30 ${
-            isMobileLandscape || isMobilePortrait
-              ? `top-1 ${playerIndex === 3 ? "left-2" : "right-2"} ${
-                  player.rotation === 90 || player.rotation === 270
-                    ? "mr-8"
-                    : ""
-                }`
-              : `top-1 ${playerIndex === 3 ? "left-2" : "right-2"}`
-          }`}
-        >
-          <button
-            onClick={() => updateRotation(playerIndex)}
-            disabled={rotatingPlayer === playerIndex}
-            className={`font-bold transition-all duration-200 flex items-center justify-center text-white/70 hover:text-white/50 text-sm p-0 ${
-              rotatingPlayer === playerIndex
-                ? "text-white/40 cursor-not-allowed"
-                : ""
-            }`}
-            title={
-              isMobileLandscape || isMobilePortrait
-                ? "Flip view"
-                : "Rotate view"
-            }
-          >
-            ↻
-          </button>
-        </div>
+        {/* Desktop-only fixed position buttons */}
+        {!isMobileLandscape && !isMobilePortrait && (
+          <>
+            {/* Rotation Control - fixed position on desktop */}
+            <button
+              onClick={() => updateRotation(playerIndex)}
+              disabled={rotatingPlayer === playerIndex}
+              className={`absolute z-30 font-bold transition-all duration-200 flex items-center justify-center text-white/70 hover:text-white/50 text-sm p-0 ${
+                rotatingPlayer === playerIndex
+                  ? "text-white/40 cursor-not-allowed"
+                  : ""
+              } ${
+                playerIndex === 0
+                  ? "top-2 right-2" // Player 1: top-right (away from settings & center)
+                  : playerIndex === 1
+                  ? "top-2 left-2" // Player 2: top-left (away from center)
+                  : playerIndex === 2
+                  ? "bottom-2 left-2" // Player 3: bottom-left (away from center)
+                  : "bottom-2 right-2" // Player 4: bottom-right (away from center)
+              }`}
+              title="Rotate view"
+            >
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M1 4v6h6" />
+                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+              </svg>
+            </button>
+
+            {/* Death Toggle - fixed position on desktop */}
+            <button
+              onClick={() => togglePlayerDead(playerIndex)}
+              className={`absolute z-30 text-white hover:text-red-400 transition-all duration-200 flex items-center justify-center ${
+                player.isDead ? "text-red-500" : "text-white/70"
+              } ${
+                playerIndex === 0
+                  ? "bottom-2 left-2" // Player 1: bottom-left (away from center)
+                  : playerIndex === 1
+                  ? "bottom-2 right-2" // Player 2: bottom-right (away from center)
+                  : playerIndex === 2
+                  ? "top-2 right-2" // Player 3: top-right (away from center)
+                  : "top-2 left-2" // Player 4: top-left (away from center & settings)
+              }`}
+              title={player.isDead ? "Revive player" : "Mark as dead"}
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                stroke="none"
+                className="drop-shadow-lg"
+              >
+                <path d="M12 2C8.13 2 5 5.13 5 9c0 1.74.5 3.37 1.41 4.84.91 1.47 2.18 2.79 3.71 3.92.63.47 1.32.88 2.05 1.24.73-.36 1.42-.77 2.05-1.24 1.53-1.13 2.8-2.45 3.71-3.92C18.5 12.37 19 10.74 19 9c0-3.87-3.13-7-7-7zM8.5 7c.83 0 1.5.67 1.5 1.5S9.33 10 8.5 10 7 9.33 7 8.5 7.67 7 8.5 7zm7 0c.83 0 1.5.67 1.5 1.5S16.33 10 15.5 10 14 9.33 14 8.5 14.67 7 15.5 7zM12 13c-1.21 0-2.25.86-2.45 2h4.9c-.2-1.14-1.24-2-2.45-2z" />
+              </svg>
+            </button>
+          </>
+        )}
 
         <div
           className={`absolute ${player.isDead ? "opacity-50" : ""}`}
@@ -537,8 +574,63 @@ function CommanderPageContent() {
           }}
         >
           <div className={`w-full h-full flex flex-col ${rotationClass}`}>
+            {/* Mobile-only buttons that rotate with quadrant - positioned in corners */}
+            {(isMobileLandscape || isMobilePortrait) && (
+              <>
+                {/* Rotation Control - top left corner */}
+                <button
+                  onClick={() => updateRotation(playerIndex)}
+                  disabled={rotatingPlayer === playerIndex}
+                  className={`absolute top-1 left-1 z-10 font-bold transition-all duration-200 flex items-center justify-center text-white/70 hover:text-white/50 text-xs p-0 ${
+                    rotatingPlayer === playerIndex
+                      ? "text-white/40 cursor-not-allowed"
+                      : ""
+                  }`}
+                  title={
+                    isMobileLandscape || isMobilePortrait
+                      ? "Flip view"
+                      : "Rotate view"
+                  }
+                >
+                  <svg
+                    width="10"
+                    height="10"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M1 4v6h6" />
+                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                  </svg>
+                </button>
+
+                {/* Death Toggle - top right corner */}
+                <button
+                  onClick={() => togglePlayerDead(playerIndex)}
+                  className={`absolute top-1 right-1 z-10 text-white hover:text-red-400 transition-all duration-200 flex items-center justify-center ${
+                    player.isDead ? "text-red-500" : "text-white/70"
+                  }`}
+                  title={player.isDead ? "Revive player" : "Mark as dead"}
+                >
+                  <svg
+                    width="10"
+                    height="10"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    stroke="none"
+                    className="drop-shadow-lg"
+                  >
+                    <path d="M12 2C8.13 2 5 5.13 5 9c0 1.74.5 3.37 1.41 4.84.91 1.47 2.18 2.79 3.71 3.92.63.47 1.32.88 2.05 1.24.73-.36 1.42-.77 2.05-1.24 1.53-1.13 2.8-2.45 3.71-3.92C18.5 12.37 19 10.74 19 9c0-3.87-3.13-7-7-7zM8.5 7c.83 0 1.5.67 1.5 1.5S9.33 10 8.5 10 7 9.33 7 8.5 7.67 7 8.5 7zm7 0c.83 0 1.5.67 1.5 1.5S16.33 10 15.5 10 14 9.33 14 8.5 14.67 7 15.5 7zM12 13c-1.21 0-2.25.86-2.45 2h4.9c-.2-1.14-1.24-2-2.45-2z" />
+                  </svg>
+                </button>
+              </>
+            )}
+
             {/* Player Label */}
-            <div className="text-center mb-1 shrink-0">
+            <div className="text-center mb-1 shrink-0 w-full flex justify-center">
               <h2 className="text-lg font-bold text-[#ffffff] tracking-wide truncate">
                 {player.name}
               </h2>
@@ -597,11 +689,23 @@ function CommanderPageContent() {
             {/* History */}
             <div className="flex-1 mt-1 mb-1 w-full max-w-xs mx-auto flex flex-col min-h-0">
               <div className="bg-[#2a2a2a] p-2 flex-1 overflow-y-auto min-h-0">
-                <div className="text-[12px] text-[#a3a3a3] font-semibold mb-1 pb-1 border-b border-[#404040]">
+                <div
+                  className={`${
+                    isMobileLandscape || isMobilePortrait
+                      ? "text-[9px]"
+                      : "text-[12px]"
+                  } text-[#a3a3a3] font-semibold mb-1 pb-1 border-b border-[#404040]`}
+                >
                   Recent Actions:
                 </div>
                 {player.history.length === 0 ? (
-                  <div className="text-[12px] text-[#888888] italic mt-1">
+                  <div
+                    className={`${
+                      isMobileLandscape || isMobilePortrait
+                        ? "text-[9px]"
+                        : "text-[12px]"
+                    } text-[#888888] italic mt-1`}
+                  >
                     No actions yet
                   </div>
                 ) : (
@@ -652,8 +756,17 @@ function CommanderPageContent() {
                       return (
                         <div
                           key={`${entry.timestamp}-${index}`}
-                          className="grid grid-cols-[16px_auto_1fr_auto] items-center text-[12px] leading-tight font-medium py-1 border-b border-[#404040]"
-                          style={{ columnGap: "8px" }}
+                          className={`grid items-center ${
+                            isMobileLandscape || isMobilePortrait
+                              ? "text-[9px] grid-cols-[10px_auto_1fr_auto]"
+                              : "text-[12px] grid-cols-[16px_auto_1fr_auto]"
+                          } leading-tight font-medium py-1 border-b border-[#404040]`}
+                          style={{
+                            columnGap:
+                              isMobileLandscape || isMobilePortrait
+                                ? "4px"
+                                : "8px",
+                          }}
                         >
                           <span
                             className={`font-bold text-center ${signColor}`}
@@ -666,7 +779,13 @@ function CommanderPageContent() {
                           <span className={`truncate ${textColor}`}>
                             {label}
                           </span>
-                          <span className="text-[#888888] text-[11px] shrink-0">
+                          <span
+                            className={`text-[#888888] ${
+                              isMobileLandscape || isMobilePortrait
+                                ? "text-[8px]"
+                                : "text-[11px]"
+                            } shrink-0`}
+                          >
                             {formatTime(entry.timestamp)}
                           </span>
                         </div>
@@ -678,13 +797,7 @@ function CommanderPageContent() {
             </div>
 
             {/* Commander Damage & Poison Counters */}
-            <div
-              className={`shrink-0 ${
-                player.rotation === 90 || player.rotation === 270
-                  ? "pb-6"
-                  : "pb-1"
-              }`}
-            >
+            <div className="shrink-0 pb-1">
               <div className="grid grid-cols-4 gap-1 w-full max-w-xs mx-auto">
                 {/* Commander Damage Counters */}
                 {commanderSources.map((sourceIndex, i) => (
@@ -708,11 +821,25 @@ function CommanderPageContent() {
                         </span>
                       </div>
                       <div className="flex gap-1 justify-center items-center">
-                        <span className="bg-[#991b1b] hover:bg-[#b91c1c] text-white text-xs font-bold transition-all duration-150 w-4 h-4 flex items-center justify-center flex-shrink-0 font-mono leading-none">
-                          −
+                        <span className="bg-[#991b1b] hover:bg-[#b91c1c] text-white text-xs font-bold transition-all duration-150 w-4 h-4 flex items-center justify-center flex-shrink-0">
+                          <svg
+                            width="8"
+                            height="8"
+                            viewBox="0 0 24 24"
+                            fill="currentColor"
+                          >
+                            <path d="M19 13H5v-2h14v2z" />
+                          </svg>
                         </span>
-                        <span className="bg-[#166534] hover:bg-[#16a34a] text-white text-xs font-bold transition-all duration-150 w-4 h-4 flex items-center justify-center flex-shrink-0 font-mono leading-none">
-                          +
+                        <span className="bg-[#166534] hover:bg-[#16a34a] text-white text-xs font-bold transition-all duration-150 w-4 h-4 flex items-center justify-center flex-shrink-0">
+                          <svg
+                            width="8"
+                            height="8"
+                            viewBox="0 0 24 24"
+                            fill="currentColor"
+                          >
+                            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+                          </svg>
                         </span>
                       </div>
                     </div>
@@ -749,11 +876,25 @@ function CommanderPageContent() {
                       </div>
                     </div>
                     <div className="flex gap-1 justify-center items-center">
-                      <span className="bg-[#991b1b] hover:bg-[#b91c1c] text-white text-xs font-bold transition-all duration-150 w-4 h-4 flex items-center justify-center flex-shrink-0 font-mono leading-none">
-                        −
+                      <span className="bg-[#991b1b] hover:bg-[#b91c1c] text-white text-xs font-bold transition-all duration-150 w-4 h-4 flex items-center justify-center flex-shrink-0">
+                        <svg
+                          width="8"
+                          height="8"
+                          viewBox="0 0 24 24"
+                          fill="currentColor"
+                        >
+                          <path d="M19 13H5v-2h14v2z" />
+                        </svg>
                       </span>
-                      <span className="bg-[#064e3b] hover:bg-[#065f46] text-white text-xs font-bold transition-all duration-150 w-4 h-4 flex items-center justify-center flex-shrink-0 font-mono leading-none">
-                        +
+                      <span className="bg-[#064e3b] hover:bg-[#065f46] text-white text-xs font-bold transition-all duration-150 w-4 h-4 flex items-center justify-center flex-shrink-0">
+                        <svg
+                          width="8"
+                          height="8"
+                          viewBox="0 0 24 24"
+                          fill="currentColor"
+                        >
+                          <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+                        </svg>
                       </span>
                     </div>
                   </div>
@@ -762,36 +903,20 @@ function CommanderPageContent() {
             </div>
           </div>
         </div>
-
-        {/* Death Toggle - bottom right corner of quadrant */}
-        <button
-          onClick={() => togglePlayerDead(playerIndex)}
-          className={`absolute bottom-1 right-1 z-30 text-white hover:text-red-400 transition-all duration-200 flex items-center justify-center ${
-            player.isDead ? "text-red-500" : "text-white/70"
-          }`}
-          title={player.isDead ? "Revive player" : "Mark as dead"}
-        >
-          <svg
-            width={isMobileLandscape || isMobilePortrait ? "12" : "14"}
-            height={isMobileLandscape || isMobilePortrait ? "12" : "14"}
-            viewBox="0 0 24 24"
-            fill="currentColor"
-            stroke="none"
-            className="drop-shadow-lg"
-          >
-            <path d="M12 2C8.13 2 5 5.13 5 9c0 1.74.5 3.37 1.41 4.84.91 1.47 2.18 2.79 3.71 3.92.63.47 1.32.88 2.05 1.24.73-.36 1.42-.77 2.05-1.24 1.53-1.13 2.8-2.45 3.71-3.92C18.5 12.37 19 10.74 19 9c0-3.87-3.13-7-7-7zM8.5 7c.83 0 1.5.67 1.5 1.5S9.33 10 8.5 10 7 9.33 7 8.5 7.67 7 8.5 7zm7 0c.83 0 1.5.67 1.5 1.5S16.33 10 15.5 10 14 9.33 14 8.5 14.67 7 15.5 7zM12 13c-1.21 0-2.25.86-2.45 2h4.9c-.2-1.14-1.24-2-2.45-2z" />
-          </svg>
-        </button>
       </div>
     );
   };
 
   return (
     <div className="h-screen w-screen bg-[#1a1a1a] overflow-hidden relative select-none">
-      {/* Menu Button */}
+      {/* Menu Button - centered on mobile, top-left on desktop */}
       <button
         onClick={() => setIsMenuOpen(true)}
-        className="absolute top-1 left-2 z-30 font-bold transition-all duration-200 flex items-center justify-center text-white/70 hover:text-white/50 text-xs p-0"
+        className={`absolute z-30 font-bold transition-all duration-200 flex items-center justify-center text-white/70 hover:text-white/50 text-xs p-0 ${
+          isMobileLandscape || isMobilePortrait
+            ? "top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2" // Center on mobile
+            : "top-1 left-2" // Top-left on desktop
+        }`}
         title="Game Settings"
       >
         <svg
@@ -902,44 +1027,46 @@ function CommanderPageContent() {
         </div>
       )}
 
-      {/* Center Scoreboard - Hidden on mobile, visible on larger screens */}
-      <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none hidden md:block">
-        <div className="bg-[#222222] shadow-lg">
-          <div className="grid grid-cols-2 grid-rows-4 gap-0">
-            {/* Row 1: Names */}
-            <div className="text-center border border-[#404040] px-1.5 py-1 text-xs font-bold text-[#cccccc]">
-              {playerAbbrevs[0]}
-            </div>
-            <div className="text-center border border-[#404040] px-1.5 py-1 text-xs font-bold text-[#cccccc]">
-              {playerAbbrevs[1]}
-            </div>
+      {/* Center Scoreboard - Hidden on mobile (both landscape and portrait), visible on desktop */}
+      {!isMobileLandscape && !isMobilePortrait && (
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none">
+          <div className="bg-[#222222] shadow-lg">
+            <div className="grid grid-cols-2 grid-rows-4 gap-0">
+              {/* Row 1: Names */}
+              <div className="text-center border border-[#404040] px-1.5 py-1 text-xs font-bold text-[#cccccc]">
+                {playerAbbrevs[0]}
+              </div>
+              <div className="text-center border border-[#404040] px-1.5 py-1 text-xs font-bold text-[#cccccc]">
+                {playerAbbrevs[1]}
+              </div>
 
-            {/* Row 2: Scores */}
-            <div className="text-center border border-[#404040] px-1.5 py-1 text-sm font-bold text-[#ffffff]">
-              {players[0].life}
-            </div>
-            <div className="text-center border border-[#404040] px-1.5 py-1 text-sm font-bold text-[#ffffff]">
-              {players[1].life}
-            </div>
+              {/* Row 2: Scores */}
+              <div className="text-center border border-[#404040] px-1.5 py-1 text-sm font-bold text-[#ffffff]">
+                {players[0].life}
+              </div>
+              <div className="text-center border border-[#404040] px-1.5 py-1 text-sm font-bold text-[#ffffff]">
+                {players[1].life}
+              </div>
 
-            {/* Row 3: Scores */}
-            <div className="text-center border border-[#404040] px-1.5 py-1 text-sm font-bold text-[#ffffff]">
-              {players[3].life}
-            </div>
-            <div className="text-center border border-[#404040] px-1.5 py-1 text-sm font-bold text-[#ffffff]">
-              {players[2].life}
-            </div>
+              {/* Row 3: Scores */}
+              <div className="text-center border border-[#404040] px-1.5 py-1 text-sm font-bold text-[#ffffff]">
+                {players[3].life}
+              </div>
+              <div className="text-center border border-[#404040] px-1.5 py-1 text-sm font-bold text-[#ffffff]">
+                {players[2].life}
+              </div>
 
-            {/* Row 4: Names */}
-            <div className="text-center border border-[#404040] px-1.5 py-1 text-xs font-bold text-[#cccccc]">
-              {playerAbbrevs[3]}
-            </div>
-            <div className="text-center border border-[#404040] px-1.5 py-1 text-xs font-bold text-[#cccccc]">
-              {playerAbbrevs[2]}
+              {/* Row 4: Names */}
+              <div className="text-center border border-[#404040] px-1.5 py-1 text-xs font-bold text-[#cccccc]">
+                {playerAbbrevs[3]}
+              </div>
+              <div className="text-center border border-[#404040] px-1.5 py-1 text-xs font-bold text-[#cccccc]">
+                {playerAbbrevs[2]}
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* 4 Player Quadrants - Perfect quarters of the screen */}
       <div className="grid grid-cols-2 grid-rows-2 h-full w-full">
