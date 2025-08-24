@@ -1008,8 +1008,12 @@ function CommanderPageContent() {
 
 // Default export with loading state for SSR compatibility
 export default function CommanderPage() {
-  const { isClient } = useMobileDetection();
-
+  const [isClient, setIsClient] = useState(false);
+  
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+  
   // Show loading state during hydration
   if (!isClient) {
     return (
@@ -1018,6 +1022,6 @@ export default function CommanderPage() {
       </div>
     );
   }
-
+  
   return <CommanderPageContent />;
 }
