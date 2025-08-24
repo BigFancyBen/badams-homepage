@@ -14,6 +14,7 @@ interface PlayerState {
   name: string;
   history: HistoryEntry[];
   poison: number;
+  isDead: boolean;
 }
 
 export default function CommanderPage() {
@@ -25,6 +26,7 @@ export default function CommanderPage() {
       name: "Player 1",
       history: [],
       poison: 0,
+      isDead: false,
     },
     {
       life: 40,
@@ -33,6 +35,7 @@ export default function CommanderPage() {
       name: "Player 2",
       history: [],
       poison: 0,
+      isDead: false,
     },
     {
       life: 40,
@@ -41,6 +44,7 @@ export default function CommanderPage() {
       name: "Player 3",
       history: [],
       poison: 0,
+      isDead: false,
     },
     {
       life: 40,
@@ -49,10 +53,12 @@ export default function CommanderPage() {
       name: "Player 4",
       history: [],
       poison: 0,
+      isDead: false,
     },
   ]);
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   // Generate unique abbreviations for player names
   const generateAbbreviations = () => {
@@ -193,6 +199,14 @@ export default function CommanderPage() {
     );
   };
 
+  const togglePlayerDead = (playerIndex: number) => {
+    setPlayers((prev) =>
+      prev.map((player, index) =>
+        index === playerIndex ? { ...player, isDead: !player.isDead } : player
+      )
+    );
+  };
+
   const damageAllOthers = (playerIndex: number, damage: number) => {
     setPlayers((prev) =>
       prev.map((player, index) =>
@@ -230,9 +244,19 @@ export default function CommanderPage() {
         name: player.name, // Keep current name
         history: [], // Clear history
         poison: 0, // Reset poison
+        isDead: false, // Reset dead status
       }))
     );
+    setShowResetConfirm(false);
     setIsMenuOpen(false);
+  };
+
+  const handleResetClick = () => {
+    setShowResetConfirm(true);
+  };
+
+  const cancelReset = () => {
+    setShowResetConfirm(false);
   };
 
   const PlayerQuadrant = ({
@@ -281,31 +305,53 @@ export default function CommanderPage() {
     const commanderSources = [0, 1, 2, 3].filter((i) => i !== playerIndex);
 
     return (
-      <div className="relative w-full h-full border-2 border-slate-600/30 bg-slate-900 overflow-hidden">
+      <div className="relative w-full h-full border border-[#333333] bg-[#222222] overflow-hidden">
+        {/* Dead overlay */}
+        {player.isDead && (
+          <div className="absolute inset-0 bg-black/60 z-20 pointer-events-none" />
+        )}
+
+        {/* Corner Controls - positioned outside of rotated container */}
+        <div className="absolute top-2 right-2 flex gap-1 z-10">
+          <button
+            onClick={() => togglePlayerDead(playerIndex)}
+            className={`text-xs font-bold py-1.5 px-1.5 transition-all duration-200 w-7 h-7 flex items-center justify-center ${
+              player.isDead
+                ? "bg-[#991b1b] hover:bg-[#b91c1c] text-white"
+                : "bg-[#333333] hover:bg-[#404040] text-[#cccccc]"
+            }`}
+            title={player.isDead ? "Revive player" : "Mark as dead"}
+          >
+            💀
+          </button>
+          <button
+            onClick={() => updateRotation(playerIndex)}
+            className="bg-[#333333] hover:bg-[#404040] text-[#cccccc] text-xs font-bold py-1.5 px-1.5 transition-all duration-200 w-7 h-7 flex items-center justify-center"
+            title="Rotate view"
+          >
+            ↻
+          </button>
+        </div>
+
         <div
-          className={`absolute inset-4 flex flex-col ${rotationClass} h-full`}
+          className={`absolute inset-4 flex flex-col ${rotationClass} h-full ${
+            player.isDead ? "opacity-50" : ""
+          }`}
         >
-          {/* Player Label and Rotation Control */}
-          <div className="text-center mb-1 flex items-center justify-center gap-2 shrink-0">
-            <h2 className="text-lg font-black text-slate-100 tracking-wide truncate drop-shadow-lg">
+          {/* Player Label */}
+          <div className="text-center mb-1 shrink-0">
+            <h2 className="text-lg font-bold text-[#ffffff] tracking-wide truncate">
               {player.name}
             </h2>
-            <button
-              onClick={() => updateRotation(playerIndex)}
-              className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold py-1.5 px-1.5 shadow-lg hover:shadow-xl transition-all duration-200 w-7 h-7 flex items-center justify-center border border-slate-500/50"
-              title="Rotate view"
-            >
-              ↻
-            </button>
           </div>
 
           {/* Life Counter */}
           <div className="shrink-0 flex flex-col items-center justify-center">
             <div className="relative mb-2">
-              <div className="text-5xl font-black text-slate-100 mb-2 select-none tracking-tight drop-shadow-2xl">
+              <div className="text-5xl font-bold text-[#f5f5f5] mb-2 select-none tracking-tight">
                 {player.life}
               </div>
-              <div className="absolute inset-0 text-5xl font-black text-emerald-400 mb-2 select-none tracking-tight opacity-20 blur-sm">
+              <div className="absolute inset-0 text-5xl font-bold text-[#166534] mb-2 select-none tracking-tight opacity-15 blur-sm">
                 {player.life}
               </div>
             </div>
@@ -315,25 +361,25 @@ export default function CommanderPage() {
               <div className="grid grid-cols-4 gap-1">
                 <button
                   onClick={() => updateLife(playerIndex, -5)}
-                  className="bg-red-700 hover:bg-red-600 text-white text-xs font-bold py-1.5 px-1 shadow-md hover:shadow-lg transition-all duration-150 border-b-2 border-red-900 active:border-red-700"
+                  className="bg-[#991b1b] hover:bg-[#b91c1c] text-white text-xs font-bold py-1.5 px-1 transition-all duration-150"
                 >
                   -5
                 </button>
                 <button
                   onClick={() => updateLife(playerIndex, -1)}
-                  className="bg-red-600 hover:bg-red-500 text-white text-xs font-bold py-1.5 px-1 shadow-md hover:shadow-lg transition-all duration-150 border-b-2 border-red-800 active:border-red-600"
+                  className="bg-[#b91c1c] hover:bg-[#dc2626] text-white text-xs font-bold py-1.5 px-1 transition-all duration-150"
                 >
                   -1
                 </button>
                 <button
                   onClick={() => updateLife(playerIndex, 1)}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-1.5 px-1 shadow-md hover:shadow-lg transition-all duration-150 border-b-2 border-emerald-800 active:border-emerald-600"
+                  className="bg-[#166534] hover:bg-[#16a34a] text-white text-xs font-bold py-1.5 px-1 transition-all duration-150"
                 >
                   +1
                 </button>
                 <button
                   onClick={() => updateLife(playerIndex, 5)}
-                  className="bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold py-1.5 px-1 shadow-md hover:shadow-lg transition-all duration-150 border-b-2 border-emerald-900 active:border-emerald-700"
+                  className="bg-[#14532d] hover:bg-[#166534] text-white text-xs font-bold py-1.5 px-1 transition-all duration-150"
                 >
                   +5
                 </button>
@@ -342,7 +388,7 @@ export default function CommanderPage() {
               {/* Damage All Others Button */}
               <button
                 onClick={() => damageAllOthers(playerIndex, -1)}
-                className="bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold py-1.5 px-2 shadow-md hover:shadow-lg transition-all duration-150 border-b-2 border-orange-800 active:border-orange-600"
+                className="bg-[#c2410c] hover:bg-[#ea580c] text-white text-xs font-bold py-1.5 px-2 transition-all duration-150"
               >
                 -1 to all others
               </button>
@@ -351,37 +397,37 @@ export default function CommanderPage() {
 
           {/* History */}
           <div className="flex-1 mt-2 mb-2 w-full max-w-[270px] mx-auto flex flex-col min-h-0">
-            <div className="bg-slate-800 border border-slate-700/50 border-b-2 border-b-slate-950 p-2 flex-1 overflow-y-auto min-h-0">
-              <div className="text-[9px] text-slate-400 font-semibold mb-1 pb-1 border-b border-slate-500">
+            <div className="bg-[#2a2a2a] p-2 flex-1 overflow-y-auto min-h-0">
+              <div className="text-[9px] text-[#a3a3a3] font-semibold mb-1 pb-1 border-b border-[#404040]">
                 Recent Actions:
               </div>
               {player.history.length === 0 ? (
-                <div className="text-[8px] text-slate-500 italic mt-1">
+                <div className="text-[8px] text-[#888888] italic mt-1">
                   No actions yet
                 </div>
               ) : (
                 <div className="mt-1">
                   {player.history.map((entry, index) => {
                     const [text, type] = entry.action.split("|");
-                    let textColor = "text-slate-400"; // default
+                    let textColor = "text-[#a3a3a3]"; // default
 
                     if (type === "positive") {
-                      textColor = "text-emerald-400";
+                      textColor = "text-[#22c55e]";
                     } else if (type === "negative") {
-                      textColor = "text-red-400";
+                      textColor = "text-[#dc2626]";
                     } else if (type === "poison") {
-                      textColor = "text-purple-400";
+                      textColor = "text-[#a855f7]";
                     } else if (type === "commander") {
-                      textColor = "text-blue-400";
+                      textColor = "text-[#3b82f6]";
                     }
 
                     return (
                       <div
                         key={`${entry.timestamp}-${index}`}
-                        className={`flex justify-between items-center text-[8px] leading-tight font-medium py-1 border-b border-slate-700/30 ${textColor}`}
+                        className={`flex justify-between items-center text-[8px] leading-tight font-medium py-1 border-b border-[#404040] ${textColor}`}
                       >
                         <span className="truncate pr-1">{text}</span>
-                        <span className="text-slate-500 text-[7px] shrink-0">
+                        <span className="text-[#888888] text-[7px] shrink-0">
                           {formatTime(entry.timestamp)}
                         </span>
                       </div>
@@ -399,24 +445,24 @@ export default function CommanderPage() {
               {commanderSources.map((sourceIndex, i) => (
                 <div
                   key={sourceIndex}
-                  className="bg-slate-800 p-2 text-center flex-1 min-w-0 shadow-lg border border-slate-700/50 border-b-2 border-b-slate-950"
-                  style={{ minWidth: "48px" }}
+                  className="bg-[#2a2a2a] p-2 text-center flex-1 min-w-0"
+                  style={{ minWidth: "52px" }}
                 >
                   <div className="flex items-center justify-center mb-1 h-5">
-                    <span className="text-xs text-slate-200 font-bold leading-none tracking-wide whitespace-nowrap">
+                    <span className="text-xs text-[#e5e5e5] font-bold leading-none tracking-wide whitespace-nowrap">
                       {playerAbbrevs[sourceIndex]}: {player.commanderDamage[i]}
                     </span>
                   </div>
-                  <div className="flex gap-0.5 justify-center">
+                  <div className="flex gap-1 justify-center items-center">
                     <button
                       onClick={() => updateCommanderDamage(playerIndex, i, -1)}
-                      className="bg-red-600 hover:bg-red-500 text-white text-[8px] font-bold py-0.5 px-0.5 shadow-md hover:shadow-lg transition-all duration-150 w-4 h-4 flex items-center justify-center border-b border-red-800"
+                      className="bg-[#991b1b] hover:bg-[#b91c1c] text-white text-[8px] font-bold transition-all duration-150 w-4 h-4 flex items-center justify-center"
                     >
                       -
                     </button>
                     <button
                       onClick={() => updateCommanderDamage(playerIndex, i, 1)}
-                      className="bg-emerald-700 hover:bg-emerald-600 text-white text-[8px] font-bold py-0.5 px-0.5 shadow-md hover:shadow-lg transition-all duration-150 w-4 h-4 flex items-center justify-center border-b border-emerald-900"
+                      className="bg-[#166534] hover:bg-[#16a34a] text-white text-[8px] font-bold transition-all duration-150 w-4 h-4 flex items-center justify-center"
                     >
                       +
                     </button>
@@ -426,8 +472,8 @@ export default function CommanderPage() {
 
               {/* Poison Counter */}
               <div
-                className="bg-slate-800 p-2 text-center flex-1 min-w-0 shadow-lg border border-slate-700/50 border-b-2 border-b-slate-950"
-                style={{ minWidth: "48px" }}
+                className="bg-[#2a2a2a] p-2 text-center flex-1 min-w-0"
+                style={{ minWidth: "52px" }}
               >
                 <div className="flex items-center justify-center mb-1 h-5">
                   <div className="flex items-center whitespace-nowrap">
@@ -442,21 +488,21 @@ export default function CommanderPage() {
                         fill="currentColor"
                       />
                     </svg>
-                    <span className="text-xs text-slate-200 font-bold leading-none tracking-wide">
+                    <span className="text-xs text-[#e5e5e5] font-bold leading-none tracking-wide">
                       {player.poison}
                     </span>
                   </div>
                 </div>
-                <div className="flex gap-0.5 justify-center">
+                <div className="flex gap-1 justify-center items-center">
                   <button
                     onClick={() => updatePoison(playerIndex, -1)}
-                    className="bg-red-600 hover:bg-red-500 text-white text-[8px] font-bold py-0.5 px-0.5 shadow-md hover:shadow-lg transition-all duration-150 w-4 h-4 flex items-center justify-center border-b border-red-800"
+                    className="bg-[#991b1b] hover:bg-[#b91c1c] text-white text-[8px] font-bold transition-all duration-150 w-4 h-4 flex items-center justify-center"
                   >
                     -
                   </button>
                   <button
                     onClick={() => updatePoison(playerIndex, 1)}
-                    className="bg-green-900 hover:bg-green-800 text-white text-[8px] font-bold py-0.5 px-0.5 shadow-md hover:shadow-lg transition-all duration-150 w-4 h-4 flex items-center justify-center border-b border-green-950"
+                    className="bg-[#064e3b] hover:bg-[#065f46] text-white text-[8px] font-bold transition-all duration-150 w-4 h-4 flex items-center justify-center"
                   >
                     +
                   </button>
@@ -470,38 +516,46 @@ export default function CommanderPage() {
   };
 
   return (
-    <div className="h-screen w-screen bg-slate-950 overflow-hidden relative select-none">
+    <div className="h-screen w-screen bg-[#1a1a1a] overflow-hidden relative select-none">
       {/* Menu Button */}
       <button
         onClick={() => setIsMenuOpen(true)}
-        className="absolute top-4 right-4 z-10 bg-slate-800 hover:bg-slate-700 text-slate-100 font-bold py-3 px-4 shadow-xl hover:shadow-2xl transition-all duration-200 border border-slate-600/50 border-b-2 border-b-slate-950"
+        className="absolute top-4 left-4 z-30 bg-[#333333] hover:bg-[#404040] text-[#e5e5e5] font-bold py-2 px-2 transition-all duration-200 w-10 h-10 flex items-center justify-center"
+        title="Game Settings"
       >
-        ⚙️ Menu
+        ⚙️
       </button>
 
       {/* Menu Modal */}
       {isMenuOpen && (
-        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-20">
-          <div className="bg-slate-800 p-8 max-w-md w-full mx-4 max-h-[80vh] overflow-y-auto shadow-2xl border-2 border-slate-700/50 border-b-4 border-b-slate-950">
-            <h3 className="text-2xl font-black text-slate-100 mb-6 tracking-wide drop-shadow-lg">
+        <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-20">
+          <div className="bg-[#2a2a2a] p-8 max-w-md w-full mx-4 max-h-[80vh] overflow-y-auto">
+            <h3 className="text-2xl font-bold text-[#f5f5f5] mb-6 tracking-wide">
               Game Settings
             </h3>
 
             {/* Player Names */}
-            <div className="space-y-4 mb-8">
-              <h4 className="text-lg font-bold text-slate-200 tracking-wide">
+            <div className="space-y-4 mb-2">
+              <h4 className="text-lg font-bold text-[#cccccc] tracking-wide">
                 Player Names
               </h4>
               {players.map((player, index) => (
                 <div key={index} className="flex items-center gap-3">
-                  <span className="text-slate-300 text-sm font-semibold w-20">
+                  <span className="text-[#b3b3b3] text-sm font-semibold w-20">
                     Player {index + 1}:
                   </span>
                   <input
                     type="text"
-                    value={player.name}
-                    onChange={(e) => updatePlayerName(index, e.target.value)}
-                    className="flex-1 px-4 py-3 bg-slate-950 text-slate-100 border border-slate-600 border-b-2 border-b-slate-800 focus:border-emerald-400 focus:border-b-emerald-400 focus:ring-2 focus:ring-emerald-400/20 focus:outline-none transition-all duration-200 font-medium shadow-inner"
+                    value={
+                      player.name === `Player ${index + 1}` ? "" : player.name
+                    }
+                    onChange={(e) =>
+                      updatePlayerName(
+                        index,
+                        e.target.value || `Player ${index + 1}`
+                      )
+                    }
+                    className="flex-1 px-4 py-3 bg-[#1a1a1a] text-[#e5e5e5] focus:border-[#4ade80] focus:ring-2 focus:ring-[#4ade80]/20 focus:outline-none transition-all duration-200 font-medium"
                     placeholder={`Player ${index + 1}`}
                   />
                 </div>
@@ -509,19 +563,47 @@ export default function CommanderPage() {
             </div>
 
             {/* Actions */}
-            <div className="flex gap-4">
-              <button
-                onClick={resetGame}
-                className="flex-1 bg-red-700 hover:bg-red-600 text-white font-bold py-4 px-6 shadow-lg hover:shadow-xl transition-all duration-200 border border-red-500/50 border-b-2 border-b-red-900"
-              >
-                Reset Game
-              </button>
-              <button
-                onClick={() => setIsMenuOpen(false)}
-                className="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-100 font-bold py-4 px-6 shadow-lg hover:shadow-xl transition-all duration-200 border border-slate-600/50 border-b-2 border-b-slate-950"
-              >
-                Close
-              </button>
+            <div>
+              <div className="text-center">
+                <p
+                  className={`text-[#f5f5f5] text-sm font-bold mb-2 transition-opacity duration-200 ${
+                    showResetConfirm ? "opacity-100" : "opacity-0"
+                  }`}
+                >
+                  Are you sure you want to reset the entire game?
+                </p>
+              </div>
+              {!showResetConfirm ? (
+                <div className="flex gap-4">
+                  <button
+                    onClick={handleResetClick}
+                    className="flex-1 bg-[#991b1b] hover:bg-[#b91c1c] text-white font-bold py-4 px-6 transition-all duration-200"
+                  >
+                    Reset Game
+                  </button>
+                  <button
+                    onClick={() => setIsMenuOpen(false)}
+                    className="flex-1 bg-[#404040] hover:bg-[#4a4a4a] text-[#e5e5e5] font-bold py-4 px-6 transition-all duration-200"
+                  >
+                    Close
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-4">
+                  <button
+                    onClick={resetGame}
+                    className="flex-1 bg-[#991b1b] hover:bg-[#b91c1c] text-white font-bold py-4 px-6 transition-all duration-200"
+                  >
+                    Yes, Reset
+                  </button>
+                  <button
+                    onClick={cancelReset}
+                    className="flex-1 bg-[#404040] hover:bg-[#4a4a4a] text-[#e5e5e5] font-bold py-4 px-6 transition-all duration-200"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
