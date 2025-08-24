@@ -108,6 +108,7 @@ function CommanderPageContent() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [rotatingPlayer, setRotatingPlayer] = useState<number | null>(null);
+  const [showScoreboard, setShowScoreboard] = useState(true);
 
   const [hasLoadedInitialState, setHasLoadedInitialState] = useState(false);
 
@@ -152,15 +153,31 @@ function CommanderPageContent() {
 
       // Only load player names if we didn't load a complete game state
       if (savedSettings) {
-        const settings = JSON.parse(savedSettings);
-        if (settings.playerNames) {
-          setPlayers((prev) =>
-            prev.map((player, index) => ({
-              ...player,
-              name: settings.playerNames[index] || player.name,
-            }))
-          );
+        try {
+          const settings = JSON.parse(savedSettings);
+          if (settings.playerNames) {
+            setPlayers((prev) =>
+              prev.map((player, index) => ({
+                ...player,
+                name: settings.playerNames[index] || player.name,
+              }))
+            );
+          }
+          // Load scoreboard visibility setting (default to true if not set)
+          if (typeof settings.showScoreboard === "boolean") {
+            setShowScoreboard(settings.showScoreboard);
+          } else {
+            // If no setting exists in saved settings, default to true
+            setShowScoreboard(true);
+          }
+        } catch (error) {
+          console.error("Failed to parse saved settings:", error);
+          // If there's an error parsing settings, use defaults
+          setShowScoreboard(true);
         }
+      } else {
+        // If no saved settings exist at all, default to true
+        setShowScoreboard(true);
       }
 
       // Mark that we've finished loading initial state
@@ -168,16 +185,17 @@ function CommanderPageContent() {
     }
   }, []);
 
-  // Save player names to localStorage
+  // Save player names and settings to localStorage
   const saveToLocalStorage = useCallback(() => {
     if (typeof window !== "undefined") {
       const playerNames = players.map((player) => player.name);
       const settings = {
         playerNames: playerNames,
+        showScoreboard: showScoreboard,
       };
       localStorage.setItem("commander-settings", JSON.stringify(settings));
     }
-  }, [players]);
+  }, [players, showScoreboard]);
 
   // Save complete game state to localStorage
   const saveGameStateToStorage = useCallback(() => {
@@ -193,8 +211,22 @@ function CommanderPageContent() {
 
   // Update localStorage whenever players change
   useEffect(() => {
-    saveToLocalStorage();
-  }, [saveToLocalStorage]);
+    if (hasLoadedInitialState) {
+      saveToLocalStorage();
+    }
+  }, [saveToLocalStorage, hasLoadedInitialState]);
+
+  // Save settings immediately when scoreboard visibility changes
+  useEffect(() => {
+    if (hasLoadedInitialState && typeof window !== "undefined") {
+      const playerNames = players.map((player) => player.name);
+      const settings = {
+        playerNames: playerNames,
+        showScoreboard: showScoreboard,
+      };
+      localStorage.setItem("commander-settings", JSON.stringify(settings));
+    }
+  }, [showScoreboard, hasLoadedInitialState, players]);
 
   // Auto-save game state whenever players state changes
   useEffect(() => {
@@ -823,8 +855,8 @@ function CommanderPageContent() {
                       <div className="flex gap-1 justify-center items-center">
                         <span className="bg-[#991b1b] hover:bg-[#b91c1c] text-white text-xs font-bold transition-all duration-150 w-4 h-4 flex items-center justify-center flex-shrink-0">
                           <svg
-                            width="8"
-                            height="8"
+                            width="12"
+                            height="12"
                             viewBox="0 0 24 24"
                             fill="currentColor"
                           >
@@ -833,8 +865,8 @@ function CommanderPageContent() {
                         </span>
                         <span className="bg-[#166534] hover:bg-[#16a34a] text-white text-xs font-bold transition-all duration-150 w-4 h-4 flex items-center justify-center flex-shrink-0">
                           <svg
-                            width="8"
-                            height="8"
+                            width="12"
+                            height="12"
                             viewBox="0 0 24 24"
                             fill="currentColor"
                           >
@@ -878,8 +910,8 @@ function CommanderPageContent() {
                     <div className="flex gap-1 justify-center items-center">
                       <span className="bg-[#991b1b] hover:bg-[#b91c1c] text-white text-xs font-bold transition-all duration-150 w-4 h-4 flex items-center justify-center flex-shrink-0">
                         <svg
-                          width="8"
-                          height="8"
+                          width="12"
+                          height="12"
                           viewBox="0 0 24 24"
                           fill="currentColor"
                         >
@@ -888,8 +920,8 @@ function CommanderPageContent() {
                       </span>
                       <span className="bg-[#064e3b] hover:bg-[#065f46] text-white text-xs font-bold transition-all duration-150 w-4 h-4 flex items-center justify-center flex-shrink-0">
                         <svg
-                          width="8"
-                          height="8"
+                          width="12"
+                          height="12"
                           viewBox="0 0 24 24"
                           fill="currentColor"
                         >
@@ -972,6 +1004,32 @@ function CommanderPageContent() {
               </div>
             </div>
 
+            {/* Scoreboard Settings - Desktop only */}
+            {!isMobileLandscape && !isMobilePortrait && (
+              <div className="mb-4">
+                <h4 className="text-sm font-bold text-[#a3a3a3] mb-3 tracking-wide">
+                  DISPLAY:
+                </h4>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-[#e5e5e5] font-medium">
+                    Show Center Scoreboard
+                  </span>
+                  <button
+                    onClick={() => setShowScoreboard(!showScoreboard)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${
+                      showScoreboard ? "bg-[#4ade80]" : "bg-[#404040]"
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ${
+                        showScoreboard ? "translate-x-6" : "translate-x-1"
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Reset Confirmation Text */}
             <div className="text-center mb-2">
               <p
@@ -1027,8 +1085,8 @@ function CommanderPageContent() {
         </div>
       )}
 
-      {/* Center Scoreboard - Hidden on mobile (both landscape and portrait), visible on desktop */}
-      {!isMobileLandscape && !isMobilePortrait && (
+      {/* Center Scoreboard - Hidden on mobile (both landscape and portrait), controlled by setting on desktop */}
+      {!isMobileLandscape && !isMobilePortrait && showScoreboard && (
         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none">
           <div className="bg-[#222222] shadow-lg">
             <div className="grid grid-cols-2 grid-rows-4 gap-0">
