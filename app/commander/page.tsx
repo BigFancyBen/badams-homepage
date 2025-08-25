@@ -61,6 +61,19 @@ interface PlayerState {
   isDead: boolean;
 }
 
+interface UndoOperation {
+  sourcePlayerIndex: number;
+  affectedPlayers: Array<{
+    playerIndex: number;
+    lifeChange: number;
+  }>;
+  historyEntries: Array<{
+    playerIndex: number;
+    entry: HistoryEntry;
+  }>;
+  timestamp: number;
+}
+
 function CommanderPageContent() {
   // Use custom hooks for mobile detection
   const { isMobileLandscape, isMobilePortrait, isLandscape, isClient } =
@@ -108,6 +121,7 @@ function CommanderPageContent() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [rotatingPlayer, setRotatingPlayer] = useState<number | null>(null);
+  const [undoStack, setUndoStack] = useState<UndoOperation[]>([]);
 
   const [hasLoadedInitialState, setHasLoadedInitialState] = useState(false);
 
@@ -382,26 +396,98 @@ function CommanderPageContent() {
   };
 
   const damageAllOthers = (playerIndex: number, damage: number) => {
-    setPlayers((prev) =>
-      prev.map((player, index) =>
-        index !== playerIndex
-          ? { ...player, life: Math.max(0, player.life + damage) }
-          : player
-      )
-    );
-
-    // Add history to all other players
     const changeText = damage > 0 ? `+${damage}` : `${damage}`;
     const actionType = damage > 0 ? "positive" : "negative";
     const sourceName = players[playerIndex]?.name || `P${playerIndex + 1}`;
+    const timestamp = Date.now();
+    
+    // Store information for undo operation
+    const affectedPlayers: Array<{ playerIndex: number; lifeChange: number }> = [];
+    const historyEntries: Array<{ playerIndex: number; entry: HistoryEntry }> = [];
+    
+    // Track which players will be affected and create history entries
     [0, 1, 2, 3].forEach((index) => {
       if (index !== playerIndex) {
-        addHistory(
-          index,
-          `${changeText} life from ${sourceName}|${actionType}`
-        );
+        affectedPlayers.push({
+          playerIndex: index,
+          lifeChange: damage,
+        });
+        
+        historyEntries.push({
+          playerIndex: index,
+          entry: {
+            action: `${changeText} life from ${sourceName}|${actionType}`,
+            timestamp,
+          },
+        });
       }
     });
+
+    // Update player states
+    setPlayers((prev) =>
+      prev.map((player, index) => {
+        if (index !== playerIndex) {
+          // Apply damage and add history
+          const newHistory = [
+            historyEntries.find(h => h.playerIndex === index)!.entry,
+            ...player.history,
+          ];
+          
+          return {
+            ...player,
+            life: Math.max(0, player.life + damage),
+            history: newHistory,
+          };
+        }
+        return player;
+      })
+    );
+
+    // Add to undo stack
+    const undoOperation: UndoOperation = {
+      sourcePlayerIndex: playerIndex,
+      affectedPlayers,
+      historyEntries,
+      timestamp,
+    };
+    
+    setUndoStack((prev) => [undoOperation, ...prev]);
+  };
+
+  const undoDamageAllOthers = () => {
+    if (undoStack.length === 0) return;
+    
+    const lastOperation = undoStack[0];
+    
+    // Reverse the life changes and remove history entries
+    setPlayers((prev) =>
+      prev.map((player, index) => {
+        const affectedPlayer = lastOperation.affectedPlayers.find(
+          (ap) => ap.playerIndex === index
+        );
+        
+        if (affectedPlayer) {
+          // Reverse the life change
+          const newLife = player.life - affectedPlayer.lifeChange;
+          
+          // Remove the history entry that was added
+          const newHistory = player.history.filter(
+            (entry) => entry.timestamp !== lastOperation.timestamp
+          );
+          
+          return {
+            ...player,
+            life: Math.max(0, newLife),
+            history: newHistory,
+          };
+        }
+        
+        return player;
+      })
+    );
+    
+    // Remove the operation from undo stack
+    setUndoStack((prev) => prev.slice(1));
   };
 
   const updatePlayerName = (playerIndex: number, name: string) => {
@@ -426,6 +512,7 @@ function CommanderPageContent() {
     );
     setShowResetConfirm(false);
     setIsMenuOpen(false);
+    setUndoStack([]); // Clear undo stack
 
     // Clear the saved game state but keep the settings
     if (typeof window !== "undefined") {
@@ -684,13 +771,23 @@ function CommanderPageContent() {
                   </button>
                 </div>
 
-                {/* Damage All Others Button */}
-                <button
-                  onClick={() => damageAllOthers(playerIndex, -1)}
-                  className="bg-[#c2410c] hover:bg-[#ea580c] text-white text-sm font-bold py-3 px-2 transition-all duration-150"
-                >
-                  -1 to all others
-                </button>
+                {/* Damage All Others Button and Undo */}
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => damageAllOthers(playerIndex, -1)}
+                    className="flex-1 bg-[#c2410c] hover:bg-[#ea580c] text-white text-sm font-bold py-3 px-2 transition-all duration-150"
+                  >
+                    -1 to all others
+                  </button>
+                  <button
+                    onClick={undoDamageAllOthers}
+                    disabled={undoStack.length === 0}
+                    className="bg-[#6b7280] hover:bg-[#9ca3af] disabled:bg-[#374151] disabled:text-[#6b7280] disabled:cursor-not-allowed text-white text-sm font-bold py-3 px-2 transition-all duration-150"
+                    title="Undo last damage to all others"
+                  >
+                    ↶
+                  </button>
+                </div>
               </div>
             </div>
 
