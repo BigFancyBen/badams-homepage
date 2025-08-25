@@ -3,36 +3,26 @@ export default function Home() {
     <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8">
       <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-center">benadams.dev</h1>
 
-      {/* Featured Project */}
-      <div className="mt-8">
-        <a
-          href="/commander"
-          className="inline-block px-6 py-3 border-2 border-black hover:bg-black hover:text-white transition-colors text-lg font-medium cursor-pointer underline hover:no-underline"
-        >
-          MTG Commander Scorekeeper
-        </a>
-      </div>
-
       {/* Projects Section */}
       <div className="mt-16 w-full max-w-4xl">
         <h2 className="text-2xl md:text-3xl font-bold text-center mb-8">Projects</h2>
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {/* MTG Commander Scorekeeper */}
-          <div className="border-2 border-gray-300 p-6 hover:border-black transition-colors">
+          <a 
+            href="/commander"
+            className="block border-2 border-gray-300 p-6 hover:border-black transition-colors cursor-pointer"
+          >
             <h3 className="text-xl font-bold mb-3">MTG Commander Scorekeeper</h3>
             <p className="text-gray-700 mb-4 text-sm leading-relaxed">
               A full-screen, touch-friendly scorekeeper application for Magic: The Gathering Commander format. 
               Features 4-player quadrant layout, life tracking, commander damage tracking, poison counters, 
               persistent game state, and mobile-optimized interface with rotating quadrants.
             </p>
-            <a 
-              href="/commander" 
-              className="inline-block px-4 py-2 border border-black hover:bg-black hover:text-white transition-colors text-sm font-medium"
-            >
-              Try it out →
-            </a>
-          </div>
+            <div className="text-sm text-gray-500">
+              Click to try it out →
+            </div>
+          </a>
 
           {/* Prognosticator */}
           <div className="border-2 border-gray-300 p-6 hover:border-black transition-colors">
