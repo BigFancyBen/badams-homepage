@@ -111,6 +111,15 @@ function CommanderPageContent() {
   const [showScoreboard, setShowScoreboard] = useState(true);
 
   const [hasLoadedInitialState, setHasLoadedInitialState] = useState(false);
+  
+  // Track last "damage all others" action per player for undo functionality
+  const [lastDamageAllAction, setLastDamageAllAction] = useState<{
+    [playerIndex: number]: {
+      timestamp: number;
+      affectedPlayers: number[];
+      damage: number;
+    } | null;
+  }>({});
 
   // Handle orientation changes for mobile devices
   useEffect(() => {
@@ -407,6 +416,8 @@ function CommanderPageContent() {
   };
 
   const damageAllOthers = (playerIndex: number, damage: number) => {
+    const affectedPlayers = [0, 1, 2, 3].filter(index => index !== playerIndex);
+    
     setPlayers((prev) =>
       prev.map((player, index) =>
         index !== playerIndex
@@ -415,18 +426,51 @@ function CommanderPageContent() {
       )
     );
 
+    // Store this action for potential undo
+    setLastDamageAllAction(prev => ({
+      ...prev,
+      [playerIndex]: {
+        timestamp: Date.now(),
+        affectedPlayers,
+        damage
+      }
+    }));
+
     // Add history to all other players
     const changeText = damage > 0 ? `+${damage}` : `${damage}`;
     const actionType = damage > 0 ? "positive" : "negative";
     const sourceName = players[playerIndex]?.name || `P${playerIndex + 1}`;
-    [0, 1, 2, 3].forEach((index) => {
-      if (index !== playerIndex) {
-        addHistory(
-          index,
-          `${changeText} life from ${sourceName}|${actionType}`
-        );
-      }
+    affectedPlayers.forEach((index) => {
+      addHistory(
+        index,
+        `${changeText} life from ${sourceName}|${actionType}`
+      );
     });
+  };
+
+  const undoDamageAllOthers = (playerIndex: number) => {
+    const lastAction = lastDamageAllAction[playerIndex];
+    if (!lastAction) return;
+
+    // Reverse the damage
+    setPlayers((prev) =>
+      prev.map((player, index) => {
+        if (lastAction.affectedPlayers.includes(index)) {
+          return { 
+            ...player, 
+            life: player.life - lastAction.damage, // Reverse the damage
+            history: player.history.slice(1) // Remove the most recent history entry
+          };
+        }
+        return player;
+      })
+    );
+
+    // Clear the stored action
+    setLastDamageAllAction(prev => ({
+      ...prev,
+      [playerIndex]: null
+    }));
   };
 
   const updatePlayerName = (playerIndex: number, name: string) => {
@@ -451,6 +495,9 @@ function CommanderPageContent() {
     );
     setShowResetConfirm(false);
     setIsMenuOpen(false);
+    
+    // Clear undo state
+    setLastDamageAllAction({});
 
     // Clear the saved game state but keep the settings
     if (typeof window !== "undefined") {
@@ -709,13 +756,27 @@ function CommanderPageContent() {
                   </button>
                 </div>
 
-                {/* Damage All Others Button */}
-                <button
-                  onClick={() => damageAllOthers(playerIndex, -1)}
-                  className="bg-[#c2410c] hover:bg-[#ea580c] text-white text-xs font-bold py-1.5 px-2 transition-all duration-150"
-                >
-                  -1 to all others
-                </button>
+                {/* Damage All Others Button with Undo */}
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => damageAllOthers(playerIndex, -1)}
+                    className="flex-1 bg-[#c2410c] hover:bg-[#ea580c] text-white text-xs font-bold py-1.5 px-2 transition-all duration-150"
+                  >
+                    -1 to all others
+                  </button>
+                  <button
+                    onClick={() => undoDamageAllOthers(playerIndex)}
+                    disabled={!lastDamageAllAction[playerIndex]}
+                    className={`px-2 py-1.5 text-xs font-bold transition-all duration-150 ${
+                      lastDamageAllAction[playerIndex]
+                        ? "bg-[#374151] hover:bg-[#4b5563] text-white"
+                        : "bg-[#1f2937] text-[#6b7280] cursor-not-allowed"
+                    }`}
+                    title={lastDamageAllAction[playerIndex] ? "Undo last damage to all others" : "No recent damage to undo"}
+                  >
+                    ↶
+                  </button>
+                </div>
               </div>
             </div>
 
