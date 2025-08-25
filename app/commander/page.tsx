@@ -449,31 +449,31 @@ function CommanderPageContent() {
     const newDamageValue = Math.max(0, Math.min(21, currentDamage + change));
     const actualChange = newDamageValue - currentDamage;
 
-    setPlayers((prev) =>
-      prev.map((player, index) => {
-        if (index === playerIndex) {
-          const newDamage = [...player.commanderDamage];
-          newDamage[sourceIndex] = newDamageValue;
-          return {
-            ...player,
-            commanderDamage: newDamage as [number, number, number],
-          };
-        }
-        return player;
-      })
-    );
-
-    // Also update life by the opposite amount of the actual commander damage change
-    // and only add history if there was an actual change
+    // Only proceed if there was an actual change
     if (actualChange !== 0) {
-      updateLife(playerIndex, -actualChange);
-      
+      setPlayers((prev) =>
+        prev.map((player, index) => {
+          if (index === playerIndex) {
+            const newDamage = [...player.commanderDamage];
+            newDamage[sourceIndex] = newDamageValue;
+            return {
+              ...player,
+              commanderDamage: newDamage as [number, number, number],
+              // Update life directly without creating a life history entry
+              life: Math.max(0, player.life - actualChange),
+            };
+          }
+          return player;
+        })
+      );
+
+      // Only add commander damage history entry (not a life entry)
       const commanderSources = [0, 1, 2, 3].filter((i) => i !== playerIndex);
       const actualSourceIndex = commanderSources[sourceIndex];
       const changeText = actualChange > 0 ? `+${actualChange}` : `${actualChange}`;
       const sourceName =
         players[actualSourceIndex]?.name || `P${actualSourceIndex + 1}`;
-      addHistory(playerIndex, `${changeText} from ${sourceName}|commander`);
+      addHistory(playerIndex, `${changeText} commander damage from ${sourceName}|commander`);
     }
   };
 
@@ -525,6 +525,78 @@ function CommanderPageContent() {
     );
   };
 
+  // Helper function to parse life actions from a specific player
+  const parseLifeActionFromPlayer = (actionStr: string): { value: number, type: string, fromPlayer: string } | null => {
+    const match = actionStr.match(/^([+-])(\d+)\s+life from (.+)\|(.+)$/);
+    if (!match) return null;
+    return {
+      value: parseInt(match[2]) * (match[1] === '+' ? 1 : -1),
+      type: match[4],
+      fromPlayer: match[3]
+    };
+  };
+
+  // Helper function to collapse life actions from a specific player
+  const collapseLifeActionsWithFrom = (newAction: string, existingHistory: HistoryEntry[], fromPlayer: string): HistoryEntry[] => {
+    const now = Date.now();
+    const COLLAPSE_WINDOW_MS = 2000; // 2 seconds
+    
+    // Only collapse life actions from the same player
+    if (!newAction.includes('life from ') || !newAction.includes(fromPlayer)) {
+      return [{ action: newAction, timestamp: now }, ...existingHistory];
+    }
+
+    // Find recent life actions from the same player within the time window
+    const newParsed = parseLifeActionFromPlayer(newAction);
+    if (!newParsed) {
+      return [{ action: newAction, timestamp: now }, ...existingHistory];
+    }
+    
+    const recentActions: HistoryEntry[] = [];
+    
+    for (const entry of existingHistory) {
+      if (now - entry.timestamp > COLLAPSE_WINDOW_MS) break;
+      if (entry.action.includes(`life from ${fromPlayer}|`)) {
+        const parsed = parseLifeActionFromPlayer(entry.action);
+        if (parsed) {
+          recentActions.push(entry);
+        } else {
+          break; // Stop if we can't parse the action
+        }
+      } else {
+        break; // Stop if we hit a non-matching action
+      }
+    }
+
+    // Parse recent actions and include the new one
+    const allValues: number[] = [newParsed.value];
+    const recentParsed = recentActions.map(entry => parseLifeActionFromPlayer(entry.action)).filter(Boolean) as { value: number, type: string, fromPlayer: string }[];
+    
+    for (const parsed of recentParsed) {
+      allValues.push(parsed.value);
+    }
+
+    // Collapse the values: sum them all up (allows cancellation)
+    const totalValue = allValues.reduce((sum, val) => sum + val, 0);
+    
+    // If the total is 0, we can skip adding anything (complete cancellation)
+    if (totalValue === 0) {
+      // Remove the recent life actions and don't add the new one
+      return existingHistory.slice(recentActions.length);
+    }
+
+    // Create the collapsed action
+    const changeText = totalValue > 0 ? `+${totalValue}` : `${totalValue}`;
+    const actionType = totalValue > 0 ? "positive" : "negative";
+    const collapsedAction = `${changeText} life from ${fromPlayer}|${actionType}`;
+
+    // Return history with recent actions replaced by the collapsed one
+    return [
+      { action: collapsedAction, timestamp: now },
+      ...existingHistory.slice(recentActions.length)
+    ];
+  };
+
   const damageAllOthers = (playerIndex: number, damage: number) => {
     const changeText = damage > 0 ? `+${damage}` : `${damage}`;
     const actionType = damage > 0 ? "positive" : "negative";
@@ -560,9 +632,9 @@ function CommanderPageContent() {
           // Apply damage
           const newLife = Math.max(0, player.life + damage);
           
-          // Use collapsing logic for history - create an equivalent direct life action for collapsing
-          const directLifeAction = `${changeText} life|${actionType}`;
-          const collapsedHistory = collapseLifeActions(directLifeAction, player.history);
+          // Add the proper "from player" format that can still collapse
+          const fromPlayerAction = `${changeText} life from ${sourceName}|${actionType}`;
+          const collapsedHistory = collapseLifeActionsWithFrom(fromPlayerAction, player.history, sourceName);
           
           return {
             ...player,
@@ -595,6 +667,9 @@ function CommanderPageContent() {
     // Check if the undo is happening within the collapse window
     const isWithinCollapseWindow = now - lastOperation.timestamp <= COLLAPSE_WINDOW_MS;
     
+    // Get the source player name for history formatting
+    const sourcePlayerName = players[lastOperation.sourcePlayerIndex]?.name || `P${lastOperation.sourcePlayerIndex + 1}`;
+    
     // Reverse the life changes and handle history
     setPlayers((prev) =>
       prev.map((player, index) => {
@@ -613,19 +688,18 @@ function CommanderPageContent() {
             const reverseChange = -affectedPlayer.lifeChange;
             const changeText = reverseChange > 0 ? `+${reverseChange}` : `${reverseChange}`;
             const actionType = reverseChange > 0 ? "positive" : "negative";
-            const reverseAction = `${changeText} life|${actionType}`;
+            const reverseAction = `${changeText} life from ${sourcePlayerName}|${actionType}`;
             
-            // Use collapsing logic with the reverse action
-            newHistory = collapseLifeActions(reverseAction, player.history);
+            // Use collapsing logic with the reverse action for "from player" format
+            newHistory = collapseLifeActionsWithFrom(reverseAction, player.history, sourcePlayerName);
           } else {
-            // If undoing outside the collapse window, we need to remove the most recent direct life action
-            // that matches the damage amount and timestamp, since we're now storing direct life actions
+            // If undoing outside the collapse window, we need to remove the matching "from player" entry
             const targetChange = affectedPlayer.lifeChange;
             const changeText = targetChange > 0 ? `+${targetChange}` : `${targetChange}`;
             const actionType = targetChange > 0 ? "positive" : "negative";
-            const targetAction = `${changeText} life|${actionType}`;
+            const targetAction = `${changeText} life from ${sourcePlayerName}|${actionType}`;
             
-            // Find and remove the matching entry by timestamp
+            // Find and remove the matching entry by timestamp and action
             const filteredHistory = player.history.filter(
               (entry) => !(entry.timestamp === lastOperation.timestamp && entry.action === targetAction)
             );
