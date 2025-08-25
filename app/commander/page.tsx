@@ -284,60 +284,6 @@ function CommanderPageContent() {
     };
   };
 
-  // Helper function to re-evaluate and collapse existing history
-  const reEvaluateHistoryCollapsing = (existingHistory: HistoryEntry[]): HistoryEntry[] => {
-    if (existingHistory.length === 0) return existingHistory;
-
-    // Find all consecutive life actions at the beginning of history (any sign)
-    const consecutiveActions: HistoryEntry[] = [];
-    
-    for (let i = 0; i < existingHistory.length; i++) {
-      const entry = existingHistory[i];
-      
-      // Include direct life actions (not "from" someone)
-      if (entry.action.includes('life|') && !entry.action.includes('from ')) {
-        const parsed = parseLifeAction(entry.action);
-        if (parsed) {
-          consecutiveActions.push(entry);
-        } else {
-          break; // Invalid life action format
-        }
-      } else {
-        break; // Stop if we hit a non-life action or life action "from" someone
-      }
-    }
-
-    if (consecutiveActions.length <= 1) {
-      return existingHistory; // Nothing to collapse
-    }
-
-    // Parse consecutive actions
-    const consecutiveParsed = consecutiveActions.map(entry => parseLifeAction(entry.action)).filter(Boolean) as { value: number, type: string }[];
-    
-    if (consecutiveParsed.length <= 1) {
-      return existingHistory; // Nothing valid to collapse
-    }
-
-    // Collapse the values: sum them all up (allows cancellation)
-    const totalValue = consecutiveParsed.reduce((sum, parsed) => sum + parsed.value, 0);
-    
-    // If the total is 0, we can remove all consecutive life actions (complete cancellation)
-    if (totalValue === 0) {
-      return existingHistory.slice(consecutiveActions.length);
-    }
-
-    // Create the collapsed action using the most recent timestamp
-    const changeText = totalValue > 0 ? `+${totalValue}` : `${totalValue}`;
-    const actionType = totalValue > 0 ? "positive" : "negative";
-    const collapsedAction = `${changeText} life|${actionType}`;
-
-    // Return history with consecutive actions replaced by the collapsed one
-    return [
-      { action: collapsedAction, timestamp: consecutiveActions[0].timestamp },
-      ...existingHistory.slice(consecutiveActions.length)
-    ];
-  };
-
   // Helper function to collapse recent life actions
   const collapseLifeActions = (newAction: string, existingHistory: HistoryEntry[]): HistoryEntry[] => {
     const now = Date.now();
