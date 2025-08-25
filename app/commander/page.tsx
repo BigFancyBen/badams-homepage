@@ -356,27 +356,39 @@ function CommanderPageContent() {
   // Helper function to collapse recent life actions
   const collapseLifeActions = (newAction: string, existingHistory: HistoryEntry[]): HistoryEntry[] => {
     const now = Date.now();
-    const COLLAPSE_WINDOW_MS = 15000; // 15 seconds
+    const COLLAPSE_WINDOW_MS = 2000; // 2 seconds
     
     // Only collapse life actions, not commander damage or poison
     if (!newAction.includes('life|')) {
       return [{ action: newAction, timestamp: now }, ...existingHistory];
     }
 
-    // Find recent life actions within the time window
-    const recentActions: HistoryEntry[] = [];
-    for (const entry of existingHistory) {
-      if (now - entry.timestamp > COLLAPSE_WINDOW_MS) break;
-      if (entry.action.includes('life|') && !entry.action.includes('from ')) {
-        recentActions.push(entry);
-      } else {
-        break; // Stop if we hit a non-life action or life action "from" someone
-      }
-    }
-
+    // Find recent life actions within the time window (same sign only)
     const newParsed = parseLifeAction(newAction);
     if (!newParsed) {
       return [{ action: newAction, timestamp: now }, ...existingHistory];
+    }
+    
+    const newSign = newParsed.value > 0 ? '+' : '-';
+    const recentActions: HistoryEntry[] = [];
+    
+    for (const entry of existingHistory) {
+      if (now - entry.timestamp > COLLAPSE_WINDOW_MS) break;
+      if (entry.action.includes('life|') && !entry.action.includes('from ')) {
+        const parsed = parseLifeAction(entry.action);
+        if (parsed) {
+          const entrySign = parsed.value > 0 ? '+' : '-';
+          if (entrySign === newSign) {
+            recentActions.push(entry);
+          } else {
+            break; // Stop if we hit a different sign
+          }
+        } else {
+          break; // Stop if we can't parse the action
+        }
+      } else {
+        break; // Stop if we hit a non-life action or life action "from" someone
+      }
     }
 
     // Parse recent actions and include the new one
