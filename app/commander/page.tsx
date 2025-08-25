@@ -286,45 +286,59 @@ function CommanderPageContent() {
 
   // Helper function to re-evaluate and collapse existing history
   const reEvaluateHistoryCollapsing = (existingHistory: HistoryEntry[]): HistoryEntry[] => {
-    const COLLAPSE_WINDOW_MS = 15000; // 15 seconds
-    
     if (existingHistory.length === 0) return existingHistory;
 
-    // Find consecutive life actions at the beginning of history that are within the time window
-    const recentActions: HistoryEntry[] = [];
+    // Find all consecutive life actions at the beginning of history (same sign)
+    const consecutiveActions: HistoryEntry[] = [];
+    let expectedSign: string | null = null;
+    
     for (let i = 0; i < existingHistory.length; i++) {
       const entry = existingHistory[i];
       
       // Only include direct life actions (not "from" someone)
       if (entry.action.includes('life|') && !entry.action.includes('from ')) {
-        // Check if this entry is within the time window from the first entry
-        if (recentActions.length === 0 || (recentActions[0].timestamp - entry.timestamp <= COLLAPSE_WINDOW_MS)) {
-          recentActions.push(entry);
+        const parsed = parseLifeAction(entry.action);
+        if (parsed) {
+          const currentSign = parsed.value > 0 ? '+' : '-';
+          
+          // If this is the first action, set the expected sign
+          if (expectedSign === null) {
+            expectedSign = currentSign;
+            consecutiveActions.push(entry);
+          }
+          // If same sign as expected, continue the sequence
+          else if (currentSign === expectedSign) {
+            consecutiveActions.push(entry);
+          }
+          // Different sign, stop the sequence
+          else {
+            break;
+          }
         } else {
-          break; // Outside time window
+          break; // Invalid life action format
         }
       } else {
         break; // Stop if we hit a non-life action or life action "from" someone
       }
     }
 
-    if (recentActions.length <= 1) {
+    if (consecutiveActions.length <= 1) {
       return existingHistory; // Nothing to collapse
     }
 
-    // Parse recent actions
-    const recentParsed = recentActions.map(entry => parseLifeAction(entry.action)).filter(Boolean) as { value: number, type: string }[];
+    // Parse consecutive actions
+    const consecutiveParsed = consecutiveActions.map(entry => parseLifeAction(entry.action)).filter(Boolean) as { value: number, type: string }[];
     
-    if (recentParsed.length <= 1) {
+    if (consecutiveParsed.length <= 1) {
       return existingHistory; // Nothing valid to collapse
     }
 
     // Collapse the values: sum them all up
-    const totalValue = recentParsed.reduce((sum, parsed) => sum + parsed.value, 0);
+    const totalValue = consecutiveParsed.reduce((sum, parsed) => sum + parsed.value, 0);
     
-    // If the total is 0, we can remove all recent life actions (complete cancellation)
+    // If the total is 0, we can remove all consecutive life actions (complete cancellation)
     if (totalValue === 0) {
-      return existingHistory.slice(recentActions.length);
+      return existingHistory.slice(consecutiveActions.length);
     }
 
     // Create the collapsed action using the most recent timestamp
@@ -332,10 +346,10 @@ function CommanderPageContent() {
     const actionType = totalValue > 0 ? "positive" : "negative";
     const collapsedAction = `${changeText} life|${actionType}`;
 
-    // Return history with recent actions replaced by the collapsed one
+    // Return history with consecutive actions replaced by the collapsed one
     return [
-      { action: collapsedAction, timestamp: recentActions[0].timestamp },
-      ...existingHistory.slice(recentActions.length)
+      { action: collapsedAction, timestamp: consecutiveActions[0].timestamp },
+      ...existingHistory.slice(consecutiveActions.length)
     ];
   };
 
