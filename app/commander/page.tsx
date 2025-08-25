@@ -112,13 +112,13 @@ function CommanderPageContent() {
 
   const [hasLoadedInitialState, setHasLoadedInitialState] = useState(false);
   
-  // Track last "damage all others" action per player for undo functionality
-  const [lastDamageAllAction, setLastDamageAllAction] = useState<{
+  // Track "damage all others" actions per player for undo functionality
+  const [damageAllActions, setDamageAllActions] = useState<{
     [playerIndex: number]: {
       timestamp: number;
       affectedPlayers: number[];
       damage: number;
-    } | null;
+    }[];
   }>({});
 
   // Handle orientation changes for mobile devices
@@ -427,13 +427,16 @@ function CommanderPageContent() {
     );
 
     // Store this action for potential undo
-    setLastDamageAllAction(prev => ({
+    setDamageAllActions(prev => ({
       ...prev,
-      [playerIndex]: {
-        timestamp: Date.now(),
-        affectedPlayers,
-        damage
-      }
+      [playerIndex]: [
+        ...(prev[playerIndex] || []),
+        {
+          timestamp: Date.now(),
+          affectedPlayers,
+          damage
+        }
+      ]
     }));
 
     // Add history to all other players
@@ -449,8 +452,11 @@ function CommanderPageContent() {
   };
 
   const undoDamageAllOthers = (playerIndex: number) => {
-    const lastAction = lastDamageAllAction[playerIndex];
-    if (!lastAction) return;
+    const playerActions = damageAllActions[playerIndex];
+    if (!playerActions || playerActions.length === 0) return;
+
+    // Get the most recent action
+    const lastAction = playerActions[playerActions.length - 1];
 
     // Reverse the damage
     setPlayers((prev) =>
@@ -466,10 +472,10 @@ function CommanderPageContent() {
       })
     );
 
-    // Clear the stored action
-    setLastDamageAllAction(prev => ({
+    // Remove the last action from the history
+    setDamageAllActions(prev => ({
       ...prev,
-      [playerIndex]: null
+      [playerIndex]: playerActions.slice(0, -1)
     }));
   };
 
@@ -497,7 +503,7 @@ function CommanderPageContent() {
     setIsMenuOpen(false);
     
     // Clear undo state
-    setLastDamageAllAction({});
+    setDamageAllActions({});
 
     // Clear the saved game state but keep the settings
     if (typeof window !== "undefined") {
@@ -766,13 +772,13 @@ function CommanderPageContent() {
                   </button>
                   <button
                     onClick={() => undoDamageAllOthers(playerIndex)}
-                    disabled={!lastDamageAllAction[playerIndex]}
+                    disabled={!damageAllActions[playerIndex] || damageAllActions[playerIndex].length === 0}
                     className={`px-2 py-1.5 text-xs font-bold transition-all duration-150 ${
-                      lastDamageAllAction[playerIndex]
+                      damageAllActions[playerIndex] && damageAllActions[playerIndex].length > 0
                         ? "bg-[#374151] hover:bg-[#4b5563] text-white"
                         : "bg-[#1f2937] text-[#6b7280] cursor-not-allowed"
                     }`}
-                    title={lastDamageAllAction[playerIndex] ? "Undo last damage to all others" : "No recent damage to undo"}
+                    title={damageAllActions[playerIndex] && damageAllActions[playerIndex].length > 0 ? "Undo last damage to all others" : "No recent damage to undo"}
                   >
                     ↶
                   </button>
