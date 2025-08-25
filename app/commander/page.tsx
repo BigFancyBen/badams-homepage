@@ -308,14 +308,16 @@ function CommanderPageContent() {
     sourceIndex: number,
     change: number
   ) => {
+    // Calculate the actual change that will be applied (considering clamping)
+    const currentDamage = players[playerIndex].commanderDamage[sourceIndex];
+    const newDamageValue = Math.max(0, Math.min(21, currentDamage + change));
+    const actualChange = newDamageValue - currentDamage;
+
     setPlayers((prev) =>
       prev.map((player, index) => {
         if (index === playerIndex) {
           const newDamage = [...player.commanderDamage];
-          newDamage[sourceIndex] = Math.max(
-            0,
-            Math.min(21, newDamage[sourceIndex] + change)
-          );
+          newDamage[sourceIndex] = newDamageValue;
           return {
             ...player,
             commanderDamage: newDamage as [number, number, number],
@@ -325,12 +327,18 @@ function CommanderPageContent() {
       })
     );
 
-    const commanderSources = [0, 1, 2, 3].filter((i) => i !== playerIndex);
-    const actualSourceIndex = commanderSources[sourceIndex];
-    const changeText = change > 0 ? `+${change}` : `${change}`;
-    const sourceName =
-      players[actualSourceIndex]?.name || `P${actualSourceIndex + 1}`;
-    addHistory(playerIndex, `${changeText} from ${sourceName}|commander`);
+    // Also update life by the opposite amount of the actual commander damage change
+    // and only add history if there was an actual change
+    if (actualChange !== 0) {
+      updateLife(playerIndex, -actualChange);
+      
+      const commanderSources = [0, 1, 2, 3].filter((i) => i !== playerIndex);
+      const actualSourceIndex = commanderSources[sourceIndex];
+      const changeText = actualChange > 0 ? `+${actualChange}` : `${actualChange}`;
+      const sourceName =
+        players[actualSourceIndex]?.name || `P${actualSourceIndex + 1}`;
+      addHistory(playerIndex, `${changeText} from ${sourceName}|commander`);
+    }
   };
 
   const updateRotation = (playerIndex: number) => {
