@@ -651,11 +651,11 @@ function CommanderPageContent() {
                   transformOrigin: "center",
                 }
               : {
-                  // Portrait container (normal): use full quadrant
+                  // Portrait container (normal): use full quadrant with adjusted height
                   top: "0.5rem",
                   left: "0.5rem",
                   width: "calc(100vw / 2 - 1rem)",
-                  height: "calc(100vh / 2 - 1rem)",
+                  height: "calc(100vh / 2 - 2rem)", // Adjusted height - reduced by 1rem for better spacing
                 }),
           }}
         >
