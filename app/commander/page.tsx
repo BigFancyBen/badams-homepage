@@ -274,19 +274,109 @@ function CommanderPageContent() {
 
   const playerAbbrevs = generateAbbreviations();
 
+  // Helper function to parse life actions
+  const parseLifeAction = (actionStr: string): { value: number, type: string } | null => {
+    const match = actionStr.match(/^([+-])(\d+)\s+life\|(.+)$/);
+    if (!match) return null;
+    return {
+      value: parseInt(match[2]) * (match[1] === '+' ? 1 : -1),
+      type: match[3]
+    };
+  };
+
+  // Helper function to collapse recent life actions
+  const collapseLifeActions = (newAction: string, existingHistory: HistoryEntry[]): HistoryEntry[] => {
+    const now = Date.now();
+    const COLLAPSE_WINDOW_MS = 2000; // 2 seconds
+    
+    // Only collapse life actions, not commander damage or poison
+    if (!newAction.includes('life|')) {
+      return [{ action: newAction, timestamp: now }, ...existingHistory];
+    }
+
+    // Find recent life actions within the time window (any sign)
+    const newParsed = parseLifeAction(newAction);
+    if (!newParsed) {
+      return [{ action: newAction, timestamp: now }, ...existingHistory];
+    }
+    
+    const recentActions: HistoryEntry[] = [];
+    
+    for (const entry of existingHistory) {
+      if (now - entry.timestamp > COLLAPSE_WINDOW_MS) break;
+      if (entry.action.includes('life|') && !entry.action.includes('from ')) {
+        const parsed = parseLifeAction(entry.action);
+        if (parsed) {
+          recentActions.push(entry);
+        } else {
+          break; // Stop if we can't parse the action
+        }
+      } else {
+        break; // Stop if we hit a non-life action or life action "from" someone
+      }
+    }
+
+    // Parse recent actions and include the new one
+    const allValues: number[] = [newParsed.value];
+    const recentParsed = recentActions.map(entry => parseLifeAction(entry.action)).filter(Boolean) as { value: number, type: string }[];
+    
+    for (const parsed of recentParsed) {
+      allValues.push(parsed.value);
+    }
+
+    // Collapse the values: sum them all up (allows cancellation)
+    const totalValue = allValues.reduce((sum, val) => sum + val, 0);
+    
+    // If the total is 0, we can skip adding anything (complete cancellation)
+    if (totalValue === 0) {
+      // Remove the recent life actions and don't add the new one
+      return existingHistory.slice(recentActions.length);
+    }
+
+    // Create the collapsed action
+    const changeText = totalValue > 0 ? `+${totalValue}` : `${totalValue}`;
+    const actionType = totalValue > 0 ? "positive" : "negative";
+    const collapsedAction = `${changeText} life|${actionType}`;
+
+    // Return history with recent actions replaced by the collapsed one
+    return [
+      { action: collapsedAction, timestamp: now },
+      ...existingHistory.slice(recentActions.length)
+    ];
+  };
+
   const addHistory = (playerIndex: number, action: string) => {
     setPlayers((prev) =>
-      prev.map((player, index) =>
-        index === playerIndex
-          ? {
-              ...player,
-              history: [
-                { action, timestamp: Date.now() },
-                ...player.history, // Keep all history
-              ],
-            }
-          : player
-      )
+      prev.map((player, index) => {
+        if (index === playerIndex) {
+          let newHistory: HistoryEntry[];
+          
+          if (action.includes('life|') && !action.includes('from ')) {
+            // Direct life actions - use existing collapsing logic
+            newHistory = collapseLifeActions(action, player.history);
+          } else if (action.includes('life from ')) {
+            // Life actions from a specific player - extract the player name
+            const match = action.match(/life from (.+)\|/);
+            const fromPlayer = match ? match[1] : '';
+            newHistory = collapseLifeActionsWithFrom(action, player.history, fromPlayer);
+          } else if (action.includes('commander damage from ') && action.includes('|commander')) {
+            // Commander damage actions - use commander damage collapsing logic
+            newHistory = collapseCommanderDamageActions(action, player.history);
+          } else if (action.includes('poison|poison')) {
+            // Poison actions - use poison collapsing logic
+            newHistory = collapsePoisonActions(action, player.history);
+          } else {
+            // Other actions - no collapsing
+            newHistory = [{ action, timestamp: Date.now() }, ...player.history];
+          }
+          
+          return {
+            ...player,
+            history: newHistory,
+          };
+        }
+        return player;
+      })
     );
   };
 
@@ -327,31 +417,31 @@ function CommanderPageContent() {
     const newDamageValue = Math.max(0, Math.min(21, currentDamage + change));
     const actualChange = newDamageValue - currentDamage;
 
-    setPlayers((prev) =>
-      prev.map((player, index) => {
-        if (index === playerIndex) {
-          const newDamage = [...player.commanderDamage];
-          newDamage[sourceIndex] = newDamageValue;
-          return {
-            ...player,
-            commanderDamage: newDamage as [number, number, number],
-          };
-        }
-        return player;
-      })
-    );
-
-    // Also update life by the opposite amount of the actual commander damage change
-    // and only add history if there was an actual change
+    // Only proceed if there was an actual change
     if (actualChange !== 0) {
-      updateLife(playerIndex, -actualChange);
-      
+      setPlayers((prev) =>
+        prev.map((player, index) => {
+          if (index === playerIndex) {
+            const newDamage = [...player.commanderDamage];
+            newDamage[sourceIndex] = newDamageValue;
+            return {
+              ...player,
+              commanderDamage: newDamage as [number, number, number],
+              // Update life directly without creating a life history entry
+              life: Math.max(0, player.life - actualChange),
+            };
+          }
+          return player;
+        })
+      );
+
+      // Only add commander damage history entry (not a life entry)
       const commanderSources = [0, 1, 2, 3].filter((i) => i !== playerIndex);
       const actualSourceIndex = commanderSources[sourceIndex];
       const changeText = actualChange > 0 ? `+${actualChange}` : `${actualChange}`;
       const sourceName =
         players[actualSourceIndex]?.name || `P${actualSourceIndex + 1}`;
-      addHistory(playerIndex, `${changeText} from ${sourceName}|commander`);
+      addHistory(playerIndex, `${changeText} commander damage from ${sourceName}|commander`);
     }
   };
 
@@ -403,6 +493,217 @@ function CommanderPageContent() {
     );
   };
 
+  // Helper function to parse life actions from a specific player
+  const parseLifeActionFromPlayer = (actionStr: string): { value: number, type: string, fromPlayer: string } | null => {
+    const match = actionStr.match(/^([+-])(\d+)\s+life from (.+)\|(.+)$/);
+    if (!match) return null;
+    return {
+      value: parseInt(match[2]) * (match[1] === '+' ? 1 : -1),
+      type: match[4],
+      fromPlayer: match[3]
+    };
+  };
+
+  // Helper function to collapse life actions from a specific player
+  const collapseLifeActionsWithFrom = (newAction: string, existingHistory: HistoryEntry[], fromPlayer: string): HistoryEntry[] => {
+    const now = Date.now();
+    const COLLAPSE_WINDOW_MS = 2000; // 2 seconds
+    
+    // Only collapse life actions from the same player
+    if (!newAction.includes('life from ') || !newAction.includes(fromPlayer)) {
+      return [{ action: newAction, timestamp: now }, ...existingHistory];
+    }
+
+    // Find recent life actions from the same player within the time window
+    const newParsed = parseLifeActionFromPlayer(newAction);
+    if (!newParsed) {
+      return [{ action: newAction, timestamp: now }, ...existingHistory];
+    }
+    
+    const recentActions: HistoryEntry[] = [];
+    
+    for (const entry of existingHistory) {
+      if (now - entry.timestamp > COLLAPSE_WINDOW_MS) break;
+      if (entry.action.includes(`life from ${fromPlayer}|`)) {
+        const parsed = parseLifeActionFromPlayer(entry.action);
+        if (parsed) {
+          recentActions.push(entry);
+        } else {
+          break; // Stop if we can't parse the action
+        }
+      } else {
+        break; // Stop if we hit a non-matching action
+      }
+    }
+
+    // Parse recent actions and include the new one
+    const allValues: number[] = [newParsed.value];
+    const recentParsed = recentActions.map(entry => parseLifeActionFromPlayer(entry.action)).filter(Boolean) as { value: number, type: string, fromPlayer: string }[];
+    
+    for (const parsed of recentParsed) {
+      allValues.push(parsed.value);
+    }
+
+    // Collapse the values: sum them all up (allows cancellation)
+    const totalValue = allValues.reduce((sum, val) => sum + val, 0);
+    
+    // If the total is 0, we can skip adding anything (complete cancellation)
+    if (totalValue === 0) {
+      // Remove the recent life actions and don't add the new one
+      return existingHistory.slice(recentActions.length);
+    }
+
+    // Create the collapsed action
+    const changeText = totalValue > 0 ? `+${totalValue}` : `${totalValue}`;
+    const actionType = totalValue > 0 ? "positive" : "negative";
+    const collapsedAction = `${changeText} life from ${fromPlayer}|${actionType}`;
+
+    // Return history with recent actions replaced by the collapsed one
+    return [
+      { action: collapsedAction, timestamp: now },
+      ...existingHistory.slice(recentActions.length)
+    ];
+  };
+
+  // Helper function to parse commander damage actions
+  const parseCommanderDamageAction = (actionStr: string): { value: number, fromPlayer: string } | null => {
+    const match = actionStr.match(/^([+-])(\d+)\s+commander damage from (.+)\|commander$/);
+    if (!match) return null;
+    return {
+      value: parseInt(match[2]) * (match[1] === '+' ? 1 : -1),
+      fromPlayer: match[3]
+    };
+  };
+
+  // Helper function to collapse commander damage actions
+  const collapseCommanderDamageActions = (newAction: string, existingHistory: HistoryEntry[]): HistoryEntry[] => {
+    const now = Date.now();
+    const COLLAPSE_WINDOW_MS = 2000; // 2 seconds
+    
+    // Only collapse commander damage actions
+    if (!newAction.includes('commander damage from ') || !newAction.includes('|commander')) {
+      return [{ action: newAction, timestamp: now }, ...existingHistory];
+    }
+
+    // Find recent commander damage actions from the same player within the time window
+    const newParsed = parseCommanderDamageAction(newAction);
+    if (!newParsed) {
+      return [{ action: newAction, timestamp: now }, ...existingHistory];
+    }
+    
+    const recentActions: HistoryEntry[] = [];
+    
+    for (const entry of existingHistory) {
+      if (now - entry.timestamp > COLLAPSE_WINDOW_MS) break;
+      if (entry.action.includes(`commander damage from ${newParsed.fromPlayer}|commander`)) {
+        const parsed = parseCommanderDamageAction(entry.action);
+        if (parsed && parsed.fromPlayer === newParsed.fromPlayer) {
+          recentActions.push(entry);
+        } else {
+          break; // Stop if we can't parse the action or different player
+        }
+      } else {
+        break; // Stop if we hit a non-matching action
+      }
+    }
+
+    // Parse recent actions and include the new one
+    const allValues: number[] = [newParsed.value];
+    const recentParsed = recentActions.map(entry => parseCommanderDamageAction(entry.action)).filter(Boolean) as { value: number, fromPlayer: string }[];
+    
+    for (const parsed of recentParsed) {
+      allValues.push(parsed.value);
+    }
+
+    // Collapse the values: sum them all up (allows cancellation)
+    const totalValue = allValues.reduce((sum, val) => sum + val, 0);
+    
+    // If the total is 0, we can skip adding anything (complete cancellation)
+    if (totalValue === 0) {
+      // Remove the recent commander damage actions and don't add the new one
+      return existingHistory.slice(recentActions.length);
+    }
+
+    // Create the collapsed action
+    const changeText = totalValue > 0 ? `+${totalValue}` : `${totalValue}`;
+    const collapsedAction = `${changeText} commander damage from ${newParsed.fromPlayer}|commander`;
+
+    // Return history with recent actions replaced by the collapsed one
+    return [
+      { action: collapsedAction, timestamp: now },
+      ...existingHistory.slice(recentActions.length)
+    ];
+  };
+
+  // Helper function to parse poison actions
+  const parsePoisonAction = (actionStr: string): { value: number } | null => {
+    const match = actionStr.match(/^([+-])(\d+)\s+poison\|poison$/);
+    if (!match) return null;
+    return {
+      value: parseInt(match[2]) * (match[1] === '+' ? 1 : -1)
+    };
+  };
+
+  // Helper function to collapse poison actions
+  const collapsePoisonActions = (newAction: string, existingHistory: HistoryEntry[]): HistoryEntry[] => {
+    const now = Date.now();
+    const COLLAPSE_WINDOW_MS = 2000; // 2 seconds
+    
+    // Only collapse poison actions
+    if (!newAction.includes('poison|poison')) {
+      return [{ action: newAction, timestamp: now }, ...existingHistory];
+    }
+
+    // Find recent poison actions within the time window
+    const newParsed = parsePoisonAction(newAction);
+    if (!newParsed) {
+      return [{ action: newAction, timestamp: now }, ...existingHistory];
+    }
+    
+    const recentActions: HistoryEntry[] = [];
+    
+    for (const entry of existingHistory) {
+      if (now - entry.timestamp > COLLAPSE_WINDOW_MS) break;
+      if (entry.action.includes('poison|poison')) {
+        const parsed = parsePoisonAction(entry.action);
+        if (parsed) {
+          recentActions.push(entry);
+        } else {
+          break; // Stop if we can't parse the action
+        }
+      } else {
+        break; // Stop if we hit a non-matching action
+      }
+    }
+
+    // Parse recent actions and include the new one
+    const allValues: number[] = [newParsed.value];
+    const recentParsed = recentActions.map(entry => parsePoisonAction(entry.action)).filter(Boolean) as { value: number }[];
+    
+    for (const parsed of recentParsed) {
+      allValues.push(parsed.value);
+    }
+
+    // Collapse the values: sum them all up (allows cancellation)
+    const totalValue = allValues.reduce((sum, val) => sum + val, 0);
+    
+    // If the total is 0, we can skip adding anything (complete cancellation)
+    if (totalValue === 0) {
+      // Remove the recent poison actions and don't add the new one
+      return existingHistory.slice(recentActions.length);
+    }
+
+    // Create the collapsed action
+    const changeText = totalValue > 0 ? `+${totalValue}` : `${totalValue}`;
+    const collapsedAction = `${changeText} poison|poison`;
+
+    // Return history with recent actions replaced by the collapsed one
+    return [
+      { action: collapsedAction, timestamp: now },
+      ...existingHistory.slice(recentActions.length)
+    ];
+  };
+
   const damageAllOthers = (playerIndex: number, damage: number) => {
     const changeText = damage > 0 ? `+${damage}` : `${damage}`;
     const actionType = damage > 0 ? "positive" : "negative";
@@ -431,20 +732,21 @@ function CommanderPageContent() {
       }
     });
 
-    // Update player states
+    // Update player states using collapsing logic
     setPlayers((prev) =>
       prev.map((player, index) => {
         if (index !== playerIndex) {
-          // Apply damage and add history
-          const newHistory = [
-            historyEntries.find(h => h.playerIndex === index)!.entry,
-            ...player.history,
-          ];
+          // Apply damage
+          const newLife = Math.max(0, player.life + damage);
+          
+          // Add the proper "from player" format that can still collapse
+          const fromPlayerAction = `${changeText} life from ${sourceName}|${actionType}`;
+          const collapsedHistory = collapseLifeActionsWithFrom(fromPlayerAction, player.history, sourceName);
           
           return {
             ...player,
-            life: Math.max(0, player.life + damage),
-            history: newHistory,
+            life: newLife,
+            history: collapsedHistory,
           };
         }
         return player;
@@ -466,8 +768,16 @@ function CommanderPageContent() {
     if (undoStack.length === 0) return;
     
     const lastOperation = undoStack[0];
+    const now = Date.now();
+    const COLLAPSE_WINDOW_MS = 2000; // 2 seconds
     
-    // Reverse the life changes and remove history entries
+    // Check if the undo is happening within the collapse window
+    const isWithinCollapseWindow = now - lastOperation.timestamp <= COLLAPSE_WINDOW_MS;
+    
+    // Get the source player name for history formatting
+    const sourcePlayerName = players[lastOperation.sourcePlayerIndex]?.name || `P${lastOperation.sourcePlayerIndex + 1}`;
+    
+    // Reverse the life changes and handle history
     setPlayers((prev) =>
       prev.map((player, index) => {
         const affectedPlayer = lastOperation.affectedPlayers.find(
@@ -478,10 +788,27 @@ function CommanderPageContent() {
           // Reverse the life change
           const newLife = player.life - affectedPlayer.lifeChange;
           
-          // Remove the history entry that was added
-          const newHistory = player.history.filter(
-            (entry) => entry.timestamp !== lastOperation.timestamp
-          );
+          let newHistory: HistoryEntry[];
+          
+          if (isWithinCollapseWindow) {
+            // If undoing within the collapse window, create a reverse action for collapsing
+            const reverseChange = -affectedPlayer.lifeChange;
+            const changeText = reverseChange > 0 ? `+${reverseChange}` : `${reverseChange}`;
+            const actionType = reverseChange > 0 ? "positive" : "negative";
+            const reverseAction = `${changeText} life from ${sourcePlayerName}|${actionType}`;
+            
+            // Use collapsing logic with the reverse action for "from player" format
+            newHistory = collapseLifeActionsWithFrom(reverseAction, player.history, sourcePlayerName);
+          } else {
+            // If undoing outside the collapse window, create a reverse action for proper collapsing
+            const reverseChange = -affectedPlayer.lifeChange;
+            const changeText = reverseChange > 0 ? `+${reverseChange}` : `${reverseChange}`;
+            const actionType = reverseChange > 0 ? "positive" : "negative";
+            const reverseAction = `${changeText} life from ${sourcePlayerName}|${actionType}`;
+            
+            // Use collapsing logic with the reverse action for "from player" format
+            newHistory = collapseLifeActionsWithFrom(reverseAction, player.history, sourcePlayerName);
+          }
           
           return {
             ...player,
@@ -556,6 +883,8 @@ function CommanderPageContent() {
       return date.toLocaleTimeString([], {
         hour: "2-digit",
         minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
       });
     };
 
