@@ -108,7 +108,6 @@ function CommanderPageContent() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [rotatingPlayer, setRotatingPlayer] = useState<number | null>(null);
-  const [showScoreboard, setShowScoreboard] = useState(true);
 
   const [hasLoadedInitialState, setHasLoadedInitialState] = useState(false);
 
@@ -164,21 +163,10 @@ function CommanderPageContent() {
               }))
             );
           }
-          // Load scoreboard visibility setting (default to true if not set)
-          if (typeof settings.showScoreboard === "boolean") {
-            setShowScoreboard(settings.showScoreboard);
-          } else {
-            // If no setting exists in saved settings, default to true
-            setShowScoreboard(true);
-          }
+
         } catch (error) {
           console.error("Failed to parse saved settings:", error);
-          // If there's an error parsing settings, use defaults
-          setShowScoreboard(true);
         }
-      } else {
-        // If no saved settings exist at all, default to true
-        setShowScoreboard(true);
       }
 
       // Mark that we've finished loading initial state
@@ -186,17 +174,16 @@ function CommanderPageContent() {
     }
   }, []);
 
-  // Save player names and settings to localStorage
+  // Save player names to localStorage
   const saveToLocalStorage = useCallback(() => {
     if (typeof window !== "undefined") {
       const playerNames = players.map((player) => player.name);
       const settings = {
         playerNames: playerNames,
-        showScoreboard: showScoreboard,
       };
       localStorage.setItem("commander-settings", JSON.stringify(settings));
     }
-  }, [players, showScoreboard]);
+  }, [players]);
 
   // Save complete game state to localStorage
   const saveGameStateToStorage = useCallback(() => {
@@ -216,18 +203,6 @@ function CommanderPageContent() {
       saveToLocalStorage();
     }
   }, [saveToLocalStorage, hasLoadedInitialState]);
-
-  // Save settings immediately when scoreboard visibility changes
-  useEffect(() => {
-    if (hasLoadedInitialState && typeof window !== "undefined") {
-      const playerNames = players.map((player) => player.name);
-      const settings = {
-        playerNames: playerNames,
-        showScoreboard: showScoreboard,
-      };
-      localStorage.setItem("commander-settings", JSON.stringify(settings));
-    }
-  }, [showScoreboard, hasLoadedInitialState, players]);
 
   // Auto-save game state whenever players state changes
   useEffect(() => {
@@ -1006,37 +981,6 @@ function CommanderPageContent() {
               </div>
             </div>
 
-            {/* Scoreboard Settings - Desktop only */}
-            {!isMobileLandscape && !isMobilePortrait && (
-              <div className="mb-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-[#e5e5e5] font-medium">
-                    Show Center Scoreboard
-                  </span>
-                  <button
-                    onClick={() => {
-                      console.log(
-                        "Toggle clicked, current state:",
-                        showScoreboard,
-                        "setting to:",
-                        !showScoreboard
-                      );
-                      setShowScoreboard(!showScoreboard);
-                    }}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${
-                      showScoreboard ? "bg-[#4ade80]" : "bg-[#404040]"
-                    }`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ${
-                        showScoreboard ? "translate-x-6" : "translate-x-1"
-                      }`}
-                    />
-                  </button>
-                </div>
-              </div>
-            )}
-
             {/* Reset Confirmation Text */}
             <div className="text-center mb-2">
               <p
@@ -1087,47 +1031,6 @@ function CommanderPageContent() {
               >
                 Close
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Center Scoreboard - Hidden on mobile (both landscape and portrait), controlled by setting on desktop */}
-      {!isMobileLandscape && !isMobilePortrait && showScoreboard && (
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none">
-          <div className="bg-[#222222] shadow-lg">
-            <div className="grid grid-cols-2 grid-rows-4 gap-0">
-              {/* Row 1: Names */}
-              <div className="text-center border border-[#404040] px-1.5 py-1 text-xs font-bold text-[#cccccc]">
-                {playerAbbrevs[0]}
-              </div>
-              <div className="text-center border border-[#404040] px-1.5 py-1 text-xs font-bold text-[#cccccc]">
-                {playerAbbrevs[1]}
-              </div>
-
-              {/* Row 2: Scores */}
-              <div className="text-center border border-[#404040] px-1.5 py-1 text-sm font-bold text-[#ffffff]">
-                {players[0].life}
-              </div>
-              <div className="text-center border border-[#404040] px-1.5 py-1 text-sm font-bold text-[#ffffff]">
-                {players[1].life}
-              </div>
-
-              {/* Row 3: Scores */}
-              <div className="text-center border border-[#404040] px-1.5 py-1 text-sm font-bold text-[#ffffff]">
-                {players[3].life}
-              </div>
-              <div className="text-center border border-[#404040] px-1.5 py-1 text-sm font-bold text-[#ffffff]">
-                {players[2].life}
-              </div>
-
-              {/* Row 4: Names */}
-              <div className="text-center border border-[#404040] px-1.5 py-1 text-xs font-bold text-[#cccccc]">
-                {playerAbbrevs[3]}
-              </div>
-              <div className="text-center border border-[#404040] px-1.5 py-1 text-xs font-bold text-[#cccccc]">
-                {playerAbbrevs[2]}
-              </div>
             </div>
           </div>
         </div>
