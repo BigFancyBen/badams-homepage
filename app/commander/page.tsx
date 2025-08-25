@@ -288,32 +288,17 @@ function CommanderPageContent() {
   const reEvaluateHistoryCollapsing = (existingHistory: HistoryEntry[]): HistoryEntry[] => {
     if (existingHistory.length === 0) return existingHistory;
 
-    // Find all consecutive life actions at the beginning of history (same sign)
+    // Find all consecutive life actions at the beginning of history (any sign)
     const consecutiveActions: HistoryEntry[] = [];
-    let expectedSign: string | null = null;
     
     for (let i = 0; i < existingHistory.length; i++) {
       const entry = existingHistory[i];
       
-      // Only include direct life actions (not "from" someone)
+      // Include direct life actions (not "from" someone)
       if (entry.action.includes('life|') && !entry.action.includes('from ')) {
         const parsed = parseLifeAction(entry.action);
         if (parsed) {
-          const currentSign = parsed.value > 0 ? '+' : '-';
-          
-          // If this is the first action, set the expected sign
-          if (expectedSign === null) {
-            expectedSign = currentSign;
-            consecutiveActions.push(entry);
-          }
-          // If same sign as expected, continue the sequence
-          else if (currentSign === expectedSign) {
-            consecutiveActions.push(entry);
-          }
-          // Different sign, stop the sequence
-          else {
-            break;
-          }
+          consecutiveActions.push(entry);
         } else {
           break; // Invalid life action format
         }
@@ -333,7 +318,7 @@ function CommanderPageContent() {
       return existingHistory; // Nothing valid to collapse
     }
 
-    // Collapse the values: sum them all up
+    // Collapse the values: sum them all up (allows cancellation)
     const totalValue = consecutiveParsed.reduce((sum, parsed) => sum + parsed.value, 0);
     
     // If the total is 0, we can remove all consecutive life actions (complete cancellation)
@@ -363,13 +348,12 @@ function CommanderPageContent() {
       return [{ action: newAction, timestamp: now }, ...existingHistory];
     }
 
-    // Find recent life actions within the time window (same sign only)
+    // Find recent life actions within the time window (any sign)
     const newParsed = parseLifeAction(newAction);
     if (!newParsed) {
       return [{ action: newAction, timestamp: now }, ...existingHistory];
     }
     
-    const newSign = newParsed.value > 0 ? '+' : '-';
     const recentActions: HistoryEntry[] = [];
     
     for (const entry of existingHistory) {
@@ -377,12 +361,7 @@ function CommanderPageContent() {
       if (entry.action.includes('life|') && !entry.action.includes('from ')) {
         const parsed = parseLifeAction(entry.action);
         if (parsed) {
-          const entrySign = parsed.value > 0 ? '+' : '-';
-          if (entrySign === newSign) {
-            recentActions.push(entry);
-          } else {
-            break; // Stop if we hit a different sign
-          }
+          recentActions.push(entry);
         } else {
           break; // Stop if we can't parse the action
         }
@@ -399,7 +378,7 @@ function CommanderPageContent() {
       allValues.push(parsed.value);
     }
 
-    // Collapse the values: sum them all up
+    // Collapse the values: sum them all up (allows cancellation)
     const totalValue = allValues.reduce((sum, val) => sum + val, 0);
     
     // If the total is 0, we can skip adding anything (complete cancellation)
@@ -574,20 +553,21 @@ function CommanderPageContent() {
       }
     });
 
-    // Update player states
+    // Update player states using collapsing logic
     setPlayers((prev) =>
       prev.map((player, index) => {
         if (index !== playerIndex) {
-          // Apply damage and add history
-          const newHistory = [
-            historyEntries.find(h => h.playerIndex === index)!.entry,
-            ...player.history,
-          ];
+          // Apply damage
+          const newLife = Math.max(0, player.life + damage);
+          
+          // Use collapsing logic for history - create an equivalent direct life action for collapsing
+          const directLifeAction = `${changeText} life|${actionType}`;
+          const collapsedHistory = collapseLifeActions(directLifeAction, player.history);
           
           return {
             ...player,
-            life: Math.max(0, player.life + damage),
-            history: newHistory,
+            life: newLife,
+            history: collapsedHistory,
           };
         }
         return player;
@@ -609,8 +589,13 @@ function CommanderPageContent() {
     if (undoStack.length === 0) return;
     
     const lastOperation = undoStack[0];
+    const now = Date.now();
+    const COLLAPSE_WINDOW_MS = 2000; // 2 seconds
     
-    // Reverse the life changes and remove history entries
+    // Check if the undo is happening within the collapse window
+    const isWithinCollapseWindow = now - lastOperation.timestamp <= COLLAPSE_WINDOW_MS;
+    
+    // Reverse the life changes and handle history
     setPlayers((prev) =>
       prev.map((player, index) => {
         const affectedPlayer = lastOperation.affectedPlayers.find(
@@ -621,18 +606,31 @@ function CommanderPageContent() {
           // Reverse the life change
           const newLife = player.life - affectedPlayer.lifeChange;
           
-          // Remove the history entry that was added
-          const filteredHistory = player.history.filter(
-            (entry) => entry.timestamp !== lastOperation.timestamp
-          );
+          let newHistory: HistoryEntry[];
           
-          // Re-evaluate history collapsing after removing the undo entry
-          const collapsedHistory = reEvaluateHistoryCollapsing(filteredHistory);
+          if (isWithinCollapseWindow) {
+            // If undoing within the collapse window, create a reverse action for collapsing
+            const reverseChange = -affectedPlayer.lifeChange;
+            const changeText = reverseChange > 0 ? `+${reverseChange}` : `${reverseChange}`;
+            const actionType = reverseChange > 0 ? "positive" : "negative";
+            const reverseAction = `${changeText} life|${actionType}`;
+            
+            // Use collapsing logic with the reverse action
+            newHistory = collapseLifeActions(reverseAction, player.history);
+          } else {
+            // If undoing outside the collapse window, just remove the history entry and re-evaluate
+            const filteredHistory = player.history.filter(
+              (entry) => entry.timestamp !== lastOperation.timestamp
+            );
+            
+            // Re-evaluate history collapsing after removing the undo entry
+            newHistory = reEvaluateHistoryCollapsing(filteredHistory);
+          }
           
           return {
             ...player,
             life: Math.max(0, newLife),
-            history: collapsedHistory,
+            history: newHistory,
           };
         }
         
