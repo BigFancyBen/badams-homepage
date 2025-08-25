@@ -618,9 +618,16 @@ function CommanderPageContent() {
             // Use collapsing logic with the reverse action
             newHistory = collapseLifeActions(reverseAction, player.history);
           } else {
-            // If undoing outside the collapse window, just remove the history entry and re-evaluate
+            // If undoing outside the collapse window, we need to remove the most recent direct life action
+            // that matches the damage amount and timestamp, since we're now storing direct life actions
+            const targetChange = affectedPlayer.lifeChange;
+            const changeText = targetChange > 0 ? `+${targetChange}` : `${targetChange}`;
+            const actionType = targetChange > 0 ? "positive" : "negative";
+            const targetAction = `${changeText} life|${actionType}`;
+            
+            // Find and remove the matching entry by timestamp
             const filteredHistory = player.history.filter(
-              (entry) => entry.timestamp !== lastOperation.timestamp
+              (entry) => !(entry.timestamp === lastOperation.timestamp && entry.action === targetAction)
             );
             
             // Re-evaluate history collapsing after removing the undo entry
