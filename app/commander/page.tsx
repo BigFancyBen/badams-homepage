@@ -685,25 +685,25 @@ function CommanderPageContent() {
                 <div className="grid grid-cols-4 gap-1">
                   <button
                     onClick={() => updateLife(playerIndex, -5)}
-                    className="bg-[#991b1b] hover:bg-[#b91c1c] text-white text-xs font-bold py-1.5 px-1 transition-all duration-150"
+                    className="bg-[#991b1b] hover:bg-[#b91c1c] text-white text-sm font-bold py-3 px-1 transition-all duration-150"
                   >
                     -5
                   </button>
                   <button
                     onClick={() => updateLife(playerIndex, -1)}
-                    className="bg-[#b91c1c] hover:bg-[#dc2626] text-white text-xs font-bold py-1.5 px-1 transition-all duration-150"
+                    className="bg-[#b91c1c] hover:bg-[#dc2626] text-white text-sm font-bold py-3 px-1 transition-all duration-150"
                   >
                     -1
                   </button>
                   <button
                     onClick={() => updateLife(playerIndex, 1)}
-                    className="bg-[#166534] hover:bg-[#16a34a] text-white text-xs font-bold py-1.5 px-1 transition-all duration-150"
+                    className="bg-[#166534] hover:bg-[#16a34a] text-white text-sm font-bold py-3 px-1 transition-all duration-150"
                   >
                     +1
                   </button>
                   <button
                     onClick={() => updateLife(playerIndex, 5)}
-                    className="bg-[#14532d] hover:bg-[#166534] text-white text-xs font-bold py-1.5 px-1 transition-all duration-150"
+                    className="bg-[#14532d] hover:bg-[#166534] text-white text-sm font-bold py-3 px-1 transition-all duration-150"
                   >
                     +5
                   </button>
@@ -712,7 +712,7 @@ function CommanderPageContent() {
                 {/* Damage All Others Button */}
                 <button
                   onClick={() => damageAllOthers(playerIndex, -1)}
-                  className="bg-[#c2410c] hover:bg-[#ea580c] text-white text-xs font-bold py-1.5 px-2 transition-all duration-150"
+                  className="bg-[#c2410c] hover:bg-[#ea580c] text-white text-sm font-bold py-3 px-2 transition-all duration-150"
                 >
                   -1 to all others
                 </button>
