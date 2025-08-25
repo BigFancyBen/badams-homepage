@@ -854,19 +854,14 @@ function CommanderPageContent() {
             // Use collapsing logic with the reverse action for "from player" format
             newHistory = collapseLifeActionsWithFrom(reverseAction, player.history, sourcePlayerName);
           } else {
-            // If undoing outside the collapse window, we need to remove the matching "from player" entry
-            const targetChange = affectedPlayer.lifeChange;
-            const changeText = targetChange > 0 ? `+${targetChange}` : `${targetChange}`;
-            const actionType = targetChange > 0 ? "positive" : "negative";
-            const targetAction = `${changeText} life from ${sourcePlayerName}|${actionType}`;
+            // If undoing outside the collapse window, create a reverse action for proper collapsing
+            const reverseChange = -affectedPlayer.lifeChange;
+            const changeText = reverseChange > 0 ? `+${reverseChange}` : `${reverseChange}`;
+            const actionType = reverseChange > 0 ? "positive" : "negative";
+            const reverseAction = `${changeText} life from ${sourcePlayerName}|${actionType}`;
             
-            // Find and remove the matching entry by timestamp and action
-            const filteredHistory = player.history.filter(
-              (entry) => !(entry.timestamp === lastOperation.timestamp && entry.action === targetAction)
-            );
-            
-            // Re-evaluate history collapsing after removing the undo entry
-            newHistory = reEvaluateHistoryCollapsing(filteredHistory);
+            // Use collapsing logic with the reverse action for "from player" format
+            newHistory = collapseLifeActionsWithFrom(reverseAction, player.history, sourcePlayerName);
           }
           
           return {
