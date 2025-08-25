@@ -263,7 +263,7 @@ function CommanderPageContent() {
   // Helper function to collapse recent life actions
   const collapseLifeActions = (newAction: string, existingHistory: HistoryEntry[]): HistoryEntry[] => {
     const now = Date.now();
-    const COLLAPSE_WINDOW_MS = 8000; // 8 seconds
+    const COLLAPSE_WINDOW_MS = 15000; // 15 seconds
     
     // Only collapse life actions, not commander damage or poison
     if (!newAction.includes('life|')) {
