@@ -287,16 +287,22 @@ function CommanderPageContent() {
   // Helper function to re-evaluate and collapse existing history
   const reEvaluateHistoryCollapsing = (existingHistory: HistoryEntry[]): HistoryEntry[] => {
     const COLLAPSE_WINDOW_MS = 15000; // 15 seconds
-    const now = Date.now();
     
     if (existingHistory.length === 0) return existingHistory;
 
-    // Find recent life actions within the time window
+    // Find consecutive life actions at the beginning of history that are within the time window
     const recentActions: HistoryEntry[] = [];
-    for (const entry of existingHistory) {
-      if (now - entry.timestamp > COLLAPSE_WINDOW_MS) break;
+    for (let i = 0; i < existingHistory.length; i++) {
+      const entry = existingHistory[i];
+      
+      // Only include direct life actions (not "from" someone)
       if (entry.action.includes('life|') && !entry.action.includes('from ')) {
-        recentActions.push(entry);
+        // Check if this entry is within the time window from the first entry
+        if (recentActions.length === 0 || (recentActions[0].timestamp - entry.timestamp <= COLLAPSE_WINDOW_MS)) {
+          recentActions.push(entry);
+        } else {
+          break; // Outside time window
+        }
       } else {
         break; // Stop if we hit a non-life action or life action "from" someone
       }
@@ -670,6 +676,8 @@ function CommanderPageContent() {
       return date.toLocaleTimeString([], {
         hour: "2-digit",
         minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
       });
     };
 
