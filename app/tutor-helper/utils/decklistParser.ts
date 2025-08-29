@@ -35,6 +35,97 @@ export function extractDeckId(url: string): { site: string; id: string } | null 
   return null;
 }
 
+// Fetch decklist from supported sites
+export async function fetchDecklistFromUrl(url: string): Promise<string> {
+  const deckInfo = extractDeckId(url);
+  if (!deckInfo) {
+    throw new Error('Invalid deck URL format');
+  }
+
+  try {
+    switch (deckInfo.site) {
+      case 'moxfield':
+        return await fetchMoxfieldDecklist(deckInfo.id);
+      case 'archidekt':
+        return await fetchArchidektDecklist(deckInfo.id);
+      case 'tappedout':
+        return await fetchTappedOutDecklist(deckInfo.id);
+      default:
+        throw new Error(`Unsupported site: ${deckInfo.site}`);
+    }
+  } catch (error) {
+    throw new Error(`Failed to fetch decklist from ${deckInfo.site}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+// Fetch decklist from Moxfield
+async function fetchMoxfieldDecklist(deckId: string): Promise<string> {
+  const response = await fetch(`https://www.moxfield.com/api/v2/decks/${deckId}`);
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+  }
+  
+  const data = await response.json();
+  if (!data.mainboard || !Array.isArray(data.mainboard)) {
+    throw new Error('Invalid deck data format');
+  }
+  
+  // Convert Moxfield format to our format
+  return data.mainboard
+    .map((card: any) => `${card.quantity} ${card.card.name}`)
+    .join('\n');
+}
+
+// Fetch decklist from Archidekt
+async function fetchArchidektDecklist(deckId: string): Promise<string> {
+  const response = await fetch(`https://archidekt.com/api/decks/${deckId}/`);
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+  }
+  
+  const data = await response.json();
+  if (!data.cards || !Array.isArray(data.cards)) {
+    throw new Error('Invalid deck data format');
+  }
+  
+  // Convert Archidekt format to our format
+  return data.cards
+    .filter((card: any) => card.categories && card.categories.includes('main'))
+    .map((card: any) => `${card.quantity} ${card.card.name}`)
+    .join('\n');
+}
+
+// Fetch decklist from TappedOut
+async function fetchTappedOutDecklist(deckId: string): Promise<string> {
+  // TappedOut doesn't have a public API, so we'll scrape the HTML
+  const response = await fetch(`https://tappedout.net/mtg-decks/${deckId}/`);
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+  }
+  
+  const html = await response.text();
+  
+  // Extract card information from the HTML
+  // This is a simplified approach - TappedOut's HTML structure may change
+  const cardRegex = /<td[^>]*>(\d+)<\/td>\s*<td[^>]*>([^<]+)<\/td>/g;
+  const cards: string[] = [];
+  let match;
+  
+  while ((match = cardRegex.exec(html)) !== null) {
+    const quantity = match[1];
+    const cardName = match[2].trim();
+    if (cardName && quantity) {
+      cards.push(`${quantity} ${cardName}`);
+    }
+  }
+  
+  if (cards.length === 0) {
+    throw new Error('No cards found in deck');
+  }
+  
+  return cards.join('\n');
+}
+
 // Parse a single card line (handles various formats)
 function parseCardLine(line: string): ParsedCard | null {
   const trimmed = line.trim();
@@ -90,11 +181,11 @@ function parseCommaSeparated(input: string): ParsedCard[] {
         originalLine: trimmed
       };
     })
-    .filter((card): card is ParsedCard => card !== null);
+    .filter((card): card is NonNullable<typeof card> => card !== null);
 }
 
 // Main parsing function
-export function parseDecklist(input: string): ParsedDecklist {
+export async function parseDecklist(input: string): Promise<ParsedDecklist> {
   const errors: string[] = [];
   let cards: ParsedCard[] = [];
   
@@ -105,9 +196,25 @@ export function parseDecklist(input: string): ParsedDecklist {
   // Check if it's a URL
   const deckInfo = extractDeckId(input);
   if (deckInfo) {
-    errors.push(`URL detected (${deckInfo.site}). URL parsing not yet implemented - please paste the card list directly.`);
-    return { cards: [], errors, totalCards: 0 };
+    try {
+      const decklistText = await fetchDecklistFromUrl(input);
+      // Parse the fetched decklist text
+      const parsedDecklist = await parseDecklistText(decklistText);
+      return parsedDecklist;
+    } catch (error) {
+      errors.push(`Failed to fetch decklist from ${deckInfo.site}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      return { cards: [], errors, totalCards: 0 };
+    }
   }
+  
+  // Parse the input text directly
+  return await parseDecklistText(input);
+}
+
+// Parse decklist text (separated for reusability)
+async function parseDecklistText(input: string): Promise<ParsedDecklist> {
+  const errors: string[] = [];
+  let cards: ParsedCard[] = [];
   
   // Check if it's comma-separated (no line breaks and contains commas)
   const hasLineBreaks = input.includes('\n');

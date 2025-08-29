@@ -67,12 +67,6 @@ export default function TutorHelperPage() {
     }
   };
 
-  const handleClearDecklist = () => {
-    setDecklistCards([]);
-    setImportInput("");
-    clearDecklist();
-  };
-
   const filteredCards = useMemo(() => {
     const filtered = filterCards(cards, filters);
 
