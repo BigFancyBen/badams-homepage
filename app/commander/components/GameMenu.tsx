@@ -1,0 +1,119 @@
+import { PlayerState } from "../types";
+
+interface GameMenuProps {
+  isOpen: boolean;
+  showResetConfirm: boolean;
+  players: PlayerState[];
+  isMobileLandscape: boolean;
+  isMobilePortrait: boolean;
+  onClose: () => void;
+  onResetClick: () => void;
+  onResetConfirm: () => void;
+  onResetCancel: () => void;
+  onResetNames: () => void;
+  onUpdatePlayerName: (playerIndex: number, name: string) => void;
+}
+
+export function GameMenu({
+  isOpen,
+  showResetConfirm,
+  players,
+  isMobileLandscape,
+  isMobilePortrait,
+  onClose,
+  onResetClick,
+  onResetConfirm,
+  onResetCancel,
+  onResetNames,
+  onUpdatePlayerName,
+}: GameMenuProps) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-40 p-4">
+      <div
+        className={`bg-[#222222] border border-[#333333] w-full max-w-md mx-4 ${
+          isMobileLandscape || isMobilePortrait ? "p-4" : "p-6"
+        }`}
+      >
+        <h3 className="text-xl font-bold text-[#ffffff] mb-6 text-center tracking-wide">
+          Game Settings
+        </h3>
+
+        {/* Player Names */}
+        <div className="mb-4">
+          <h4 className="text-sm font-bold text-[#a3a3a3] mb-3 tracking-wide">
+            PLAYER NAMES:
+          </h4>
+          <div className="space-y-2">
+            {players.map((player, index) => (
+              <div key={index} className="flex items-center gap-3">
+                <span className="text-xs text-[#888888] font-semibold w-16">
+                  P{index + 1}:
+                </span>
+                <input
+                  type="text"
+                  value={
+                    player.name === `Player ${index + 1}` ? "" : player.name
+                  }
+                  onChange={(e) =>
+                    onUpdatePlayerName(
+                      index,
+                      e.target.value || `Player ${index + 1}`
+                    )
+                  }
+                  className="flex-1 bg-[#2a2a2a] text-[#e5e5e5] border border-[#404040] focus:border-[#4ade80] focus:ring-1 focus:ring-[#4ade80]/30 focus:outline-none transition-all duration-200 px-3 py-2 text-sm font-medium"
+                  placeholder={`Player ${index + 1}`}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Reset Confirmation Text */}
+        <div className="text-center mb-2">
+          <p
+            className={`text-sm text-[#f5f5f5] font-bold transition-opacity duration-200 ${
+              showResetConfirm ? "opacity-100" : "opacity-0"
+            }`}
+          >
+            Are you sure you want to reset the entire game?
+          </p>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex gap-2">
+          <button
+            onClick={onResetNames}
+            className="flex-1 bg-[#2a2a2a] hover:bg-[#3a3a3a] text-[#cccccc] text-sm font-bold py-3 px-4 transition-all duration-200"
+            title="Reset player names to defaults"
+          >
+            Reset Names
+          </button>
+          {!showResetConfirm ? (
+            <button
+              onClick={onResetClick}
+              className="flex-1 bg-[#991b1b] hover:bg-[#b91c1c] text-white text-sm font-bold py-3 px-4 transition-all duration-200"
+            >
+              Reset Game
+            </button>
+          ) : (
+            <button
+              onClick={onResetConfirm}
+              className="flex-1 bg-[#991b1b] hover:bg-[#b91c1c] text-white text-sm font-bold py-3 px-4 transition-all duration-200"
+            >
+              Yes, Reset
+            </button>
+          )}
+          <button
+            onClick={showResetConfirm ? onResetCancel : onClose}
+            className="flex-1 bg-[#404040] hover:bg-[#4a4a4a] text-[#e5e5e5] text-sm font-bold py-3 px-4 transition-all duration-200"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
