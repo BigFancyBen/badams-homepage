@@ -66,16 +66,12 @@ const getCardTypeColor = (
 
 interface CardTypeFilterProps {
   selectedTypes: string[];
-  typeLogic: "and" | "or";
   onToggleType: (type: string) => void;
-  onToggleLogic: () => void;
 }
 
 export function CardTypeFilter({
   selectedTypes,
-  typeLogic,
   onToggleType,
-  onToggleLogic,
 }: CardTypeFilterProps) {
   return (
     <div className="flex flex-wrap gap-1 sm:gap-2">

@@ -1,33 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
 import { MagicCard } from "../types";
-import { getPrimaryCardType } from "../utils/cardTypeUtils";
-
-// Color mapping for each card type
-const getCardTypeColor = (cardType: string): string => {
-  switch (cardType.toLowerCase()) {
-    case "land":
-      return "bg-green-200 border-green-300"; // Green for lands
-    case "artifact":
-      return "bg-gray-200 border-gray-300"; // Gray for artifacts
-    case "enchantment":
-      return "bg-purple-200 border-purple-300"; // Purple for enchantments
-    case "creature":
-      return "bg-orange-200 border-orange-300"; // Orange for creatures
-    case "instant":
-      return "bg-blue-200 border-blue-300"; // Blue for instants
-    case "sorcery":
-      return "bg-red-200 border-red-300"; // Red for sorceries
-    case "planeswalker":
-      return "bg-yellow-200 border-yellow-300"; // Yellow for planeswalkers
-    case "battle":
-      return "bg-pink-200 border-pink-300"; // Pink for battles
-    default:
-      return "bg-slate-200 border-slate-300"; // Default gray
-  }
-};
 
 interface CardGridProps {
   cards: MagicCard[];

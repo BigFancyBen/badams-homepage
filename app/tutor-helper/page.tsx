@@ -165,9 +165,7 @@ export default function TutorHelperPage() {
 
           <CardTypeFilter
             selectedTypes={filters.cardTypes}
-            typeLogic={filters.typeLogic}
             onToggleType={toggleCardType}
-            onToggleLogic={toggleTypeLogic}
           />
 
           {/* Advanced Type Search */}
@@ -310,7 +308,7 @@ export default function TutorHelperPage() {
                 No Decklist Loaded
               </h3>
               <p className="text-[#9ca3af] mb-6">
-                Click "Import Decklist" to get started with filtering your Magic
+                Click &quot;Import Decklist&quot; to get started with filtering your Magic
                 cards.
               </p>
               <button

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { MagicCard } from '../types';
 import { useLocalStorageCache } from './useLocalStorageCache';
 

@@ -71,6 +71,7 @@ export function useLocalStorageCache() {
         return null;
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { cachedAt, originalInput, ...decklist } = cachedDecklist;
       return { decklist, originalInput };
     } catch (error) {
@@ -133,6 +134,7 @@ export function useLocalStorageCache() {
         const cachedCard = cache[cacheKey];
 
         if (cachedCard && (now - cachedCard.cachedAt) < CACHE_EXPIRY) {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const { cachedAt, ...card } = cachedCard;
           cachedCards.push(card);
           console.log(`Cache hit for: "${name}" -> "${card.name}"`);
@@ -173,23 +175,7 @@ export function useLocalStorageCache() {
     }
   }, [isLoaded]);
 
-  // Get cache statistics
-  const getCacheStats = useCallback(() => {
-    if (!isLoaded) return { totalCards: 0, cacheSize: "0 KB" };
 
-    try {
-      const cached = localStorage.getItem(SCRYFALL_CACHE_KEY);
-      if (!cached) return { totalCards: 0, cacheSize: "0 KB" };
-
-      const cache: Record<string, CachedCard> = JSON.parse(cached);
-      const totalCards = Object.keys(cache).length;
-      const cacheSize = ((cached.length * 2) / 1024).toFixed(1) + " KB"; // Rough estimate
-
-      return { totalCards, cacheSize };
-    } catch (error) {
-      return { totalCards: 0, cacheSize: "0 KB" };
-    }
-  }, [isLoaded]);
 
   // Clear all cache
   const clearAllCache = useCallback(() => {
@@ -211,7 +197,6 @@ export function useLocalStorageCache() {
     saveScryfallCards,
     loadCachedCards,
     cleanupCache,
-    getCacheStats,
     clearAllCache
   };
 }
