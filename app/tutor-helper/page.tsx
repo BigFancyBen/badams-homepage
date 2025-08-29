@@ -308,8 +308,8 @@ export default function TutorHelperPage() {
                 No Decklist Loaded
               </h3>
               <p className="text-[#9ca3af] mb-6">
-                Click &quot;Import Decklist&quot; to get started with filtering your Magic
-                cards.
+                Click &quot;Import Decklist&quot; to get started with filtering
+                your Magic cards.
               </p>
               <button
                 onClick={() => setShowImport(true)}
