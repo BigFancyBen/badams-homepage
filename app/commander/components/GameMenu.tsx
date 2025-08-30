@@ -172,9 +172,6 @@ export function GameMenu({
 
         {/* Wake Lock Section */}
         <div className="mb-4">
-          <h4 className="text-sm font-bold text-[#a3a3a3] mb-3 tracking-wide">
-            SCREEN SETTINGS:
-          </h4>
           <div className="flex gap-2">
             {wakeLockStatus === 'not-supported' ? (
               <div className="flex-1 bg-[#404040] text-[#888888] text-sm font-bold py-3 px-4 text-center">
