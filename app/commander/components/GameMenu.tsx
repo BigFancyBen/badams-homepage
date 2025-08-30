@@ -31,12 +31,43 @@ export function GameMenu({
   const [wakeLockStatus, setWakeLockStatus] = useState<'not-supported' | 'released' | 'active' | 'error'>('released');
   const [wakeLockSentinel, setWakeLockSentinel] = useState<WakeLockSentinel | null>(null);
 
-  // Check wake lock support on mount
+  // Check wake lock support and load user preference on mount
   useEffect(() => {
     if (!('wakeLock' in navigator)) {
       setWakeLockStatus('not-supported');
+      return;
     }
-  }, []);
+
+    // Load user preference from localStorage
+    const savedPreference = localStorage.getItem('commander-wake-lock-enabled');
+    if (savedPreference !== null) {
+      const preferenceValue = savedPreference === 'true';
+      
+      // If user previously enabled wake lock and modal is open, automatically request it
+      if (preferenceValue && isOpen) {
+        // Create an async function to handle the wake lock request
+        const autoRequestWakeLock = async () => {
+          try {
+            const sentinel = await navigator.wakeLock.request('screen');
+            setWakeLockSentinel(sentinel);
+            setWakeLockStatus('active');
+
+            // Listen for release events
+            sentinel.addEventListener('release', () => {
+              setWakeLockStatus('released');
+              setWakeLockSentinel(null);
+            });
+          } catch (error) {
+            console.error('Failed to auto-request wake lock:', error);
+            setWakeLockStatus('error');
+            localStorage.setItem('commander-wake-lock-enabled', 'false');
+          }
+        };
+        
+        autoRequestWakeLock();
+      }
+    }
+  }, [isOpen]);
 
   // Release wake lock when component unmounts or modal closes
   useEffect(() => {
@@ -62,6 +93,9 @@ export function GameMenu({
       const sentinel = await navigator.wakeLock.request('screen');
       setWakeLockSentinel(sentinel);
       setWakeLockStatus('active');
+      
+      // Save preference to localStorage
+      localStorage.setItem('commander-wake-lock-enabled', 'true');
 
       // Listen for release events
       sentinel.addEventListener('release', () => {
@@ -71,6 +105,9 @@ export function GameMenu({
     } catch (error) {
       console.error('Failed to request wake lock:', error);
       setWakeLockStatus('error');
+      
+      // If permission was denied or there was an error, save the preference as false
+      localStorage.setItem('commander-wake-lock-enabled', 'false');
     }
   };
 
@@ -80,6 +117,9 @@ export function GameMenu({
         await wakeLockSentinel.release();
         setWakeLockSentinel(null);
         setWakeLockStatus('released');
+        
+        // Save preference to localStorage
+        localStorage.setItem('commander-wake-lock-enabled', 'false');
       } catch (error) {
         console.error('Failed to release wake lock:', error);
         setWakeLockStatus('error');
