@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { PlayerState } from "../types";
 
 interface GameMenuProps {
@@ -30,11 +30,28 @@ export function GameMenu({
 }: GameMenuProps) {
   const [wakeLockStatus, setWakeLockStatus] = useState<'not-supported' | 'released' | 'active' | 'error'>('released');
   const [wakeLockSentinel, setWakeLockSentinel] = useState<WakeLockSentinel | null>(null);
+  const [mobileBrowserWarning, setMobileBrowserWarning] = useState<string | null>(null);
 
   // Check wake lock support on mount
   useEffect(() => {
     if (!('wakeLock' in navigator)) {
       setWakeLockStatus('not-supported');
+      // Detect mobile browsers that don't support wake lock
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const userAgent = (window as any).navigator?.userAgent?.toLowerCase() || '';
+        if (userAgent.includes('mobile') || userAgent.includes('android')) {
+          if (userAgent.includes('firefox')) {
+            setMobileBrowserWarning('Firefox Mobile does not support screen wake lock');
+          } else if (userAgent.includes('safari') && !userAgent.includes('chrome')) {
+            setMobileBrowserWarning('Safari Mobile does not support screen wake lock');
+          } else {
+            setMobileBrowserWarning('Screen wake lock may not be available in this mobile browser');
+          }
+        }
+      } catch {
+        // Ignore errors in user agent detection
+      }
     }
   }, []);
 
@@ -47,7 +64,7 @@ export function GameMenu({
     }
   }, [isOpen, wakeLockSentinel]);
 
-  const requestWakeLock = async () => {
+  const requestWakeLock = useCallback(async () => {
     if (!('wakeLock' in navigator)) {
       setWakeLockStatus('not-supported');
       return;
@@ -71,8 +88,19 @@ export function GameMenu({
     } catch (error) {
       console.error('Failed to request wake lock:', error);
       setWakeLockStatus('error');
+      
+      // Provide specific feedback for mobile users
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const userAgent = (window as any).navigator?.userAgent?.toLowerCase() || '';
+        if (userAgent.includes('mobile') || userAgent.includes('android')) {
+          console.warn('Wake lock failed on mobile device. This may be due to browser limitations, power saving settings, or permissions.');
+        }
+      } catch {
+        // Ignore errors in user agent detection
+      }
     }
-  };
+  }, [wakeLockSentinel]);
 
   const releaseWakeLock = async () => {
     if (wakeLockSentinel) {
@@ -86,6 +114,21 @@ export function GameMenu({
       }
     }
   };
+
+  // Handle document visibility changes to maintain wake lock
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && wakeLockStatus === 'active' && !wakeLockSentinel) {
+        // Re-request wake lock when page becomes visible again
+        requestWakeLock();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [wakeLockStatus, wakeLockSentinel, requestWakeLock]);
 
   if (!isOpen) return null;
 
@@ -154,12 +197,18 @@ export function GameMenu({
                 Keep Screen On
               </button>
             )}
-            {wakeLockStatus === 'error' && (
-              <div className="text-xs text-[#dc2626] mt-1">
-                Failed to control screen wake lock
-              </div>
-            )}
           </div>
+          {/* Error Messages */}
+          {wakeLockStatus === 'error' && (
+            <div className="text-xs text-[#dc2626] mt-1 text-center">
+              Failed to control screen wake lock
+            </div>
+          )}
+          {mobileBrowserWarning && (
+            <div className="text-xs text-[#fbbf24] mt-1 text-center">
+              {mobileBrowserWarning}
+            </div>
+          )}
         </div>
 
         {/* Reset Confirmation Text */}
