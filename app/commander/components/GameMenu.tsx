@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { PlayerState } from "../types";
 
 interface GameMenuProps {
@@ -27,6 +28,65 @@ export function GameMenu({
   onResetNames,
   onUpdatePlayerName,
 }: GameMenuProps) {
+  const [wakeLockStatus, setWakeLockStatus] = useState<'not-supported' | 'released' | 'active' | 'error'>('released');
+  const [wakeLockSentinel, setWakeLockSentinel] = useState<WakeLockSentinel | null>(null);
+
+  // Check wake lock support on mount
+  useEffect(() => {
+    if (!('wakeLock' in navigator)) {
+      setWakeLockStatus('not-supported');
+    }
+  }, []);
+
+  // Release wake lock when component unmounts or modal closes
+  useEffect(() => {
+    if (!isOpen && wakeLockSentinel) {
+      wakeLockSentinel.release();
+      setWakeLockSentinel(null);
+      setWakeLockStatus('released');
+    }
+  }, [isOpen, wakeLockSentinel]);
+
+  const requestWakeLock = async () => {
+    if (!('wakeLock' in navigator)) {
+      setWakeLockStatus('not-supported');
+      return;
+    }
+
+    try {
+      // Release existing wake lock if any
+      if (wakeLockSentinel) {
+        await wakeLockSentinel.release();
+      }
+
+      const sentinel = await navigator.wakeLock.request('screen');
+      setWakeLockSentinel(sentinel);
+      setWakeLockStatus('active');
+
+      // Listen for release events
+      sentinel.addEventListener('release', () => {
+        setWakeLockStatus('released');
+        setWakeLockSentinel(null);
+      });
+    } catch (error) {
+      console.error('Failed to request wake lock:', error);
+      setWakeLockStatus('error');
+    }
+  };
+
+  const releaseWakeLock = async () => {
+    if (wakeLockSentinel) {
+      try {
+        await wakeLockSentinel.release();
+        setWakeLockSentinel(null);
+        setWakeLockStatus('released');
+      } catch (error) {
+        console.error('Failed to release wake lock:', error);
+        setWakeLockStatus('error');
+      }
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -67,6 +127,41 @@ export function GameMenu({
                 />
               </div>
             ))}
+          </div>
+        </div>
+
+        {/* Wake Lock Section */}
+        <div className="mb-4">
+          <h4 className="text-sm font-bold text-[#a3a3a3] mb-3 tracking-wide">
+            SCREEN SETTINGS:
+          </h4>
+          <div className="flex gap-2">
+            {wakeLockStatus === 'not-supported' ? (
+              <div className="flex-1 bg-[#404040] text-[#888888] text-sm font-bold py-3 px-4 text-center">
+                Wake Lock Not Supported
+              </div>
+            ) : wakeLockStatus === 'active' ? (
+              <button
+                onClick={releaseWakeLock}
+                className="flex-1 bg-[#16a34a] hover:bg-[#15803d] text-white text-sm font-bold py-3 px-4 transition-all duration-200"
+                title="Screen will stay on - click to disable"
+              >
+                ✓ Screen On
+              </button>
+            ) : (
+              <button
+                onClick={requestWakeLock}
+                className="flex-1 bg-[#2a2a2a] hover:bg-[#3a3a3a] text-[#cccccc] text-sm font-bold py-3 px-4 transition-all duration-200"
+                title="Keep screen on during gameplay"
+              >
+                Keep Screen On
+              </button>
+            )}
+            {wakeLockStatus === 'error' && (
+              <div className="text-xs text-[#dc2626] mt-1">
+                Failed to control screen wake lock
+              </div>
+            )}
           </div>
         </div>
 
