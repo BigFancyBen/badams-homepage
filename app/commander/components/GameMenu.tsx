@@ -6,12 +6,16 @@ interface GameMenuProps {
   players: PlayerState[];
   isMobileLandscape: boolean;
   isMobilePortrait: boolean;
+  wakeLockSentinel: WakeLockSentinel | null;
+  isWakeLockSupported: boolean;
+  wakeLockError: string | null;
   onClose: () => void;
   onResetClick: () => void;
   onResetConfirm: () => void;
   onResetCancel: () => void;
   onResetNames: () => void;
   onUpdatePlayerName: (playerIndex: number, name: string) => void;
+  onToggleWakeLock: () => void;
 }
 
 export function GameMenu({
@@ -20,12 +24,16 @@ export function GameMenu({
   players,
   isMobileLandscape,
   isMobilePortrait,
+  wakeLockSentinel,
+  isWakeLockSupported,
+  wakeLockError,
   onClose,
   onResetClick,
   onResetConfirm,
   onResetCancel,
   onResetNames,
   onUpdatePlayerName,
+  onToggleWakeLock,
 }: GameMenuProps) {
   if (!isOpen) return null;
 
@@ -68,6 +76,44 @@ export function GameMenu({
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Wake Lock Section */}
+        <div className="mb-4">
+          <div className="flex gap-2">
+            {!isWakeLockSupported ? (
+              <div className="flex-1 bg-[#404040] text-[#888888] text-sm font-bold py-3 px-4 text-center">
+                Wake Lock Not Supported
+              </div>
+            ) : wakeLockSentinel ? (
+              <button
+                onClick={onToggleWakeLock}
+                className="flex-1 bg-[#16a34a] hover:bg-[#15803d] text-white text-sm font-bold py-3 px-4 transition-all duration-200"
+                title="Screen will stay on - click to disable"
+              >
+                ✓ Screen Locked On
+              </button>
+            ) : (
+              <button
+                onClick={onToggleWakeLock}
+                className="flex-1 bg-[#2a2a2a] hover:bg-[#3a3a3a] text-[#cccccc] text-sm font-bold py-3 px-4 transition-all duration-200"
+                title="Prevent screen from turning off during gameplay"
+              >
+                Keep Screen On
+              </button>
+            )}
+          </div>
+          {/* Status and Error Messages */}
+          {wakeLockError && (
+            <div className="text-xs text-[#dc2626] mt-2 text-center leading-relaxed">
+              {wakeLockError}
+            </div>
+          )}
+          {wakeLockSentinel && (
+            <div className="text-xs text-[#16a34a] mt-2 text-center">
+              Screen lock active - your screen will not turn off
+            </div>
+          )}
         </div>
 
         {/* Reset Confirmation Text */}
