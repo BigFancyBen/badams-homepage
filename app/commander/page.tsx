@@ -131,24 +131,18 @@ function CommanderPageContent() {
     try {
       if (wakeLockSentinel) {
         // Release current wake lock
-        console.log('Releasing wake lock...');
         await wakeLockSentinel.release();
         setWakeLockSentinel(null);
         setWakeLockError(null);
-        console.log('Wake lock released');
       } else {
         // Request new wake lock
-        console.log('Requesting wake lock...');
         setWakeLockError(null);
         
         const sentinel = await navigator.wakeLock.request('screen');
-        console.log('Wake lock acquired successfully');
-        
         setWakeLockSentinel(sentinel);
         
         // Handle automatic release by system
         sentinel.addEventListener('release', () => {
-          console.log('Wake lock released by system');
           setWakeLockSentinel(null);
         });
       }
