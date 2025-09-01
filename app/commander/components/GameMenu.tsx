@@ -1,4 +1,3 @@
-import { useState, useEffect, useCallback } from "react";
 import { PlayerState } from "../types";
 
 interface GameMenuProps {
@@ -7,12 +6,16 @@ interface GameMenuProps {
   players: PlayerState[];
   isMobileLandscape: boolean;
   isMobilePortrait: boolean;
+  wakeLockSentinel: WakeLockSentinel | null;
+  isWakeLockSupported: boolean;
+  wakeLockError: string | null;
   onClose: () => void;
   onResetClick: () => void;
   onResetConfirm: () => void;
   onResetCancel: () => void;
   onResetNames: () => void;
   onUpdatePlayerName: (playerIndex: number, name: string) => void;
+  onToggleWakeLock: () => void;
 }
 
 export function GameMenu({
@@ -21,108 +24,17 @@ export function GameMenu({
   players,
   isMobileLandscape,
   isMobilePortrait,
+  wakeLockSentinel,
+  isWakeLockSupported,
+  wakeLockError,
   onClose,
   onResetClick,
   onResetConfirm,
   onResetCancel,
   onResetNames,
   onUpdatePlayerName,
+  onToggleWakeLock,
 }: GameMenuProps) {
-  const [wakeLockSentinel, setWakeLockSentinel] = useState<WakeLockSentinel | null>(null);
-  const [isWakeLockSupported, setIsWakeLockSupported] = useState<boolean>(false);
-  const [wakeLockError, setWakeLockError] = useState<string | null>(null);
-
-  // Check wake lock support on mount
-  useEffect(() => {
-    const checkSupport = () => {
-      const isSupported = 'wakeLock' in navigator && window.isSecureContext;
-      setIsWakeLockSupported(isSupported);
-      
-      if (!isSupported) {
-        if (!window.isSecureContext) {
-          setWakeLockError('Requires HTTPS or localhost');
-        } else if (!('wakeLock' in navigator)) {
-          // Check for specific browser messages
-          const userAgent = window.navigator.userAgent.toLowerCase();
-          if (userAgent.includes('firefox')) {
-            setWakeLockError('Not supported in Firefox');
-          } else if (userAgent.includes('safari') && !userAgent.includes('chrome')) {
-            setWakeLockError('Not supported in Safari');
-          } else {
-            setWakeLockError('Not supported in this browser');
-          }
-        }
-      }
-    };
-    
-    checkSupport();
-  }, []);
-
-  // Clean up wake lock when component unmounts or modal closes
-  useEffect(() => {
-    if (!isOpen && wakeLockSentinel) {
-      wakeLockSentinel.release().catch(() => {});
-      setWakeLockSentinel(null);
-    }
-  }, [isOpen, wakeLockSentinel]);
-
-  // Clean up on unmount
-  useEffect(() => {
-    return () => {
-      if (wakeLockSentinel) {
-        wakeLockSentinel.release().catch(() => {});
-      }
-    };
-  }, [wakeLockSentinel]);
-
-  const toggleWakeLock = useCallback(async () => {
-    if (!isWakeLockSupported) return;
-
-    try {
-      if (wakeLockSentinel) {
-        // Release current wake lock
-        console.log('Releasing wake lock...');
-        await wakeLockSentinel.release();
-        setWakeLockSentinel(null);
-        setWakeLockError(null);
-        console.log('Wake lock released');
-      } else {
-        // Request new wake lock
-        console.log('Requesting wake lock...');
-        setWakeLockError(null);
-        
-        const sentinel = await navigator.wakeLock.request('screen');
-        console.log('Wake lock acquired successfully');
-        
-        setWakeLockSentinel(sentinel);
-        
-        // Handle automatic release by system
-        sentinel.addEventListener('release', () => {
-          console.log('Wake lock released by system');
-          setWakeLockSentinel(null);
-        });
-      }
-    } catch (error) {
-      console.error('Wake lock error:', error);
-      setWakeLockSentinel(null);
-      
-      if (error instanceof Error) {
-        switch (error.name) {
-          case 'NotAllowedError':
-            setWakeLockError('Permission denied - tap to try again');
-            break;
-          case 'NotSupportedError':
-            setWakeLockError('Not supported on this device');
-            break;
-          default:
-            setWakeLockError(`Error: ${error.message}`);
-        }
-      } else {
-        setWakeLockError('Failed to toggle wake lock');
-      }
-    }
-  }, [isWakeLockSupported, wakeLockSentinel]);
-
   if (!isOpen) return null;
 
   return (
@@ -175,7 +87,7 @@ export function GameMenu({
               </div>
             ) : wakeLockSentinel ? (
               <button
-                onClick={toggleWakeLock}
+                onClick={onToggleWakeLock}
                 className="flex-1 bg-[#16a34a] hover:bg-[#15803d] text-white text-sm font-bold py-3 px-4 transition-all duration-200"
                 title="Screen will stay on - click to disable"
               >
@@ -183,7 +95,7 @@ export function GameMenu({
               </button>
             ) : (
               <button
-                onClick={toggleWakeLock}
+                onClick={onToggleWakeLock}
                 className="flex-1 bg-[#2a2a2a] hover:bg-[#3a3a3a] text-[#cccccc] text-sm font-bold py-3 px-4 transition-all duration-200"
                 title="Prevent screen from turning off during gameplay"
               >

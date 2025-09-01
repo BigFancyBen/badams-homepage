@@ -24,6 +24,11 @@ function CommanderPageContent() {
     collapsePoisonActions,
   } = useHistoryManagement();
 
+  // Global wake lock state
+  const [wakeLockSentinel, setWakeLockSentinel] = useState<WakeLockSentinel | null>(null);
+  const [isWakeLockSupported, setIsWakeLockSupported] = useState<boolean>(false);
+  const [wakeLockError, setWakeLockError] = useState<string | null>(null);
+
   const [players, setPlayers] = useState<PlayerState[]>([
     {
       life: 40,
@@ -67,6 +72,106 @@ function CommanderPageContent() {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [rotatingPlayer, setRotatingPlayer] = useState<number | null>(null);
   const [undoStack, setUndoStack] = useState<UndoOperation[]>([]);
+
+  // Check wake lock support on mount
+  useEffect(() => {
+    const checkSupport = () => {
+      const isSupported = 'wakeLock' in navigator && window.isSecureContext;
+      setIsWakeLockSupported(isSupported);
+      
+      if (!isSupported) {
+        if (!window.isSecureContext) {
+          setWakeLockError('Requires HTTPS or localhost');
+        } else if (!('wakeLock' in navigator)) {
+          // Check for specific browser messages
+          const userAgent = window.navigator.userAgent.toLowerCase();
+          if (userAgent.includes('firefox')) {
+            setWakeLockError('Not supported in Firefox');
+          } else if (userAgent.includes('safari') && !userAgent.includes('chrome')) {
+            setWakeLockError('Not supported in Safari');
+          } else {
+            setWakeLockError('Not supported in this browser');
+          }
+        }
+      }
+    };
+    
+    if (isClient) {
+      checkSupport();
+    }
+  }, [isClient]);
+
+  // Clean up wake lock on unmount
+  useEffect(() => {
+    return () => {
+      if (wakeLockSentinel) {
+        wakeLockSentinel.release().catch(() => {});
+      }
+    };
+  }, [wakeLockSentinel]);
+
+  // Handle page visibility changes to maintain wake lock
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && wakeLockSentinel && wakeLockSentinel.released) {
+        // Try to re-acquire wake lock when page becomes visible again
+        // This won't work without user interaction, but we'll show the appropriate state
+        setWakeLockSentinel(null);
+        setWakeLockError('Wake lock lost - tap to reactivate');
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [wakeLockSentinel]);
+
+  const toggleWakeLock = useCallback(async () => {
+    if (!isWakeLockSupported) return;
+
+    try {
+      if (wakeLockSentinel) {
+        // Release current wake lock
+        console.log('Releasing wake lock...');
+        await wakeLockSentinel.release();
+        setWakeLockSentinel(null);
+        setWakeLockError(null);
+        console.log('Wake lock released');
+      } else {
+        // Request new wake lock
+        console.log('Requesting wake lock...');
+        setWakeLockError(null);
+        
+        const sentinel = await navigator.wakeLock.request('screen');
+        console.log('Wake lock acquired successfully');
+        
+        setWakeLockSentinel(sentinel);
+        
+        // Handle automatic release by system
+        sentinel.addEventListener('release', () => {
+          console.log('Wake lock released by system');
+          setWakeLockSentinel(null);
+        });
+      }
+    } catch (error) {
+      console.error('Wake lock error:', error);
+      setWakeLockSentinel(null);
+      
+      if (error instanceof Error) {
+        switch (error.name) {
+          case 'NotAllowedError':
+            setWakeLockError('Permission denied - tap to try again');
+            break;
+          case 'NotSupportedError':
+            setWakeLockError('Not supported on this device');
+            break;
+          default:
+            setWakeLockError(`Error: ${error.message}`);
+        }
+      } else {
+        setWakeLockError('Failed to toggle wake lock');
+      }
+    }
+  }, [isWakeLockSupported, wakeLockSentinel]);
 
   // Handle orientation changes for mobile devices
   useEffect(() => {
@@ -463,12 +568,16 @@ function CommanderPageContent() {
         players={players}
         isMobileLandscape={isMobileLandscape}
         isMobilePortrait={isMobilePortrait}
+        wakeLockSentinel={wakeLockSentinel}
+        isWakeLockSupported={isWakeLockSupported}
+        wakeLockError={wakeLockError}
         onClose={() => setIsMenuOpen(false)}
         onResetClick={handleResetClick}
         onResetConfirm={resetGame}
         onResetCancel={cancelReset}
         onResetNames={resetPlayerNames}
         onUpdatePlayerName={updatePlayerName}
+        onToggleWakeLock={toggleWakeLock}
       />
 
       {/* 4 Player Quadrants - Perfect quarters of the screen */}
