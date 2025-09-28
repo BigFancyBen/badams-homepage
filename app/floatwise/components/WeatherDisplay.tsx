@@ -67,7 +67,9 @@ function formatLocationName(locationName: string): string {
 }
 
 // Helper function to determine display names based on shared states
-function getDisplayNames(locationWeather: LocationWeather[]): { [key: string]: string } {
+function getDisplayNames(locationWeather: LocationWeather[]): {
+  [key: string]: string;
+} {
   const validLocations = locationWeather.filter(
     (l) => !l.isLoading && !l.error && l.hours.length > 0
   );
@@ -183,8 +185,14 @@ export function WeatherDisplay({
         >
           <table className="w-full min-w-[600px] sm:min-w-[800px] border-collapse">
             <thead className="sticky top-0 z-30">
-              <tr className="bg-white dark:bg-gray-800" style={{ boxShadow: '0 2px 0 0 rgb(156 163 175)' }}>
-                <th className="sticky left-0 z-40 text-left py-2 px-2 sm:px-3 font-medium text-gray-700 dark:text-gray-200 text-xs sm:text-sm w-20 bg-white dark:bg-gray-800" style={{ boxShadow: '2px 0 0 0 rgb(156 163 175)' }}></th>
+              <tr
+                className="bg-white dark:bg-gray-800"
+                style={{ boxShadow: "0 2px 0 0 rgb(156 163 175)" }}
+              >
+                <th
+                  className="sticky left-0 z-40 text-left py-2 px-2 sm:px-3 font-medium text-gray-700 dark:text-gray-200 text-xs sm:text-sm w-20 bg-white dark:bg-gray-800"
+                  style={{ boxShadow: "2px 0 0 0 rgb(156 163 175)" }}
+                ></th>
                 {sortedHours.map((hour) => (
                   <th
                     key={hour}
@@ -226,7 +234,7 @@ export function WeatherDisplay({
                           ? "bg-gray-50 dark:bg-gray-800"
                           : "bg-white dark:bg-gray-700"
                       }`}
-                      style={{ boxShadow: '2px 0 0 0 rgb(156 163 175)' }}
+                      style={{ boxShadow: "2px 0 0 0 rgb(156 163 175)" }}
                     >
                       <div className="font-semibold">
                         {displayNames[locationData.location.id] ||
@@ -249,8 +257,11 @@ export function WeatherDisplay({
                                 {hourData.temperature}°
                               </span>
                               <div className="flex items-center justify-center gap-1">
-                                <span className={`text-xs sm:text-sm ${colors?.text}`}>
-                                  {hourData.windSpeed.replace(/\s*mph/i, "")} {hourData.windDirection}
+                                <span
+                                  className={`text-xs sm:text-sm ${colors?.text}`}
+                                >
+                                  {hourData.windSpeed.replace(/\s*mph/i, "")}{" "}
+                                  {hourData.windDirection}
                                 </span>
                                 <div
                                   className={`w-3 h-3 border-t-2 border-r-2 ${colors?.arrow}`}

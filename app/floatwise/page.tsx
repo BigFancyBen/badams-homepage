@@ -12,8 +12,7 @@ export default function FloatWisePage() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const { locations, isLoaded, addLocation, removeLocation } =
     useLocationStorage();
-  const { weatherData, fetchWeatherForLocations } =
-    useWeatherData();
+  const { weatherData, fetchWeatherForLocations } = useWeatherData();
 
   // Fetch weather data when locations or selected date changes
   useEffect(() => {

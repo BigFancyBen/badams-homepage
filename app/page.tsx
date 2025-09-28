@@ -6,7 +6,7 @@ export default function Home() {
       </h1>
 
       {/* Projects Section */}
-             <div className="mt-16 w-full max-w-7xl">
+      <div className="mt-16 w-full max-w-7xl">
         <h2 className="text-2xl md:text-3xl font-bold text-center mb-8">
           Projects
         </h2>

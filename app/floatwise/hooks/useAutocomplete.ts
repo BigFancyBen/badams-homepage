@@ -14,7 +14,6 @@ export function useAutocomplete() {
 
   // Debounced search function
   const debouncedSearch = useCallback(
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     debounce(async (searchQuery: string) => {
       if (!searchQuery.trim()) {
         setSuggestions([]);
@@ -62,7 +61,7 @@ export function useAutocomplete() {
           setIsLoading(false);
         }
       }
-    }, 300), // 300ms debounce
+    }, 500), // 500ms debounce for better performance
     []
   );
 
@@ -119,9 +118,11 @@ export function useAutocomplete() {
   };
 
   const clearSuggestions = () => {
+    setQuery('');
     setIsOpen(false);
     setSuggestions([]);
     setHighlightedIndex(-1);
+    setError('');
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }

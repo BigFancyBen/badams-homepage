@@ -10,7 +10,7 @@ export default function Error({
   reset: () => void;
 }) {
   useEffect(() => {
-    console.error('FloatWise error:', error);
+    console.error("FloatWise error:", error);
   }, [error]);
 
   return (

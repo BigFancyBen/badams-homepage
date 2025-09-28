@@ -179,7 +179,7 @@ export interface GeocodingResult {
 export type GeocodingResponse = GeocodingResult[];
 
 /**
- * Search for locations by city name using multiple strategies for better results
+ * Search for locations by city name with optimized single-strategy approach
  */
 export async function searchLocationByName(cityName: string): Promise<GeocodingResult[]> {
   if (!cityName.trim()) {
@@ -188,91 +188,81 @@ export async function searchLocationByName(cityName: string): Promise<GeocodingR
 
   try {
     const query = cityName.trim();
+    
+    // Skip search for very short queries to reduce noise
+    if (query.length < 2) {
+      return [];
+    }
+    
     const encodedQuery = encodeURIComponent(query);
     
-    // Try multiple search strategies in parallel for better coverage
-    const searchPromises = [
-      // Strategy 1: Direct city search with structured query
-      fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&city=${encodedQuery}&countrycodes=us&limit=5&addressdetails=1&dedupe=1`,
-        { headers: { 'User-Agent': 'FloatWise-Weather-App' } }
-      ),
-      
-      // Strategy 2: General search with place types
-      fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodedQuery}&countrycodes=us&limit=8&addressdetails=1&dedupe=1&featuretype=city,town,village`,
-        { headers: { 'User-Agent': 'FloatWise-Weather-App' } }
-      ),
-      
-      // Strategy 3: Search with state context if query doesn't contain comma
-      !query.includes(',') ? fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodedQuery},USA&countrycodes=us&limit=5&addressdetails=1&dedupe=1`,
-        { headers: { 'User-Agent': 'FloatWise-Weather-App' } }
-      ) : null
-    ].filter(Boolean);
-
-    const responses = await Promise.allSettled(searchPromises);
-    const allResults: GeocodingResult[] = [];
-
-    // Combine results from all successful searches
-    for (const response of responses) {
-      if (response.status === 'fulfilled' && response.value && response.value.ok) {
-        const data: GeocodingResponse = await response.value.json();
-        allResults.push(...data);
+    // Single optimized search strategy for better performance and consistency
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&q=${encodedQuery}&countrycodes=us&limit=8&addressdetails=1&dedupe=1&class=place`,
+      { 
+        headers: { 'User-Agent': 'FloatWise-Weather-App' },
+        signal: AbortSignal.timeout(5000) // 5 second timeout
       }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Search failed: ${response.statusText}`);
     }
 
-    // Remove duplicates and filter for relevant places
-    const seenCoords = new Set<string>();
-    const uniqueResults = allResults.filter(result => {
-      const coordKey = `${result.lat},${result.lon}`;
-      if (seenCoords.has(coordKey)) return false;
-      seenCoords.add(coordKey);
-
-      const addressType = result.addresstype || result.type;
-      const placeClass = result.class;
-      const displayName = result.display_name.toLowerCase();
-      
-      // More inclusive filtering for better results
-      return (
-        addressType === 'city' || 
-        addressType === 'town' || 
-        addressType === 'village' ||
-        addressType === 'municipality' ||
-        addressType === 'administrative' ||
-        placeClass === 'place' ||
-        placeClass === 'boundary' ||
-        displayName.includes('city') ||
-        displayName.includes('town') ||
-        displayName.includes('village') ||
-        displayName.includes('borough') ||
-        displayName.includes('township') ||
-        // Include populated places
-        (result.address && (result.address.city || result.address.town || result.address.village))
-      );
-    });
-
-    // Sort by relevance: importance score, then by how well the name matches
-    return uniqueResults
-      .sort((a, b) => {
-        const aName = (a.address?.city || a.address?.town || a.address?.village || a.display_name.split(',')[0]).toLowerCase();
-        const bName = (b.address?.city || b.address?.town || b.address?.village || b.display_name.split(',')[0]).toLowerCase();
+    const results: GeocodingResponse = await response.json();
+    
+    // Filter and sort results for better relevance
+    const filteredResults = results
+      .filter(result => {
+        const addressType = result.addresstype || result.type;
+        const placeClass = result.class;
+        const displayName = result.display_name.toLowerCase();
         const queryLower = query.toLowerCase();
         
+        // Filter for cities, towns, and villages
+        const isValidPlaceType = (
+          addressType === 'city' || 
+          addressType === 'town' || 
+          addressType === 'village' ||
+          addressType === 'municipality' ||
+          placeClass === 'place' ||
+          displayName.includes('city') ||
+          displayName.includes('town') ||
+          displayName.includes('village')
+        );
+        
+        // Basic relevance check - name should somewhat match query
+        const nameMatch = displayName.includes(queryLower) || 
+                          result.name?.toLowerCase().includes(queryLower) ||
+                          result.address?.city?.toLowerCase().includes(queryLower) ||
+                          result.address?.town?.toLowerCase().includes(queryLower) ||
+                          result.address?.village?.toLowerCase().includes(queryLower);
+        
+        return isValidPlaceType && nameMatch;
+      })
+      .sort((a, b) => {
+        const queryLower = query.toLowerCase();
+        
+        // Get the primary name for each result
+        const aName = (a.address?.city || a.address?.town || a.address?.village || a.name || a.display_name.split(',')[0]).toLowerCase();
+        const bName = (b.address?.city || b.address?.town || b.address?.village || b.name || b.display_name.split(',')[0]).toLowerCase();
+        
         // Exact matches first
-        const aExact = aName === queryLower ? 1 : 0;
-        const bExact = bName === queryLower ? 1 : 0;
+        const aExact = aName === queryLower ? 2 : 0;
+        const bExact = bName === queryLower ? 2 : 0;
         if (aExact !== bExact) return bExact - aExact;
         
-        // Then by starts with
+        // Starts with query second  
         const aStarts = aName.startsWith(queryLower) ? 1 : 0;
         const bStarts = bName.startsWith(queryLower) ? 1 : 0;
         if (aStarts !== bStarts) return bStarts - aStarts;
         
-        // Finally by importance
+        // Finally by importance score
         return (b.importance || 0) - (a.importance || 0);
       })
-      .slice(0, 10); // Limit final results
+      .slice(0, 8); // Limit to 8 results for better performance
+      
+    return filteredResults;
       
   } catch (error) {
     console.error('Error searching for location:', error);
