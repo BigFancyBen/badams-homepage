@@ -42,6 +42,20 @@ export default function Home() {
             <div className="text-sm text-gray-500">Click to try it out →</div>
           </a>
 
+          {/* FloatWise */}
+          <a
+            href="/floatwise"
+            className="block border-2 border-gray-300 p-6 hover:border-black transition-colors cursor-pointer"
+          >
+            <h3 className="text-xl font-bold mb-3">FloatWise</h3>
+            <p className="text-gray-700 mb-4 text-sm leading-relaxed">
+              NOAA weather tracker for multiple locations. View detailed hourly
+              forecasts from 10am-7pm, track temperature and wind conditions,
+              and manage your favorite float trip destinations.
+            </p>
+            <div className="text-sm text-gray-500">Click to try it out →</div>
+          </a>
+
           {/* Prognosticator */}
           <div className="border-2 border-gray-300 p-6 hover:border-black transition-colors">
             <h3 className="text-xl font-bold mb-3">Prognosticator</h3>
