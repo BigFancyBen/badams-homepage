@@ -13,6 +13,7 @@ export function AddLocationModal({
   onAdd,
   locations,
   onRemove,
+  onReorder,
 }: AddLocationModalProps) {
   const [searchMode, setSearchMode] = useState<"city" | "coordinates">("city");
   const [name, setName] = useState("");
@@ -20,6 +21,8 @@ export function AddLocationModal({
   const [lon, setLon] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   // Autocomplete hook for city search
   const {
@@ -123,6 +126,48 @@ export function AddLocationModal({
     }
   };
 
+  const handleDragStart = (index: number) => {
+    setDraggedIndex(index);
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (draggedIndex !== null && draggedIndex !== index) {
+      setDragOverIndex(index);
+    }
+  };
+
+  const handleDragLeave = () => {
+    setDragOverIndex(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    
+    if (draggedIndex === null || draggedIndex === dropIndex) {
+      setDraggedIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+
+    const newLocations = [...locations];
+    const draggedItem = newLocations[draggedIndex];
+    
+    // Remove from old position
+    newLocations.splice(draggedIndex, 1);
+    // Insert at new position
+    newLocations.splice(dropIndex, 0, draggedItem);
+    
+    onReorder(newLocations);
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -187,17 +232,47 @@ export function AddLocationModal({
               Current Locations
             </h3>
             <div className="space-y-2 max-h-40 overflow-y-auto">
-              {locations.map((location) => (
+              {locations.map((location, index) => (
                 <div
                   key={location.id}
-                  className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600"
+                  draggable
+                  onDragStart={() => handleDragStart(index)}
+                  onDragOver={(e) => handleDragOver(e, index)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, index)}
+                  onDragEnd={handleDragEnd}
+                  className={`flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 transition-all cursor-move ${
+                    draggedIndex === index ? 'opacity-50' : ''
+                  } ${
+                    dragOverIndex === index && draggedIndex !== index
+                      ? 'border-blue-500 dark:border-blue-400 border-t-2'
+                      : ''
+                  }`}
                 >
-                  <div className="flex-1">
-                    <div className="font-medium text-gray-900 dark:text-gray-100">
-                      {location.name}
+                  <div className="flex items-center flex-1">
+                    {/* Drag Handle */}
+                    <div className="mr-3 text-gray-400 dark:text-gray-500">
+                      <svg
+                        className="w-5 h-5"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M4 8h16M4 16h16"
+                        />
+                      </svg>
                     </div>
-                    <div className="text-sm text-gray-500 dark:text-gray-400">
-                      {location.lat.toFixed(4)}, {location.lon.toFixed(4)}
+                    <div className="flex-1">
+                      <div className="font-medium text-gray-900 dark:text-gray-100">
+                        {location.name}
+                      </div>
+                      <div className="text-sm text-gray-500 dark:text-gray-400">
+                        {location.lat.toFixed(4)}, {location.lon.toFixed(4)}
+                      </div>
                     </div>
                   </div>
                   <button

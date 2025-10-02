@@ -54,6 +54,7 @@ export interface LocationManagerProps {
   locations: Location[];
   onAddLocation: (location: Location) => void;
   onRemoveLocation: (locationId: string) => void;
+  onReorderLocations: (locations: Location[]) => void;
 }
 
 export interface WeatherDisplayProps {
@@ -67,6 +68,7 @@ export interface AddLocationModalProps {
   onAdd: (location: Location) => void;
   locations: Location[];
   onRemove: (locationId: string) => void;
+  onReorder: (locations: Location[]) => void;
 }
 
 export interface LocationSearchResult {

@@ -58,12 +58,17 @@ export function useLocationStorage() {
     setLocations([]);
   };
 
+  const reorderLocations = (newOrder: Location[]) => {
+    setLocations(newOrder);
+  };
+
   return {
     locations,
     isLoaded,
     addLocation,
     removeLocation,
     updateLocation,
-    clearLocations
+    clearLocations,
+    reorderLocations
   };
 }
