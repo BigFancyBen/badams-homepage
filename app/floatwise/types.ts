@@ -19,6 +19,10 @@ export interface NOAAForecast {
   windDirection: string;
   shortForecast: string;
   detailedForecast: string;
+  probabilityOfPrecipitation?: {
+    unitCode: string;
+    value: number | null;
+  };
 }
 
 export interface NOAAResponse {
@@ -34,6 +38,8 @@ export interface WeatherHour {
   temperature: number;
   windSpeed: string;
   windDirection: string;
+  precipChance: number | null;
+  shortForecast: string;
 }
 
 export interface LocationWeather {

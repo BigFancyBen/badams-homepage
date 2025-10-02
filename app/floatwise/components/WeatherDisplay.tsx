@@ -1,6 +1,32 @@
 import { WeatherDisplayProps, LocationWeather } from "../types";
 import { formatDate } from "../utils";
 
+// Helper function to get weather icon based on forecast
+function getWeatherIcon(shortForecast: string): string {
+  const forecast = shortForecast.toLowerCase();
+  
+  // Check for specific weather conditions in priority order
+  if (forecast.includes("thunder") || forecast.includes("tstorm")) {
+    return "⛈️"; // Thunderstorm
+  } else if (forecast.includes("rain") || forecast.includes("shower")) {
+    return "🌧️"; // Rain
+  } else if (forecast.includes("snow") || forecast.includes("flurr")) {
+    return "🌨️"; // Snow
+  } else if (forecast.includes("sleet") || forecast.includes("ice") || forecast.includes("freezing")) {
+    return "🌨️"; // Sleet/Ice
+  } else if (forecast.includes("fog") || forecast.includes("mist")) {
+    return "🌫️"; // Fog
+  } else if (forecast.includes("cloud") || forecast.includes("overcast")) {
+    return "☁️"; // Cloudy
+  } else if (forecast.includes("partly") || forecast.includes("mostly")) {
+    return "⛅"; // Partly Cloudy
+  } else if (forecast.includes("clear") || forecast.includes("sunny")) {
+    return "☀️"; // Sunny/Clear
+  } else {
+    return "🌤️"; // Default - partly sunny
+  }
+}
+
 // Helper function to format location names with state abbreviations
 function formatLocationName(locationName: string): string {
   // Common state name to abbreviation mapping
@@ -272,6 +298,16 @@ export function WeatherDisplay({
                                   }}
                                   title={`Wind from ${hourData.windDirection} at ${hourData.windSpeed}`}
                                 />
+                              </div>
+                              <div className="flex items-center justify-center gap-1 text-xs sm:text-sm">
+                                <span className="text-base" title={hourData.shortForecast}>
+                                  {getWeatherIcon(hourData.shortForecast)}
+                                </span>
+                                {hourData.precipChance !== null && (
+                                  <span className="text-blue-600 dark:text-blue-400">
+                                    {hourData.precipChance}%
+                                  </span>
+                                )}
                               </div>
                             </div>
                           ) : (
