@@ -7,9 +7,10 @@ function getWeatherIconName(shortForecast: string): string {
   const forecast = shortForecast.toLowerCase();
   
   // Check for specific weather conditions in priority order
+  // Prioritize precipitation-related conditions first
   if (forecast.includes("thunder") || forecast.includes("tstorm")) {
     return "meteocons:thunderstorms-day-fill";
-  } else if (forecast.includes("rain") || forecast.includes("shower")) {
+  } else if (forecast.includes("rain") || forecast.includes("shower") || forecast.includes("drizzle")) {
     return "meteocons:rain-fill";
   } else if (forecast.includes("snow") || forecast.includes("flurr")) {
     return "meteocons:snow-fill";
@@ -17,7 +18,13 @@ function getWeatherIconName(shortForecast: string): string {
     return "meteocons:partly-cloudy-day-sleet-fill";
   } else if (forecast.includes("fog") || forecast.includes("mist")) {
     return "meteocons:fog-fill";
-  } else if (forecast.includes("cloud") || forecast.includes("overcast")) {
+  } else if (forecast.includes("overcast")) {
+    return "meteocons:cloudy-fill";
+  } else if (forecast.includes("cloud")) {
+    // Check if it mentions clouds but also clear/sunny
+    if (forecast.includes("clear") || forecast.includes("sunny")) {
+      return "meteocons:partly-cloudy-day-fill";
+    }
     return "meteocons:cloudy-fill";
   } else if (forecast.includes("partly") || forecast.includes("mostly")) {
     return "meteocons:partly-cloudy-day-fill";
@@ -316,7 +323,7 @@ export function WeatherDisplay({
                                 />
                               </div>
                               <div className="flex items-center justify-center gap-1 text-xs sm:text-sm">
-                                {hourData.precipChance !== null && (
+                                {hourData.precipChance !== null && hourData.precipChance >= 5 && (
                                   <span className={getPrecipChanceColor(hourData.precipChance)}>
                                     {hourData.precipChance}%
                                   </span>
