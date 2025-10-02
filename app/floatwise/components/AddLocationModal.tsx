@@ -23,6 +23,7 @@ export function AddLocationModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [touchStartY, setTouchStartY] = useState<number | null>(null);
 
   // Autocomplete hook for city search
   const {
@@ -168,6 +169,57 @@ export function AddLocationModal({
     setDragOverIndex(null);
   };
 
+  // Touch event handlers for mobile support
+  const handleTouchStart = (e: React.TouchEvent, index: number) => {
+    const touch = e.touches[0];
+    setTouchStartY(touch.clientY);
+    setDraggedIndex(index);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (draggedIndex === null || touchStartY === null) return;
+    
+    const touch = e.touches[0];
+    
+    // Find which element we're over
+    const elements = document.elementsFromPoint(touch.clientX, touch.clientY);
+    const locationElement = elements.find(el => 
+      el.hasAttribute('data-location-index')
+    ) as HTMLElement;
+    
+    if (locationElement) {
+      const overIndex = parseInt(locationElement.getAttribute('data-location-index') || '-1');
+      if (overIndex !== -1 && overIndex !== draggedIndex) {
+        setDragOverIndex(overIndex);
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (draggedIndex === null || dragOverIndex === null) {
+      setDraggedIndex(null);
+      setDragOverIndex(null);
+      setTouchStartY(null);
+      return;
+    }
+
+    if (draggedIndex !== dragOverIndex) {
+      const newLocations = [...locations];
+      const draggedItem = newLocations[draggedIndex];
+      
+      // Remove from old position
+      newLocations.splice(draggedIndex, 1);
+      // Insert at new position
+      newLocations.splice(dragOverIndex, 0, draggedItem);
+      
+      onReorder(newLocations);
+    }
+    
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+    setTouchStartY(null);
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -235,12 +287,16 @@ export function AddLocationModal({
               {locations.map((location, index) => (
                 <div
                   key={location.id}
+                  data-location-index={index}
                   draggable
                   onDragStart={() => handleDragStart(index)}
                   onDragOver={(e) => handleDragOver(e, index)}
                   onDragLeave={handleDragLeave}
                   onDrop={(e) => handleDrop(e, index)}
                   onDragEnd={handleDragEnd}
+                  onTouchStart={(e) => handleTouchStart(e, index)}
+                  onTouchMove={handleTouchMove}
+                  onTouchEnd={handleTouchEnd}
                   className={`flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 transition-all cursor-move ${
                     draggedIndex === index ? 'opacity-50' : ''
                   } ${
@@ -248,6 +304,10 @@ export function AddLocationModal({
                       ? 'border-blue-500 dark:border-blue-400 border-t-2'
                       : ''
                   }`}
+                  style={{
+                    touchAction: 'none',
+                    userSelect: 'none',
+                  }}
                 >
                   <div className="flex items-center flex-1">
                     {/* Drag Handle */}
