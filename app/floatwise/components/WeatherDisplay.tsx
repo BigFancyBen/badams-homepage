@@ -1,29 +1,45 @@
+import { Icon } from "@iconify/react";
 import { WeatherDisplayProps, LocationWeather } from "../types";
 import { formatDate } from "../utils";
 
-// Helper function to get weather icon based on forecast
-function getWeatherIcon(shortForecast: string): string {
+// Helper function to get weather icon name based on forecast
+function getWeatherIconName(shortForecast: string): string {
   const forecast = shortForecast.toLowerCase();
   
   // Check for specific weather conditions in priority order
   if (forecast.includes("thunder") || forecast.includes("tstorm")) {
-    return "⛈️"; // Thunderstorm
+    return "meteocons:thunderstorms-day-fill";
   } else if (forecast.includes("rain") || forecast.includes("shower")) {
-    return "🌧️"; // Rain
+    return "meteocons:rain-fill";
   } else if (forecast.includes("snow") || forecast.includes("flurr")) {
-    return "🌨️"; // Snow
+    return "meteocons:snow-fill";
   } else if (forecast.includes("sleet") || forecast.includes("ice") || forecast.includes("freezing")) {
-    return "🌨️"; // Sleet/Ice
+    return "meteocons:partly-cloudy-day-sleet-fill";
   } else if (forecast.includes("fog") || forecast.includes("mist")) {
-    return "🌫️"; // Fog
+    return "meteocons:fog-fill";
   } else if (forecast.includes("cloud") || forecast.includes("overcast")) {
-    return "☁️"; // Cloudy
+    return "meteocons:cloudy-fill";
   } else if (forecast.includes("partly") || forecast.includes("mostly")) {
-    return "⛅"; // Partly Cloudy
+    return "meteocons:partly-cloudy-day-fill";
   } else if (forecast.includes("clear") || forecast.includes("sunny")) {
-    return "☀️"; // Sunny/Clear
+    return "meteocons:clear-day-fill";
   } else {
-    return "🌤️"; // Default - partly sunny
+    return "meteocons:partly-cloudy-day-fill"; // Default - partly cloudy
+  }
+}
+
+// Helper function to get color based on precipitation chance
+function getPrecipChanceColor(precipChance: number): string {
+  if (precipChance >= 70) {
+    return "text-red-600 dark:text-red-400 font-semibold";
+  } else if (precipChance >= 50) {
+    return "text-orange-600 dark:text-orange-400 font-medium";
+  } else if (precipChance >= 30) {
+    return "text-yellow-600 dark:text-yellow-500 font-medium";
+  } else if (precipChance >= 10) {
+    return "text-blue-600 dark:text-blue-400";
+  } else {
+    return "text-gray-500 dark:text-gray-400";
   }
 }
 
@@ -300,14 +316,17 @@ export function WeatherDisplay({
                                 />
                               </div>
                               <div className="flex items-center justify-center gap-1 text-xs sm:text-sm">
-                                <span className="text-base" title={hourData.shortForecast}>
-                                  {getWeatherIcon(hourData.shortForecast)}
-                                </span>
                                 {hourData.precipChance !== null && (
-                                  <span className="text-blue-600 dark:text-blue-400">
+                                  <span className={getPrecipChanceColor(hourData.precipChance)}>
                                     {hourData.precipChance}%
                                   </span>
                                 )}
+                                <span title={hourData.shortForecast}>
+                                  <Icon 
+                                    icon={getWeatherIconName(hourData.shortForecast)} 
+                                    className="w-5 h-5 text-blue-500 dark:text-blue-400"
+                                  />
+                                </span>
                               </div>
                             </div>
                           ) : (
