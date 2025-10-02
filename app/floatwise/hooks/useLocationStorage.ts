@@ -3,35 +3,42 @@ import { Location } from '../types';
 
 const STORAGE_KEY = 'floatwise-locations';
 
-export function useLocationStorage() {
+export function useLocationStorage(urlLocations?: Location[] | null) {
   const [locations, setLocations] = useState<Location[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  // Load locations from localStorage on mount
+  // Load locations from URL params or localStorage on mount
   useEffect(() => {
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsedLocations = JSON.parse(stored);
-        setLocations(parsedLocations);
+      // If URL locations are provided, use them (but don't save to localStorage)
+      if (urlLocations && urlLocations.length > 0) {
+        setLocations(urlLocations);
+      } else {
+        // Otherwise load from localStorage
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+          const parsedLocations = JSON.parse(stored);
+          setLocations(parsedLocations);
+        }
       }
     } catch (error) {
       console.error('Error loading locations from localStorage:', error);
     } finally {
       setIsLoaded(true);
     }
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run on mount, urlLocations is intentionally not a dependency
 
-  // Save locations to localStorage whenever locations change
+  // Save locations to localStorage only if not viewing a shared link
   useEffect(() => {
-    if (isLoaded) {
+    if (isLoaded && !urlLocations) {
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(locations));
       } catch (error) {
         console.error('Error saving locations to localStorage:', error);
       }
     }
-  }, [locations, isLoaded]);
+  }, [locations, isLoaded, urlLocations]);
 
   const addLocation = (location: Location) => {
     setLocations(prev => {
@@ -64,6 +71,7 @@ export function useLocationStorage() {
     addLocation,
     removeLocation,
     updateLocation,
-    clearLocations
+    clearLocations,
+    isViewingSharedLink: !!urlLocations && urlLocations.length > 0
   };
 }

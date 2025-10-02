@@ -280,6 +280,59 @@ export function cleanLocationName(displayName: string): string {
 }
 
 /**
+ * Encode locations array into a URL-safe base64 string
+ */
+export function encodeLocationsToURL(locations: { id: string; name: string; lat: number; lon: number }[]): string {
+  if (locations.length === 0) return '';
+  
+  // Create a compact representation of locations
+  const locationData = locations.map(loc => ({
+    id: loc.id,
+    name: loc.name,
+    lat: loc.lat,
+    lon: loc.lon
+  }));
+  
+  const jsonString = JSON.stringify(locationData);
+  // Convert to base64 and make it URL-safe
+  const base64 = btoa(jsonString);
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+/**
+ * Decode locations from a URL parameter
+ */
+export function decodeLocationsFromURL(encodedString: string): { id: string; name: string; lat: number; lon: number }[] | null {
+  if (!encodedString) return null;
+  
+  try {
+    // Convert from URL-safe base64 back to regular base64
+    const base64 = encodedString.replace(/-/g, '+').replace(/_/g, '/');
+    // Add padding if needed
+    const padded = base64 + '=='.slice(0, (4 - base64.length % 4) % 4);
+    
+    const jsonString = atob(padded);
+    const locations = JSON.parse(jsonString);
+    
+    // Validate the structure
+    if (!Array.isArray(locations)) return null;
+    
+    // Validate each location has required fields
+    const isValid = locations.every(loc => 
+      loc.id && 
+      loc.name && 
+      typeof loc.lat === 'number' && 
+      typeof loc.lon === 'number'
+    );
+    
+    return isValid ? locations : null;
+  } catch (error) {
+    console.error('Error decoding locations from URL:', error);
+    return null;
+  }
+}
+
+/**
  * Extract "City, State" format from geocoding display name
  */
 export function formatCityState(displayName: string): string {
