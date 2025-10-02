@@ -3,7 +3,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { useScryfall } from "./hooks/useScryfall";
 import { useCardFilters } from "./hooks/useCardFilters";
-import { useLocalStorageCache } from "./hooks/useLocalStorageCache";
+import { useDeckStorage } from "./hooks/useDeckStorage";
 import { ManaCostFilter } from "./components/ManaCostFilter";
 import { CardTypeFilter } from "./components/CardTypeFilter";
 import { CardGrid } from "./components/CardGrid";
@@ -15,12 +15,18 @@ import { ParsedDecklist } from "./utils/decklistParser";
 export default function TutorHelperPage() {
   const [decklistCards, setDecklistCards] = useState<string[]>([]);
   const [showImport, setShowImport] = useState(false);
-  const [importInput, setImportInput] = useState("");
   const [sortBy, setSortBy] = useState<"mana" | "name">("mana");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
-  const { isLoaded, saveDecklist, loadDecklist, clearDecklist, cleanupCache } =
-    useLocalStorageCache();
+  const { 
+    decks, 
+    isLoaded, 
+    activeDeckId, 
+    addDeck, 
+    removeDeck, 
+    selectDeck, 
+    getActiveDeck 
+  } = useDeckStorage();
 
   const { cards, loading, error } = useScryfall(decklistCards);
   const {
@@ -32,39 +38,29 @@ export default function TutorHelperPage() {
     resetFilters,
   } = useCardFilters();
 
-  // Load cached decklist on initial load
+  // Load active deck when it changes
   useEffect(() => {
     if (isLoaded) {
-      const cached = loadDecklist();
-      if (cached) {
-        setImportInput(cached.originalInput);
-        if (cached.decklist.cards.length > 0) {
-          const cardNames = cached.decklist.cards.map((card) => card.name);
-          setDecklistCards(cardNames);
-        }
+      const activeDeck = getActiveDeck();
+      if (activeDeck && activeDeck.decklist.cards.length > 0) {
+        const cardNames = activeDeck.decklist.cards.map((card) => card.name);
+        setDecklistCards(cardNames);
+      } else {
+        setDecklistCards([]);
       }
-      // Cleanup expired cache entries
-      cleanupCache();
     }
-  }, [isLoaded, loadDecklist, cleanupCache]);
+  }, [isLoaded, activeDeckId, getActiveDeck]);
 
-  const handleDecklistParsed = (
-    decklist: ParsedDecklist,
-    originalInput?: string
-  ) => {
-    if (decklist.cards.length > 0) {
-      const cardNames = decklist.cards.map((card) => card.name);
-      setDecklistCards(cardNames);
-      // Save to localStorage with original input
-      if (originalInput) {
-        saveDecklist(decklist, originalInput);
-        setImportInput(originalInput);
-      }
-    } else {
-      setDecklistCards([]);
-      clearDecklist();
-      setImportInput("");
-    }
+  const handleAddDeck = (name: string, decklist: ParsedDecklist, originalInput: string) => {
+    addDeck(name, decklist, originalInput);
+  };
+
+  const handleRemoveDeck = (deckId: string) => {
+    removeDeck(deckId);
+  };
+
+  const handleSelectDeck = (deckId: string) => {
+    selectDeck(deckId);
   };
 
   const filteredCards = useMemo(() => {
@@ -120,6 +116,8 @@ export default function TutorHelperPage() {
     );
   }
 
+  const activeDeck = getActiveDeck();
+
   return (
     <div className="min-h-screen bg-[#1a1a1a] p-2 sm:p-4">
       <div className="max-w-7xl mx-auto">
@@ -127,32 +125,42 @@ export default function TutorHelperPage() {
         <ImportModal
           isOpen={showImport}
           onClose={() => setShowImport(false)}
-          onDecklistParsed={handleDecklistParsed}
-          initialInput={importInput}
+          decks={decks}
+          activeDeckId={activeDeckId}
+          onSelectDeck={handleSelectDeck}
+          onAddDeck={handleAddDeck}
+          onRemoveDeck={handleRemoveDeck}
         />
 
         {/* Filters */}
         <div className="bg-[#222222] border border-[#333333] p-3 sm:p-6 mb-3 sm:mb-6 relative">
-          {/* Import Button - Absolutely positioned top right */}
-          <button
-            onClick={() => setShowImport(!showImport)}
-            className="absolute top-2 right-2 sm:top-4 sm:right-4 p-1.5 bg-[#4ade80] text-black hover:bg-[#22c55e] transition-colors"
-            title={showImport ? "Hide Import" : "Import Decklist"}
-          >
-            <svg
-              className="w-3 h-3"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+          {/* Deck selector and Import Button - Absolutely positioned top right */}
+          <div className="absolute top-2 right-2 sm:top-4 sm:right-4 flex items-center gap-2">
+            {activeDeck && (
+              <div className="text-sm text-[#cccccc] px-3 py-1.5 bg-[#2a2a2a] border border-[#404040]">
+                {activeDeck.name}
+              </div>
+            )}
+            <button
+              onClick={() => setShowImport(!showImport)}
+              className="p-1.5 bg-[#4ade80] text-black hover:bg-[#22c55e] transition-colors"
+              title={showImport ? "Hide Decks" : "Manage Decks"}
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 4v16m8-8H4"
-              />
-            </svg>
-          </button>
+              <svg
+                className="w-3 h-3"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+            </button>
+          </div>
 
           <div className="mb-2 sm:mb-4 pr-12">
             <div className="flex gap-1 sm:gap-2 flex-wrap">
@@ -308,14 +316,14 @@ export default function TutorHelperPage() {
                 No Decklist Loaded
               </h3>
               <p className="text-[#9ca3af] mb-6">
-                Click &quot;Import Decklist&quot; to get started with filtering
+                Click &quot;Manage Decks&quot; to add your first deck and start filtering
                 your Magic cards.
               </p>
               <button
                 onClick={() => setShowImport(true)}
                 className="px-6 py-3 bg-[#4ade80] text-black hover:bg-[#22c55e] transition-colors font-semibold"
               >
-                Import Your First Decklist
+                Add Your First Deck
               </button>
             </div>
           ) : (
