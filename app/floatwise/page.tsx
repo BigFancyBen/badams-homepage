@@ -10,7 +10,7 @@ import { Location } from "./types";
 
 export default function FloatWisePage() {
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const { locations, isLoaded, addLocation, removeLocation, reorderLocations } =
+  const { locations, isLoaded, addLocation, removeLocation, reorderLocations, renameLocation } =
     useLocationStorage();
   const { weatherData, fetchWeatherForLocations } = useWeatherData();
 
@@ -35,6 +35,10 @@ export default function FloatWisePage() {
 
   const handleReorderLocations = (locations: Location[]) => {
     reorderLocations(locations);
+  };
+
+  const handleRenameLocation = (locationId: string, newName: string) => {
+    renameLocation(locationId, newName);
   };
 
   // Show loading state until localStorage is loaded
@@ -75,6 +79,7 @@ export default function FloatWisePage() {
             onAddLocation={handleAddLocation}
             onRemoveLocation={handleRemoveLocation}
             onReorderLocations={handleReorderLocations}
+            onRenameLocation={handleRenameLocation}
           />
 
           {/* Weather Display */}

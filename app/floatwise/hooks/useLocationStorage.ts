@@ -62,6 +62,12 @@ export function useLocationStorage() {
     setLocations(newOrder);
   };
 
+  const renameLocation = (locationId: string, newName: string) => {
+    setLocations(prev => prev.map(loc => 
+      loc.id === locationId ? { ...loc, name: newName } : loc
+    ));
+  };
+
   return {
     locations,
     isLoaded,
@@ -69,6 +75,7 @@ export function useLocationStorage() {
     removeLocation,
     updateLocation,
     clearLocations,
-    reorderLocations
+    reorderLocations,
+    renameLocation
   };
 }

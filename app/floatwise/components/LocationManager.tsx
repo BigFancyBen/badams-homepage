@@ -7,6 +7,7 @@ export function LocationManager({
   onAddLocation,
   onRemoveLocation,
   onReorderLocations,
+  onRenameLocation,
 }: LocationManagerProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -58,6 +59,7 @@ export function LocationManager({
         locations={locations}
         onRemove={onRemoveLocation}
         onReorder={onReorderLocations}
+        onRename={onRenameLocation}
       />
     </div>
   );
