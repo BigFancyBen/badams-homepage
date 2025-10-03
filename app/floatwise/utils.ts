@@ -126,6 +126,24 @@ export function parseWeatherForTimeRange(
 }
 
 /**
+ * Get the initial/first selectable date based on current time
+ * Returns today if before 7pm, tomorrow if after 7pm
+ */
+export function getInitialDate(): Date {
+  const now = new Date();
+  const currentHour = now.getHours();
+  
+  // If it's past 7pm (19:00), start with tomorrow
+  const startOffset = currentHour >= 19 ? 1 : 0;
+  
+  const date = new Date(now);
+  date.setDate(now.getDate() + startOffset);
+  date.setHours(0, 0, 0, 0);
+  
+  return date;
+}
+
+/**
  * Generate next 10 days starting from today (or tomorrow if past 7pm)
  * Uses user's local timezone to determine the appropriate starting date
  */

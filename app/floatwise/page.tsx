@@ -8,10 +8,10 @@ import { WeatherDisplay } from "./components/WeatherDisplay";
 import { useLocationStorage } from "./hooks/useLocationStorage";
 import { useWeatherData } from "./hooks/useWeatherData";
 import { Location } from "./types";
-import { encodeLocationsToURL, decodeLocationsFromURL } from "./utils";
+import { encodeLocationsToURL, decodeLocationsFromURL, getInitialDate } from "./utils";
 
 export default function FloatWisePage() {
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(getInitialDate());
   const searchParams = useSearchParams();
 
   // Decode locations from URL parameter if present
