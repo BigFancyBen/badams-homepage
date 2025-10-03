@@ -9,6 +9,7 @@ interface DeckManagerProps {
   activeDeckId: string | null;
   onSelectDeck: (deckId: string) => void;
   onAddDeck: (name: string, decklist: ParsedDecklist, originalInput: string) => void;
+  onUpdateDeck: (deckId: string, name: string, decklist: ParsedDecklist, originalInput: string) => void;
   onRemoveDeck: (deckId: string) => void;
   onClose: () => void;
 }
@@ -18,10 +19,12 @@ export function DeckManager({
   activeDeckId,
   onSelectDeck,
   onAddDeck,
+  onUpdateDeck,
   onRemoveDeck,
   onClose,
 }: DeckManagerProps) {
   const [isAdding, setIsAdding] = useState(false);
+  const [editingDeckId, setEditingDeckId] = useState<string | null>(null);
   const [newDeckName, setNewDeckName] = useState("");
   const [newDeckInput, setNewDeckInput] = useState("");
   const [parseError, setParseError] = useState<string | null>(null);
@@ -61,10 +64,56 @@ export function DeckManager({
     onClose();
   };
 
+  const handleEditDeck = (deck: SavedDeck) => {
+    setEditingDeckId(deck.id);
+    setNewDeckName(deck.name);
+    setNewDeckInput(deck.originalInput);
+    setParseError(null);
+    setIsAdding(false);
+  };
+
+  const handleUpdateDeck = () => {
+    if (!editingDeckId) return;
+
+    if (!newDeckName.trim()) {
+      setParseError("Please enter a deck name");
+      return;
+    }
+
+    if (!newDeckInput.trim()) {
+      setParseError("Please paste a decklist");
+      return;
+    }
+
+    try {
+      const parsed = parseDecklist(newDeckInput);
+      
+      if (parsed.cards.length === 0) {
+        setParseError("No valid cards found in the decklist");
+        return;
+      }
+
+      onUpdateDeck(editingDeckId, newDeckName.trim(), parsed, newDeckInput);
+      setNewDeckName("");
+      setNewDeckInput("");
+      setParseError(null);
+      setEditingDeckId(null);
+    } catch (error) {
+      setParseError(error instanceof Error ? error.message : "Failed to parse decklist");
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingDeckId(null);
+    setNewDeckName("");
+    setNewDeckInput("");
+    setParseError(null);
+  };
+
   return (
     <div className="space-y-4">
       {/* Deck List */}
-      {!isAdding && decks.length > 0 && (
+      {!isAdding && !editingDeckId && decks.length > 0 && (
         <div>
           <h3 className="text-lg font-semibold text-[#e5e5e5] mb-3">Your Decks</h3>
           <div className="space-y-2">
@@ -86,33 +135,117 @@ export function DeckManager({
                     {deck.decklist.cards.length} unique cards ({deck.decklist.totalCards} total)
                   </div>
                 </button>
-                <button
-                  onClick={() => onRemoveDeck(deck.id)}
-                  className="ml-4 p-2 text-[#991b1b] hover:text-white hover:bg-[#991b1b] transition-colors"
-                  title="Remove deck"
-                >
-                  <svg
-                    className="w-5 h-5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleEditDeck(deck)}
+                    className="p-2 text-[#4ade80] hover:text-white hover:bg-[#4ade80] transition-colors"
+                    title="Edit deck"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                    />
-                  </svg>
-                </button>
+                    <svg
+                      className="w-5 h-5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                      />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => onRemoveDeck(deck.id)}
+                    className="p-2 text-[#991b1b] hover:text-white hover:bg-[#991b1b] transition-colors"
+                    title="Remove deck"
+                  >
+                    <svg
+                      className="w-5 h-5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                      />
+                    </svg>
+                  </button>
+                </div>
               </div>
             ))}
           </div>
         </div>
       )}
 
+      {/* Edit Deck Section */}
+      {editingDeckId && (
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold text-[#e5e5e5]">Edit Deck</h3>
+          <div>
+            <label htmlFor="edit-deck-name" className="block text-lg font-semibold text-[#e5e5e5] mb-2">
+              Deck Name
+            </label>
+            <input
+              id="edit-deck-name"
+              type="text"
+              value={newDeckName}
+              onChange={(e) => setNewDeckName(e.target.value)}
+              placeholder="e.g., Mono Red Aggro"
+              className="w-full p-3 border-2 border-[#404040] bg-[#2a2a2a] text-[#e5e5e5] focus:ring-2 focus:ring-[#4ade80] focus:border-[#4ade80] transition-colors"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="edit-deck-input" className="block text-lg font-semibold text-[#e5e5e5] mb-2">
+              Decklist
+            </label>
+            <textarea
+              id="edit-deck-input"
+              value={newDeckInput}
+              onChange={(e) => setNewDeckInput(e.target.value)}
+              placeholder="Paste your decklist here...
+
+Examples:
+1 Lightning Bolt
+2 Forest
+1 Jace, the Mind Sculptor
+
+Or: Lightning Bolt, Forest, Jace the Mind Sculptor"
+              className="w-full h-48 p-4 border-2 border-[#404040] bg-[#2a2a2a] text-[#e5e5e5] font-mono text-sm resize-y focus:ring-2 focus:ring-[#4ade80] focus:border-[#4ade80] transition-colors"
+            />
+          </div>
+
+          {parseError && (
+            <div className="p-3 bg-[#991b1b] bg-opacity-20 border border-[#991b1b] text-red-300">
+              {parseError}
+            </div>
+          )}
+
+          <div className="flex gap-3">
+            <button
+              onClick={handleUpdateDeck}
+              className="px-6 py-3 bg-[#4ade80] text-black font-semibold hover:bg-[#22c55e] transition-colors"
+            >
+              Update Deck
+            </button>
+            <button
+              onClick={handleCancelEdit}
+              className="px-6 py-3 bg-[#404040] text-white font-semibold hover:bg-[#606060] transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Add New Deck Section */}
-      {isAdding ? (
+      {!editingDeckId && (
+        <>
+          {isAdding ? (
         <div className="space-y-4">
           <div>
             <label htmlFor="deck-name" className="block text-lg font-semibold text-[#e5e5e5] mb-2">
@@ -182,9 +315,11 @@ Or: Lightning Bolt, Forest, Jace the Mind Sculptor"
           + Add New Deck
         </button>
       )}
+        </>
+      )}
 
       {/* Empty State */}
-      {!isAdding && decks.length === 0 && (
+      {!isAdding && !editingDeckId && decks.length === 0 && (
         <div className="text-center py-8">
           <div className="text-[#6b7280] mb-4">
             <svg
