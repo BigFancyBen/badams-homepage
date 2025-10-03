@@ -137,7 +137,7 @@ export default function TutorHelperPage() {
           {/* Deck selector and Import Button - Absolutely positioned top right */}
           <div className="absolute top-2 right-2 sm:top-4 sm:right-4 flex items-center gap-2">
             {activeDeck && (
-              <div className="text-sm text-[#cccccc] px-3 py-1.5 bg-[#2a2a2a] border border-[#404040]">
+              <div className="hidden sm:block text-sm text-[#cccccc] px-3 py-1.5 bg-[#2a2a2a] border border-[#404040]">
                 {activeDeck.name}
               </div>
             )}
