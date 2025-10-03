@@ -15,14 +15,11 @@ export function LocationManager({
   };
 
   return (
-    <div className="w-full mb-4 sm:mb-6">
-      <div className="flex items-center justify-between mb-3 sm:mb-4">
-        <h2 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-gray-100">
-          Weather Locations
-        </h2>
+    <div className="absolute top-1 right-1 sm:top-2 sm:right-2">
+      <div className="flex items-center mb-3 sm:mb-4">
         <button
           onClick={() => setIsModalOpen(true)}
-          className="w-8 h-8 bg-blue-500 dark:bg-blue-600 text-white hover:bg-blue-600 dark:hover:bg-blue-700 transition-colors flex items-center justify-center"
+          className="ml-2 w-8 h-8 bg-blue-500 dark:bg-blue-600 text-white hover:bg-blue-600 dark:hover:bg-blue-700 transition-colors flex items-center justify-center"
           title="Manage locations"
         >
           <svg

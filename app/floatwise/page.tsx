@@ -48,28 +48,26 @@ export default function FloatWisePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 px-2 sm:px-4 py-4 sm:py-8">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="text-center mb-4 sm:mb-8">
-          <h1 className="text-2xl sm:text-4xl font-bold text-gray-900 dark:text-gray-100 mb-1 sm:mb-2">
-            FloatWise
-          </h1>
-        </div>
 
         {/* Main Content */}
-        <div className="bg-white dark:bg-gray-800 shadow-sm border border-gray-200 dark:border-gray-700 p-3 sm:p-6">
+        <div className="bg-white dark:bg-gray-800 shadow-sm border border-gray-200 dark:border-gray-700 p-1 sm:p-3">
+          <div className="flex items-center justify-center mb-2 relative">
+            <h1 className="text-2xl sm:text-4xl font-bold text-gray-900 dark:text-gray-100 mb-1 sm:mb-2">
+              FloatWise
+            </h1>
+            <LocationManager
+              locations={locations}
+              onAddLocation={handleAddLocation}
+              onRemoveLocation={handleRemoveLocation}
+            />
+          </div>
           {/* Calendar */}
           <Calendar
             selectedDate={selectedDate}
             onDateSelect={handleDateSelect}
-          />
-
-          {/* Location Manager */}
-          <LocationManager
-            locations={locations}
-            onAddLocation={handleAddLocation}
-            onRemoveLocation={handleRemoveLocation}
           />
 
           {/* Weather Display */}
@@ -77,14 +75,6 @@ export default function FloatWisePage() {
             locationWeather={weatherData}
             selectedDate={selectedDate}
           />
-        </div>
-
-        {/* Footer */}
-        <div className="text-center mt-4 sm:mt-8 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
-          <p>Weather data provided by the National Weather Service (NOAA)</p>
-          <p className="mt-1">
-            Data shows forecasts from 10:00 AM to 7:00 PM for the selected date
-          </p>
         </div>
       </div>
     </div>
