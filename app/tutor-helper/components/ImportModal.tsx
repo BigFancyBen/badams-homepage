@@ -12,6 +12,7 @@ interface ImportModalProps {
   activeDeckId: string | null;
   onSelectDeck: (deckId: string) => void;
   onAddDeck: (name: string, decklist: ParsedDecklist, originalInput: string) => void;
+  onUpdateDeck: (deckId: string, name: string, decklist: ParsedDecklist, originalInput: string) => void;
   onRemoveDeck: (deckId: string) => void;
 }
 
@@ -22,6 +23,7 @@ export function ImportModal({
   activeDeckId,
   onSelectDeck,
   onAddDeck,
+  onUpdateDeck,
   onRemoveDeck,
 }: ImportModalProps) {
   // Handle escape key
@@ -80,6 +82,7 @@ export function ImportModal({
               activeDeckId={activeDeckId}
               onSelectDeck={onSelectDeck}
               onAddDeck={onAddDeck}
+              onUpdateDeck={onUpdateDeck}
               onRemoveDeck={onRemoveDeck}
               onClose={onClose}
             />

@@ -23,7 +23,8 @@ export default function TutorHelperPage() {
     isLoaded, 
     activeDeckId, 
     addDeck, 
-    removeDeck, 
+    removeDeck,
+    updateDeck,
     selectDeck, 
     getActiveDeck 
   } = useDeckStorage();
@@ -53,6 +54,10 @@ export default function TutorHelperPage() {
 
   const handleAddDeck = (name: string, decklist: ParsedDecklist, originalInput: string) => {
     addDeck(name, decklist, originalInput);
+  };
+
+  const handleUpdateDeck = (deckId: string, name: string, decklist: ParsedDecklist, originalInput: string) => {
+    updateDeck(deckId, name, decklist, originalInput);
   };
 
   const handleRemoveDeck = (deckId: string) => {
@@ -129,6 +134,7 @@ export default function TutorHelperPage() {
           activeDeckId={activeDeckId}
           onSelectDeck={handleSelectDeck}
           onAddDeck={handleAddDeck}
+          onUpdateDeck={handleUpdateDeck}
           onRemoveDeck={handleRemoveDeck}
         />
 
