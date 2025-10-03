@@ -3,7 +3,7 @@ import { WeatherDisplayProps, LocationWeather } from "../types";
 import { formatDate } from "../utils";
 
 // Helper function to get weather icon name based on forecast
-// Uses icons from basmilius/weather-icons (meteocons)
+// Uses filled icons from basmilius/weather-icons (meteocons)
 function getWeatherIconName(shortForecast: string, precipChance?: number | null): string {
   const forecast = shortForecast.toLowerCase();
   
@@ -11,50 +11,50 @@ function getWeatherIconName(shortForecast: string, precipChance?: number | null)
   // If high precipitation chance (>50%), prioritize rain/storm icons
   if (precipChance !== null && precipChance !== undefined && precipChance >= 50) {
     if (forecast.includes("thunder") || forecast.includes("tstorm") || forecast.includes("t-storm")) {
-      return "meteocons:thunderstorms-day";
+      return "meteocons:thunderstorms-day-fill";
     } else if (forecast.includes("snow")) {
-      return "meteocons:snow";
+      return "meteocons:snow-fill";
     } else {
       // High precip with no thunder/snow = rain
-      return "meteocons:rain";
+      return "meteocons:rain-fill";
     }
   }
   
   // Check for specific weather conditions in priority order
   if (forecast.includes("thunder") || forecast.includes("tstorm") || forecast.includes("t-storm")) {
-    return "meteocons:thunderstorms-day";
+    return "meteocons:thunderstorms-day-fill";
   } else if (forecast.includes("rain") || forecast.includes("shower") || forecast.includes("drizzle")) {
     if (forecast.includes("partly") || forecast.includes("scattered")) {
-      return "meteocons:partly-cloudy-day-rain";
+      return "meteocons:partly-cloudy-day-rain-fill";
     }
-    return "meteocons:rain";
+    return "meteocons:rain-fill";
   } else if (forecast.includes("snow") || forecast.includes("flurr")) {
     if (forecast.includes("partly") || forecast.includes("scattered")) {
-      return "meteocons:partly-cloudy-day-snow";
+      return "meteocons:partly-cloudy-day-snow-fill";
     }
-    return "meteocons:snow";
+    return "meteocons:snow-fill";
   } else if (forecast.includes("sleet") || forecast.includes("ice") || forecast.includes("freezing")) {
-    return "meteocons:sleet";
+    return "meteocons:sleet-fill";
   } else if (forecast.includes("fog") || forecast.includes("mist") || forecast.includes("haze")) {
-    return "meteocons:fog";
+    return "meteocons:fog-fill";
   } else if (forecast.includes("wind")) {
-    return "meteocons:wind";
+    return "meteocons:wind-fill";
   } else if (forecast.includes("overcast")) {
-    return "meteocons:overcast";
+    return "meteocons:overcast-fill";
   } else if (forecast.includes("cloud")) {
     // Differentiate between partly and mostly cloudy
     if (forecast.includes("partly") || forecast.includes("few") || forecast.includes("scattered")) {
-      return "meteocons:partly-cloudy-day";
+      return "meteocons:partly-cloudy-day-fill";
     } else if (forecast.includes("mostly")) {
-      return "meteocons:cloudy";
+      return "meteocons:cloudy-fill";
     }
-    return "meteocons:cloudy";
+    return "meteocons:cloudy-fill";
   } else if (forecast.includes("partly") || forecast.includes("mostly")) {
-    return "meteocons:partly-cloudy-day";
+    return "meteocons:partly-cloudy-day-fill";
   } else if (forecast.includes("clear") || forecast.includes("sunny") || forecast.includes("fair")) {
-    return "meteocons:clear-day";
+    return "meteocons:clear-day-fill";
   } else {
-    return "meteocons:partly-cloudy-day"; // Default
+    return "meteocons:partly-cloudy-day-fill"; // Default
   }
 }
 
