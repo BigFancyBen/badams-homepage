@@ -1,5 +1,4 @@
 import { WeatherDisplayProps, LocationWeather } from "../types";
-import { formatDate } from "../utils";
 import {
   WeatherLottieIcon,
   getWeatherLottieIconType,
@@ -124,10 +123,7 @@ function getDisplayNames(locationWeather: LocationWeather[]): {
   return displayNames;
 }
 
-export function WeatherDisplay({
-  locationWeather,
-  selectedDate,
-}: WeatherDisplayProps) {
+export function WeatherDisplay({ locationWeather }: WeatherDisplayProps) {
   if (locationWeather.length === 0) {
     return (
       <div className="text-center py-8 text-gray-500 dark:text-gray-400">

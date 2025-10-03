@@ -1,17 +1,37 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { Calendar } from "./components/Calendar";
 import { LocationManager } from "./components/LocationManager";
 import { WeatherDisplay } from "./components/WeatherDisplay";
 import { useLocationStorage } from "./hooks/useLocationStorage";
 import { useWeatherData } from "./hooks/useWeatherData";
 import { Location } from "./types";
+import {
+  encodeLocationsToURL,
+  decodeLocationsFromURL,
+  getInitialDate,
+} from "./utils";
 
 export default function FloatWisePage() {
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const { locations, isLoaded, addLocation, removeLocation } =
-    useLocationStorage();
+  const [selectedDate, setSelectedDate] = useState(getInitialDate());
+  const searchParams = useSearchParams();
+
+  // Decode locations from URL parameter if present
+  const urlLocations = decodeLocationsFromURL(
+    searchParams.get("locations") || ""
+  );
+
+  const {
+    locations,
+    isLoaded,
+    addLocation,
+    removeLocation,
+    reorderLocations,
+    renameLocation,
+    isViewingSharedLink,
+  } = useLocationStorage(urlLocations);
   const { weatherData, fetchWeatherForLocations } = useWeatherData();
 
   // Fetch weather data when locations or selected date changes
@@ -33,6 +53,29 @@ export default function FloatWisePage() {
     removeLocation(locationId);
   };
 
+  const handleReorderLocations = (locations: Location[]) => {
+    reorderLocations(locations);
+  };
+
+  const handleRenameLocation = (locationId: string, newName: string) => {
+    renameLocation(locationId, newName);
+  };
+
+  const handleShareClick = async () => {
+    if (locations.length === 0) {
+      return;
+    }
+
+    const encodedLocations = encodeLocationsToURL(locations);
+    const shareUrl = `${window.location.origin}${window.location.pathname}?locations=${encodedLocations}`;
+
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+    } catch (error) {
+      console.error("Failed to copy link:", error);
+    }
+  };
+
   // Show loading state until localStorage is loaded
   if (!isLoaded) {
     return (
@@ -48,33 +91,34 @@ export default function FloatWisePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-800">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
-
         {/* Main Content */}
-        <div className="bg-white dark:bg-gray-800 shadow-sm border border-gray-200 dark:border-gray-700 p-1 sm:p-3">
-          <div className="flex items-center justify-center mb-2 relative">
+        <div className="bg-white dark:bg-gray-800 shadow-sm  p-1 sm:p-3">
+          <div className="flex items-center justify-between mb-2 w-full px-2 sm:px-0">
             <h1 className="text-2xl sm:text-4xl font-bold text-gray-900 dark:text-gray-100 mb-1 sm:mb-2">
               FloatWise
             </h1>
-            <LocationManager
-              locations={locations}
-              onAddLocation={handleAddLocation}
-              onRemoveLocation={handleRemoveLocation}
-            />
+            <div className="flex items-center gap-1">
+              <LocationManager
+                locations={locations}
+                onAddLocation={handleAddLocation}
+                onRemoveLocation={handleRemoveLocation}
+                onReorderLocations={handleReorderLocations}
+                onRenameLocation={handleRenameLocation}
+                showShareButton={locations.length > 0}
+                onShareClick={handleShareClick}
+                isViewingSharedLink={isViewingSharedLink}
+              />
+            </div>
           </div>
           {/* Calendar */}
           <Calendar
             selectedDate={selectedDate}
             onDateSelect={handleDateSelect}
           />
-
           {/* Weather Display */}
-          <WeatherDisplay
-            locationWeather={weatherData}
-            selectedDate={selectedDate}
-          />
+          <WeatherDisplay locationWeather={weatherData} />
         </div>
       </div>
     </div>

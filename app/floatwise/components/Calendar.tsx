@@ -6,7 +6,7 @@ export function Calendar({ selectedDate, onDateSelect }: CalendarProps) {
 
   return (
     <div className="w-full mb-2">
-      <div className="flex gap-1 flex-wrap pb-2 items-center justify-center">
+      <div className="flex gap-1 overflow-x-auto pb-2 items-center justify-start">
         {days.map((date, index) => {
           const isSelected = isSameDay(date, selectedDate);
           const isToday = isSameDay(date, new Date());
@@ -16,7 +16,7 @@ export function Calendar({ selectedDate, onDateSelect }: CalendarProps) {
               key={date.toISOString()}
               onClick={() => onDateSelect(date)}
               className={`
-                flex-shrink-0 border-2 transition-colors min-w-[100px]
+                flex-shrink-0 border-2 transition-colors min-w-[60px]
                 ${
                   isSelected
                     ? "border-blue-500 bg-blue-50 dark:bg-blue-900 text-blue-700 dark:text-blue-300"
@@ -30,11 +30,11 @@ export function Calendar({ selectedDate, onDateSelect }: CalendarProps) {
               `}
             >
               <div className="flex flex-row items-center justify-center w-full">
-                <div className="text-center text-[11px] font-medium pb-1 pl-2">
+                <div className="text-center text-[10px] font-medium pb-1 pl-1">
                   {formatDate(date)}
                 </div>
-                <div className="text-[9px] text-gray-500 dark:text-gray-400 pl-1 pr-2">
-                  {isToday ? "" : index === 0 ? "" : `+${index}d`}
+                <div className="text-[8px]  text-gray-500 dark:text-gray-400 pl-[2px] pr-1 pb-[6px]">
+                  {isToday ? "" : index === 0 ? "" : `+${index}`}
                 </div>
               </div>
             </button>
