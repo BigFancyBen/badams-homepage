@@ -280,6 +280,83 @@ export function cleanLocationName(displayName: string): string {
 }
 
 /**
+ * Encode locations array into a URL-safe base64 string
+ * Uses minimal data structure for shorter URLs (~50% reduction)
+ */
+export function encodeLocationsToURL(locations: { id: string; name: string; lat: number; lon: number }[]): string {
+  if (locations.length === 0) return '';
+  
+  // Create a compact representation with short keys and reduced precision
+  // ID is omitted (can be regenerated), coordinates use 4 decimal places (~11m precision)
+  const locationData = locations.map(loc => ({
+    n: loc.name,                          // name
+    x: parseFloat(loc.lat.toFixed(4)),   // latitude (4 decimals)
+    y: parseFloat(loc.lon.toFixed(4))    // longitude (4 decimals)
+  }));
+  
+  const jsonString = JSON.stringify(locationData);
+  // Convert to base64 and make it URL-safe
+  const base64 = btoa(jsonString);
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+/**
+ * Decode locations from a URL parameter
+ * Supports both legacy format (with id) and new compact format (without id)
+ */
+export function decodeLocationsFromURL(encodedString: string): { id: string; name: string; lat: number; lon: number }[] | null {
+  if (!encodedString) return null;
+  
+  try {
+    // Convert from URL-safe base64 back to regular base64
+    const base64 = encodedString.replace(/-/g, '+').replace(/_/g, '/');
+    // Add padding if needed
+    const padded = base64 + '=='.slice(0, (4 - base64.length % 4) % 4);
+    
+    const jsonString = atob(padded);
+    const locations = JSON.parse(jsonString);
+    
+    // Validate the structure
+    if (!Array.isArray(locations)) return null;
+    
+    // Check if this is the new compact format (using short keys)
+    const isCompactFormat = locations.length > 0 && 'n' in locations[0];
+    
+    if (isCompactFormat) {
+      // New compact format: {n: name, x: lat, y: lon}
+      const isValid = locations.every(loc => 
+        loc.n && 
+        typeof loc.x === 'number' && 
+        typeof loc.y === 'number'
+      );
+      
+      if (!isValid) return null;
+      
+      // Convert to standard format and regenerate IDs
+      return locations.map(loc => ({
+        id: generateLocationId(loc.n, loc.x, loc.y),
+        name: loc.n,
+        lat: loc.x,
+        lon: loc.y
+      }));
+    } else {
+      // Legacy format: {id, name, lat, lon}
+      const isValid = locations.every(loc => 
+        loc.id && 
+        loc.name && 
+        typeof loc.lat === 'number' && 
+        typeof loc.lon === 'number'
+      );
+      
+      return isValid ? locations : null;
+    }
+  } catch (error) {
+    console.error('Error decoding locations from URL:', error);
+    return null;
+  }
+}
+
+/**
  * Extract "City, State" format from geocoding display name
  */
 export function formatCityState(displayName: string): string {

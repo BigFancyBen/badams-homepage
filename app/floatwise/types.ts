@@ -48,6 +48,7 @@ export interface LocationWeather {
 export interface CalendarProps {
   selectedDate: Date;
   onDateSelect: (date: Date) => void;
+  onShareClick: () => Promise<void>;
 }
 
 export interface LocationManagerProps {

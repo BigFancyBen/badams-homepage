@@ -1,17 +1,33 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { Calendar } from "./components/Calendar";
 import { LocationManager } from "./components/LocationManager";
 import { WeatherDisplay } from "./components/WeatherDisplay";
 import { useLocationStorage } from "./hooks/useLocationStorage";
 import { useWeatherData } from "./hooks/useWeatherData";
 import { Location } from "./types";
+import { encodeLocationsToURL, decodeLocationsFromURL } from "./utils";
 
 export default function FloatWisePage() {
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const { locations, isLoaded, addLocation, removeLocation, reorderLocations, renameLocation } =
-    useLocationStorage();
+  const searchParams = useSearchParams();
+
+  // Decode locations from URL parameter if present
+  const urlLocations = decodeLocationsFromURL(
+    searchParams.get("locations") || ""
+  );
+
+  const {
+    locations,
+    isLoaded,
+    addLocation,
+    removeLocation,
+    reorderLocations,
+    renameLocation,
+    isViewingSharedLink,
+  } = useLocationStorage(urlLocations);
   const { weatherData, fetchWeatherForLocations } = useWeatherData();
 
   // Fetch weather data when locations or selected date changes
@@ -41,6 +57,21 @@ export default function FloatWisePage() {
     renameLocation(locationId, newName);
   };
 
+  const handleShareClick = async () => {
+    if (locations.length === 0) {
+      return;
+    }
+
+    const encodedLocations = encodeLocationsToURL(locations);
+    const shareUrl = `${window.location.origin}${window.location.pathname}?locations=${encodedLocations}`;
+
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+    } catch (error) {
+      console.error("Failed to copy link:", error);
+    }
+  };
+
   // Show loading state until localStorage is loaded
   if (!isLoaded) {
     return (
@@ -63,6 +94,11 @@ export default function FloatWisePage() {
           <h1 className="text-2xl sm:text-4xl font-bold text-gray-900 dark:text-gray-100 mb-1 sm:mb-2">
             FloatWise
           </h1>
+          {isViewingSharedLink && (
+            <p className="text-sm text-blue-600 dark:text-blue-400">
+              Viewing shared locations
+            </p>
+          )}
         </div>
 
         {/* Main Content */}
@@ -71,6 +107,7 @@ export default function FloatWisePage() {
           <Calendar
             selectedDate={selectedDate}
             onDateSelect={handleDateSelect}
+            onShareClick={handleShareClick}
           />
 
           {/* Location Manager */}
