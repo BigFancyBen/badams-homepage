@@ -328,29 +328,20 @@ export function WeatherDisplay({
                               <span className="text-sm sm:text-base text-gray-900 dark:text-gray-100 font-medium">
                                 {hourData.temperature}°
                               </span>
-                              <div className="flex items-center justify-center gap-1">
+                              <div className="flex items-center justify-center gap-2 text-xs sm:text-sm w-full">
                                 <span
-                                  className={`text-xs sm:text-sm ${colors?.text}`}
+                                  className={`${colors?.text} w-12 text-right`}
                                 >
                                   {hourData.windSpeed.replace(/\s*mph/i, "")}{" "}
                                   {hourData.windDirection}
                                 </span>
-                                <div
-                                  className={`w-3 h-3 border-t-2 border-r-2 ${colors?.arrow}`}
-                                  style={{
-                                    transform: `rotate(${getWindDirectionAngle(
-                                      hourData.windDirection
-                                    )}deg)`,
-                                  }}
-                                  title={`Wind from ${hourData.windDirection} at ${hourData.windSpeed}`}
-                                />
-                              </div>
-                              <div className="flex items-center justify-center gap-1 text-xs sm:text-sm">
                                 {hourData.precipChance !== null && hourData.precipChance >= 5 && (
-                                  <span className={getPrecipChanceColor(hourData.precipChance)}>
+                                  <span className={`${getPrecipChanceColor(hourData.precipChance)} w-10 text-left`}>
                                     {hourData.precipChance}%
                                   </span>
                                 )}
+                              </div>
+                              <div className="flex items-center justify-center">
                                 <span title={hourData.shortForecast}>
                                   <Icon 
                                     icon={getWeatherIconName(hourData.shortForecast, hourData.precipChance)} 
@@ -376,32 +367,6 @@ export function WeatherDisplay({
       </div>
     </div>
   );
-}
-
-// Helper function to convert wind direction to angle for arrow display
-// Wind direction indicates where wind comes FROM
-// Arrow shows where wind is BLOWING TO (opposite direction)
-function getWindDirectionAngle(direction: string): number {
-  const directions: { [key: string]: number } = {
-    N: -135,    // Wind from North blows South (arrow points down/south)
-    NNE: -112.5,
-    NE: -90,
-    ENE: -67.5,
-    E: -45,
-    ESE: -22.5,
-    SE: 0,
-    SSE: 22.5,
-    S: 45,      // Wind from South blows North (arrow points up/north)
-    SSW: 67.5,
-    SW: 90,
-    WSW: 112.5,
-    W: 135,
-    WNW: 157.5,
-    NW: 180,    // Wind from NW blows SE (arrow points down-right/SE)
-    NNW: -157.5,
-  };
-
-  return directions[direction.toUpperCase()] || 0;
 }
 
 // Helper function to get color based on wind speed
