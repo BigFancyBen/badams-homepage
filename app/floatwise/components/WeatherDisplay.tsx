@@ -356,25 +356,26 @@ export function WeatherDisplay({
 }
 
 // Helper function to convert wind direction to angle for arrow display
-// Wind direction indicates where wind comes FROM, so arrow points in that direction
+// Wind direction indicates where wind comes FROM
+// Arrow shows where wind is BLOWING TO (opposite direction)
 function getWindDirectionAngle(direction: string): number {
   const directions: { [key: string]: number } = {
-    N: 45,      // Wind from North (arrow points up/north) - was -135, now +180
-    NNE: 67.5,
-    NE: 90,
-    ENE: 112.5,
-    E: 135,
-    ESE: 157.5,
-    SE: 180,
-    SSE: -157.5,
-    S: -135,    // Wind from South (arrow points down/south)
-    SSW: -112.5,
-    SW: -90,
-    WSW: -67.5,
-    W: -45,
-    WNW: -22.5,
-    NW: 0,
-    NNW: 22.5,
+    N: -135,    // Wind from North blows South (arrow points down/south)
+    NNE: -112.5,
+    NE: -90,
+    ENE: -67.5,
+    E: -45,
+    ESE: -22.5,
+    SE: 0,
+    SSE: 22.5,
+    S: 45,      // Wind from South blows North (arrow points up/north)
+    SSW: 67.5,
+    SW: 90,
+    WSW: 112.5,
+    W: 135,
+    WNW: 157.5,
+    NW: 180,    // Wind from NW blows SE (arrow points down-right/SE)
+    NNW: -157.5,
   };
 
   return directions[direction.toUpperCase()] || 0;
