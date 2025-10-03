@@ -67,6 +67,7 @@ export async function fetchNOAAWeather(lat: number, lon: number): Promise<NOAARe
 
 /**
  * Parse NOAA forecast periods and extract hourly data for 10am-7pm
+ * Converts NOAA times to user's local timezone for display
  */
 export function parseWeatherForTimeRange(
   forecast: NOAAResponse, 
@@ -74,35 +75,35 @@ export function parseWeatherForTimeRange(
 ): WeatherHour[] {
   const hours: WeatherHour[] = [];
   
-  // Format target date as YYYY-MM-DD for comparison
+  // Format target date as YYYY-MM-DD in user's local timezone
   const targetYear = targetDate.getFullYear();
   const targetMonth = String(targetDate.getMonth() + 1).padStart(2, '0');
   const targetDay = String(targetDate.getDate()).padStart(2, '0');
   const targetDateStr = `${targetYear}-${targetMonth}-${targetDay}`;
   
   // Filter periods for the target date and time range (10am-7pm)
-  // Note: NOAA hourly data may not have every single hour available
   const relevantPeriods = forecast.properties.periods.filter(period => {
-    // NOAA returns times in format: "2024-10-03T18:00:00-06:00"
-    // Extract the date and hour from the ISO string directly to avoid timezone conversion issues
-    const timeStr = period.startTime;
+    // Parse NOAA time to Date object (converts to user's local timezone)
+    const periodDate = new Date(period.startTime);
     
-    // Extract date part (YYYY-MM-DD) from ISO string
-    const datePart = timeStr.substring(0, 10);
+    // Get date components in user's local timezone
+    const periodYear = periodDate.getFullYear();
+    const periodMonth = String(periodDate.getMonth() + 1).padStart(2, '0');
+    const periodDay = String(periodDate.getDate()).padStart(2, '0');
+    const periodDateStr = `${periodYear}-${periodMonth}-${periodDay}`;
     
-    // Extract hour from ISO string (before timezone conversion)
-    const hourMatch = timeStr.match(/T(\d{2}):/);
-    const periodHour = hourMatch ? parseInt(hourMatch[1], 10) : 0;
+    // Get hour in user's local timezone
+    const periodHour = periodDate.getHours();
     
-    // Check if same date and within time range (10am-7pm)
-    return datePart === targetDateStr && periodHour >= 10 && periodHour <= 19;
+    // Check if same date and within time range (10am-7pm) in user's timezone
+    return periodDateStr === targetDateStr && periodHour >= 10 && periodHour <= 19;
   });
   
   // Convert periods to our hourly format
   relevantPeriods.forEach(period => {
-    // Extract hour from ISO string directly to avoid timezone issues
-    const hourMatch = period.startTime.match(/T(\d{2}):/);
-    const hour = hourMatch ? parseInt(hourMatch[1], 10) : 0;
+    // Parse to Date object to get time in user's local timezone
+    const periodDate = new Date(period.startTime);
+    const hour = periodDate.getHours();
     
     // Format time display
     const hour12 = hour === 0 ? 12 : (hour > 12 ? hour - 12 : hour);
@@ -125,15 +126,23 @@ export function parseWeatherForTimeRange(
 }
 
 /**
- * Generate next 10 days starting from today
+ * Generate next 10 days starting from today (or tomorrow if past 7pm)
+ * Uses user's local timezone to determine the appropriate starting date
  */
 export function getNext10Days(): Date[] {
   const days: Date[] = [];
-  const today = new Date();
+  const now = new Date();
+  const currentHour = now.getHours();
+  
+  // If it's past 7pm (19:00), start with tomorrow as the first day
+  // since there's no useful weather data left for today
+  const startOffset = currentHour >= 19 ? 1 : 0;
   
   for (let i = 0; i < 10; i++) {
-    const date = new Date(today);
-    date.setDate(today.getDate() + i);
+    const date = new Date(now);
+    date.setDate(now.getDate() + startOffset + i);
+    // Set to start of day in user's timezone
+    date.setHours(0, 0, 0, 0);
     days.push(date);
   }
   

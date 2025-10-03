@@ -130,7 +130,7 @@ export default function FloatWisePage() {
         <div className="text-center mt-4 sm:mt-8 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
           <p>Weather data provided by the National Weather Service (NOAA)</p>
           <p className="mt-1">
-            Data shows forecasts from 10:00 AM to 7:00 PM for the selected date
+            Times shown in your local timezone · Forecast from 10:00 AM to 7:00 PM
           </p>
         </div>
       </div>
