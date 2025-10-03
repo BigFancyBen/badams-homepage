@@ -84,6 +84,6 @@ export function useLocationStorage(urlLocations?: Location[] | null) {
     clearLocations,
     reorderLocations,
     renameLocation,
-    isViewingSharedLink: !!urlLocations && urlLocations.length > 0
+    isViewingSharedLink: !!urlLocations && urlLocations.length > 0,
   };
 }

@@ -13,12 +13,21 @@ import { encodeLocationsToURL, decodeLocationsFromURL } from "./utils";
 export default function FloatWisePage() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const searchParams = useSearchParams();
-  
+
   // Decode locations from URL parameter if present
-  const urlLocations = decodeLocationsFromURL(searchParams.get('locations') || '');
-  
-  const { locations, isLoaded, addLocation, removeLocation, reorderLocations, renameLocation, isViewingSharedLink } =
-    useLocationStorage(urlLocations);
+  const urlLocations = decodeLocationsFromURL(
+    searchParams.get("locations") || ""
+  );
+
+  const {
+    locations,
+    isLoaded,
+    addLocation,
+    removeLocation,
+    reorderLocations,
+    renameLocation,
+    isViewingSharedLink,
+  } = useLocationStorage(urlLocations);
   const { weatherData, fetchWeatherForLocations } = useWeatherData();
 
   // Fetch weather data when locations or selected date changes
@@ -55,11 +64,11 @@ export default function FloatWisePage() {
 
     const encodedLocations = encodeLocationsToURL(locations);
     const shareUrl = `${window.location.origin}${window.location.pathname}?locations=${encodedLocations}`;
-    
+
     try {
       await navigator.clipboard.writeText(shareUrl);
     } catch (error) {
-      console.error('Failed to copy link:', error);
+      console.error("Failed to copy link:", error);
     }
   };
 
