@@ -67,35 +67,51 @@ export async function fetchNOAAWeather(lat: number, lon: number): Promise<NOAARe
 
 /**
  * Parse NOAA forecast periods and extract hourly data for 10am-7pm
+ * Converts NOAA times to user's local timezone for display
  */
 export function parseWeatherForTimeRange(
   forecast: NOAAResponse, 
   targetDate: Date
 ): WeatherHour[] {
   const hours: WeatherHour[] = [];
-  const targetDateStr = targetDate.toISOString().split('T')[0]; // YYYY-MM-DD format
+  
+  // Format target date as YYYY-MM-DD in user's local timezone
+  const targetYear = targetDate.getFullYear();
+  const targetMonth = String(targetDate.getMonth() + 1).padStart(2, '0');
+  const targetDay = String(targetDate.getDate()).padStart(2, '0');
+  const targetDateStr = `${targetYear}-${targetMonth}-${targetDay}`;
   
   // Filter periods for the target date and time range (10am-7pm)
-  // Note: NOAA hourly data may not have every single hour available
   const relevantPeriods = forecast.properties.periods.filter(period => {
+    // Parse NOAA time to Date object (converts to user's local timezone)
     const periodDate = new Date(period.startTime);
-    const periodDateStr = periodDate.toISOString().split('T')[0];
+    
+    // Get date components in user's local timezone
+    const periodYear = periodDate.getFullYear();
+    const periodMonth = String(periodDate.getMonth() + 1).padStart(2, '0');
+    const periodDay = String(periodDate.getDate()).padStart(2, '0');
+    const periodDateStr = `${periodYear}-${periodMonth}-${periodDay}`;
+    
+    // Get hour in user's local timezone
     const periodHour = periodDate.getHours();
     
-    // Include daytime hours (10am-7pm) for the target date
+    // Check if same date and within time range (10am-7pm) in user's timezone
     return periodDateStr === targetDateStr && periodHour >= 10 && periodHour <= 19;
   });
   
   // Convert periods to our hourly format
   relevantPeriods.forEach(period => {
-    const startTime = new Date(period.startTime);
-    const hour = startTime.getHours();
+    // Parse to Date object to get time in user's local timezone
+    const periodDate = new Date(period.startTime);
+    const hour = periodDate.getHours();
+    
+    // Format time display
+    const hour12 = hour === 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const time = `${hour12} ${ampm}`;
     
     hours.push({
-      time: startTime.toLocaleTimeString('en-US', { 
-        hour: 'numeric', 
-        hour12: true 
-      }),
+      time,
       hour,
       temperature: period.temperature,
       windSpeed: period.windSpeed,
@@ -110,15 +126,41 @@ export function parseWeatherForTimeRange(
 }
 
 /**
- * Generate next 10 days starting from today
+ * Get the initial/first selectable date based on current time
+ * Returns today if before 7pm, tomorrow if after 7pm
+ */
+export function getInitialDate(): Date {
+  const now = new Date();
+  const currentHour = now.getHours();
+  
+  // If it's past 7pm (19:00), start with tomorrow
+  const startOffset = currentHour >= 19 ? 1 : 0;
+  
+  const date = new Date(now);
+  date.setDate(now.getDate() + startOffset);
+  date.setHours(0, 0, 0, 0);
+  
+  return date;
+}
+
+/**
+ * Generate next 10 days starting from today (or tomorrow if past 7pm)
+ * Uses user's local timezone to determine the appropriate starting date
  */
 export function getNext10Days(): Date[] {
   const days: Date[] = [];
-  const today = new Date();
+  const now = new Date();
+  const currentHour = now.getHours();
+  
+  // If it's past 7pm (19:00), start with tomorrow as the first day
+  // since there's no useful weather data left for today
+  const startOffset = currentHour >= 19 ? 1 : 0;
   
   for (let i = 0; i < 10; i++) {
-    const date = new Date(today);
-    date.setDate(today.getDate() + i);
+    const date = new Date(now);
+    date.setDate(now.getDate() + startOffset + i);
+    // Set to start of day in user's timezone
+    date.setHours(0, 0, 0, 0);
     days.push(date);
   }
   
