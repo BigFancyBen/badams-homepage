@@ -5,17 +5,22 @@ import {
 } from "../lottieweathericons/WeatherLottieIcon";
 
 // Helper function to get color based on precipitation chance
+// Two-color system: black = go (precip <= 30%), red = no-go (precip > 30%)
 function getPrecipChanceColor(precipChance: number): string {
-  if (precipChance >= 70) {
+  if (precipChance > 30) {
     return "text-red-600 dark:text-red-400 font-semibold";
-  } else if (precipChance >= 50) {
-    return "text-orange-600 dark:text-orange-400 font-medium";
-  } else if (precipChance >= 30) {
-    return "text-yellow-600 dark:text-yellow-500 font-medium";
-  } else if (precipChance >= 10) {
-    return "text-blue-600 dark:text-blue-400";
   } else {
-    return "text-gray-500 dark:text-gray-400";
+    return "text-gray-900 dark:text-gray-100";
+  }
+}
+
+// Helper function to get color based on temperature
+// Two-color system: black = go (temp > 70°), red = no-go (temp <= 70°)
+function getTemperatureColor(temperature: number): string {
+  if (temperature > 70) {
+    return "text-gray-900 dark:text-gray-100";
+  } else {
+    return "text-red-600 dark:text-red-400 font-semibold";
   }
 }
 
@@ -279,7 +284,7 @@ export function WeatherDisplay({ locationWeather }: WeatherDisplayProps) {
                             <div className="ml-2 sm:mx-auto flex flex-row items-center justify-between sm:max-w-[65px] relative">
                               <div className="flex flex-col items-start justify-center gap-[1px]">
                                 {/* Temperature */}
-                                <span className="text-[10px] sm:text-[11px] text-gray-900 dark:text-gray-100 font-medium leading-none">
+                                <span className={`text-[10px] sm:text-[11px] font-medium leading-none ${getTemperatureColor(hourData.temperature)}`}>
                                   {hourData.temperature}°
                                 </span>
                                 {/* Wind - prevent wrapping with nowrap */}
@@ -291,16 +296,15 @@ export function WeatherDisplay({ locationWeather }: WeatherDisplayProps) {
                                 </div>
                                 {/* Precipitation % + Weather Icon on same line */}
                                 <div className="flex items-center justify-center gap-0.5 text-[9px] sm:text-[10px] leading-none z-20">
-                                  {hourData.precipChance !== null &&
-                                    hourData.precipChance >= 5 && (
-                                      <span
-                                        className={getPrecipChanceColor(
-                                          hourData.precipChance
-                                        )}
-                                      >
-                                        {hourData.precipChance}%
-                                      </span>
-                                    )}
+                                  {hourData.precipChance !== null && (
+                                    <span
+                                      className={getPrecipChanceColor(
+                                        hourData.precipChance
+                                      )}
+                                    >
+                                      {hourData.precipChance}%
+                                    </span>
+                                  )}
                                 </div>
                               </div>
                               <WeatherLottieIcon
@@ -333,44 +337,20 @@ export function WeatherDisplay({ locationWeather }: WeatherDisplayProps) {
 }
 
 // Helper function to get color based on wind speed
+// Two-color system: black = go (speed <= 10 mph), red = no-go (speed > 10 mph)
 function getWindSpeedColor(windSpeed: string): { text: string; arrow: string } {
   // Extract numeric value from wind speed (e.g., "10 mph" -> 10)
   const speed = parseInt(windSpeed.replace(/[^\d]/g, "")) || 0;
 
-  if (speed === 0) {
+  if (speed > 10) {
     return {
-      text: "text-gray-400 dark:text-gray-500",
-      arrow: "border-gray-400 dark:border-gray-500",
-    };
-  } else if (speed <= 5) {
-    return {
-      text: "text-green-600 dark:text-green-400",
-      arrow: "border-green-600 dark:border-green-400",
-    };
-  } else if (speed <= 10) {
-    return {
-      text: "text-teal-600 dark:text-teal-400",
-      arrow: "border-teal-600 dark:border-teal-400",
-    };
-  } else if (speed <= 15) {
-    return {
-      text: "text-yellow-600 dark:text-yellow-400",
-      arrow: "border-yellow-600 dark:border-yellow-400",
-    };
-  } else if (speed <= 20) {
-    return {
-      text: "text-orange-600 dark:text-orange-400",
-      arrow: "border-orange-600 dark:border-orange-400",
-    };
-  } else if (speed <= 30) {
-    return {
-      text: "text-red-600 dark:text-red-400",
+      text: "text-red-600 dark:text-red-400 font-semibold",
       arrow: "border-red-600 dark:border-red-400",
     };
   } else {
     return {
-      text: "text-purple-600 dark:text-purple-400",
-      arrow: "border-purple-600 dark:border-purple-400",
+      text: "text-gray-900 dark:text-gray-100",
+      arrow: "border-gray-900 dark:border-gray-100",
     };
   }
 }
