@@ -3,35 +3,58 @@ import { WeatherDisplayProps, LocationWeather } from "../types";
 import { formatDate } from "../utils";
 
 // Helper function to get weather icon name based on forecast
-function getWeatherIconName(shortForecast: string): string {
+// Uses icons from basmilius/weather-icons (meteocons)
+function getWeatherIconName(shortForecast: string, precipChance?: number | null): string {
   const forecast = shortForecast.toLowerCase();
   
-  // Check for specific weather conditions in priority order
-  // Prioritize precipitation-related conditions first
-  if (forecast.includes("thunder") || forecast.includes("tstorm")) {
-    return "meteocons:thunderstorms-day-fill";
-  } else if (forecast.includes("rain") || forecast.includes("shower") || forecast.includes("drizzle")) {
-    return "meteocons:rain-fill";
-  } else if (forecast.includes("snow") || forecast.includes("flurr")) {
-    return "meteocons:snow-fill";
-  } else if (forecast.includes("sleet") || forecast.includes("ice") || forecast.includes("freezing")) {
-    return "meteocons:partly-cloudy-day-sleet-fill";
-  } else if (forecast.includes("fog") || forecast.includes("mist")) {
-    return "meteocons:fog-fill";
-  } else if (forecast.includes("overcast")) {
-    return "meteocons:cloudy-fill";
-  } else if (forecast.includes("cloud")) {
-    // Check if it mentions clouds but also clear/sunny
-    if (forecast.includes("clear") || forecast.includes("sunny")) {
-      return "meteocons:partly-cloudy-day-fill";
+  // HIGH PRIORITY: Check precipitation percentage first
+  // If high precipitation chance (>50%), prioritize rain/storm icons
+  if (precipChance !== null && precipChance !== undefined && precipChance >= 50) {
+    if (forecast.includes("thunder") || forecast.includes("tstorm") || forecast.includes("t-storm")) {
+      return "meteocons:thunderstorms-day";
+    } else if (forecast.includes("snow")) {
+      return "meteocons:snow";
+    } else {
+      // High precip with no thunder/snow = rain
+      return "meteocons:rain";
     }
-    return "meteocons:cloudy-fill";
+  }
+  
+  // Check for specific weather conditions in priority order
+  if (forecast.includes("thunder") || forecast.includes("tstorm") || forecast.includes("t-storm")) {
+    return "meteocons:thunderstorms-day";
+  } else if (forecast.includes("rain") || forecast.includes("shower") || forecast.includes("drizzle")) {
+    if (forecast.includes("partly") || forecast.includes("scattered")) {
+      return "meteocons:partly-cloudy-day-rain";
+    }
+    return "meteocons:rain";
+  } else if (forecast.includes("snow") || forecast.includes("flurr")) {
+    if (forecast.includes("partly") || forecast.includes("scattered")) {
+      return "meteocons:partly-cloudy-day-snow";
+    }
+    return "meteocons:snow";
+  } else if (forecast.includes("sleet") || forecast.includes("ice") || forecast.includes("freezing")) {
+    return "meteocons:sleet";
+  } else if (forecast.includes("fog") || forecast.includes("mist") || forecast.includes("haze")) {
+    return "meteocons:fog";
+  } else if (forecast.includes("wind")) {
+    return "meteocons:wind";
+  } else if (forecast.includes("overcast")) {
+    return "meteocons:overcast";
+  } else if (forecast.includes("cloud")) {
+    // Differentiate between partly and mostly cloudy
+    if (forecast.includes("partly") || forecast.includes("few") || forecast.includes("scattered")) {
+      return "meteocons:partly-cloudy-day";
+    } else if (forecast.includes("mostly")) {
+      return "meteocons:cloudy";
+    }
+    return "meteocons:cloudy";
   } else if (forecast.includes("partly") || forecast.includes("mostly")) {
-    return "meteocons:partly-cloudy-day-fill";
-  } else if (forecast.includes("clear") || forecast.includes("sunny")) {
-    return "meteocons:clear-day-fill";
+    return "meteocons:partly-cloudy-day";
+  } else if (forecast.includes("clear") || forecast.includes("sunny") || forecast.includes("fair")) {
+    return "meteocons:clear-day";
   } else {
-    return "meteocons:partly-cloudy-day-fill"; // Default - partly cloudy
+    return "meteocons:partly-cloudy-day"; // Default
   }
 }
 
@@ -330,7 +353,7 @@ export function WeatherDisplay({
                                 )}
                                 <span title={hourData.shortForecast}>
                                   <Icon 
-                                    icon={getWeatherIconName(hourData.shortForecast)} 
+                                    icon={getWeatherIconName(hourData.shortForecast, hourData.precipChance)} 
                                     className="w-5 h-5 text-blue-500 dark:text-blue-400"
                                   />
                                 </span>
