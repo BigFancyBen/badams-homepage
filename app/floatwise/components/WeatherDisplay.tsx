@@ -1,62 +1,6 @@
-import { Icon } from "@iconify/react";
 import { WeatherDisplayProps, LocationWeather } from "../types";
 import { formatDate } from "../utils";
-
-// Helper function to get weather icon name based on forecast
-// Uses filled icons from basmilius/weather-icons (meteocons)
-function getWeatherIconName(shortForecast: string, precipChance?: number | null): string {
-  const forecast = shortForecast.toLowerCase();
-  
-  // HIGH PRIORITY: Check precipitation percentage first
-  // If high precipitation chance (>50%), prioritize rain/storm icons
-  if (precipChance !== null && precipChance !== undefined && precipChance >= 50) {
-    if (forecast.includes("thunder") || forecast.includes("tstorm") || forecast.includes("t-storm")) {
-      return "meteocons:thunderstorms-day-fill";
-    } else if (forecast.includes("snow")) {
-      return "meteocons:snow-fill";
-    } else {
-      // High precip with no thunder/snow = rain
-      return "meteocons:rain-fill";
-    }
-  }
-  
-  // Check for specific weather conditions in priority order
-  if (forecast.includes("thunder") || forecast.includes("tstorm") || forecast.includes("t-storm")) {
-    return "meteocons:thunderstorms-day-fill";
-  } else if (forecast.includes("rain") || forecast.includes("shower") || forecast.includes("drizzle")) {
-    if (forecast.includes("partly") || forecast.includes("scattered")) {
-      return "meteocons:partly-cloudy-day-rain-fill";
-    }
-    return "meteocons:rain-fill";
-  } else if (forecast.includes("snow") || forecast.includes("flurr")) {
-    if (forecast.includes("partly") || forecast.includes("scattered")) {
-      return "meteocons:partly-cloudy-day-snow-fill";
-    }
-    return "meteocons:snow-fill";
-  } else if (forecast.includes("sleet") || forecast.includes("ice") || forecast.includes("freezing")) {
-    return "meteocons:sleet-fill";
-  } else if (forecast.includes("fog") || forecast.includes("mist") || forecast.includes("haze")) {
-    return "meteocons:fog-fill";
-  } else if (forecast.includes("wind")) {
-    return "meteocons:wind-fill";
-  } else if (forecast.includes("overcast")) {
-    return "meteocons:overcast-fill";
-  } else if (forecast.includes("cloud")) {
-    // Differentiate between partly and mostly cloudy
-    if (forecast.includes("partly") || forecast.includes("few") || forecast.includes("scattered")) {
-      return "meteocons:partly-cloudy-day-fill";
-    } else if (forecast.includes("mostly")) {
-      return "meteocons:cloudy-fill";
-    }
-    return "meteocons:cloudy-fill";
-  } else if (forecast.includes("partly") || forecast.includes("mostly")) {
-    return "meteocons:partly-cloudy-day-fill";
-  } else if (forecast.includes("clear") || forecast.includes("sunny") || forecast.includes("fair")) {
-    return "meteocons:clear-day-fill";
-  } else {
-    return "meteocons:partly-cloudy-day-fill"; // Default
-  }
-}
+import { WeatherLottieIcon, getWeatherLottieIconType } from "../lottieweathericons/WeatherLottieIcon";
 
 // Helper function to get color based on precipitation chance
 function getPrecipChanceColor(precipChance: number): string {
@@ -325,29 +269,29 @@ export function WeatherDisplay({
                         >
                           {hourData ? (
                             <div className="flex flex-col items-center justify-center gap-1">
+                              {/* Temperature */}
                               <span className="text-sm sm:text-base text-gray-900 dark:text-gray-100 font-medium">
                                 {hourData.temperature}°
                               </span>
-                              <div className="flex items-center justify-center gap-2 text-xs sm:text-sm w-full">
-                                <span
-                                  className={`${colors?.text} w-12 text-right`}
-                                >
+                              {/* Wind - prevent wrapping with nowrap */}
+                              <div className="text-xs sm:text-sm whitespace-nowrap">
+                                <span className={colors?.text}>
                                   {hourData.windSpeed.replace(/\s*mph/i, "")}{" "}
                                   {hourData.windDirection}
                                 </span>
+                              </div>
+                              {/* Precipitation % + Weather Icon on same line */}
+                              <div className="flex items-center justify-center gap-1 text-xs sm:text-sm">
                                 {hourData.precipChance !== null && hourData.precipChance >= 5 && (
-                                  <span className={`${getPrecipChanceColor(hourData.precipChance)} w-10 text-left`}>
+                                  <span className={getPrecipChanceColor(hourData.precipChance)}>
                                     {hourData.precipChance}%
                                   </span>
                                 )}
-                              </div>
-                              <div className="flex items-center justify-center">
-                                <span title={hourData.shortForecast}>
-                                  <Icon 
-                                    icon={getWeatherIconName(hourData.shortForecast, hourData.precipChance)} 
-                                    className="w-5 h-5 text-blue-500 dark:text-blue-400"
-                                  />
-                                </span>
+                                <WeatherLottieIcon
+                                  type={getWeatherLottieIconType(hourData.shortForecast, hourData.precipChance)}
+                                  className="w-5 h-5"
+                                  title={hourData.shortForecast}
+                                />
                               </div>
                             </div>
                           ) : (
