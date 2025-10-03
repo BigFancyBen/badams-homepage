@@ -13,6 +13,8 @@ export function AddLocationModal({
   onAdd,
   locations,
   onRemove,
+  onReorder,
+  onRename,
 }: AddLocationModalProps) {
   const [searchMode, setSearchMode] = useState<"city" | "coordinates">("city");
   const [name, setName] = useState("");
@@ -20,6 +22,11 @@ export function AddLocationModal({
   const [lon, setLon] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [touchStartY, setTouchStartY] = useState<number | null>(null);
+  const [editingLocationId, setEditingLocationId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState("");
 
   // Autocomplete hook for city search
   const {
@@ -123,6 +130,125 @@ export function AddLocationModal({
     }
   };
 
+  const handleDragStart = (index: number) => {
+    setDraggedIndex(index);
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (draggedIndex !== null && draggedIndex !== index) {
+      setDragOverIndex(index);
+    }
+  };
+
+  const handleDragLeave = () => {
+    setDragOverIndex(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    
+    if (draggedIndex === null || draggedIndex === dropIndex) {
+      setDraggedIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+
+    const newLocations = [...locations];
+    const draggedItem = newLocations[draggedIndex];
+    
+    // Remove from old position
+    newLocations.splice(draggedIndex, 1);
+    // Insert at new position
+    newLocations.splice(dropIndex, 0, draggedItem);
+    
+    onReorder(newLocations);
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
+  // Touch event handlers for mobile support
+  const handleTouchStart = (e: React.TouchEvent, index: number) => {
+    const touch = e.touches[0];
+    setTouchStartY(touch.clientY);
+    setDraggedIndex(index);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (draggedIndex === null || touchStartY === null) return;
+    
+    const touch = e.touches[0];
+    
+    // Find which element we're over
+    const elements = document.elementsFromPoint(touch.clientX, touch.clientY);
+    const locationElement = elements.find(el => 
+      el.hasAttribute('data-location-index')
+    ) as HTMLElement;
+    
+    if (locationElement) {
+      const overIndex = parseInt(locationElement.getAttribute('data-location-index') || '-1');
+      if (overIndex !== -1 && overIndex !== draggedIndex) {
+        setDragOverIndex(overIndex);
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (draggedIndex === null || dragOverIndex === null) {
+      setDraggedIndex(null);
+      setDragOverIndex(null);
+      setTouchStartY(null);
+      return;
+    }
+
+    if (draggedIndex !== dragOverIndex) {
+      const newLocations = [...locations];
+      const draggedItem = newLocations[draggedIndex];
+      
+      // Remove from old position
+      newLocations.splice(draggedIndex, 1);
+      // Insert at new position
+      newLocations.splice(dragOverIndex, 0, draggedItem);
+      
+      onReorder(newLocations);
+    }
+    
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+    setTouchStartY(null);
+  };
+
+  const handleStartEdit = (locationId: string, currentName: string) => {
+    setEditingLocationId(locationId);
+    setEditingName(currentName);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingLocationId(null);
+    setEditingName("");
+  };
+
+  const handleSaveEdit = (locationId: string) => {
+    if (editingName.trim()) {
+      onRename(locationId, editingName.trim());
+      setEditingLocationId(null);
+      setEditingName("");
+    }
+  };
+
+  const handleEditKeyDown = (e: React.KeyboardEvent, locationId: string) => {
+    if (e.key === 'Enter') {
+      handleSaveEdit(locationId);
+    } else if (e.key === 'Escape') {
+      handleCancelEdit();
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -187,38 +313,109 @@ export function AddLocationModal({
               Current Locations
             </h3>
             <div className="space-y-2 max-h-40 overflow-y-auto">
-              {locations.map((location) => (
+              {locations.map((location, index) => (
                 <div
                   key={location.id}
-                  className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600"
+                  data-location-index={index}
+                  draggable
+                  onDragStart={() => handleDragStart(index)}
+                  onDragOver={(e) => handleDragOver(e, index)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, index)}
+                  onDragEnd={handleDragEnd}
+                  onTouchStart={(e) => handleTouchStart(e, index)}
+                  onTouchMove={handleTouchMove}
+                  onTouchEnd={handleTouchEnd}
+                  className={`flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 transition-all cursor-move ${
+                    draggedIndex === index ? 'opacity-50' : ''
+                  } ${
+                    dragOverIndex === index && draggedIndex !== index
+                      ? 'border-blue-500 dark:border-blue-400 border-t-2'
+                      : ''
+                  }`}
+                  style={{
+                    touchAction: 'none',
+                    userSelect: 'none',
+                  }}
                 >
-                  <div className="flex-1">
-                    <div className="font-medium text-gray-900 dark:text-gray-100">
-                      {location.name}
+                  <div className="flex items-center flex-1">
+                    {/* Drag Handle */}
+                    <div className="mr-3 text-gray-400 dark:text-gray-500">
+                      <svg
+                        className="w-5 h-5"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M4 8h16M4 16h16"
+                        />
+                      </svg>
                     </div>
-                    <div className="text-sm text-gray-500 dark:text-gray-400">
-                      {location.lat.toFixed(4)}, {location.lon.toFixed(4)}
+                    <div className="flex-1">
+                      {editingLocationId === location.id ? (
+                        <input
+                          type="text"
+                          value={editingName}
+                          onChange={(e) => setEditingName(e.target.value)}
+                          onKeyDown={(e) => handleEditKeyDown(e, location.id)}
+                          onBlur={() => handleSaveEdit(location.id)}
+                          className="w-full px-2 py-1 border border-blue-500 dark:border-blue-400 bg-white dark:bg-gray-600 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          autoFocus
+                        />
+                      ) : (
+                        <div className="font-medium text-gray-900 dark:text-gray-100">
+                          {location.name}
+                        </div>
+                      )}
+                      <div className="text-sm text-gray-500 dark:text-gray-400">
+                        {location.lat.toFixed(4)}, {location.lon.toFixed(4)}
+                      </div>
                     </div>
                   </div>
-                  <button
-                    onClick={() => onRemove(location.id)}
-                    className="ml-3 p-1 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition-colors"
-                    title="Remove location"
-                  >
-                    <svg
-                      className="w-5 h-5"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleStartEdit(location.id, location.name)}
+                      className="p-1 text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
+                      title="Rename location"
                     >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                      />
-                    </svg>
-                  </button>
+                      <svg
+                        className="w-5 h-5"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                        />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => onRemove(location.id)}
+                      className="p-1 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition-colors"
+                      title="Remove location"
+                    >
+                      <svg
+                        className="w-5 h-5"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                        />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
