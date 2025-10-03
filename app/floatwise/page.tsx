@@ -17,7 +17,7 @@ export default function FloatWisePage() {
   // Decode locations from URL parameter if present
   const urlLocations = decodeLocationsFromURL(searchParams.get('locations') || '');
   
-  const { locations, isLoaded, addLocation, removeLocation, isViewingSharedLink } =
+  const { locations, isLoaded, addLocation, removeLocation, reorderLocations, renameLocation, isViewingSharedLink } =
     useLocationStorage(urlLocations);
   const { weatherData, fetchWeatherForLocations } = useWeatherData();
 
@@ -38,6 +38,14 @@ export default function FloatWisePage() {
 
   const handleRemoveLocation = (locationId: string) => {
     removeLocation(locationId);
+  };
+
+  const handleReorderLocations = (locations: Location[]) => {
+    reorderLocations(locations);
+  };
+
+  const handleRenameLocation = (locationId: string, newName: string) => {
+    renameLocation(locationId, newName);
   };
 
   const handleShareClick = async () => {
@@ -98,6 +106,8 @@ export default function FloatWisePage() {
             locations={locations}
             onAddLocation={handleAddLocation}
             onRemoveLocation={handleRemoveLocation}
+            onReorderLocations={handleReorderLocations}
+            onRenameLocation={handleRenameLocation}
           />
 
           {/* Weather Display */}

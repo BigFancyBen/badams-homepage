@@ -65,6 +65,16 @@ export function useLocationStorage(urlLocations?: Location[] | null) {
     setLocations([]);
   };
 
+  const reorderLocations = (newOrder: Location[]) => {
+    setLocations(newOrder);
+  };
+
+  const renameLocation = (locationId: string, newName: string) => {
+    setLocations(prev => prev.map(loc => 
+      loc.id === locationId ? { ...loc, name: newName } : loc
+    ));
+  };
+
   return {
     locations,
     isLoaded,
@@ -72,6 +82,8 @@ export function useLocationStorage(urlLocations?: Location[] | null) {
     removeLocation,
     updateLocation,
     clearLocations,
+    reorderLocations,
+    renameLocation,
     isViewingSharedLink: !!urlLocations && urlLocations.length > 0
   };
 }
