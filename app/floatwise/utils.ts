@@ -115,7 +115,9 @@ export function parseWeatherForTimeRange(
       hour,
       temperature: period.temperature,
       windSpeed: period.windSpeed,
-      windDirection: period.windDirection
+      windDirection: period.windDirection,
+      precipChance: period.probabilityOfPrecipitation?.value ?? null,
+      shortForecast: period.shortForecast
     });
   });
   

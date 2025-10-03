@@ -19,8 +19,13 @@ export const metadata: Metadata = {
     description:
       "NOAA weather tracking for multiple locations with hourly forecasts",
   },
-  viewport: "width=device-width, initial-scale=1",
+
   robots: "index, follow",
+};
+
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function FloatWiseLayout({

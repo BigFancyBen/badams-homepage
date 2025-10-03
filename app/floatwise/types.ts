@@ -19,6 +19,10 @@ export interface NOAAForecast {
   windDirection: string;
   shortForecast: string;
   detailedForecast: string;
+  probabilityOfPrecipitation?: {
+    unitCode: string;
+    value: number | null;
+  };
 }
 
 export interface NOAAResponse {
@@ -34,6 +38,8 @@ export interface WeatherHour {
   temperature: number;
   windSpeed: string;
   windDirection: string;
+  precipChance: number | null;
+  shortForecast: string;
 }
 
 export interface LocationWeather {
@@ -48,7 +54,6 @@ export interface LocationWeather {
 export interface CalendarProps {
   selectedDate: Date;
   onDateSelect: (date: Date) => void;
-  onShareClick: () => Promise<void>;
 }
 
 export interface LocationManagerProps {
@@ -57,11 +62,13 @@ export interface LocationManagerProps {
   onRemoveLocation: (locationId: string) => void;
   onReorderLocations: (locations: Location[]) => void;
   onRenameLocation: (locationId: string, newName: string) => void;
+  showShareButton?: boolean;
+  onShareClick?: () => Promise<void>;
+  isViewingSharedLink?: boolean;
 }
 
 export interface WeatherDisplayProps {
   locationWeather: LocationWeather[];
-  selectedDate: Date;
 }
 
 export interface AddLocationModalProps {

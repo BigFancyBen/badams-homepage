@@ -8,7 +8,11 @@ import { WeatherDisplay } from "./components/WeatherDisplay";
 import { useLocationStorage } from "./hooks/useLocationStorage";
 import { useWeatherData } from "./hooks/useWeatherData";
 import { Location } from "./types";
-import { encodeLocationsToURL, decodeLocationsFromURL, getInitialDate } from "./utils";
+import {
+  encodeLocationsToURL,
+  decodeLocationsFromURL,
+  getInitialDate,
+} from "./utils";
 
 export default function FloatWisePage() {
   const [selectedDate, setSelectedDate] = useState(getInitialDate());
@@ -87,51 +91,34 @@ export default function FloatWisePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 px-2 sm:px-4 py-4 sm:py-8">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-800">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="text-center mb-4 sm:mb-8">
-          <h1 className="text-2xl sm:text-4xl font-bold text-gray-900 dark:text-gray-100 mb-1 sm:mb-2">
-            FloatWise
-          </h1>
-          {isViewingSharedLink && (
-            <p className="text-sm text-blue-600 dark:text-blue-400">
-              Viewing shared locations
-            </p>
-          )}
-        </div>
-
         {/* Main Content */}
-        <div className="bg-white dark:bg-gray-800 shadow-sm border border-gray-200 dark:border-gray-700 p-3 sm:p-6">
+        <div className="bg-white dark:bg-gray-800 shadow-sm  p-1 sm:p-3">
+          <div className="flex items-center justify-between mb-2 w-full px-2 sm:px-0">
+            <h1 className="text-2xl sm:text-4xl font-bold text-gray-900 dark:text-gray-100 mb-1 sm:mb-2">
+              FloatWise
+            </h1>
+            <div className="flex items-center gap-1">
+              <LocationManager
+                locations={locations}
+                onAddLocation={handleAddLocation}
+                onRemoveLocation={handleRemoveLocation}
+                onReorderLocations={handleReorderLocations}
+                onRenameLocation={handleRenameLocation}
+                showShareButton={locations.length > 0}
+                onShareClick={handleShareClick}
+                isViewingSharedLink={isViewingSharedLink}
+              />
+            </div>
+          </div>
           {/* Calendar */}
           <Calendar
             selectedDate={selectedDate}
             onDateSelect={handleDateSelect}
-            onShareClick={handleShareClick}
           />
-
-          {/* Location Manager */}
-          <LocationManager
-            locations={locations}
-            onAddLocation={handleAddLocation}
-            onRemoveLocation={handleRemoveLocation}
-            onReorderLocations={handleReorderLocations}
-            onRenameLocation={handleRenameLocation}
-          />
-
           {/* Weather Display */}
-          <WeatherDisplay
-            locationWeather={weatherData}
-            selectedDate={selectedDate}
-          />
-        </div>
-
-        {/* Footer */}
-        <div className="text-center mt-4 sm:mt-8 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
-          <p>Weather data provided by the National Weather Service (NOAA)</p>
-          <p className="mt-1">
-            Times shown in your local timezone · Forecast from 10:00 AM to 7:00 PM
-          </p>
+          <WeatherDisplay locationWeather={weatherData} />
         </div>
       </div>
     </div>

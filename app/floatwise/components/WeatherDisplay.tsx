@@ -1,5 +1,23 @@
 import { WeatherDisplayProps, LocationWeather } from "../types";
-import { formatDate } from "../utils";
+import {
+  WeatherLottieIcon,
+  getWeatherLottieIconType,
+} from "../lottieweathericons/WeatherLottieIcon";
+
+// Helper function to get color based on precipitation chance
+function getPrecipChanceColor(precipChance: number): string {
+  if (precipChance >= 70) {
+    return "text-red-600 dark:text-red-400 font-semibold";
+  } else if (precipChance >= 50) {
+    return "text-orange-600 dark:text-orange-400 font-medium";
+  } else if (precipChance >= 30) {
+    return "text-yellow-600 dark:text-yellow-500 font-medium";
+  } else if (precipChance >= 10) {
+    return "text-blue-600 dark:text-blue-400";
+  } else {
+    return "text-gray-500 dark:text-gray-400";
+  }
+}
 
 // Helper function to format location names with state abbreviations
 function formatLocationName(locationName: string): string {
@@ -105,10 +123,7 @@ function getDisplayNames(locationWeather: LocationWeather[]): {
   return displayNames;
 }
 
-export function WeatherDisplay({
-  locationWeather,
-  selectedDate,
-}: WeatherDisplayProps) {
+export function WeatherDisplay({ locationWeather }: WeatherDisplayProps) {
   if (locationWeather.length === 0) {
     return (
       <div className="text-center py-8 text-gray-500 dark:text-gray-400">
@@ -118,17 +133,15 @@ export function WeatherDisplay({
   }
 
   // Get all unique hours from all locations to create unified column headers
-  const allHours = new Set<number>();
+  // Always show all 24 hours (or a fixed set of hours) to keep columns consistent
+  // Fixed set of columns for 10am to 7pm
   const hourTimeMap = new Map<number, string>();
-
-  locationWeather.forEach((locationData) => {
-    locationData.hours.forEach((hour) => {
-      allHours.add(hour.hour);
-      hourTimeMap.set(hour.hour, hour.time);
-    });
+  const sortedHours = Array.from({ length: 10 }, (_, i) => i + 10); // 10 to 19
+  sortedHours.forEach((hour) => {
+    const ampm =
+      hour < 12 ? `${hour} AM` : hour === 12 ? "12 PM" : `${hour - 12} PM`;
+    hourTimeMap.set(hour, ampm);
   });
-
-  const sortedHours = Array.from(allHours).sort((a, b) => a - b);
 
   // Check if any location has data
   const hasAnyData = locationWeather.some(
@@ -144,9 +157,6 @@ export function WeatherDisplay({
     if (loadingCount > 0) {
       return (
         <div className="w-full">
-          <h2 className="text-lg sm:text-xl font-semibold mb-3 sm:mb-4 text-gray-900 dark:text-gray-100">
-            Weather for {formatDate(selectedDate)}
-          </h2>
           <div className="flex items-center justify-center py-8">
             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500 mr-3"></div>
             <span className="text-gray-600 dark:text-gray-300">
@@ -159,9 +169,6 @@ export function WeatherDisplay({
 
     return (
       <div className="w-full">
-        <h2 className="text-lg sm:text-xl font-semibold mb-3 sm:mb-4 text-gray-900 dark:text-gray-100">
-          Weather for {formatDate(selectedDate)}
-        </h2>
         <div className="text-center py-8 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900 border border-red-200 dark:border-red-700">
           <p className="mb-2">Failed to load weather data</p>
           <p className="text-sm">No weather data available for this date</p>
@@ -173,32 +180,34 @@ export function WeatherDisplay({
   const displayNames = getDisplayNames(locationWeather);
 
   return (
-    <div className="w-full">
-      <h2 className="text-lg sm:text-xl font-semibold mb-3 sm:mb-4 text-gray-900 dark:text-gray-100">
-        Weather for {formatDate(selectedDate)}
-      </h2>
-
+    <div className="w-full ">
       <div className="">
         <div
           className="overflow-x-auto -mx-3 sm:mx-0"
           style={{ height: "auto", maxHeight: "80vh" }}
         >
-          <table className="w-full min-w-[600px] sm:min-w-[800px] border-collapse">
+          <table className="w-full table-fixed border-collapse text-[10px] sm:text-[11px] min-w-[700px]">
             <thead className="sticky top-0 z-30">
               <tr
                 className="bg-white dark:bg-gray-800"
                 style={{ boxShadow: "0 2px 0 0 rgb(156 163 175)" }}
               >
-                <th
-                  className="sticky left-0 z-40 text-left py-2 px-2 sm:px-3 font-medium text-gray-700 dark:text-gray-200 text-xs sm:text-sm w-20 bg-white dark:bg-gray-800"
-                  style={{ boxShadow: "2px 0 0 0 rgb(156 163 175)" }}
-                ></th>
-                {sortedHours.map((hour) => (
+                <th className="sticky left-0 z-40 text-left py-0.5 px-1 sm:px-1.5 font-medium text-gray-700 dark:text-gray-200 text-[10px] sm:text-[11px] w-[50px] sm:w-[55px] bg-white dark:bg-gray-800 sticky-right-divider"></th>
+                {sortedHours.map((hour, idx) => (
                   <th
                     key={hour}
-                    className="text-center py-2 px-1 sm:px-2 font-medium text-gray-700 dark:text-gray-200 text-xs sm:text-sm min-w-[100px] bg-white dark:bg-gray-800"
+                    className={`text-center py-0.5 px-0 font-medium text-gray-700 dark:text-gray-200 text-[10px] sm:text-[11px] whitespace-nowrap ${
+                      idx % 2 === 0
+                        ? "bg-white dark:bg-gray-800"
+                        : "bg-gray-50 dark:bg-gray-700"
+                    }`}
+                    style={{
+                      width: "56px",
+                      minWidth: "56px",
+                      maxWidth: "56px",
+                    }}
                   >
-                    {hourTimeMap.get(hour)}
+                    <div>{hourTimeMap.get(hour)}</div>
                   </th>
                 ))}
               </tr>
@@ -222,57 +231,87 @@ export function WeatherDisplay({
                   // Combined temperature and wind row for this location
                   <tr
                     key={`${locationData.location.id}-combined`}
-                    className={`${
-                      locationIndex % 2 === 0
-                        ? "bg-gray-50 dark:bg-gray-800"
-                        : "bg-white dark:bg-gray-700"
-                    }`}
+                    className="h-[40px]"
                   >
                     <td
-                      className={`sticky left-0 z-20 py-2 sm:py-3 px-2 sm:px-3 font-medium text-gray-900 dark:text-gray-100 text-xs sm:text-sm ${
+                      className={`sticky left-0 z-30 py-1 px-1 sm:px-1.5 pl-2 font-medium text-gray-900 dark:text-gray-100 text-[10px] sm:text-[11px] whitespace-normal sticky-right-divider border-b border-gray-500/20 w-[50px] sm:w-[55px] ${
+                        locationIndex === 0
+                          ? "border-t-2 border-t-white dark:border-t-gray-900"
+                          : "border-t border-t-gray-500/20"
+                      } ${
                         locationIndex % 2 === 0
-                          ? "bg-gray-50 dark:bg-gray-800"
-                          : "bg-white dark:bg-gray-700"
+                          ? "bg-white dark:bg-gray-800"
+                          : "bg-gray-50 dark:bg-gray-700"
                       }`}
-                      style={{ boxShadow: "2px 0 0 0 rgb(156 163 175)" }}
                     >
-                      <div className="font-semibold">
+                      <div
+                        className="font-semibold mx-1 text-[8px] sm:text-[9px] leading-tight line-clamp-3 break-words"
+                        title={
+                          displayNames[locationData.location.id] ||
+                          locationData.location.name
+                        }
+                      >
                         {displayNames[locationData.location.id] ||
                           locationData.location.name}
                       </div>
                     </td>
-                    {sortedHours.map((hour) => {
+                    {sortedHours.map((hour, idx) => {
                       const hourData = hourDataMap.get(hour);
                       const colors = hourData
                         ? getWindSpeedColor(hourData.windSpeed)
                         : null;
+                      // Checkerboard cell background based on row and column parity
+                      const isRowEven = locationIndex % 2 === 0;
+                      const isColEven = idx % 2 === 0;
+                      const cellBgClass = isRowEven
+                        ? isColEven
+                          ? "bg-white dark:bg-gray-800"
+                          : "bg-gray-50 dark:bg-gray-700"
+                        : isColEven
+                        ? "bg-gray-50 dark:bg-gray-800"
+                        : "bg-white dark:bg-gray-700";
                       return (
                         <td
                           key={`combined-${hour}`}
-                          className="py-2 sm:py-3 px-1 sm:px-2 text-center"
+                          className={`py-1 px-0 text-center border-b border-gray-500/20  ${cellBgClass}`}
                         >
                           {hourData ? (
-                            <div className="flex flex-col items-center justify-center gap-1">
-                              <span className="text-sm sm:text-base text-gray-900 dark:text-gray-100 font-medium">
-                                {hourData.temperature}°
-                              </span>
-                              <div className="flex items-center justify-center gap-1">
-                                <span
-                                  className={`text-xs sm:text-sm ${colors?.text}`}
-                                >
-                                  {hourData.windSpeed.replace(/\s*mph/i, "")}{" "}
-                                  {hourData.windDirection}
+                            <div className="ml-2 sm:mx-auto flex flex-row items-center justify-between sm:max-w-[65px] relative">
+                              <div className="flex flex-col items-start justify-center gap-[1px]">
+                                {/* Temperature */}
+                                <span className="text-[10px] sm:text-[11px] text-gray-900 dark:text-gray-100 font-medium leading-none">
+                                  {hourData.temperature}°
                                 </span>
-                                <div
-                                  className={`w-3 h-3 border-t-2 border-r-2 ${colors?.arrow}`}
-                                  style={{
-                                    transform: `rotate(${getWindDirectionAngle(
-                                      hourData.windDirection
-                                    )}deg)`,
-                                  }}
-                                  title={`Wind from ${hourData.windDirection} at ${hourData.windSpeed}`}
-                                />
+                                {/* Wind - prevent wrapping with nowrap */}
+                                <div className="text-[9px] sm:text-[10px] whitespace-nowrap leading-none z-20">
+                                  <span className={colors?.text}>
+                                    {hourData.windSpeed.replace(/\s*mph/i, "")}{" "}
+                                    {hourData.windDirection}
+                                  </span>
+                                </div>
+                                {/* Precipitation % + Weather Icon on same line */}
+                                <div className="flex items-center justify-center gap-0.5 text-[9px] sm:text-[10px] leading-none z-20">
+                                  {hourData.precipChance !== null &&
+                                    hourData.precipChance >= 5 && (
+                                      <span
+                                        className={getPrecipChanceColor(
+                                          hourData.precipChance
+                                        )}
+                                      >
+                                        {hourData.precipChance}%
+                                      </span>
+                                    )}
+                                </div>
                               </div>
+                              <WeatherLottieIcon
+                                type={getWeatherLottieIconType(
+                                  hourData.shortForecast,
+                                  hourData.precipChance,
+                                  hourData.hour
+                                )}
+                                className="w-8 h-8 shrink-0 absolute right-0 z-10 opacity-60"
+                                title={hourData.shortForecast}
+                              />
                             </div>
                           ) : (
                             <span className="text-xs text-gray-400 dark:text-gray-600">
@@ -291,30 +330,6 @@ export function WeatherDisplay({
       </div>
     </div>
   );
-}
-
-// Helper function to convert wind direction to angle for arrow display
-function getWindDirectionAngle(direction: string): number {
-  const directions: { [key: string]: number } = {
-    N: -135,
-    NNE: -112.5,
-    NE: -90,
-    ENE: -67.5,
-    E: -45,
-    ESE: -22.5,
-    SE: 0,
-    SSE: 22.5,
-    S: 45,
-    SSW: 67.5,
-    SW: 90,
-    WSW: 112.5,
-    W: 135,
-    WNW: 157.5,
-    NW: 180,
-    NNW: -157.5,
-  };
-
-  return directions[direction.toUpperCase()] || 0;
 }
 
 // Helper function to get color based on wind speed
