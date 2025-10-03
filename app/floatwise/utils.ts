@@ -73,29 +73,44 @@ export function parseWeatherForTimeRange(
   targetDate: Date
 ): WeatherHour[] {
   const hours: WeatherHour[] = [];
-  const targetDateStr = targetDate.toISOString().split('T')[0]; // YYYY-MM-DD format
+  
+  // Format target date as YYYY-MM-DD for comparison
+  const targetYear = targetDate.getFullYear();
+  const targetMonth = String(targetDate.getMonth() + 1).padStart(2, '0');
+  const targetDay = String(targetDate.getDate()).padStart(2, '0');
+  const targetDateStr = `${targetYear}-${targetMonth}-${targetDay}`;
   
   // Filter periods for the target date and time range (10am-7pm)
   // Note: NOAA hourly data may not have every single hour available
   const relevantPeriods = forecast.properties.periods.filter(period => {
-    const periodDate = new Date(period.startTime);
-    const periodDateStr = periodDate.toISOString().split('T')[0];
-    const periodHour = periodDate.getHours();
+    // NOAA returns times in format: "2024-10-03T18:00:00-06:00"
+    // Extract the date and hour from the ISO string directly to avoid timezone conversion issues
+    const timeStr = period.startTime;
     
-    // Include daytime hours (10am-7pm) for the target date
-    return periodDateStr === targetDateStr && periodHour >= 10 && periodHour <= 19;
+    // Extract date part (YYYY-MM-DD) from ISO string
+    const datePart = timeStr.substring(0, 10);
+    
+    // Extract hour from ISO string (before timezone conversion)
+    const hourMatch = timeStr.match(/T(\d{2}):/);
+    const periodHour = hourMatch ? parseInt(hourMatch[1], 10) : 0;
+    
+    // Check if same date and within time range (10am-7pm)
+    return datePart === targetDateStr && periodHour >= 10 && periodHour <= 19;
   });
   
   // Convert periods to our hourly format
   relevantPeriods.forEach(period => {
-    const startTime = new Date(period.startTime);
-    const hour = startTime.getHours();
+    // Extract hour from ISO string directly to avoid timezone issues
+    const hourMatch = period.startTime.match(/T(\d{2}):/);
+    const hour = hourMatch ? parseInt(hourMatch[1], 10) : 0;
+    
+    // Format time display
+    const hour12 = hour === 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const time = `${hour12} ${ampm}`;
     
     hours.push({
-      time: startTime.toLocaleTimeString('en-US', { 
-        hour: 'numeric', 
-        hour12: true 
-      }),
+      time,
       hour,
       temperature: period.temperature,
       windSpeed: period.windSpeed,
