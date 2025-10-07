@@ -65,6 +65,9 @@ export interface LocationManagerProps {
   showShareButton?: boolean;
   onShareClick?: () => Promise<void>;
   isViewingSharedLink?: boolean;
+  onExportCSV?: () => Promise<void>;
+  onExportCSVFile?: () => void;
+  onImportCSV?: (locations: Location[]) => void;
 }
 
 export interface WeatherDisplayProps {

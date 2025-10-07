@@ -12,6 +12,8 @@ import {
   encodeLocationsToURL,
   decodeLocationsFromURL,
   getInitialDate,
+  exportLocationsToCSV,
+  downloadTextFile,
 } from "./utils";
 
 export default function FloatWisePage() {
@@ -76,6 +78,36 @@ export default function FloatWisePage() {
     }
   };
 
+  const handleExportCSV = async () => {
+    if (locations.length === 0) {
+      return;
+    }
+
+    const csv = exportLocationsToCSV(locations);
+    try {
+      await navigator.clipboard.writeText(csv);
+    } catch (error) {
+      console.error("Failed to copy CSV:", error);
+    }
+  };
+
+  const handleExportCSVFile = () => {
+    if (locations.length === 0) {
+      return;
+    }
+
+    const csv = exportLocationsToCSV(locations);
+    const timestamp = new Date().toISOString().slice(0, 10);
+    downloadTextFile(csv, `floatwise-locations-${timestamp}.csv`);
+  };
+
+  const handleImportCSV = (importedLocations: Location[]) => {
+    // Add all imported locations (duplicates will be prevented by addLocation)
+    importedLocations.forEach(location => {
+      addLocation(location);
+    });
+  };
+
   // Show loading state until localStorage is loaded
   if (!isLoaded) {
     return (
@@ -109,6 +141,9 @@ export default function FloatWisePage() {
                 showShareButton={locations.length > 0}
                 onShareClick={handleShareClick}
                 isViewingSharedLink={isViewingSharedLink}
+                onExportCSV={handleExportCSV}
+                onExportCSVFile={handleExportCSVFile}
+                onImportCSV={handleImportCSV}
               />
             </div>
           </div>
