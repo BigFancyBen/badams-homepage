@@ -28,6 +28,11 @@ export function LocationManager({
     }
   };
 
+  const handleLoadMyData = () => {
+    // Remove URL params to load user's own data
+    window.location.href = window.location.pathname;
+  };
+
   return (
     <div className="">
       <div className="flex items-center gap-1 mb-3 sm:mb-4">
@@ -36,8 +41,16 @@ export function LocationManager({
             viewing shared locations
           </div>
         )}
-        {/* Share Button */}
-        {showShareButton && onShareClick && (
+        {/* Share or Load My Data Button */}
+        {isViewingSharedLink ? (
+          <button
+            onClick={handleLoadMyData}
+            className="w-auto px-2 h-8 text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors flex items-center justify-center text-xs font-medium border border-gray-300 dark:border-gray-600"
+            title="Load my data"
+          >
+            Load My Data
+          </button>
+        ) : showShareButton && onShareClick ? (
           <div className="relative">
             <button
               onClick={handleShareClick}
@@ -64,7 +77,7 @@ export function LocationManager({
               </div>
             )}
           </div>
-        )}
+        ) : null}
         {/* Add Location Button */}
         <button
           onClick={() => setIsModalOpen(true)}

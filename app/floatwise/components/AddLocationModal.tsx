@@ -312,7 +312,7 @@ export function AddLocationModal({
             <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-3">
               Current Locations
             </h3>
-            <div className="space-y-2 max-h-40 overflow-y-auto">
+            <div className="space-y-2 max-h-60 overflow-y-auto">
               {locations.map((location, index) => (
                 <div
                   key={location.id}
