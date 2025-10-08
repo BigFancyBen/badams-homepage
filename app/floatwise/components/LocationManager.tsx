@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { LocationManagerProps, Location } from "../types";
 import { AddLocationModal } from "./AddLocationModal";
-import { importLocationsFromCSV } from "../utils";
+import { SettingsModal } from "./SettingsModal";
 
 export function LocationManager({
   locations,
@@ -12,15 +12,11 @@ export function LocationManager({
   showShareButton,
   onShareClick,
   isViewingSharedLink,
-  onExportCSV,
-  onExportCSVFile,
-  onImportCSV,
+  onImportLocations,
 }: LocationManagerProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showCopiedMessage, setShowCopiedMessage] = useState(false);
-  const [showImportModal, setShowImportModal] = useState(false);
-  const [csvInput, setCsvInput] = useState('');
-  const [importError, setImportError] = useState('');
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
 
   const handleAddLocation = (location: Location) => {
     onAddLocation(location);
@@ -40,47 +36,6 @@ export function LocationManager({
     window.location.href = window.location.pathname;
   };
 
-  const handleExportCSV = async () => {
-    if (onExportCSV) {
-      await onExportCSV();
-      setShowCopiedMessage(true);
-      setTimeout(() => setShowCopiedMessage(false), 2000);
-    }
-  };
-
-  const handleExportCSVFile = () => {
-    if (onExportCSVFile) {
-      onExportCSVFile();
-    }
-  };
-
-  const handleImportCSV = () => {
-    setShowImportModal(true);
-    setCsvInput('');
-    setImportError('');
-  };
-
-  const handleImportSubmit = () => {
-    if (!onImportCSV) return;
-    
-    try {
-      const importedLocations = importLocationsFromCSV(csvInput);
-      
-      if (importedLocations.length === 0) {
-        setImportError('No valid locations found in CSV. Please check the format.');
-        return;
-      }
-      
-      onImportCSV(importedLocations);
-      setShowImportModal(false);
-      setCsvInput('');
-      setImportError('');
-    } catch (error) {
-      setImportError('Error parsing CSV. Please check the format.');
-      console.error('Import error:', error);
-    }
-  };
-
   return (
     <div className="">
       <div className="flex items-center gap-1 mb-3 sm:mb-4">
@@ -89,12 +44,12 @@ export function LocationManager({
             viewing shared locations
           </div>
         )}
-        {/* Import CSV Button */}
-        {!isViewingSharedLink && onImportCSV && (
+        {/* Settings Button */}
+        {!isViewingSharedLink && (
           <button
-            onClick={handleImportCSV}
+            onClick={() => setShowSettingsModal(true)}
             className="w-8 h-8 text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors flex items-center justify-center"
-            title="Import CSV"
+            title="Settings"
           >
             <svg
               className="w-5 h-5"
@@ -106,58 +61,13 @@ export function LocationManager({
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 strokeWidth={2}
-                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
               />
-            </svg>
-          </button>
-        )}
-        {/* Export CSV to Clipboard Button */}
-        {!isViewingSharedLink && locations.length > 0 && onExportCSV && (
-          <div className="relative">
-            <button
-              onClick={handleExportCSV}
-              className="w-8 h-8 text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors flex items-center justify-center"
-              title="Export CSV to clipboard"
-            >
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                />
-              </svg>
-            </button>
-            {showCopiedMessage && (
-              <div className="absolute top-1/2 right-full mr-2 -translate-y-1/2 px-2 py-1 bg-gray-800 dark:bg-gray-700 text-white text-xs rounded whitespace-nowrap z-50">
-                CSV copied!
-              </div>
-            )}
-          </div>
-        )}
-        {/* Export CSV to File Button */}
-        {!isViewingSharedLink && locations.length > 0 && onExportCSVFile && (
-          <button
-            onClick={handleExportCSVFile}
-            className="w-8 h-8 text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors flex items-center justify-center"
-            title="Download CSV file"
-          >
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 strokeWidth={2}
-                d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
               />
             </svg>
           </button>
@@ -240,68 +150,12 @@ export function LocationManager({
         onRename={onRenameLocation}
       />
 
-      {/* Import CSV Modal */}
-      {showImportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          {/* Backdrop */}
-          <div
-            className="fixed inset-0 bg-black bg-opacity-75 backdrop-blur-sm"
-            onClick={() => setShowImportModal(false)}
-          />
-
-          {/* Modal Content */}
-          <div className="relative z-10 w-full max-w-2xl mx-4 bg-white dark:bg-gray-800 shadow-2xl">
-            {/* Header */}
-            <div className="bg-gray-100 dark:bg-gray-900 px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-              <div className="flex justify-between items-center">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                  Import Locations from CSV
-                </h3>
-                <button
-                  onClick={() => setShowImportModal(false)}
-                  className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 text-2xl"
-                >
-                  ×
-                </button>
-              </div>
-            </div>
-
-            {/* Body */}
-            <div className="p-6">
-              <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
-                Paste CSV data with format: <code className="bg-gray-100 dark:bg-gray-700 px-1 py-0.5">name,lat,lon</code>
-              </p>
-              <textarea
-                value={csvInput}
-                onChange={(e) => setCsvInput(e.target.value)}
-                placeholder="name,lat,lon&#10;Harrison Arkansas,36.2298,-93.1077&#10;Seattle Washington,47.6062,-122.3321"
-                className="w-full h-48 px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              {importError && (
-                <p className="mt-2 text-sm text-red-600 dark:text-red-400">
-                  {importError}
-                </p>
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="bg-gray-100 dark:bg-gray-900 px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-2">
-              <button
-                onClick={() => setShowImportModal(false)}
-                className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleImportSubmit}
-                className="px-4 py-2 bg-blue-500 dark:bg-blue-600 text-white hover:bg-blue-600 dark:hover:bg-blue-700 transition-colors"
-              >
-                Import
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <SettingsModal
+        isOpen={showSettingsModal}
+        onClose={() => setShowSettingsModal(false)}
+        locations={locations}
+        onImportLocations={onImportLocations || (() => {})}
+      />
     </div>
   );
 }
