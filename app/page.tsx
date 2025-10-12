@@ -15,71 +15,71 @@ export default function Home() {
           {/* MTG Commander Scorekeeper */}
           <a
             href="/commander"
-            className="block border-2 border-gray-300 p-6 hover:border-black transition-colors cursor-pointer"
+            className="block border-2 border-gray-700 p-6 hover:border-gray-500 transition-colors cursor-pointer"
           >
             <h3 className="text-xl font-bold mb-3">
               MTG Commander Scorekeeper
             </h3>
-            <p className="text-gray-700 mb-4 text-sm leading-relaxed">
+            <p className="text-gray-300 mb-4 text-sm leading-relaxed">
               Full-screen, touch-friendly scorekeeper for Magic: The Gathering
               Commander format. Features 4-player quadrant layout, life
               tracking, commander damage, and mobile-optimized interface.
             </p>
-            <div className="text-sm text-gray-500">Click to try it out →</div>
+            <div className="text-sm text-gray-400">Click to try it out →</div>
           </a>
 
           {/* Magic Tutor Helper */}
           <a
             href="/tutor-helper"
-            className="block border-2 border-gray-300 p-6 hover:border-black transition-colors cursor-pointer"
+            className="block border-2 border-gray-700 p-6 hover:border-gray-500 transition-colors cursor-pointer"
           >
             <h3 className="text-xl font-bold mb-3">Magic Tutor Helper</h3>
-            <p className="text-gray-700 mb-4 text-sm leading-relaxed">
+            <p className="text-gray-300 mb-4 text-sm leading-relaxed">
               Advanced card filtering tool for Magic: The Gathering decklists.
               Import decklists, filter by mana cost and card types, and analyze
               your cards with Scryfall integration.
             </p>
-            <div className="text-sm text-gray-500">Click to try it out →</div>
+            <div className="text-sm text-gray-400">Click to try it out →</div>
           </a>
 
           {/* FloatWise */}
           <a
             href="/floatwise"
-            className="block border-2 border-gray-300 p-6 hover:border-black transition-colors cursor-pointer"
+            className="block border-2 border-gray-700 p-6 hover:border-gray-500 transition-colors cursor-pointer"
           >
             <h3 className="text-xl font-bold mb-3">FloatWise</h3>
-            <p className="text-gray-700 mb-4 text-sm leading-relaxed">
+            <p className="text-gray-300 mb-4 text-sm leading-relaxed">
               NOAA weather tracker for multiple locations. View detailed hourly
               forecasts from 10am-7pm, track temperature and wind conditions,
               and manage your favorite float trip destinations.
             </p>
-            <div className="text-sm text-gray-500">Click to try it out →</div>
+            <div className="text-sm text-gray-400">Click to try it out →</div>
           </a>
 
           {/* Prognosticator */}
-          <div className="border-2 border-gray-300 p-6 hover:border-black transition-colors">
+          <div className="border-2 border-gray-700 p-6 hover:border-gray-500 transition-colors">
             <h3 className="text-xl font-bold mb-3">Prognosticator</h3>
-            <p className="text-gray-700 mb-4 text-sm leading-relaxed">
+            <p className="text-gray-300 mb-4 text-sm leading-relaxed">
               Cross-platform desktop app for DJs and music curators. Import
               Spotify playlists, download songs, fetch DJ metadata (key, BPM),
               and integrate with VirtualDJ and OBS.
             </p>
-            <div className="text-sm text-gray-500">
+            <div className="text-sm text-gray-400">
               Desktop App • VirtualDJ • OBS Integration
             </div>
           </div>
 
           {/* RuneScape Progress Image Generator */}
-          <div className="border-2 border-gray-300 p-6 hover:border-black transition-colors">
+          <div className="border-2 border-gray-700 p-6 hover:border-gray-500 transition-colors">
             <h3 className="text-xl font-bold mb-3">
               RuneScape Progress Image Generator
             </h3>
-            <p className="text-gray-700 mb-4 text-sm leading-relaxed">
+            <p className="text-gray-300 mb-4 text-sm leading-relaxed">
               API endpoint for generating progress report images for Old School
               RuneScape players. Features collection log items, OSRS Wiki
               integration, and comprehensive game database.
             </p>
-            <div className="text-sm text-gray-500">
+            <div className="text-sm text-gray-400">
               API • OSRS Wiki • Image Generation
             </div>
           </div>
