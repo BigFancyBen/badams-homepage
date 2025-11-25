@@ -172,9 +172,12 @@ interface ImageViewProps {
 function ImageView({ imageNumber, onBack, imagePath }: ImageViewProps) {
   const [timeLeft, setTimeLeft] = useState(25);
   const [audioPlayed, setAudioPlayed] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
 
   useEffect(() => {
-    // Start the timer
+    // Only start the timer once the image has loaded
+    if (!imageLoaded) return;
+
     const interval = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
@@ -186,7 +189,7 @@ function ImageView({ imageNumber, onBack, imagePath }: ImageViewProps) {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [imageLoaded]);
 
   useEffect(() => {
     // Play audio when timer reaches 0
@@ -242,6 +245,7 @@ function ImageView({ imageNumber, onBack, imagePath }: ImageViewProps) {
             maxWidth: "100vw",
             maxHeight: "calc(100vh - 250px)",
           }}
+          onLoad={() => setImageLoaded(true)}
           onError={(e) => {
             // Fallback if image doesn't exist
             const target = e.target as HTMLImageElement;
