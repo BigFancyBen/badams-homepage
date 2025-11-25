@@ -5,16 +5,45 @@ import { RotateCcw } from "lucide-react";
 
 // All available images
 const ALL_IMAGES = [
-  "27OZ12Lq_o.jpg", "2LUtgtDT_o.jpg", "6TnULgSA_o.jpg", "AFfaeVY2_o.jpg",
-  "BRW5rDXu_o.jpg", "CS07SdMw_o.jpg", "CxyL2KQP_o.jpg", "eUmtSjEW_o.jpg",
-  "FAODWl3V_o.jpg", "gBZSYSi1_o.jpg", "gHsBereL_o.jpg", "GuB9V9so_o.jpg",
-  "HDJx7LQn_o.jpg", "HEnzJcox_o.jpg", "hfqHwtoe_o.jpg", "IevT1kNW_o.jpg",
-  "iVFvMGcJ_o.jpg", "Jix2uTaO_o.jpg", "k7ynvMqo_o.jpg", "kzBqJpW4_o.jpg",
-  "l1knf9QN_o.jpg", "oiDgvThT_o.jpg", "ophUNJc4_o.jpg", "PTL4lnGR_o.jpg",
-  "r3BG6G3S_o.jpg", "Ra4763cD_o.jpg", "rc7uLXxA_o.jpg", "sEWLxYMo_o.jpg",
-  "SkOTPp7t_o.jpg", "tflRpduE_o.jpg", "TQOIY0FT_o.jpg", "v5HEBLKa_o.jpg",
-  "vTNQ7ytb_o.jpg", "VYnRKN04_o.jpg", "wnpFmXpp_o.jpg", "XBYYphoW_o.jpg",
-  "xfLKw6WF_o.jpg", "XHIdnUxO_o.jpg", "yZ7Z4yfv_o.jpg", "ZW43RXvU_o.jpg"
+  "27OZ12Lq_o.jpg",
+  "2LUtgtDT_o.jpg",
+  "6TnULgSA_o.jpg",
+  "AFfaeVY2_o.jpg",
+  "BRW5rDXu_o.jpg",
+  "CS07SdMw_o.jpg",
+  "CxyL2KQP_o.jpg",
+  "eUmtSjEW_o.jpg",
+  "FAODWl3V_o.jpg",
+  "gBZSYSi1_o.jpg",
+  "gHsBereL_o.jpg",
+  "GuB9V9so_o.jpg",
+  "HDJx7LQn_o.jpg",
+  "HEnzJcox_o.jpg",
+  "hfqHwtoe_o.jpg",
+  "IevT1kNW_o.jpg",
+  "iVFvMGcJ_o.jpg",
+  "k7ynvMqo_o.jpg",
+  "kzBqJpW4_o.jpg",
+  "l1knf9QN_o.jpg",
+  "oiDgvThT_o.jpg",
+  "ophUNJc4_o.jpg",
+  "PTL4lnGR_o.jpg",
+  "r3BG6G3S_o.jpg",
+  "Ra4763cD_o.jpg",
+  "rc7uLXxA_o.jpg",
+  "sEWLxYMo_o.jpg",
+  "SkOTPp7t_o.jpg",
+  "tflRpduE_o.jpg",
+  "TQOIY0FT_o.jpg",
+  "v5HEBLKa_o.jpg",
+  "vTNQ7ytb_o.jpg",
+  "VYnRKN04_o.jpg",
+  "wnpFmXpp_o.jpg",
+  "XBYYphoW_o.jpg",
+  "xfLKw6WF_o.jpg",
+  "XHIdnUxO_o.jpg",
+  "yZ7Z4yfv_o.jpg",
+  "ZW43RXvU_o.jpg",
 ];
 
 // Function to shuffle and select 30 random images
@@ -36,7 +65,7 @@ export default function TomsIdioTest() {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("idiotest-selected");
       const savedImages = localStorage.getItem("idiotest-images");
-      
+
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
@@ -45,7 +74,7 @@ export default function TomsIdioTest() {
           console.error("Failed to load selected buttons:", error);
         }
       }
-      
+
       if (savedImages) {
         try {
           const parsed = JSON.parse(savedImages);
@@ -57,7 +86,7 @@ export default function TomsIdioTest() {
       } else {
         setCurrentImages(selectRandomImages());
       }
-      
+
       setHasLoaded(true);
     }
   }, []);
@@ -74,11 +103,12 @@ export default function TomsIdioTest() {
 
   // Save current images to localStorage whenever they change
   useEffect(() => {
-    if (hasLoaded && typeof window !== "undefined" && currentImages.length > 0) {
-      localStorage.setItem(
-        "idiotest-images",
-        JSON.stringify(currentImages)
-      );
+    if (
+      hasLoaded &&
+      typeof window !== "undefined" &&
+      currentImages.length > 0
+    ) {
+      localStorage.setItem("idiotest-images", JSON.stringify(currentImages));
     }
   }, [currentImages, hasLoaded]);
 
@@ -101,7 +131,13 @@ export default function TomsIdioTest() {
 
   if (currentView !== "grid") {
     const imagePath = currentImages[currentView - 1] || currentImages[0];
-    return <ImageView imageNumber={currentView} onBack={handleBackToGrid} imagePath={imagePath} />;
+    return (
+      <ImageView
+        imageNumber={currentView}
+        onBack={handleBackToGrid}
+        imagePath={imagePath}
+      />
+    );
   }
 
   return (
@@ -208,29 +244,27 @@ function ImageView({ imageNumber, onBack, imagePath }: ImageViewProps) {
       onClick={timeLeft === 0 ? onBack : undefined}
       style={{ cursor: timeLeft === 0 ? "pointer" : "default" }}
     >
-      {/* Back button - only visible while timer is counting down */}
-      {timeLeft > 0 && (
-        <button
-          onClick={onBack}
-          className="fixed top-8 left-8 p-4 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors z-10"
-          aria-label="Go back"
+      {/* Back button */}
+      <button
+        onClick={onBack}
+        className="fixed top-8 left-8 p-4 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors z-10"
+        aria-label="Go back"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="48"
+          height="48"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="48"
-            height="48"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="m12 19-7-7 7-7" />
-            <path d="M19 12H5" />
-          </svg>
-        </button>
-      )}
+          <path d="m12 19-7-7 7-7" />
+          <path d="M19 12H5" />
+        </svg>
+      </button>
 
       {/* Timer */}
       <div className="text-9xl font-bold mb-8 text-red-500">{timeLeft}</div>
