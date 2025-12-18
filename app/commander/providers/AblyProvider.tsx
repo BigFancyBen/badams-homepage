@@ -13,7 +13,9 @@ interface AblyProviderProps {
 export function AblyProvider({ children, clientId, channelName }: AblyProviderProps) {
   const client = useMemo(() => {
     return new Ably.Realtime({
-      authUrl: `/api/ably?clientId=${clientId}`,
+      authUrl: '/api/ably',
+      authMethod: 'POST',
+      authParams: { clientId },
       clientId,
     });
   }, [clientId]);
