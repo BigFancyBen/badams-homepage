@@ -66,3 +66,35 @@ export interface ParsedPoisonAction {
   value: number;
 }
 
+// Lobby-related types
+export type PlayerCount = 2 | 3 | 4;
+
+export type QuadrantMode = 'local' | 'display' | 'controller';
+
+export interface LobbySettings {
+  playerCount: PlayerCount;
+  startingLife: number;
+}
+
+export interface ConnectedPlayer {
+  id: string;
+  name: string;
+  slot: number | null;
+  isHost: boolean;
+  isConnected: boolean;
+}
+
+// Lobby code generation utilities
+export const LOBBY_CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // Avoid ambiguous chars: 0/O, 1/l/I
+
+export function generateLobbyCode(): string {
+  return Array.from({ length: 6 }, () =>
+    LOBBY_CODE_CHARS[Math.floor(Math.random() * LOBBY_CODE_CHARS.length)]
+  ).join('');
+}
+
+export function isValidLobbyCode(code: string): boolean {
+  if (code.length !== 6) return false;
+  return code.split('').every(char => LOBBY_CODE_CHARS.includes(char.toUpperCase()));
+}
+
