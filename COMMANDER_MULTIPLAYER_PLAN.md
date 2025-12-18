@@ -296,6 +296,66 @@ Simple header showing:
 └────────────────────────────────┘
 ```
 
+**6.4 New: LobbyShareCard Component**
+A sleek, reusable component for sharing the lobby code:
+
+```
+┌─────────────────────────────────────────────┐
+│                                             │
+│          ┌─────────────────┐                │
+│          │ ░░░░░░░░░░░░░░░ │                │
+│          │ ░░░         ░░░ │                │
+│          │ ░░░  QR     ░░░ │                │
+│          │ ░░░  CODE   ░░░ │                │
+│          │ ░░░         ░░░ │                │
+│          │ ░░░░░░░░░░░░░░░ │                │
+│          └─────────────────┘                │
+│                                             │
+│             JOIN WITH CODE                  │
+│                                             │
+│     ┌───┬───┬───┬───┬───┬───┐              │
+│     │ A │ B │ C │ 1 │ 2 │ 3 │   [📋 Copy]  │
+│     └───┴───┴───┴───┴───┴───┘              │
+│                                             │
+│          yoursite.com/commander             │
+│                                             │
+└─────────────────────────────────────────────┘
+```
+
+**Design Details:**
+- **Dark card background** (`#2a2a2a`) with subtle border (`#3a3a3a`)
+- **QR Code**: White on dark, rounded corners, ~150px on mobile, ~200px on display
+- **Lobby code**: Large monospace font, each character in its own cell
+  - Cells have subtle background (`#333`) with rounded corners
+  - Easy to read and type
+- **Copy button**:
+  - Icon changes to checkmark on success
+  - Brief "Copied!" toast feedback
+  - Copies full join URL: `yoursite.com/commander/lobby/ABC123/join`
+- **URL hint**: Small muted text showing the base URL for manual entry
+- **Responsive**: Stacks nicely on small screens
+
+**States:**
+```
+Default:        [📋 Copy]
+On click:       [✓ Copied!]  (green, reverts after 2s)
+```
+
+**Usage Contexts:**
+1. **Shared Display Overlay** - Large, centered, semi-transparent backdrop
+2. **Host Settings Menu** - Medium size, fits in modal
+3. **Controller Settings Menu** - Compact size, fits in modal
+
+**Code Structure:**
+```typescript
+interface LobbyShareCardProps {
+  lobbyCode: string;
+  size: 'compact' | 'medium' | 'large';
+  showUrl?: boolean;  // Show base URL hint
+  className?: string;
+}
+```
+
 ---
 
 ### Phase 7: Liveblocks Integration
@@ -378,6 +438,7 @@ const getGridLayout = (playerCount: PlayerCount) => {
 | `app/commander/lobby/[code]/page.tsx` | Shared display |
 | `app/commander/lobby/[code]/join/page.tsx` | Join flow + controller |
 | `app/commander/components/LobbyHeader.tsx` | Lobby info header |
+| `app/commander/components/LobbyShareCard.tsx` | QR code + lobby code sharing UI |
 | `app/commander/components/SlotPicker.tsx` | Slot selection UI |
 | `app/commander/hooks/useLobby.ts` | Liveblocks wrapper hook |
 
