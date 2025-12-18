@@ -76,12 +76,14 @@ export interface LobbySettings {
   startingLife: number;
 }
 
-export interface ConnectedPlayer {
-  id: string;
-  name: string;
-  slot: number | null;
-  isHost: boolean;
-  isConnected: boolean;
+// Lobby state stored in Redis
+export interface LobbyState {
+  code: string;
+  players: PlayerState[];
+  settings: LobbySettings;
+  showQrOverlay: boolean;
+  createdAt: number;
+  version: number; // Incremented on each update for optimistic concurrency
 }
 
 // Lobby code generation utilities

@@ -1,58 +1,38 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, use } from "react";
 import { useRouter } from "next/navigation";
-import {
-  RoomProvider,
-  useStatus,
-  createInitialStorage,
-  createInitialPresence,
-  LivePlayerState,
-} from "../../liveblocks.config";
 import { useLobby } from "../../hooks/useLobby";
 import { LobbyHeader } from "../../components/LobbyHeader";
 import { LobbyShareCard } from "../../components/LobbyShareCard";
-import { PlayerCount } from "../../types";
+import { PlayerState } from "../../types";
 import { generateAbbreviations } from "../../utils";
 
-interface LobbyDisplayContentProps {
-  lobbyCode: string;
-}
-
-function LobbyDisplayContent({ lobbyCode }: LobbyDisplayContentProps) {
+// Display page - polls every 1 second to show live updates
+export default function LobbyDisplayPage({
+  params,
+}: {
+  params: Promise<{ code: string }>;
+}) {
+  const resolvedParams = use(params);
+  const lobbyCode = resolvedParams.code.toUpperCase();
   const router = useRouter();
-  const status = useStatus();
-  const {
-    players,
-    settings,
-    showQrOverlay,
-    connectedPlayers,
-    occupiedSlots,
-    setIsHost,
-    toggleQrOverlay,
-    setQrOverlay,
-  } = useLobby();
+
+  const { lobby, isLoading, error, resetGame, setQrOverlay } = useLobby(
+    lobbyCode,
+    { pollInterval: 1000 }
+  );
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-  // Mark as host on mount
-  useEffect(() => {
-    setIsHost(true);
-  }, [setIsHost]);
-
-  // Auto-hide QR overlay when all slots are filled
-  useEffect(() => {
-    if (settings && occupiedSlots.length >= settings.playerCount) {
-      setQrOverlay(false);
-    }
-  }, [occupiedSlots.length, settings, setQrOverlay]);
-
   // Generate abbreviations for player names
-  const playerAbbrevs = players ? generateAbbreviations(players) : ["P1", "P2", "P3", "P4"];
+  const playerAbbrevs = lobby?.players
+    ? generateAbbreviations(lobby.players)
+    : ["P1", "P2", "P3", "P4"];
 
   // Get grid layout based on player count
   const getGridClass = () => {
-    const count = settings?.playerCount || 4;
+    const count = lobby?.settings.playerCount || 4;
     switch (count) {
       case 2:
         return "grid-cols-2 grid-rows-1";
@@ -64,12 +44,12 @@ function LobbyDisplayContent({ lobbyCode }: LobbyDisplayContentProps) {
     }
   };
 
-  if (status === "connecting" || status === "reconnecting") {
+  if (isLoading) {
     return (
       <div className="w-screen h-screen bg-[#1a1a1a] flex items-center justify-center">
         <div className="text-center">
           <div className="text-[#cccccc] text-lg mb-2">
-            {status === "connecting" ? "Connecting to lobby..." : "Reconnecting..."}
+            Connecting to lobby...
           </div>
           <div className="text-[#888888] text-sm">Code: {lobbyCode}</div>
         </div>
@@ -77,11 +57,13 @@ function LobbyDisplayContent({ lobbyCode }: LobbyDisplayContentProps) {
     );
   }
 
-  if (status === "disconnected") {
+  if (error || !lobby) {
     return (
       <div className="w-screen h-screen bg-[#1a1a1a] flex items-center justify-center">
         <div className="text-center">
-          <div className="text-[#dc2626] text-lg mb-4">Disconnected from lobby</div>
+          <div className="text-[#dc2626] text-lg mb-4">
+            {error || "Lobby not found"}
+          </div>
           <button
             onClick={() => router.push("/commander")}
             className="bg-[#404040] hover:bg-[#4a4a4a] text-white font-bold py-2 px-4"
@@ -93,13 +75,17 @@ function LobbyDisplayContent({ lobbyCode }: LobbyDisplayContentProps) {
     );
   }
 
+  const handleToggleQrOverlay = () => {
+    setQrOverlay(!lobby.showQrOverlay);
+  };
+
   return (
     <div className="h-screen w-screen bg-[#1a1a1a] overflow-hidden relative select-none flex flex-col">
       {/* Header */}
       <LobbyHeader
         lobbyCode={lobbyCode}
-        connectedCount={occupiedSlots.length}
-        maxPlayers={settings?.playerCount || 4}
+        connectedCount={lobby.settings.playerCount}
+        maxPlayers={lobby.settings.playerCount}
       />
 
       {/* Settings Button */}
@@ -125,22 +111,23 @@ function LobbyDisplayContent({ lobbyCode }: LobbyDisplayContentProps) {
 
       {/* Player Quadrants Grid */}
       <div className={`grid ${getGridClass()} flex-1`}>
-        {players?.slice(0, settings?.playerCount || 4).map((player, index) => (
-          <DisplayQuadrant
-            key={index}
-            player={player}
-            playerIndex={index}
-            playerAbbrevs={playerAbbrevs}
-            isConnected={occupiedSlots.some((s) => s.slot === index)}
-          />
-        ))}
+        {lobby.players
+          .slice(0, lobby.settings.playerCount)
+          .map((player, index) => (
+            <DisplayQuadrant
+              key={index}
+              player={player}
+              playerIndex={index}
+              playerAbbrevs={playerAbbrevs}
+            />
+          ))}
       </div>
 
       {/* QR Code Overlay */}
-      {showQrOverlay && (
+      {lobby.showQrOverlay && (
         <div
           className="absolute inset-0 bg-black/70 flex items-center justify-center z-20"
-          onClick={toggleQrOverlay}
+          onClick={handleToggleQrOverlay}
         >
           <div onClick={(e) => e.stopPropagation()}>
             <LobbyShareCard lobbyCode={lobbyCode} size="large" />
@@ -155,8 +142,9 @@ function LobbyDisplayContent({ lobbyCode }: LobbyDisplayContentProps) {
       {isMenuOpen && (
         <HostSettingsMenu
           lobbyCode={lobbyCode}
-          showQrOverlay={showQrOverlay || false}
-          onToggleQrOverlay={toggleQrOverlay}
+          showQrOverlay={lobby.showQrOverlay}
+          onToggleQrOverlay={handleToggleQrOverlay}
+          onResetGame={resetGame}
           onClose={() => setIsMenuOpen(false)}
         />
       )}
@@ -166,17 +154,15 @@ function LobbyDisplayContent({ lobbyCode }: LobbyDisplayContentProps) {
 
 // Display-only quadrant (no controls)
 interface DisplayQuadrantProps {
-  player: LivePlayerState;
+  player: PlayerState;
   playerIndex: number;
   playerAbbrevs: string[];
-  isConnected: boolean;
 }
 
 function DisplayQuadrant({
   player,
   playerIndex,
   playerAbbrevs,
-  isConnected,
 }: DisplayQuadrantProps) {
   const commanderSources = [0, 1, 2, 3].filter((i) => i !== playerIndex);
 
@@ -186,14 +172,6 @@ function DisplayQuadrant({
       {player.isDead && (
         <div className="absolute inset-0 bg-black/60 z-20 pointer-events-none" />
       )}
-
-      {/* Connection indicator */}
-      <div
-        className={`absolute top-2 right-2 w-3 h-3 ${
-          isConnected ? "bg-[#22c55e]" : "bg-[#666666]"
-        }`}
-        title={isConnected ? "Connected" : "Waiting for player"}
-      />
 
       <div
         className={`w-full h-full flex flex-col items-center justify-center p-4 ${
@@ -235,6 +213,7 @@ interface HostSettingsMenuProps {
   lobbyCode: string;
   showQrOverlay: boolean;
   onToggleQrOverlay: () => void;
+  onResetGame: () => Promise<void>;
   onClose: () => void;
 }
 
@@ -242,13 +221,13 @@ function HostSettingsMenu({
   lobbyCode,
   showQrOverlay,
   onToggleQrOverlay,
+  onResetGame,
   onClose,
 }: HostSettingsMenuProps) {
-  const { resetGame } = useLobby();
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
-  const handleReset = () => {
-    resetGame();
+  const handleReset = async () => {
+    await onResetGame();
     setShowResetConfirm(false);
     onClose();
   };
@@ -272,9 +251,6 @@ function HostSettingsMenu({
           >
             {showQrOverlay ? "Hide QR on Display" : "Show QR on Display"}
           </button>
-          <p className="text-xs text-[#666666] mt-1 text-center">
-            Auto-hides when all players join
-          </p>
         </div>
 
         {/* Reset Game */}
@@ -323,46 +299,5 @@ function HostSettingsMenu({
         </button>
       </div>
     </div>
-  );
-}
-
-// Main page component with RoomProvider
-export default function LobbyDisplayPage({
-  params,
-}: {
-  params: Promise<{ code: string }>;
-}) {
-  const resolvedParams = use(params);
-  const lobbyCode = resolvedParams.code.toUpperCase();
-  const [isClient, setIsClient] = useState(false);
-  const [playerCount, setPlayerCount] = useState<PlayerCount>(4);
-
-  useEffect(() => {
-    setIsClient(true);
-    // Check if we have a stored player count for this lobby
-    if (typeof window !== "undefined") {
-      const stored = sessionStorage.getItem(`lobby-${lobbyCode}-playerCount`);
-      if (stored) {
-        setPlayerCount(parseInt(stored) as PlayerCount);
-      }
-    }
-  }, [lobbyCode]);
-
-  if (!isClient) {
-    return (
-      <div className="w-screen h-screen bg-[#1a1a1a] flex items-center justify-center">
-        <div className="text-[#cccccc] text-lg">Loading lobby...</div>
-      </div>
-    );
-  }
-
-  return (
-    <RoomProvider
-      id={`commander-${lobbyCode}`}
-      initialPresence={createInitialPresence(true)}
-      initialStorage={createInitialStorage(playerCount)}
-    >
-      <LobbyDisplayContent lobbyCode={lobbyCode} />
-    </RoomProvider>
   );
 }

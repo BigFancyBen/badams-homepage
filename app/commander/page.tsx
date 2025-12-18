@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { generateLobbyCode, isValidLobbyCode } from "./types";
+import { isValidLobbyCode } from "./types";
 
 export default function CommanderLandingPage() {
   const router = useRouter();
@@ -16,15 +16,25 @@ export default function CommanderLandingPage() {
     setIsClient(true);
   }, []);
 
-  const handleCreateLobby = () => {
+  const handleCreateLobby = async () => {
     setIsCreating(true);
-    const code = generateLobbyCode();
-    // Store player count preference for the lobby
-    if (typeof window !== "undefined") {
-      sessionStorage.setItem(`lobby-${code}-playerCount`, playerCount.toString());
-      sessionStorage.setItem(`lobby-${code}-isHost`, "true");
+    try {
+      const response = await fetch("/api/commander/lobby", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playerCount, startingLife: 40 }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to create lobby");
+      }
+
+      const { code } = await response.json();
+      router.push(`/commander/lobby/${code}`);
+    } catch (error) {
+      console.error("Error creating lobby:", error);
+      setIsCreating(false);
     }
-    router.push(`/commander/lobby/${code}`);
   };
 
   const handleJoinLobby = () => {
