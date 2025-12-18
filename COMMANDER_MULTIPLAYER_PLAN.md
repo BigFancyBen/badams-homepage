@@ -4,330 +4,295 @@
 
 Transform the single-device `/commander` page into a multiplayer experience where:
 - **Host device** creates a lobby and gets a shareable code
-- **Player devices** join via lobby code
-- **Each player** controls their own life total, name, and values as a "remote control"
+- **Player devices** join via lobby code and select their slot (1-4)
+- **Each player** controls their own life total as a "remote control"
 - **Shared display** shows all players' life totals in real-time
+- **2-4 players** supported, anonymous (no accounts)
 
 ---
 
 ## Architecture Decision: Real-Time Backend
 
-### Recommended: PartyKit
+### Recommended: Liveblocks
 
-**Why PartyKit?**
-- Purpose-built for multiplayer/collaborative apps
-- Runs on Cloudflare's edge network (low latency)
-- Simple API, easy integration with Next.js
-- Free tier: 100k monthly active connections
-- TypeScript-first
-- Handles lobby rooms natively
+**Why Liveblocks for Vercel?**
+- Purpose-built for collaborative/multiplayer apps
+- **Works seamlessly with Vercel** (no separate server deployment)
+- "Rooms" concept maps perfectly to lobbies
+- Presence API tracks connected players
+- Storage API syncs game state in real-time
+- Free tier: 250 monthly active users
+- TypeScript-first with React hooks
+- Simple `@liveblocks/react` integration
 
 **Alternative Options:**
 | Option | Pros | Cons |
 |--------|------|------|
-| Firebase Realtime DB | Battle-tested, easy setup | Overkill for this use case, Google account required |
-| Supabase Realtime | PostgreSQL + realtime | More complex setup |
-| Pusher | Simple API | Cost scales quickly |
-| Self-hosted WebSocket | Full control | Requires server management |
+| Ably | 6M free messages/month | More complex setup |
+| Pusher | Simple channels API | Cost scales quickly |
+| Firebase Realtime DB | Battle-tested | Requires Google account, overkill |
+| Supabase Realtime | PostgreSQL + realtime | More infrastructure |
+
+---
+
+## Key Design Principles
+
+1. **Minimal UI changes** - Multiplayer mode looks almost identical to local mode
+2. **Same quadrant layout** - Reuse existing `PlayerQuadrant` component
+3. **Controller = simplified quadrant** - Players see their own quadrant with controls
+4. **Display = read-only quadrants** - Shared screen shows all 4 quadrants without controls
 
 ---
 
 ## Implementation Phases
 
-### Phase 1: PartyKit Setup & Infrastructure
+### Phase 1: Liveblocks Setup
 
 **1.1 Install Dependencies**
 ```bash
-npm install partysocket partykit
+npm install @liveblocks/client @liveblocks/react
 ```
 
-**1.2 Create PartyKit Server**
-Create `party/commander.ts` - the server-side lobby manager:
-- Handle lobby creation with unique 6-character codes
-- Manage player connections (join/leave)
-- Broadcast state changes to all connected clients
-- Handle reconnection scenarios
-
-**1.3 Configure PartyKit**
-Create `partykit.json` configuration file for deployment.
-
----
-
-### Phase 2: Lobby System
-
-**2.1 New Types** (`app/commander/types.ts`)
+**1.2 Create Liveblocks Config**
 ```typescript
-interface LobbyState {
-  code: string;
-  hostId: string;
-  players: ConnectedPlayer[];
-  gameState: GameState;
-  createdAt: number;
-}
+// liveblocks.config.ts
+import { createClient } from "@liveblocks/client";
+import { createRoomContext } from "@liveblocks/react";
 
-interface ConnectedPlayer {
-  id: string;           // Connection ID
-  playerSlot: number;   // 0-3 (which quadrant)
-  name: string;
+const client = createClient({
+  publicApiKey: process.env.NEXT_PUBLIC_LIVEBLOCKS_PUBLIC_KEY!,
+});
+
+type Presence = {
+  odette: string;
+  odette: number | null;  // Which slot this user claimed (0-3)
   isHost: boolean;
-  isConnected: boolean;
-}
+};
 
-interface GameState {
-  players: PlayerState[]; // Existing player state
-  settings: GameSettings;
-}
+type Storage = {
+  players: PlayerState[];  // Reuse existing PlayerState type
+  settings: {
+    playerCount: 2 | 3 | 4;
+  };
+};
 
-type LobbyMessage =
-  | { type: 'join'; playerName: string }
-  | { type: 'claim-slot'; slot: number }
-  | { type: 'update-life'; slot: number; delta: number }
-  | { type: 'update-commander-damage'; slot: number; fromPlayer: number; delta: number }
-  | { type: 'update-poison'; slot: number; delta: number }
-  | { type: 'update-name'; slot: number; name: string }
-  | { type: 'toggle-death'; slot: number }
-  | { type: 'reset-game' }
-  | { type: 'kick-player'; playerId: string }
-  | { type: 'sync-request' };
+export const {
+  RoomProvider,
+  useRoom,
+  useMyPresence,
+  useOthers,
+  useStorage,
+  useMutation,
+} = createRoomContext<Presence, Storage>(client);
 ```
 
-**2.2 Lobby Code Generation**
-- 6-character alphanumeric codes (easy to type/share)
-- Avoid ambiguous characters (0/O, 1/l/I)
-- Example: `ABC123`, `XK7M2P`
+**1.3 Environment Variables**
+```env
+NEXT_PUBLIC_LIVEBLOCKS_PUBLIC_KEY=pk_xxx
+```
 
 ---
 
-### Phase 3: Page Restructure
+### Phase 2: Types Update
 
-**3.1 New Route Structure**
+**2.1 Add to `app/commander/types.ts`**
+```typescript
+// Lobby-specific types
+export interface LobbyPlayer {
+  odette: string;
+  odette: number;  // 0-3
+  connectionId: string;
+  isHost: boolean;
+}
+
+export type PlayerCount = 2 | 3 | 4;
+
+export interface LobbySettings {
+  playerCount: PlayerCount;
+  startingLife: number;
+}
+```
+
+---
+
+### Phase 3: Route Structure
+
 ```
 app/commander/
-├── page.tsx                    # Landing: Create/Join lobby buttons
+├── page.tsx                    # Landing: Create/Join/Local buttons
 ├── local/
-│   └── page.tsx               # Original single-device mode (moved here)
+│   └── page.tsx               # Original single-device mode (moved)
 ├── lobby/
 │   └── [code]/
-│       ├── page.tsx           # Shared display (host view)
-│       └── controller/
-│           └── page.tsx       # Player remote control view
+│       ├── page.tsx           # Shared display (shows all quadrants)
+│       └── join/
+│           └── page.tsx       # Join flow: enter name, pick slot, then controller
 ├── components/
-│   ├── PlayerQuadrant.tsx     # (existing)
+│   ├── PlayerQuadrant.tsx     # (existing - minor modifications)
 │   ├── GameMenu.tsx           # (existing)
-│   ├── LobbyLanding.tsx       # NEW: Create/Join UI
-│   ├── LobbyDisplay.tsx       # NEW: Shared screen view
-│   ├── PlayerController.tsx   # NEW: Remote control UI
-│   └── ConnectionStatus.tsx   # NEW: Connection indicator
+│   ├── LobbyHeader.tsx        # NEW: Shows lobby code + player count
+│   └── SlotPicker.tsx         # NEW: Pick available slot (1-4)
 ├── hooks/
 │   ├── useLocalStorage.ts     # (existing)
-│   ├── usePartySocket.ts      # NEW: PartyKit connection
-│   └── useLobbyState.ts       # NEW: Lobby state management
-└── party/
-    └── commander.ts           # PartyKit server
+│   ├── useLobby.ts            # NEW: Liveblocks room wrapper
+│   └── ...
+└── liveblocks.config.ts       # NEW: Liveblocks setup
 ```
 
-**3.2 URL Structure**
-- `/commander` - Landing page (Create/Join)
-- `/commander/local` - Original single-device mode
-- `/commander/lobby/ABC123` - Shared display for lobby ABC123
-- `/commander/lobby/ABC123/controller` - Player remote for lobby ABC123
+**URL Structure:**
+- `/commander` - Landing page
+- `/commander/local` - Single-device mode (existing functionality)
+- `/commander/lobby/ABC123` - Shared display for lobby
+- `/commander/lobby/ABC123/join` - Join flow (name + slot selection + controller)
 
 ---
 
 ### Phase 4: User Flows
 
-**4.1 Host Flow (Create Lobby)**
+**4.1 Create Lobby (Host)**
 ```
-1. User visits /commander
-2. Clicks "Create Lobby"
-3. System generates lobby code (e.g., ABC123)
-4. Redirects to /commander/lobby/ABC123
-5. Shows shared display with QR code + lobby code
-6. Other players join and appear in quadrants
-```
-
-**4.2 Player Flow (Join Lobby)**
-```
-1. User visits /commander
-2. Enters lobby code (ABC123)
-3. Redirects to /commander/lobby/ABC123/controller
-4. Enters their name
-5. Claims an available player slot (1-4)
-6. Gets personal remote control interface
-7. Their changes sync to shared display
+1. Visit /commander
+2. Select player count (2, 3, or 4)
+3. Click "Create Lobby"
+4. Generate 6-char code, redirect to /commander/lobby/ABC123
+5. Host sees shared display with lobby code shown
+6. Host can also join as a player via the join link
 ```
 
-**4.3 Shared Display Features**
-- Shows all 4 player quadrants (like current design)
-- Displays lobby code prominently for late joiners
-- Shows QR code linking to controller URL
-- Connection status indicators per player
-- Host controls: kick players, reset game
+**4.2 Join Lobby (Player)**
+```
+1. Visit /commander
+2. Enter lobby code
+3. Redirect to /commander/lobby/ABC123/join
+4. Enter name
+5. Pick available slot (shows which are taken)
+6. See controller view (your quadrant only, with controls)
+```
 
-**4.4 Controller Features**
-- Large, touch-friendly buttons for life changes
-- Commander damage tracking
-- Poison counter
-- Name editing
-- Action history for this player only
-- Connection status indicator
+**4.3 Shared Display View**
+- Shows the same 2x2 (or 2x1, 1x3) grid as current design
+- Each quadrant shows player name, life, commander damage, poison
+- Lobby code shown in corner (tap to copy)
+- Connected player indicators
+- **No interactive controls** - display only
+
+**4.4 Controller View**
+- Shows only YOUR quadrant (full screen on mobile)
+- All the same controls: life +/-, commander damage, poison
+- History of your actions
+- Small header with lobby code and connection status
 
 ---
 
-### Phase 5: PartyKit Server Logic
+### Phase 5: Component Changes
 
-**5.1 Server State Management**
+**5.1 PlayerQuadrant Modifications**
+Add a `mode` prop:
 ```typescript
-// party/commander.ts
-export default class CommanderParty implements Party.Server {
-  lobby: LobbyState;
-
-  onConnect(conn: Party.Connection) {
-    // Send current state to new connection
-    conn.send(JSON.stringify({ type: 'sync', state: this.lobby }));
-  }
-
-  onMessage(message: string, sender: Party.Connection) {
-    const msg = JSON.parse(message);
-
-    switch(msg.type) {
-      case 'join':
-        this.addPlayer(sender.id, msg.playerName);
-        break;
-      case 'update-life':
-        this.updatePlayerLife(msg.slot, msg.delta);
-        break;
-      // ... handle all message types
-    }
-
-    // Broadcast updated state to all clients
-    this.party.broadcast(JSON.stringify({
-      type: 'state-update',
-      state: this.lobby
-    }));
-  }
-
-  onClose(conn: Party.Connection) {
-    this.markPlayerDisconnected(conn.id);
-  }
+interface PlayerQuadrantProps {
+  // ... existing props
+  mode: 'local' | 'display' | 'controller';
 }
 ```
 
-**5.2 State Persistence**
-- Use PartyKit's built-in storage for lobby persistence
-- Lobbies auto-expire after 4 hours of inactivity
-- Option to save/restore games
+- `local` - Current behavior (full controls)
+- `display` - Read-only, no buttons, optimized for shared screen
+- `controller` - Full controls, possibly full-screen on mobile
 
----
+**5.2 New: LobbyHeader Component**
+Simple header showing:
+```
+┌────────────────────────────────┐
+│ LOBBY: ABC123  📋   👥 3/4     │
+└────────────────────────────────┘
+```
+- Lobby code with copy button
+- Player count indicator
+- Connection status dot
 
-### Phase 6: Component Implementation
-
-**6.1 LobbyLanding Component**
+**5.3 New: SlotPicker Component**
 ```
-┌─────────────────────────────┐
-│      COMMANDER TRACKER      │
-│                             │
-│  ┌───────────────────────┐  │
-│  │   CREATE LOBBY        │  │
-│  │   Host a new game     │  │
-│  └───────────────────────┘  │
-│                             │
-│  ┌───────────────────────┐  │
-│  │   JOIN LOBBY          │  │
-│  │   [______] Enter code │  │
-│  └───────────────────────┘  │
-│                             │
-│  ┌───────────────────────┐  │
-│  │   LOCAL MODE          │  │
-│  │   Single device       │  │
-│  └───────────────────────┘  │
-└─────────────────────────────┘
-```
-
-**6.2 LobbyDisplay Component (Shared Screen)**
-```
-┌─────────────────────────────────────────┐
-│  LOBBY: ABC123  [QR]    👥 3/4 players  │
-├───────────────────┬─────────────────────┤
-│                   │                     │
-│    PLAYER 1       │     PLAYER 2        │
-│      40 ❤️        │       38 ❤️         │
-│    (waiting...)   │     (Alice)         │
-│                   │                     │
-├───────────────────┼─────────────────────┤
-│                   │                     │
-│    PLAYER 3       │     PLAYER 4        │
-│      40 ❤️        │       35 ❤️         │
-│     (Bob)         │     (Carol)         │
-│                   │                     │
-└───────────────────┴─────────────────────┘
-```
-
-**6.3 PlayerController Component (Remote)**
-```
-┌─────────────────────────────┐
-│  Connected to ABC123   🟢   │
-├─────────────────────────────┤
-│                             │
-│         YOUR LIFE           │
-│           40                │
-│                             │
-│   [-5] [-1]    [+1] [+5]   │
-│                             │
-├─────────────────────────────┤
-│  Commander Damage           │
-│  From Alice: 0  [+] [-]     │
-│  From Bob:   0  [+] [-]     │
-│  From Carol: 2  [+] [-]     │
-├─────────────────────────────┤
-│  Poison: 0      [+] [-]     │
-├─────────────────────────────┤
-│  ┌─ History ─────────────┐  │
-│  │ +5 life               │  │
-│  │ -1 life               │  │
-│  │ +2 cmdr from Carol    │  │
-│  └───────────────────────┘  │
-└─────────────────────────────┘
+┌────────────────────────────────┐
+│     Choose your slot           │
+│                                │
+│  [1 - Alice ✓]  [2 - Empty]   │
+│  [3 - Bob ✓]    [4 - Empty]   │
+│                                │
+│  Your name: [________]         │
+│                                │
+│        [ JOIN GAME ]           │
+└────────────────────────────────┘
 ```
 
 ---
 
-### Phase 7: Error Handling & Edge Cases
+### Phase 6: Liveblocks Integration
 
-**7.1 Connection Issues**
-- Show reconnection UI with countdown
-- Auto-reconnect with exponential backoff
-- Preserve local state during disconnection
-- Sync state on reconnection
+**6.1 Room = Lobby**
+Each lobby code is a Liveblocks room ID:
+- Room `commander-ABC123` contains the game state
+- Presence tracks who's connected and their slot
+- Storage holds the synchronized `PlayerState[]`
 
-**7.2 Player Disconnection**
-- Mark player as "disconnected" (grayed out)
-- Host can kick disconnected players
-- Slot becomes available after timeout (30s)
+**6.2 useLobby Hook**
+```typescript
+// hooks/useLobby.ts
+export function useLobby() {
+  const storage = useStorage((root) => root.players);
+  const others = useOthers();
+  const [myPresence, updateMyPresence] = useMyPresence();
 
-**7.3 Host Disconnection**
-- Transfer host to next connected player
-- Or: freeze game until host returns
-- Show "Host disconnected" warning
+  const updateLife = useMutation(({ storage }, slot: number, delta: number) => {
+    const players = storage.get("players");
+    const player = players.get(slot);
+    player.set("life", player.get("life") + delta);
+  }, []);
 
-**7.4 Lobby Full**
-- Show "Lobby full" message
-- Option to spectate (read-only view)
+  // ... other mutations for commander damage, poison, etc.
+
+  return {
+    players: storage,
+    connectedPlayers: others,
+    mySlot: myPresence.slot,
+    updateLife,
+    // ...
+  };
+}
+```
 
 ---
 
-### Phase 8: Mobile Optimization
+### Phase 7: Lobby Code Generation
 
-**8.1 Controller View**
-- Full-screen life controls
-- Large touch targets (minimum 48px)
-- Swipe gestures for quick adjustments
-- Haptic feedback on actions
+**6-character codes using unambiguous characters:**
+```typescript
+// Avoid: 0/O, 1/l/I
+const CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
-**8.2 Display View**
-- Auto-rotate based on device orientation
-- Scale to fit any screen
-- Hide lobby code after initial join period (tap to reveal)
+function generateLobbyCode(): string {
+  return Array.from({ length: 6 }, () =>
+    CHARS[Math.floor(Math.random() * CHARS.length)]
+  ).join('');
+}
+```
+
+---
+
+### Phase 8: Layout Configurations
+
+**For 4 players:** 2x2 grid (current layout)
+**For 3 players:** Top row 2, bottom row 1 centered
+**For 2 players:** Side by side or stacked
+
+```typescript
+const getGridLayout = (playerCount: PlayerCount) => {
+  switch (playerCount) {
+    case 2: return 'grid-cols-2 grid-rows-1';
+    case 3: return 'grid-cols-2 grid-rows-2'; // 3rd spans or centers
+    case 4: return 'grid-cols-2 grid-rows-2';
+  }
+};
+```
 
 ---
 
@@ -336,71 +301,50 @@ export default class CommanderParty implements Party.Server {
 ### New Files
 | File | Purpose |
 |------|---------|
-| `party/commander.ts` | PartyKit server |
-| `partykit.json` | PartyKit configuration |
-| `app/commander/lobby/[code]/page.tsx` | Shared display |
-| `app/commander/lobby/[code]/controller/page.tsx` | Player remote |
+| `liveblocks.config.ts` | Liveblocks client setup |
 | `app/commander/local/page.tsx` | Original single-device mode |
-| `app/commander/components/LobbyLanding.tsx` | Create/Join UI |
-| `app/commander/components/LobbyDisplay.tsx` | Shared screen component |
-| `app/commander/components/PlayerController.tsx` | Remote control component |
-| `app/commander/components/ConnectionStatus.tsx` | Connection indicator |
-| `app/commander/hooks/usePartySocket.ts` | PartyKit connection hook |
-| `app/commander/hooks/useLobbyState.ts` | Lobby state management |
+| `app/commander/lobby/[code]/page.tsx` | Shared display |
+| `app/commander/lobby/[code]/join/page.tsx` | Join flow + controller |
+| `app/commander/components/LobbyHeader.tsx` | Lobby info header |
+| `app/commander/components/SlotPicker.tsx` | Slot selection UI |
+| `app/commander/hooks/useLobby.ts` | Liveblocks wrapper hook |
 
 ### Modified Files
 | File | Changes |
 |------|---------|
-| `app/commander/page.tsx` | Replace with landing page |
-| `app/commander/types.ts` | Add lobby-related types |
-| `package.json` | Add partykit dependencies |
+| `app/commander/page.tsx` | Replace with landing page (Create/Join/Local) |
+| `app/commander/types.ts` | Add lobby types |
+| `app/commander/components/PlayerQuadrant.tsx` | Add `mode` prop |
+| `package.json` | Add @liveblocks/client, @liveblocks/react |
+| `.env.local` | Add NEXT_PUBLIC_LIVEBLOCKS_PUBLIC_KEY |
 
 ---
 
-## Deployment Considerations
+## Deployment (Vercel)
 
-**PartyKit Deployment**
-- Deploy PartyKit server to Cloudflare: `npx partykit deploy`
-- Configure environment variables for production URLs
-- Set up custom domain (optional)
-
-**Next.js Integration**
-- PartyKit URL configured via environment variable
-- Development: `localhost:1999`
-- Production: `your-project.partykit.dev`
-
----
-
-## Future Enhancements (Not in Initial Scope)
-
-1. **Spectator Mode** - Watch-only viewers
-2. **Game Presets** - Quick setup for different formats
-3. **Chat** - In-game messaging
-4. **Sound Effects** - Audio feedback on life changes
-5. **Themes** - Custom color schemes per player
-6. **Tournament Mode** - Track multiple games
-7. **Card Search** - Integration with Scryfall API
-8. **Animated Transitions** - Smooth state changes
+1. Create Liveblocks account at liveblocks.io
+2. Get public API key from dashboard
+3. Add `NEXT_PUBLIC_LIVEBLOCKS_PUBLIC_KEY` to Vercel environment variables
+4. Deploy as normal - no additional servers needed!
 
 ---
 
 ## Implementation Order
 
-1. **Phase 1**: PartyKit setup (1 file)
-2. **Phase 2**: Types and utilities (2 files)
-3. **Phase 3**: Hooks for connection (2 files)
-4. **Phase 4**: Landing page restructure (1 file)
-5. **Phase 5**: Move existing code to `/local` (1 file)
-6. **Phase 6**: Shared display view (2 files)
-7. **Phase 7**: Controller view (2 files)
-8. **Phase 8**: Testing & polish
+1. **Phase 1**: Install Liveblocks, create config
+2. **Phase 2**: Add lobby types to types.ts
+3. **Phase 3**: Create landing page with Create/Join/Local options
+4. **Phase 4**: Move existing code to `/local`
+5. **Phase 5**: Build lobby display page (reuses PlayerQuadrant in display mode)
+6. **Phase 6**: Build join page with slot picker + controller view
+7. **Phase 7**: Add `mode` prop to PlayerQuadrant
+8. **Phase 8**: Testing across devices
 
 ---
 
-## Questions to Confirm
+## Summary
 
-1. **Lobby Size**: Is 4 players max correct, or should we support 2-6?
-2. **Player Slots**: Should players auto-assign to slots or choose manually?
-3. **Persistence**: Should lobbies survive server restarts?
-4. **Spectators**: Should non-players be able to view the shared display?
-5. **Authentication**: Any need for player accounts, or anonymous only?
+- **Backend**: Liveblocks (works natively with Vercel, no extra servers)
+- **Players**: 2-4, anonymous, select their own slot
+- **UI**: Minimal changes - same quadrant design, just with mode switching
+- **Routes**: `/commander` (landing), `/commander/local` (single), `/commander/lobby/[code]` (display), `/commander/lobby/[code]/join` (controller)
