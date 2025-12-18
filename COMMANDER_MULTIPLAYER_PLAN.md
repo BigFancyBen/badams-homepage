@@ -211,7 +211,10 @@ The host (shared display) has access to game-wide controls:
 │  [    RESET GAME    ]          │
 │  (Resets all players to 40)    │
 │                                │
-│  Lobby Code: ABC123  [Copy]    │
+│  ┌──────────┐                  │
+│  │   QR     │  ABC123  [Copy]  │
+│  │  CODE    │  Scan to join    │
+│  └──────────┘                  │
 │                                │
 │         [ CLOSE ]              │
 └────────────────────────────────┘
@@ -219,7 +222,7 @@ The host (shared display) has access to game-wide controls:
 - **Keep Screen On** - Wake lock toggle
 - **Starting Life** - Configure for next reset
 - **Reset Game** - Resets ALL players' life/damage/poison (syncs to all)
-- **Lobby Code** - Easy copy for sharing
+- **QR Code + Lobby Code** - Easy sharing for new players to join
 
 **5.2 Controller Settings Menu**
 Each player's controller has personal settings:
@@ -232,14 +235,17 @@ Each player's controller has personal settings:
 │                                │
 │  [ ] Keep Screen On            │
 │                                │
-│  Lobby: ABC123                 │
+│  ┌──────────┐                  │
+│  │   QR     │  ABC123  [Copy]  │
+│  │  CODE    │  Share to invite │
+│  └──────────┘                  │
 │                                │
 │         [ CLOSE ]              │
 └────────────────────────────────┘
 ```
 - **Your Name** - Change display name (syncs to shared display)
 - **Keep Screen On** - Wake lock toggle (per-device)
-- **Lobby Code** - Reference only
+- **QR Code + Lobby Code** - Share with others to invite more players
 
 ---
 
