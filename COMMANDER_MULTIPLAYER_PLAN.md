@@ -324,16 +324,18 @@ A sleek, reusable component for sharing the lobby code:
 
 **Design Details:**
 - **Dark card background** (`#2a2a2a`) with subtle border (`#3a3a3a`)
-- **QR Code**: White on dark, rounded corners, ~150px on mobile, ~200px on display
+- **QR Code**: White on dark, sharp edges, ~150px on mobile, ~200px on display
 - **Lobby code**: Large monospace font, each character in its own cell
-  - Cells have subtle background (`#333`) with rounded corners
+  - Cells have subtle background (`#333`) with sharp corners
   - Easy to read and type
 - **Copy button**:
+  - Sharp edges, consistent with existing button styles
   - Icon changes to checkmark on success
   - Brief "Copied!" toast feedback
   - Copies full join URL: `yoursite.com/commander/lobby/ABC123/join`
 - **URL hint**: Small muted text showing the base URL for manual entry
 - **Responsive**: Stacks nicely on small screens
+- **No rounded corners** - matches existing project style
 
 **States:**
 ```
