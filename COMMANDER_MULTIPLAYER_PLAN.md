@@ -176,7 +176,10 @@ app/commander/
 **4.3 Shared Display View**
 - Shows the same 2x2 (or 2x1, 1x3) grid as current design
 - Each quadrant shows player name, life, commander damage, poison
-- Lobby code shown in corner (tap to copy)
+- **QR Code overlay** (toggleable):
+  - Host can show/hide via settings or tap
+  - Auto-hides when all player slots are filled
+  - Shows lobby code + QR for easy joining
 - Connected player indicators
 - **No interactive controls** - display only
 
@@ -206,6 +209,9 @@ The host (shared display) has access to game-wide controls:
 ├────────────────────────────────┤
 │  [ ] Keep Screen On            │
 │                                │
+│  [ ] Show Join QR on Display   │
+│  (auto-hides when lobby full)  │
+│                                │
 │  Starting Life: [40]           │
 │                                │
 │  [    RESET GAME    ]          │
@@ -220,9 +226,10 @@ The host (shared display) has access to game-wide controls:
 └────────────────────────────────┘
 ```
 - **Keep Screen On** - Wake lock toggle
+- **Show Join QR on Display** - Toggle QR overlay visibility (auto-hides when full)
 - **Starting Life** - Configure for next reset
 - **Reset Game** - Resets ALL players' life/damage/poison (syncs to all)
-- **QR Code + Lobby Code** - Easy sharing for new players to join
+- **QR Code + Lobby Code** - Always visible in settings for sharing
 
 **5.2 Controller Settings Menu**
 Each player's controller has personal settings:
