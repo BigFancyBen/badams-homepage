@@ -66,3 +66,41 @@ export interface ParsedPoisonAction {
   value: number;
 }
 
+// Multiplayer lobby types
+export interface LobbyPlayer {
+  clientId: string;
+  name: string;
+  playerSlot: number | null; // 0-3 for assigned slot, null for spectator
+  isHost: boolean;
+  isReady: boolean;
+}
+
+export interface GameRoom {
+  roomCode: string;
+  hostClientId: string;
+  players: LobbyPlayer[];
+  gameState: PlayerState[] | null;
+  isGameStarted: boolean;
+  createdAt: number;
+}
+
+export type GameAction =
+  | { type: 'UPDATE_LIFE'; playerIndex: number; change: number }
+  | { type: 'UPDATE_POISON'; playerIndex: number; change: number }
+  | { type: 'UPDATE_COMMANDER_DAMAGE'; playerIndex: number; sourceIndex: number; change: number }
+  | { type: 'TOGGLE_DEAD'; playerIndex: number }
+  | { type: 'DAMAGE_ALL_OTHERS'; sourcePlayerIndex: number; damage: number }
+  | { type: 'UNDO_DAMAGE_ALL_OTHERS' }
+  | { type: 'RESET_GAME' }
+  | { type: 'FULL_STATE_SYNC'; players: PlayerState[] };
+
+export interface MultiplayerState {
+  isConnected: boolean;
+  roomCode: string | null;
+  lobbyPlayers: LobbyPlayer[];
+  localClientId: string;
+  localPlayerSlot: number | null;
+  isHost: boolean;
+  isGameStarted: boolean;
+}
+

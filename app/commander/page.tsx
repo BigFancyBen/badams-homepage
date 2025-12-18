@@ -530,6 +530,15 @@ function CommanderPageContent() {
 
   return (
     <div className="h-screen w-screen bg-[#1a1a1a] overflow-hidden relative select-none">
+      {/* Multiplayer Link - top right */}
+      <a
+        href="/commander/multiplayer"
+        className="absolute top-1 right-2 z-30 text-white/50 hover:text-white/70 text-xs transition-colors"
+        title="Play Online"
+      >
+        Multiplayer →
+      </a>
+
       {/* Menu Button - centered on mobile, top-left on desktop */}
       <button
         onClick={() => setIsMenuOpen(true)}

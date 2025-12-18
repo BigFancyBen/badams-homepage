@@ -16,6 +16,9 @@ interface GameMenuProps {
   onResetNames: () => void;
   onUpdatePlayerName: (playerIndex: number, name: string) => void;
   onToggleWakeLock: () => void;
+  multiplayerMode?: boolean;
+  onLeaveGame?: () => void;
+  isHost?: boolean;
 }
 
 export function GameMenu({
@@ -34,6 +37,9 @@ export function GameMenu({
   onResetNames,
   onUpdatePlayerName,
   onToggleWakeLock,
+  multiplayerMode = false,
+  onLeaveGame,
+  isHost = false,
 }: GameMenuProps) {
   if (!isOpen) return null;
 
@@ -126,6 +132,23 @@ export function GameMenu({
             Are you sure you want to reset the entire game?
           </p>
         </div>
+
+        {/* Multiplayer Leave Button */}
+        {multiplayerMode && onLeaveGame && (
+          <div className="mb-4">
+            <button
+              onClick={onLeaveGame}
+              className="w-full bg-[#7c2d12] hover:bg-[#9a3412] text-white text-sm font-bold py-3 px-4 transition-all duration-200"
+            >
+              Leave Game
+            </button>
+            {isHost && (
+              <p className="text-xs text-[#f97316] mt-2 text-center">
+                As the host, leaving will end the game for all players
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Action Buttons */}
         <div className="flex gap-2">

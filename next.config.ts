@@ -12,6 +12,7 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  serverExternalPackages: ['ably'],
 };
 
 export default nextConfig;
