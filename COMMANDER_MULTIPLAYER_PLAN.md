@@ -37,10 +37,11 @@ Transform the single-device `/commander` page into a multiplayer experience wher
 
 ## Key Design Principles
 
-1. **Minimal UI changes** - Multiplayer mode looks almost identical to local mode
+1. **Functionality parity** - All buttons/controls work identically to local mode
 2. **Same quadrant layout** - Reuse existing `PlayerQuadrant` component
-3. **Controller = simplified quadrant** - Players see their own quadrant with controls
-4. **Display = read-only quadrants** - Shared screen shows all 4 quadrants without controls
+3. **Controller = your quadrant** - Full controls for life, commander damage, poison, history
+4. **Display = read-only quadrants** - Shared screen shows all quadrants without controls
+5. **Role-based settings** - Host and controllers have different settings menus
 
 ---
 
@@ -156,8 +157,11 @@ app/commander/
 3. Click "Create Lobby"
 4. Generate 6-char code, redirect to /commander/lobby/ABC123
 5. Host sees shared display with lobby code shown
-6. Host can also join as a player via the join link
+6. Host opens /commander/lobby/ABC123/join on their phone to also be a player
+   (Or: displays QR code that host can scan to join as player)
 ```
+
+**Note:** The shared display is typically a TV/tablet/laptop. The host joins as a player from their phone like everyone else, giving them full controller functionality.
 
 **4.2 Join Lobby (Player)**
 ```
@@ -176,17 +180,72 @@ app/commander/
 - Connected player indicators
 - **No interactive controls** - display only
 
-**4.4 Controller View**
+**4.4 Controller View (All Players Including Host)**
 - Shows only YOUR quadrant (full screen on mobile)
-- All the same controls: life +/-, commander damage, poison
-- History of your actions
+- **Full control over your own values:**
+  - Life: +1, -1, +5, -5 buttons
+  - Commander damage from each opponent
+  - Poison counters
+  - Toggle dead state
+- **Undo functionality** - Can undo your own recent actions
+- **History** - Shows your action history with collapsing (like local mode)
 - Small header with lobby code and connection status
+- Settings menu button in corner
+
+All controllers have identical functionality - there's no special "host player" in-game. The host distinction only matters for the shared display settings (reset game, etc.).
 
 ---
 
-### Phase 5: Component Changes
+### Phase 5: Settings Menus (Role-Based)
 
-**5.1 PlayerQuadrant Modifications**
+**5.1 Host Display Settings Menu**
+The host (shared display) has access to game-wide controls:
+```
+┌────────────────────────────────┐
+│         GAME SETTINGS          │
+├────────────────────────────────┤
+│  [ ] Keep Screen On            │
+│                                │
+│  Starting Life: [40]           │
+│                                │
+│  [    RESET GAME    ]          │
+│  (Resets all players to 40)    │
+│                                │
+│  Lobby Code: ABC123  [Copy]    │
+│                                │
+│         [ CLOSE ]              │
+└────────────────────────────────┘
+```
+- **Keep Screen On** - Wake lock toggle
+- **Starting Life** - Configure for next reset
+- **Reset Game** - Resets ALL players' life/damage/poison (syncs to all)
+- **Lobby Code** - Easy copy for sharing
+
+**5.2 Controller Settings Menu**
+Each player's controller has personal settings:
+```
+┌────────────────────────────────┐
+│        YOUR SETTINGS           │
+├────────────────────────────────┤
+│  Your Name:                    │
+│  [_______________]             │
+│                                │
+│  [ ] Keep Screen On            │
+│                                │
+│  Lobby: ABC123                 │
+│                                │
+│         [ CLOSE ]              │
+└────────────────────────────────┘
+```
+- **Your Name** - Change display name (syncs to shared display)
+- **Keep Screen On** - Wake lock toggle (per-device)
+- **Lobby Code** - Reference only
+
+---
+
+### Phase 6: Component Changes
+
+**6.1 PlayerQuadrant Modifications**
 Add a `mode` prop:
 ```typescript
 interface PlayerQuadrantProps {
@@ -199,7 +258,7 @@ interface PlayerQuadrantProps {
 - `display` - Read-only, no buttons, optimized for shared screen
 - `controller` - Full controls, possibly full-screen on mobile
 
-**5.2 New: LobbyHeader Component**
+**6.2 New: LobbyHeader Component**
 Simple header showing:
 ```
 ┌────────────────────────────────┐
@@ -210,7 +269,7 @@ Simple header showing:
 - Player count indicator
 - Connection status dot
 
-**5.3 New: SlotPicker Component**
+**6.3 New: SlotPicker Component**
 ```
 ┌────────────────────────────────┐
 │     Choose your slot           │
@@ -226,15 +285,15 @@ Simple header showing:
 
 ---
 
-### Phase 6: Liveblocks Integration
+### Phase 7: Liveblocks Integration
 
-**6.1 Room = Lobby**
+**7.1 Room = Lobby**
 Each lobby code is a Liveblocks room ID:
 - Room `commander-ABC123` contains the game state
 - Presence tracks who's connected and their slot
 - Storage holds the synchronized `PlayerState[]`
 
-**6.2 useLobby Hook**
+**7.2 useLobby Hook**
 ```typescript
 // hooks/useLobby.ts
 export function useLobby() {
@@ -262,7 +321,7 @@ export function useLobby() {
 
 ---
 
-### Phase 7: Lobby Code Generation
+### Phase 8: Lobby Code Generation
 
 **6-character codes using unambiguous characters:**
 ```typescript
@@ -278,7 +337,7 @@ function generateLobbyCode(): string {
 
 ---
 
-### Phase 8: Layout Configurations
+### Phase 9: Layout Configurations
 
 **For 4 players:** 2x2 grid (current layout)
 **For 3 players:** Top row 2, bottom row 1 centered
@@ -335,10 +394,12 @@ const getGridLayout = (playerCount: PlayerCount) => {
 2. **Phase 2**: Add lobby types to types.ts
 3. **Phase 3**: Create landing page with Create/Join/Local options
 4. **Phase 4**: Move existing code to `/local`
-5. **Phase 5**: Build lobby display page (reuses PlayerQuadrant in display mode)
-6. **Phase 6**: Build join page with slot picker + controller view
-7. **Phase 7**: Add `mode` prop to PlayerQuadrant
-8. **Phase 8**: Testing across devices
+5. **Phase 5**: Role-based settings menus (host vs controller)
+6. **Phase 6**: Add `mode` prop to PlayerQuadrant
+7. **Phase 7**: Build Liveblocks integration (useLobby hook)
+8. **Phase 8**: Lobby code generation utilities
+9. **Phase 9**: Build lobby display page + controller view
+10. **Phase 10**: Testing across devices
 
 ---
 
