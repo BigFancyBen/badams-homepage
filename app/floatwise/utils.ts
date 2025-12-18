@@ -3,6 +3,74 @@ import { NOAAResponse, WeatherHour } from './types';
 // NOAA API base URL
 const NOAA_BASE_URL = 'https://api.weather.gov';
 
+// Cache configuration
+const GRID_POINT_CACHE_KEY = 'floatwise-grid-points';
+const WEATHER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+// In-memory weather cache (with TTL)
+interface WeatherCacheEntry {
+  data: NOAAResponse;
+  timestamp: number;
+}
+const weatherCache = new Map<string, WeatherCacheEntry>();
+
+/**
+ * Grid point cache stored in localStorage (never expires - grid points don't change)
+ */
+interface GridPointCache {
+  [key: string]: { forecastHourly: string };
+}
+
+function getGridPointCache(): GridPointCache {
+  if (typeof window === 'undefined') return {};
+  try {
+    const cached = localStorage.getItem(GRID_POINT_CACHE_KEY);
+    return cached ? JSON.parse(cached) : {};
+  } catch {
+    return {};
+  }
+}
+
+function setGridPointCache(lat: number, lon: number, forecastHourly: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const cache = getGridPointCache();
+    const key = `${lat.toFixed(4)},${lon.toFixed(4)}`;
+    cache[key] = { forecastHourly };
+    localStorage.setItem(GRID_POINT_CACHE_KEY, JSON.stringify(cache));
+  } catch {
+    // localStorage might be full or disabled
+  }
+}
+
+function getCachedGridPoint(lat: number, lon: number): string | null {
+  const cache = getGridPointCache();
+  const key = `${lat.toFixed(4)},${lon.toFixed(4)}`;
+  return cache[key]?.forecastHourly || null;
+}
+
+/**
+ * Get cached weather data if still valid
+ */
+function getCachedWeather(forecastUrl: string): NOAAResponse | null {
+  const entry = weatherCache.get(forecastUrl);
+  if (!entry) return null;
+
+  const age = Date.now() - entry.timestamp;
+  if (age > WEATHER_CACHE_TTL_MS) {
+    weatherCache.delete(forecastUrl);
+    return null;
+  }
+  return entry.data;
+}
+
+/**
+ * Cache weather response
+ */
+function setCachedWeather(forecastUrl: string, data: NOAAResponse): void {
+  weatherCache.set(forecastUrl, { data, timestamp: Date.now() });
+}
+
 /**
  * Validate if coordinates are within NOAA coverage area (roughly US and territories)
  */
@@ -45,20 +113,37 @@ export function getForecastUrl(gridPointData: { properties: { forecastHourly: st
 
 /**
  * Fetch weather forecast from NOAA API
+ * Uses caching: grid points are cached forever (they don't change),
+ * weather data is cached for 5 minutes
  */
 export async function fetchNOAAWeather(lat: number, lon: number): Promise<NOAAResponse> {
   try {
-    // First get the grid point
-    const gridPoint = await getNOAAGridPoint(lat, lon);
-    const forecastUrl = getForecastUrl(gridPoint);
-    
-    // Then get the forecast
+    // Check for cached grid point first (saves an API call)
+    let forecastUrl = getCachedGridPoint(lat, lon);
+
+    if (!forecastUrl) {
+      // Grid point not cached - fetch and cache it
+      const gridPoint = await getNOAAGridPoint(lat, lon);
+      forecastUrl = getForecastUrl(gridPoint);
+      setGridPointCache(lat, lon, forecastUrl);
+    }
+
+    // Check for cached weather data (5-minute TTL)
+    const cachedWeather = getCachedWeather(forecastUrl);
+    if (cachedWeather) {
+      return cachedWeather;
+    }
+
+    // Fetch fresh weather data
     const response = await fetch(forecastUrl);
     if (!response.ok) {
       throw new Error(`Failed to fetch weather: ${response.statusText}`);
     }
-    
-    return await response.json();
+
+    const data: NOAAResponse = await response.json();
+    setCachedWeather(forecastUrl, data);
+
+    return data;
   } catch (error) {
     console.error('Error fetching NOAA weather:', error);
     throw error;
