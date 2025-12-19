@@ -2,7 +2,14 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useChannel, usePresence, usePresenceListener, useConnectionStateListener } from 'ably/react';
-import { PlayerState, LobbyPlayer, GameAction } from '../types';
+import { GameAction, SlotOwner } from '../types';
+
+interface PresenceData {
+  clientId: string;
+  name: string;
+  playerSlot: number | null;
+  isCreator: boolean;
+}
 
 interface UseMultiplayerProps {
   roomCode: string;
@@ -10,19 +17,16 @@ interface UseMultiplayerProps {
   playerName: string;
   isCreator: boolean;
   onGameAction: (action: GameAction) => void;
-  onPlayersUpdate: (players: LobbyPlayer[]) => void;
-  onGameStart: (initialState: PlayerState[]) => void;
 }
 
 interface UseMultiplayerReturn {
   isConnected: boolean;
   isHost: boolean;
+  slotOwners: (SlotOwner | null)[];
   localPlayerSlot: number | null;
   sendGameAction: (action: GameAction) => void;
-  joinSlot: (slot: number) => void;
+  claimSlot: (slotIndex: number) => void;
   leaveSlot: () => void;
-  setReady: (ready: boolean) => void;
-  startGame: (initialState: PlayerState[]) => void;
 }
 
 export function useMultiplayer({
@@ -31,13 +35,12 @@ export function useMultiplayer({
   playerName,
   isCreator,
   onGameAction,
-  onPlayersUpdate,
-  onGameStart,
 }: UseMultiplayerProps): UseMultiplayerReturn {
   const [isConnected, setIsConnected] = useState(false);
-  const [lobbyPlayers, setLobbyPlayers] = useState<LobbyPlayer[]>([]);
   const [localPlayerSlot, setLocalPlayerSlot] = useState<number | null>(null);
-  const [isHost, setIsHost] = useState(false);
+  const [isHost, setIsHost] = useState(isCreator);
+  // Track slot ownership: who owns each slot (persists even if disconnected)
+  const [slotOwners, setSlotOwners] = useState<(SlotOwner | null)[]>([null, null, null, null]);
 
   // Monitor connection state
   useConnectionStateListener('connected', () => {
@@ -51,49 +54,80 @@ export function useMultiplayer({
   // Subscribe to game actions channel
   const { channel } = useChannel(`commander:${roomCode}`, (message) => {
     if (message.name === 'game-action') {
-      onGameAction(message.data as GameAction);
-    } else if (message.name === 'game-start') {
-      onGameStart(message.data.players as PlayerState[]);
+      const action = message.data as GameAction;
+
+      // Handle slot claims internally
+      if (action.type === 'CLAIM_SLOT') {
+        setSlotOwners((prev) => {
+          const newOwners = [...prev];
+          newOwners[action.slotIndex] = {
+            clientId: action.clientId,
+            name: action.name,
+            isConnected: true,
+          };
+          return newOwners;
+        });
+        // Update local slot if it's us
+        if (action.clientId === localClientId) {
+          setLocalPlayerSlot(action.slotIndex);
+        }
+      }
+
+      // Handle full state sync (includes slot owners)
+      if (action.type === 'FULL_STATE_SYNC') {
+        setSlotOwners(action.slotOwners);
+        // Find our slot
+        const ourSlot = action.slotOwners.findIndex(
+          (owner) => owner?.clientId === localClientId
+        );
+        if (ourSlot !== -1) {
+          setLocalPlayerSlot(ourSlot);
+        }
+      }
+
+      onGameAction(action);
     }
   });
 
-  // Track presence for lobby - use both hooks
-  const { updateStatus } = usePresence<LobbyPlayer>(
+  // Track presence for lobby
+  const { updateStatus } = usePresence<PresenceData>(
     `commander:${roomCode}`,
     {
       clientId: localClientId,
       name: playerName,
       playerSlot: null,
-      isHost: isCreator,
-      isReady: false,
       isCreator,
     }
   );
 
   // Listen for presence updates from all clients
-  const { presenceData } = usePresenceListener<LobbyPlayer>(`commander:${roomCode}`);
+  const { presenceData } = usePresenceListener<PresenceData>(`commander:${roomCode}`);
 
-  // Update lobby players when presence changes
+  // Update slot connection status when presence changes
   useEffect(() => {
-    // Host is the player who created the room (isCreator = true)
-    const creatorClientId = presenceData.find((member) => member.data.isCreator)?.data?.clientId;
+    const connectedClientIds = new Set(presenceData.map((member) => member.data.clientId));
 
-    const updatedPlayers = presenceData.map((member) => ({
-      ...member.data,
-      isHost: member.data.clientId === creatorClientId,
-    }));
+    // Update isConnected for all slot owners
+    setSlotOwners((prev) =>
+      prev.map((owner) => {
+        if (!owner) return null;
+        return {
+          ...owner,
+          isConnected: connectedClientIds.has(owner.clientId),
+        };
+      })
+    );
 
-    setLobbyPlayers(updatedPlayers);
-
-    // Update local player state
-    const localPlayer = updatedPlayers.find((p: LobbyPlayer) => p.clientId === localClientId);
-    if (localPlayer) {
-      setLocalPlayerSlot(localPlayer.playerSlot);
-      setIsHost(localPlayer.isHost);
+    // Determine host (creator, or first connected player if creator left)
+    const creatorPresent = presenceData.find((member) => member.data.isCreator);
+    if (creatorPresent) {
+      setIsHost(creatorPresent.data.clientId === localClientId);
+    } else if (presenceData.length > 0) {
+      // Sort by timestamp, first one is host
+      const sorted = [...presenceData].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+      setIsHost(sorted[0]?.data.clientId === localClientId);
     }
-
-    onPlayersUpdate(updatedPlayers);
-  }, [presenceData, localClientId, onPlayersUpdate]);
+  }, [presenceData, localClientId]);
 
   // Send a game action to all players
   const sendGameAction = useCallback(
@@ -103,75 +137,72 @@ export function useMultiplayer({
     [channel]
   );
 
-  // Join a player slot
-  const joinSlot = useCallback(
-    (slot: number) => {
+  // Claim a player slot
+  const claimSlot = useCallback(
+    (slotIndex: number) => {
       // Check if slot is already taken
-      const slotTaken = lobbyPlayers.some(
-        (p) => p.playerSlot === slot && p.clientId !== localClientId
-      );
+      if (slotOwners[slotIndex]) {
+        return;
+      }
 
-      if (!slotTaken) {
-        setLocalPlayerSlot(slot);
-        updateStatus({
+      // Update local state immediately
+      setLocalPlayerSlot(slotIndex);
+      setSlotOwners((prev) => {
+        const newOwners = [...prev];
+        newOwners[slotIndex] = {
           clientId: localClientId,
           name: playerName,
-          playerSlot: slot,
-          isHost,
-          isReady: false,
-          isCreator,
-        });
-      }
+          isConnected: true,
+        };
+        return newOwners;
+      });
+
+      // Update presence
+      updateStatus({
+        clientId: localClientId,
+        name: playerName,
+        playerSlot: slotIndex,
+        isCreator,
+      });
+
+      // Broadcast to others
+      sendGameAction({
+        type: 'CLAIM_SLOT',
+        slotIndex,
+        clientId: localClientId,
+        name: playerName,
+        senderId: localClientId,
+      });
     },
-    [lobbyPlayers, localClientId, playerName, isHost, isCreator, updateStatus]
+    [slotOwners, localClientId, playerName, isCreator, updateStatus, sendGameAction]
   );
 
-  // Leave current slot
+  // Leave current slot (become spectator)
   const leaveSlot = useCallback(() => {
+    if (localPlayerSlot === null) return;
+
+    setSlotOwners((prev) => {
+      const newOwners = [...prev];
+      newOwners[localPlayerSlot] = null;
+      return newOwners;
+    });
     setLocalPlayerSlot(null);
+
     updateStatus({
       clientId: localClientId,
       name: playerName,
       playerSlot: null,
-      isHost,
-      isReady: false,
       isCreator,
     });
-  }, [localClientId, playerName, isHost, isCreator, updateStatus]);
-
-  // Set ready status
-  const setReady = useCallback(
-    (ready: boolean) => {
-      updateStatus({
-        clientId: localClientId,
-        name: playerName,
-        playerSlot: localPlayerSlot,
-        isHost,
-        isReady: ready,
-        isCreator,
-      });
-    },
-    [localClientId, playerName, localPlayerSlot, isHost, isCreator, updateStatus]
-  );
-
-  // Start the game (host only)
-  const startGame = useCallback(
-    (initialState: PlayerState[]) => {
-      if (isHost) {
-        channel.publish('game-start', { players: initialState });
-      }
-    },
-    [isHost, channel]
-  );
+  }, [localPlayerSlot, localClientId, playerName, isCreator, updateStatus]);
 
   return {
     isConnected,
     isHost,
+    slotOwners,
     localPlayerSlot,
     sendGameAction,
-    joinSlot,
+    claimSlot,
     leaveSlot,
-    setReady,
-    startGame,
   };
 }

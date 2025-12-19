@@ -76,6 +76,13 @@ export interface LobbyPlayer {
   isCreator: boolean; // true if this client created the room
 }
 
+// Slot ownership for multiplayer - tracks who owns each quadrant
+export interface SlotOwner {
+  clientId: string;
+  name: string;
+  isConnected: boolean;
+}
+
 // Base action with senderId for echo filtering
 interface BaseAction {
   senderId: string;
@@ -89,5 +96,7 @@ export type GameAction =
   | (BaseAction & { type: 'DAMAGE_ALL_OTHERS'; sourcePlayerIndex: number; damage: number })
   | (BaseAction & { type: 'UNDO_DAMAGE_ALL_OTHERS' })
   | (BaseAction & { type: 'RESET_GAME' })
-  | (BaseAction & { type: 'FULL_STATE_SYNC'; players: PlayerState[] });
+  | (BaseAction & { type: 'FULL_STATE_SYNC'; players: PlayerState[]; slotOwners: (SlotOwner | null)[] })
+  | (BaseAction & { type: 'CLAIM_SLOT'; slotIndex: number; clientId: string; name: string })
+  | (BaseAction & { type: 'REQUEST_STATE_SYNC' });
 

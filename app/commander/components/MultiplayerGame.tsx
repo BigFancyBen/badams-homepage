@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
-import { PlayerState, GameAction } from '../types';
+import { PlayerState, GameAction, SlotOwner } from '../types';
 import { useMultiplayer } from '../hooks/useMultiplayer';
 import { generateAbbreviations } from '../utils';
 import { useMobileDetection } from '../hooks/useMobileDetection';
@@ -9,18 +9,32 @@ import { useHistoryManagement } from '../hooks/useHistoryManagement';
 import { PlayerQuadrant } from './PlayerQuadrant';
 import { GameMenu } from './GameMenu';
 
+// Default player states
+const DEFAULT_PLAYERS: PlayerState[] = [
+  { life: 40, commanderDamage: [0, 0, 0], rotation: 0, name: 'Player 1', history: [], poison: 0, isDead: false },
+  { life: 40, commanderDamage: [0, 0, 0], rotation: 0, name: 'Player 2', history: [], poison: 0, isDead: false },
+  { life: 40, commanderDamage: [0, 0, 0], rotation: 0, name: 'Player 3', history: [], poison: 0, isDead: false },
+  { life: 40, commanderDamage: [0, 0, 0], rotation: 0, name: 'Player 4', history: [], poison: 0, isDead: false },
+];
+
+// Slot colors matching the Commander design
+const SLOT_COLORS = [
+  { bg: 'bg-[#991b1b]', text: 'Player 1' }, // Red
+  { bg: 'bg-[#1e40af]', text: 'Player 2' }, // Blue
+  { bg: 'bg-[#166534]', text: 'Player 3' }, // Green
+  { bg: 'bg-[#a16207]', text: 'Player 4' }, // Yellow/Amber
+];
+
 interface MultiplayerGameProps {
   roomCode: string;
   localClientId: string;
   playerName: string;
   isCreator: boolean;
-  initialPlayers: PlayerState[];
-  localPlayerSlot: number | null; // null for spectators
   onLeaveGame: () => void;
 }
 
 export function MultiplayerGame(props: MultiplayerGameProps) {
-  const { roomCode, localClientId, playerName, isCreator, initialPlayers, onLeaveGame } = props;
+  const { roomCode, localClientId, playerName, isCreator, onLeaveGame } = props;
   const { isMobileLandscape, isMobilePortrait, isLandscape, isClient } = useMobileDetection();
   const {
     collapseLifeActions,
@@ -29,14 +43,13 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
     collapsePoisonActions,
   } = useHistoryManagement();
 
-  const [players, setPlayers] = useState<PlayerState[]>(initialPlayers);
+  const [players, setPlayers] = useState<PlayerState[]>(DEFAULT_PLAYERS);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [rotatingPlayer, setRotatingPlayer] = useState<number | null>(null);
   const [undoStack, setUndoStack] = useState<{ sourcePlayerIndex: number; affectedPlayers: { playerIndex: number; lifeChange: number }[]; timestamp: number }[]>([]);
-  // Spectators (null slot) default to overview, players default to controller
-  const isSpectator = props.localPlayerSlot === null;
-  const [viewMode, setViewMode] = useState<'controller' | 'overview'>(isSpectator ? 'overview' : 'controller');
+  const [viewMode, setViewMode] = useState<'controller' | 'overview'>('overview');
+  const [pendingSyncRequest, setPendingSyncRequest] = useState<string | null>(null);
 
   // Wake lock state
   const [wakeLockSentinel, setWakeLockSentinel] = useState<WakeLockSentinel | null>(null);
@@ -120,26 +133,64 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
         );
         setUndoStack([]);
         break;
+      case 'CLAIM_SLOT':
+        // Update the player name for the claimed slot
+        setPlayers((prev) =>
+          prev.map((player, index) =>
+            index === action.slotIndex
+              ? { ...player, name: action.name }
+              : player
+          )
+        );
+        break;
+      case 'REQUEST_STATE_SYNC':
+        // Mark that someone requested a sync - host will respond via useEffect
+        setPendingSyncRequest(action.senderId);
+        break;
     }
   }, [localClientId]);
 
-  const handlePlayersUpdate = useCallback(() => {
-    // Not used during game
-  }, []);
-
-  const handleGameStartReceived = useCallback(() => {
-    // Already in game
-  }, []);
-
-  const { isConnected, isHost, sendGameAction } = useMultiplayer({
+  const { isConnected, isHost, slotOwners, localPlayerSlot, sendGameAction, claimSlot } = useMultiplayer({
     roomCode,
     localClientId,
     playerName,
     isCreator,
     onGameAction: handleGameAction,
-    onPlayersUpdate: handlePlayersUpdate,
-    onGameStart: handleGameStartReceived,
   });
+
+  // Switch to controller mode when claiming a slot
+  useEffect(() => {
+    if (localPlayerSlot !== null) {
+      setViewMode('controller');
+    }
+  }, [localPlayerSlot]);
+
+  // Host responds to state sync requests
+  useEffect(() => {
+    if (pendingSyncRequest && isHost) {
+      sendGameAction({
+        type: 'FULL_STATE_SYNC',
+        players,
+        slotOwners,
+        senderId: localClientId,
+      });
+      setPendingSyncRequest(null);
+    }
+  }, [pendingSyncRequest, isHost, players, slotOwners, localClientId, sendGameAction]);
+
+  // Request state sync when joining as non-creator
+  useEffect(() => {
+    if (isConnected && !isCreator) {
+      // Small delay to ensure we're fully connected
+      const timer = setTimeout(() => {
+        sendGameAction({
+          type: 'REQUEST_STATE_SYNC',
+          senderId: localClientId,
+        });
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [isConnected, isCreator, localClientId, sendGameAction]);
 
   // Wake lock support check
   useEffect(() => {
@@ -301,7 +352,6 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
     const changeText = damage > 0 ? `+${damage}` : `${damage}`;
     const actionType = damage > 0 ? 'positive' : 'negative';
     const sourceName = players[playerIndex]?.name || `P${playerIndex + 1}`;
-    const timestamp = Date.now();
 
     const affectedPlayers: Array<{ playerIndex: number; lifeChange: number }> = [];
 
@@ -323,7 +373,7 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
       })
     );
 
-    setUndoStack((prev) => [{ sourcePlayerIndex: playerIndex, affectedPlayers, timestamp }, ...prev]);
+    setUndoStack((prev) => [{ sourcePlayerIndex: playerIndex, affectedPlayers, timestamp: Date.now() }, ...prev]);
     broadcastAction({ type: 'DAMAGE_ALL_OTHERS', sourcePlayerIndex: playerIndex, damage });
   }, [players, collapseLifeActionsWithFrom, broadcastAction]);
 
@@ -379,7 +429,53 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
     );
   }, []);
 
-  const localPlayerSlot = props.localPlayerSlot;
+  const handleClaimSlot = useCallback((slotIndex: number) => {
+    claimSlot(slotIndex);
+    // Update local player name immediately
+    setPlayers((prev) =>
+      prev.map((player, index) =>
+        index === slotIndex ? { ...player, name: playerName } : player
+      )
+    );
+  }, [claimSlot, playerName]);
+
+  const isSpectator = localPlayerSlot === null;
+
+  // Render unclaimed slot placeholder
+  const renderUnclaimedSlot = (slotIndex: number, gridIndex: number) => {
+    const color = SLOT_COLORS[slotIndex];
+    const positions = [
+      { top: 0, left: 0 },      // 0 = top-left
+      { top: 0, left: '50%' },  // 1 = top-right
+      { top: '50%', left: '50%' }, // 2 = bottom-right (grid index 3)
+      { top: '50%', left: 0 },  // 3 = bottom-left (grid index 2)
+    ];
+    const pos = positions[gridIndex];
+
+    return (
+      <div
+        key={gridIndex}
+        className={`absolute w-1/2 h-1/2 ${color.bg} opacity-40 flex items-center justify-center cursor-pointer hover:opacity-60 transition-opacity`}
+        style={{ top: pos.top, left: pos.left }}
+        onClick={() => handleClaimSlot(slotIndex)}
+      >
+        <div className="text-center text-white/80">
+          <div className="text-lg font-bold mb-2">{color.text}</div>
+          <div className="text-sm">Tap to join</div>
+        </div>
+      </div>
+    );
+  };
+
+  // Render disconnected overlay
+  const renderDisconnectedOverlay = (slotOwner: SlotOwner) => (
+    <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-20 pointer-events-none">
+      <div className="text-white/60 text-center">
+        <div className="text-sm font-bold">{slotOwner.name}</div>
+        <div className="text-xs">Disconnected</div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="h-screen w-screen bg-[#1a1a1a] overflow-hidden relative select-none">
@@ -429,7 +525,7 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
         roomCode={roomCode}
       />
 
-      {/* Controller View - Full screen for local player only (not available for spectators) */}
+      {/* Controller View - Full screen for local player only */}
       {viewMode === 'controller' && localPlayerSlot !== null && (
         <div className="h-full w-full">
           <PlayerQuadrant
@@ -452,30 +548,56 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
         </div>
       )}
 
-      {/* Overview View - All 4 players, spectators see all read-only, players see their slot interactive */}
+      {/* Overview View - All 4 quadrants */}
       {(viewMode === 'overview' || isSpectator) && (
-        <div className="grid grid-cols-2 grid-rows-2 h-full w-full">
-          {[0, 1, 3, 2].map((playerIndex, gridIndex) => (
-            <div key={gridIndex} className="w-full h-full">
-              <PlayerQuadrant
-                player={players[playerIndex]}
-                playerIndex={playerIndex}
-                playerAbbrevs={playerAbbrevs}
-                isMobileLandscape={isMobileLandscape}
-                isMobilePortrait={isMobilePortrait}
-                rotatingPlayer={rotatingPlayer}
-                undoStackLength={undoStack.length}
-                readOnly={isSpectator || playerIndex !== localPlayerSlot}
-                onUpdateLife={updateLife}
-                onUpdatePoison={updatePoison}
-                onUpdateCommanderDamage={updateCommanderDamage}
-                onUpdateRotation={updateRotation}
-                onTogglePlayerDead={togglePlayerDead}
-                onDamageAllOthers={damageAllOthers}
-                onUndoDamageAllOthers={undoDamageAllOthers}
-              />
-            </div>
-          ))}
+        <div className="relative h-full w-full">
+          {/* Grid order: 0=top-left, 1=top-right, 3=bottom-left, 2=bottom-right */}
+          {[0, 1, 3, 2].map((playerIndex, gridIndex) => {
+            const slotOwner = slotOwners[playerIndex];
+            const isClaimed = slotOwner !== null;
+            const isDisconnected = slotOwner && !slotOwner.isConnected;
+
+            if (!isClaimed) {
+              // Unclaimed slot - show join button
+              return renderUnclaimedSlot(playerIndex, gridIndex);
+            }
+
+            // Claimed slot - show player quadrant
+            const positions = [
+              { top: 0, left: 0 },
+              { top: 0, left: '50%' },
+              { top: '50%', left: '50%' },
+              { top: '50%', left: 0 },
+            ];
+            const pos = positions[gridIndex];
+
+            return (
+              <div
+                key={gridIndex}
+                className="absolute w-1/2 h-1/2"
+                style={{ top: pos.top, left: pos.left }}
+              >
+                {isDisconnected && renderDisconnectedOverlay(slotOwner)}
+                <PlayerQuadrant
+                  player={players[playerIndex]}
+                  playerIndex={playerIndex}
+                  playerAbbrevs={playerAbbrevs}
+                  isMobileLandscape={isMobileLandscape}
+                  isMobilePortrait={isMobilePortrait}
+                  rotatingPlayer={rotatingPlayer}
+                  undoStackLength={undoStack.length}
+                  readOnly={isSpectator || playerIndex !== localPlayerSlot}
+                  onUpdateLife={updateLife}
+                  onUpdatePoison={updatePoison}
+                  onUpdateCommanderDamage={updateCommanderDamage}
+                  onUpdateRotation={updateRotation}
+                  onTogglePlayerDead={togglePlayerDead}
+                  onDamageAllOthers={damageAllOthers}
+                  onUndoDamageAllOthers={undoDamageAllOthers}
+                />
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
