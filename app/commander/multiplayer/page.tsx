@@ -1,9 +1,20 @@
 "use client";
 
-import { useState, useCallback, useEffect, Suspense } from 'react';
+import { useState, useCallback, useEffect, Suspense, useSyncExternalStore } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { AblyProvider } from '../providers/AblyProvider';
 import { MultiplayerGame } from '../components/MultiplayerGame';
+
+// Helper functions for useSyncExternalStore (SSR-safe isClient detection)
+function subscribeNoop(_callback: () => void) {
+  return () => {};
+}
+function getSnapshotClient() {
+  return true;
+}
+function getSnapshotServer() {
+  return false;
+}
 
 type GamePhase = 'menu' | 'game';
 
@@ -35,50 +46,76 @@ function MultiplayerContent() {
   const searchParams = useSearchParams();
   const [phase, setPhase] = useState<GamePhase>('menu');
   const [roomCode, setRoomCode] = useState<string>('');
-  const [joinCode, setJoinCode] = useState<string>('');
-  const [playerName, setPlayerName] = useState<string>('');
-  const [clientId, setClientId] = useState<string>('');
+
+  // Initialize joinCode from URL params using lazy initialization
+  const [joinCode, setJoinCode] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const joinParam = urlParams.get('join');
+      if (joinParam && joinParam.length === 6) {
+        return joinParam.toUpperCase();
+      }
+    }
+    return '';
+  });
+
+  // Initialize playerName from localStorage using lazy initialization
+  const [playerName, setPlayerName] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('commander-multiplayer-name') || '';
+    }
+    return '';
+  });
+
+  // Initialize clientId from localStorage using lazy initialization
+  const [clientId] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const sessionStr = localStorage.getItem(SESSION_KEY);
+      if (sessionStr) {
+        try {
+          const session: SavedSession = JSON.parse(sessionStr);
+          if (Date.now() - session.timestamp < SESSION_EXPIRY) {
+            return session.clientId;
+          }
+          localStorage.removeItem(SESSION_KEY);
+        } catch {
+          localStorage.removeItem(SESSION_KEY);
+        }
+      }
+      return generateClientId();
+    }
+    return '';
+  });
+
   const [error, setError] = useState<string>('');
   const [isCreator, setIsCreator] = useState<boolean>(false);
-  const [savedSession, setSavedSession] = useState<SavedSession | null>(null);
 
-  // Initialize client ID and check for saved session
-  useEffect(() => {
-    // Load saved player name
-    const savedName = localStorage.getItem('commander-multiplayer-name');
-    if (savedName) {
-      setPlayerName(savedName);
-    }
-
-    // Check for saved session
-    const sessionStr = localStorage.getItem(SESSION_KEY);
-    if (sessionStr) {
-      try {
-        const session: SavedSession = JSON.parse(sessionStr);
-        // Check if session is still valid (not expired)
-        if (Date.now() - session.timestamp < SESSION_EXPIRY) {
-          setSavedSession(session);
-          setClientId(session.clientId);
-        } else {
-          localStorage.removeItem(SESSION_KEY);
-          setClientId(generateClientId());
+  // Initialize savedSession from localStorage using lazy initialization
+  const [savedSession, setSavedSession] = useState<SavedSession | null>(() => {
+    if (typeof window !== 'undefined') {
+      const sessionStr = localStorage.getItem(SESSION_KEY);
+      if (sessionStr) {
+        try {
+          const session: SavedSession = JSON.parse(sessionStr);
+          if (Date.now() - session.timestamp < SESSION_EXPIRY) {
+            return session;
+          }
+        } catch {
+          // Invalid session
         }
-      } catch {
-        localStorage.removeItem(SESSION_KEY);
-        setClientId(generateClientId());
       }
-    } else {
-      setClientId(generateClientId());
     }
-  }, []);
+    return null;
+  });
 
-  // Check for join code in URL
+  // Update joinCode when URL params change (for deep links)
   useEffect(() => {
     const joinParam = searchParams.get('join');
-    if (joinParam && joinParam.length === 6) {
-      setJoinCode(joinParam.toUpperCase());
+    if (joinParam && joinParam.length === 6 && joinParam.toUpperCase() !== joinCode) {
+      // Defer to avoid synchronous setState in effect
+      setTimeout(() => setJoinCode(joinParam.toUpperCase()), 0);
     }
-  }, [searchParams]);
+  }, [searchParams, joinCode]);
 
   // Save player name
   useEffect(() => {
@@ -270,11 +307,8 @@ function MultiplayerContent() {
 }
 
 export default function MultiplayerPage() {
-  const [isClient, setIsClient] = useState(false);
-
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
+  // Use useSyncExternalStore for SSR-safe isClient detection
+  const isClient = useSyncExternalStore(subscribeNoop, getSnapshotClient, getSnapshotServer);
 
   if (!isClient) {
     return (

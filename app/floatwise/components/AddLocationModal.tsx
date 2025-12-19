@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   AddLocationModalProps,
   Location,
@@ -65,12 +65,8 @@ export function AddLocationModal({
     setLon(selected.lon.toString());
   };
 
-  // Update error when search error occurs
-  useEffect(() => {
-    if (searchError) {
-      setError(searchError);
-    }
-  }, [searchError]);
+  // Compute displayed error - use form error if set, otherwise search error
+  const displayedError = error || searchError;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -567,9 +563,9 @@ export function AddLocationModal({
             </div>
           )}
 
-          {error && (
+          {displayedError && (
             <div className="text-red-600 dark:text-red-400 text-sm bg-red-50 dark:bg-red-900 border border-red-200 dark:border-red-700 p-2">
-              {error}
+              {displayedError}
             </div>
           )}
 

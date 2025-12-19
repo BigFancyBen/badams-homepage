@@ -1,8 +1,19 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 import { MagicCard } from "../types";
 import { ParsedDecklist } from "../utils/decklistParser";
+
+// Helper functions for useSyncExternalStore (SSR-safe isLoaded detection)
+function subscribeNoop(_callback: () => void) {
+  return () => {};
+}
+function getSnapshotClient() {
+  return true;
+}
+function getSnapshotServer() {
+  return false;
+}
 
 interface CachedCard extends MagicCard {
   cachedAt: number;
@@ -33,11 +44,8 @@ function createCacheKey(cardName: string): string {
 }
 
 export function useLocalStorageCache() {
-  const [isLoaded, setIsLoaded] = useState(false);
-
-  useEffect(() => {
-    setIsLoaded(true);
-  }, []);
+  // Use useSyncExternalStore for SSR-safe client detection
+  const isLoaded = useSyncExternalStore(subscribeNoop, getSnapshotClient, getSnapshotServer);
 
   // Save decklist to localStorage
   const saveDecklist = useCallback((decklist: ParsedDecklist, originalInput: string) => {

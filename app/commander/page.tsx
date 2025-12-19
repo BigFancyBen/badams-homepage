@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef, useSyncExternalStore } from "react";
 import { PlayerState, UndoOperation } from './types';
 import { generateAbbreviations } from './utils';
 import { useMobileDetection } from './hooks/useMobileDetection';
@@ -8,6 +8,17 @@ import { useLocalStorage } from './hooks/useLocalStorage';
 import { useHistoryManagement } from './hooks/useHistoryManagement';
 import { PlayerQuadrant } from './components/PlayerQuadrant';
 import { GameMenu } from './components/GameMenu';
+
+// Helper functions for useSyncExternalStore (SSR-safe isClient detection)
+function subscribeNoop(_callback: () => void) {
+  return () => {};
+}
+function getSnapshotClient() {
+  return true;
+}
+function getSnapshotServer() {
+  return false;
+}
 
 function CommanderPageContent() {
   // Use custom hooks for mobile detection
@@ -167,32 +178,43 @@ function CommanderPageContent() {
     }
   }, [isWakeLockSupported, wakeLockSentinel]);
 
+  // Track if we've loaded initial state to avoid redundant updates
+  const hasLoadedInitialPlayers = useRef(false);
+
   // Handle orientation changes for mobile devices
   useEffect(() => {
     if (isClient && (isMobileLandscape || isMobilePortrait)) {
-      // Update all players to face correctly for mobile
-      setPlayers((prev) =>
-        prev.map((player) => ({
-          ...player,
-          rotation: isLandscape ? 90 : 0,
-        }))
-      );
+      // Defer state update to avoid synchronous setState in effect
+      setTimeout(() => {
+        setPlayers((prev) =>
+          prev.map((player) => ({
+            ...player,
+            rotation: isLandscape ? 90 : 0,
+          }))
+        );
+      }, 0);
     }
   }, [isClient, isMobileLandscape, isMobilePortrait, isLandscape]);
 
   // Load saved settings, player names, and game state on component mount
   useEffect(() => {
+    if (hasLoadedInitialPlayers.current) return;
+    hasLoadedInitialPlayers.current = true;
+
     const { initialPlayers, savedPlayerNames } = loadInitialState();
-    
+
     if (initialPlayers) {
-      setPlayers(initialPlayers);
+      // Defer state update to avoid synchronous setState in effect
+      setTimeout(() => setPlayers(initialPlayers), 0);
     } else if (savedPlayerNames) {
-      setPlayers((prev) =>
-        prev.map((player, index) => ({
-          ...player,
-          name: savedPlayerNames[index] || player.name,
-        }))
-      );
+      setTimeout(() => {
+        setPlayers((prev) =>
+          prev.map((player, index) => ({
+            ...player,
+            name: savedPlayerNames[index] || player.name,
+          }))
+        );
+      }, 0);
     }
   }, [loadInitialState]);
 
@@ -655,11 +677,8 @@ function CommanderPageContent() {
 
 // Default export with loading state for SSR compatibility
 export default function CommanderPage() {
-  const [isClient, setIsClient] = useState(false);
-
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
+  // Use useSyncExternalStore for SSR-safe isClient detection
+  const isClient = useSyncExternalStore(subscribeNoop, getSnapshotClient, getSnapshotServer);
 
   // Show loading state during hydration
   if (!isClient) {

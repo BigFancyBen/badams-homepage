@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { PlayerState, GameAction, SlotOwner } from '../types';
 import { useMultiplayer } from '../hooks/useMultiplayer';
 import { generateAbbreviations } from '../utils';
@@ -48,8 +48,8 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [rotatingPlayer, setRotatingPlayer] = useState<number | null>(null);
   const [undoStack, setUndoStack] = useState<{ sourcePlayerIndex: number; affectedPlayers: { playerIndex: number; lifeChange: number }[]; timestamp: number }[]>([]);
-  const [viewMode, setViewMode] = useState<'controller' | 'overview'>('overview');
-  const [pendingSyncRequest, setPendingSyncRequest] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'controller' | 'overview' | null>(null);
+  const pendingSyncRequestRef = useRef<string | null>(null);
 
   // Wake lock state
   const [wakeLockSentinel, setWakeLockSentinel] = useState<WakeLockSentinel | null>(null);
@@ -157,7 +157,7 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
         break;
       case 'REQUEST_STATE_SYNC':
         // Mark that someone requested a sync - host will respond via useEffect
-        setPendingSyncRequest(action.senderId);
+        pendingSyncRequestRef.current = action.senderId;
         break;
     }
   }, [localClientId]);
@@ -170,25 +170,28 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
     onGameAction: handleGameAction,
   });
 
-  // Switch to controller mode when claiming a slot
+  // Switch to controller mode when claiming a slot for the first time
+  const hasSetInitialViewMode = useRef(false);
   useEffect(() => {
-    if (localPlayerSlot !== null) {
-      setViewMode('controller');
+    if (localPlayerSlot !== null && !hasSetInitialViewMode.current) {
+      hasSetInitialViewMode.current = true;
+      // Use setTimeout to defer the state update to avoid synchronous setState in effect
+      setTimeout(() => setViewMode('controller'), 0);
     }
   }, [localPlayerSlot]);
 
   // Host responds to state sync requests
   useEffect(() => {
-    if (pendingSyncRequest && isHost) {
+    if (pendingSyncRequestRef.current && isHost) {
       sendGameAction({
         type: 'FULL_STATE_SYNC',
         players,
         slotOwners,
         senderId: localClientId,
       });
-      setPendingSyncRequest(null);
+      pendingSyncRequestRef.current = null;
     }
-  }, [pendingSyncRequest, isHost, players, slotOwners, localClientId, sendGameAction]);
+  }, [isHost, players, slotOwners, localClientId, sendGameAction]);
 
   // Periodic state sync from host (every 30 seconds)
   useEffect(() => {
@@ -471,6 +474,9 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
 
   const isSpectator = localPlayerSlot === null;
 
+  // Compute effective view mode (null means use default based on slot)
+  const effectiveViewMode = viewMode ?? (localPlayerSlot !== null ? 'controller' : 'overview');
+
   // Render unclaimed slot placeholder
   const renderUnclaimedSlot = (slotIndex: number, gridIndex: number) => {
     const color = SLOT_COLORS[slotIndex];
@@ -550,8 +556,8 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
         multiplayerMode
         onLeaveGame={onLeaveGame}
         isHost={isHost}
-        viewMode={isSpectator ? undefined : viewMode}
-        onToggleViewMode={isSpectator ? undefined : () => setViewMode(viewMode === 'controller' ? 'overview' : 'controller')}
+        viewMode={isSpectator ? undefined : effectiveViewMode}
+        onToggleViewMode={isSpectator ? undefined : () => setViewMode(effectiveViewMode === 'controller' ? 'overview' : 'controller')}
         roomCode={roomCode}
         connectedCount={connectedCount}
         latencyMs={latencyMs}
@@ -559,7 +565,7 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
       />
 
       {/* Controller View - Full screen for local player only */}
-      {viewMode === 'controller' && localPlayerSlot !== null && (
+      {effectiveViewMode === 'controller' && localPlayerSlot !== null && (
         <div className="h-full w-full">
           <PlayerQuadrant
             player={players[localPlayerSlot]}
@@ -582,7 +588,7 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
       )}
 
       {/* Overview View - All 4 quadrants */}
-      {(viewMode === 'overview' || isSpectator) && (
+      {(effectiveViewMode === 'overview' || isSpectator) && (
         <div className="relative h-full w-full">
           {/* Grid order: 0=top-left, 1=top-right, 3=bottom-left, 2=bottom-right */}
           {[0, 1, 3, 2].map((playerIndex, gridIndex) => {

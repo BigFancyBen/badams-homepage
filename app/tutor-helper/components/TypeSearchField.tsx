@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 
 // Comprehensive Magic card types from Scryfall
 const MAGIC_TYPES = {
@@ -567,25 +567,21 @@ export function TypeSearchField({
 }: TypeSearchFieldProps) {
   const [inputValue, setInputValue] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
-  const [filteredTypes, setFilteredTypes] = useState<typeof ALL_TYPES>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Filter types based on input
-  useEffect(() => {
+  // Filter types based on input using useMemo (derived state)
+  const filteredTypes = useMemo(() => {
     if (!inputValue.trim()) {
-      setFilteredTypes([]);
-      setShowDropdown(false);
-      return;
+      return [];
     }
-
-    const filtered = ALL_TYPES.filter(({ type }) =>
+    return ALL_TYPES.filter(({ type }) =>
       type.toLowerCase().includes(inputValue.toLowerCase())
     ).slice(0, 50); // Limit to 50 results for performance
-
-    setFilteredTypes(filtered);
-    setShowDropdown(filtered.length > 0);
   }, [inputValue]);
+
+  // Compute whether dropdown should be shown (derived from filteredTypes)
+  const shouldShowDropdown = showDropdown && filteredTypes.length > 0;
 
   // Handle clicking outside to close dropdown
   useEffect(() => {
@@ -661,15 +657,13 @@ export function TypeSearchField({
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           onKeyDown={handleKeyDown}
-          onFocus={() => {
-            if (filteredTypes.length > 0) setShowDropdown(true);
-          }}
+          onFocus={() => setShowDropdown(true)}
           placeholder="Search for card types"
           className="w-full px-3 py-2 bg-[#2a2a2a] text-[#e5e5e5] border border-[#404040] focus:border-[#4ade80] focus:ring-1 focus:ring-[#4ade80]/30 focus:outline-none transition-all duration-200 text-sm"
         />
 
         {/* Dropdown */}
-        {showDropdown && filteredTypes.length > 0 && (
+        {shouldShowDropdown && (
           <div
             ref={dropdownRef}
             className="absolute top-full left-0 right-0 z-50 mt-1 bg-[#2a2a2a] border border-[#404040] max-h-64 overflow-y-auto"
