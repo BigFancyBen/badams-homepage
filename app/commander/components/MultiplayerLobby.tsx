@@ -9,6 +9,7 @@ interface MultiplayerLobbyProps {
   roomCode: string;
   localClientId: string;
   playerName: string;
+  isCreator: boolean;
   onGameStart: (players: PlayerState[], localSlot: number | null) => void;
   onLeave: () => void;
 }
@@ -36,6 +37,7 @@ export function MultiplayerLobby({
   roomCode,
   localClientId,
   playerName,
+  isCreator,
   onGameStart,
   onLeave,
 }: MultiplayerLobbyProps) {
@@ -72,6 +74,7 @@ export function MultiplayerLobby({
     roomCode,
     localClientId,
     playerName,
+    isCreator,
     onGameAction: handleGameAction,
     onPlayersUpdate: handlePlayersUpdate,
     onGameStart: handleGameStartReceived,

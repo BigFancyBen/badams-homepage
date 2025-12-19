@@ -13,13 +13,14 @@ interface MultiplayerGameProps {
   roomCode: string;
   localClientId: string;
   playerName: string;
+  isCreator: boolean;
   initialPlayers: PlayerState[];
   localPlayerSlot: number | null; // null for spectators
   onLeaveGame: () => void;
 }
 
 export function MultiplayerGame(props: MultiplayerGameProps) {
-  const { roomCode, localClientId, playerName, initialPlayers, onLeaveGame } = props;
+  const { roomCode, localClientId, playerName, isCreator, initialPlayers, onLeaveGame } = props;
   // props.localPlayerSlot is available for future use (e.g., highlighting local player's quadrant)
   const { isMobileLandscape, isMobilePortrait, isLandscape, isClient } = useMobileDetection();
   const {
@@ -135,6 +136,7 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
     roomCode,
     localClientId,
     playerName,
+    isCreator,
     onGameAction: handleGameAction,
     onPlayersUpdate: handlePlayersUpdate,
     onGameStart: handleGameStartReceived,

@@ -73,6 +73,7 @@ export interface LobbyPlayer {
   playerSlot: number | null; // 0-3 for assigned slot, null for spectator
   isHost: boolean;
   isReady: boolean;
+  isCreator: boolean; // true if this client created the room
 }
 
 export interface GameRoom {

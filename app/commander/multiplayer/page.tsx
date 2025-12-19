@@ -22,6 +22,7 @@ function MultiplayerContent() {
   const [clientId] = useState<string>(() => generateClientId());
   const [gameState, setGameState] = useState<{ players: PlayerState[]; localSlot: number | null } | null>(null);
   const [error, setError] = useState<string>('');
+  const [isCreator, setIsCreator] = useState<boolean>(false);
 
   // Check for join code in URL
   useEffect(() => {
@@ -54,6 +55,7 @@ function MultiplayerContent() {
     setError('');
     const code = generateRoomCode();
     setRoomCode(code);
+    setIsCreator(true);
     setPhase('lobby');
   }, [playerName]);
 
@@ -81,6 +83,7 @@ function MultiplayerContent() {
     setRoomCode('');
     setJoinCode('');
     setGameState(null);
+    setIsCreator(false);
   }, []);
 
   // Render based on phase
@@ -160,6 +163,7 @@ function MultiplayerContent() {
           roomCode={roomCode}
           localClientId={clientId}
           playerName={playerName}
+          isCreator={isCreator}
           onGameStart={handleGameStart}
           onLeave={handleLeave}
         />
@@ -168,6 +172,7 @@ function MultiplayerContent() {
           roomCode={roomCode}
           localClientId={clientId}
           playerName={playerName}
+          isCreator={isCreator}
           initialPlayers={gameState.players}
           localPlayerSlot={gameState.localSlot}
           onLeaveGame={handleLeave}

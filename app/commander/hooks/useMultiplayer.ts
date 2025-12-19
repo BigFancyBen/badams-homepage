@@ -8,6 +8,7 @@ interface UseMultiplayerProps {
   roomCode: string;
   localClientId: string;
   playerName: string;
+  isCreator: boolean;
   onGameAction: (action: GameAction) => void;
   onPlayersUpdate: (players: LobbyPlayer[]) => void;
   onGameStart: (initialState: PlayerState[]) => void;
@@ -29,6 +30,7 @@ export function useMultiplayer({
   roomCode,
   localClientId,
   playerName,
+  isCreator,
   onGameAction,
   onPlayersUpdate,
   onGameStart,
@@ -63,8 +65,9 @@ export function useMultiplayer({
       clientId: localClientId,
       name: playerName,
       playerSlot: null,
-      isHost: false,
+      isHost: isCreator,
       isReady: false,
+      isCreator,
     }
   );
 
@@ -73,17 +76,12 @@ export function useMultiplayer({
 
   // Update lobby players when presence changes
   useEffect(() => {
-    // Sort by Ably's timestamp (when they actually joined) to determine host
-    const sortedByJoinTime = [...presenceData].sort((a, b) => {
-      // Ably provides timestamp in milliseconds for when presence was entered
-      return (a.timestamp || 0) - (b.timestamp || 0);
-    });
-
-    const hostClientId = sortedByJoinTime[0]?.data?.clientId;
+    // Host is the player who created the room (isCreator = true)
+    const creatorClientId = presenceData.find((member) => member.data.isCreator)?.data?.clientId;
 
     const updatedPlayers = presenceData.map((member) => ({
       ...member.data,
-      isHost: member.data.clientId === hostClientId,
+      isHost: member.data.clientId === creatorClientId,
     }));
 
     setLobbyPlayers(updatedPlayers);
@@ -122,10 +120,11 @@ export function useMultiplayer({
           playerSlot: slot,
           isHost,
           isReady: false,
+          isCreator,
         });
       }
     },
-    [lobbyPlayers, localClientId, playerName, isHost, updateStatus]
+    [lobbyPlayers, localClientId, playerName, isHost, isCreator, updateStatus]
   );
 
   // Leave current slot
@@ -137,8 +136,9 @@ export function useMultiplayer({
       playerSlot: null,
       isHost,
       isReady: false,
+      isCreator,
     });
-  }, [localClientId, playerName, isHost, updateStatus]);
+  }, [localClientId, playerName, isHost, isCreator, updateStatus]);
 
   // Set ready status
   const setReady = useCallback(
@@ -149,9 +149,10 @@ export function useMultiplayer({
         playerSlot: localPlayerSlot,
         isHost,
         isReady: ready,
+        isCreator,
       });
     },
-    [localClientId, playerName, localPlayerSlot, isHost, updateStatus]
+    [localClientId, playerName, localPlayerSlot, isHost, isCreator, updateStatus]
   );
 
   // Start the game (host only)
