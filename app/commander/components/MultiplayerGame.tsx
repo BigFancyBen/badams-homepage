@@ -34,6 +34,7 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [rotatingPlayer, setRotatingPlayer] = useState<number | null>(null);
   const [undoStack, setUndoStack] = useState<{ sourcePlayerIndex: number; affectedPlayers: { playerIndex: number; lifeChange: number }[]; timestamp: number }[]>([]);
+  const [viewMode, setViewMode] = useState<'controller' | 'overview'>('controller');
 
   // Wake lock state
   const [wakeLockSentinel, setWakeLockSentinel] = useState<WakeLockSentinel | null>(null);
@@ -381,13 +382,23 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
     );
   }, []);
 
+  const localPlayerSlot = props.localPlayerSlot;
+
   return (
     <div className="h-screen w-screen bg-[#1a1a1a] overflow-hidden relative select-none">
       {/* Connection indicator */}
       <div className="absolute top-1 right-2 z-30 flex items-center gap-1.5">
-        <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+        <div className={`w-2 h-2 ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
         <span className="text-[10px] text-white/50">{roomCode}</span>
       </div>
+
+      {/* View Toggle Button */}
+      <button
+        onClick={() => setViewMode(viewMode === 'controller' ? 'overview' : 'controller')}
+        className="absolute top-1 left-1/2 -translate-x-1/2 z-30 bg-[#2a2a2a] border border-[#404040] px-3 py-1 text-[10px] text-[#a3a3a3] hover:text-white hover:bg-[#3a3a3a] transition-all"
+      >
+        {viewMode === 'controller' ? 'View All' : 'My Controls'}
+      </button>
 
       {/* Menu Button */}
       <button
@@ -427,29 +438,54 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
         isHost={isHost}
       />
 
-      {/* 4 Player Quadrants */}
-      <div className="grid grid-cols-2 grid-rows-2 h-full w-full">
-        {[0, 1, 3, 2].map((playerIndex, gridIndex) => (
-          <div key={gridIndex} className="w-full h-full">
-            <PlayerQuadrant
-              player={players[playerIndex]}
-              playerIndex={playerIndex}
-              playerAbbrevs={playerAbbrevs}
-              isMobileLandscape={isMobileLandscape}
-              isMobilePortrait={isMobilePortrait}
-              rotatingPlayer={rotatingPlayer}
-              undoStackLength={undoStack.length}
-              onUpdateLife={updateLife}
-              onUpdatePoison={updatePoison}
-              onUpdateCommanderDamage={updateCommanderDamage}
-              onUpdateRotation={updateRotation}
-              onTogglePlayerDead={togglePlayerDead}
-              onDamageAllOthers={damageAllOthers}
-              onUndoDamageAllOthers={undoDamageAllOthers}
-            />
-          </div>
-        ))}
-      </div>
+      {/* Controller View - Full screen for local player only */}
+      {viewMode === 'controller' && (
+        <div className="h-full w-full">
+          <PlayerQuadrant
+            player={players[localPlayerSlot]}
+            playerIndex={localPlayerSlot}
+            playerAbbrevs={playerAbbrevs}
+            isMobileLandscape={isMobileLandscape}
+            isMobilePortrait={isMobilePortrait}
+            rotatingPlayer={rotatingPlayer}
+            undoStackLength={undoStack.length}
+            onUpdateLife={updateLife}
+            onUpdatePoison={updatePoison}
+            onUpdateCommanderDamage={updateCommanderDamage}
+            onUpdateRotation={updateRotation}
+            onTogglePlayerDead={togglePlayerDead}
+            onDamageAllOthers={damageAllOthers}
+            onUndoDamageAllOthers={undoDamageAllOthers}
+          />
+        </div>
+      )}
+
+      {/* Overview View - All 4 players, only local is interactive */}
+      {viewMode === 'overview' && (
+        <div className="grid grid-cols-2 grid-rows-2 h-full w-full">
+          {[0, 1, 3, 2].map((playerIndex, gridIndex) => (
+            <div key={gridIndex} className="w-full h-full">
+              <PlayerQuadrant
+                player={players[playerIndex]}
+                playerIndex={playerIndex}
+                playerAbbrevs={playerAbbrevs}
+                isMobileLandscape={isMobileLandscape}
+                isMobilePortrait={isMobilePortrait}
+                rotatingPlayer={rotatingPlayer}
+                undoStackLength={undoStack.length}
+                readOnly={playerIndex !== localPlayerSlot}
+                onUpdateLife={updateLife}
+                onUpdatePoison={updatePoison}
+                onUpdateCommanderDamage={updateCommanderDamage}
+                onUpdateRotation={updateRotation}
+                onTogglePlayerDead={togglePlayerDead}
+                onDamageAllOthers={damageAllOthers}
+                onUndoDamageAllOthers={undoDamageAllOthers}
+              />
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
