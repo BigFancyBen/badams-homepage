@@ -11,6 +11,7 @@ interface PlayerQuadrantProps {
   rotatingPlayer: number | null;
   undoStackLength: number;
   readOnly?: boolean;
+  fullScreen?: boolean;
   onUpdateLife: (playerIndex: number, change: number) => void;
   onUpdatePoison: (playerIndex: number, change: number) => void;
   onUpdateCommanderDamage: (
@@ -33,6 +34,7 @@ export function PlayerQuadrant({
   rotatingPlayer,
   undoStackLength,
   readOnly = false,
+  fullScreen = false,
   onUpdateLife,
   onUpdatePoison,
   onUpdateCommanderDamage,
@@ -128,7 +130,15 @@ export function PlayerQuadrant({
       <div
         className={`absolute ${player.isDead ? "opacity-50" : ""}`}
         style={{
-          ...(player.rotation === 90 || player.rotation === 270
+          ...(fullScreen
+            ? {
+                // Full screen mode for controller view
+                top: "0.5rem",
+                left: "0.5rem",
+                width: "calc(100vw - 1rem)",
+                height: "calc(100vh - 1rem)",
+              }
+            : player.rotation === 90 || player.rotation === 270
             ? {
                 // Landscape container (rotated): center within quadrant
                 top: "50%",

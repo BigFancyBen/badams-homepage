@@ -445,6 +445,7 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
             isMobilePortrait={isMobilePortrait}
             rotatingPlayer={rotatingPlayer}
             undoStackLength={undoStack.length}
+            fullScreen
             onUpdateLife={updateLife}
             onUpdatePoison={updatePoison}
             onUpdateCommanderDamage={updateCommanderDamage}
