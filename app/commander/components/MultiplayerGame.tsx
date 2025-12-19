@@ -21,7 +21,6 @@ interface MultiplayerGameProps {
 
 export function MultiplayerGame(props: MultiplayerGameProps) {
   const { roomCode, localClientId, playerName, isCreator, initialPlayers, onLeaveGame } = props;
-  // props.localPlayerSlot is available for future use (e.g., highlighting local player's quadrant)
   const { isMobileLandscape, isMobilePortrait, isLandscape, isClient } = useMobileDetection();
   const {
     collapseLifeActions,

@@ -76,15 +76,6 @@ export interface LobbyPlayer {
   isCreator: boolean; // true if this client created the room
 }
 
-export interface GameRoom {
-  roomCode: string;
-  hostClientId: string;
-  players: LobbyPlayer[];
-  gameState: PlayerState[] | null;
-  isGameStarted: boolean;
-  createdAt: number;
-}
-
 // Base action with senderId for echo filtering
 interface BaseAction {
   senderId: string;
@@ -99,14 +90,4 @@ export type GameAction =
   | (BaseAction & { type: 'UNDO_DAMAGE_ALL_OTHERS' })
   | (BaseAction & { type: 'RESET_GAME' })
   | (BaseAction & { type: 'FULL_STATE_SYNC'; players: PlayerState[] });
-
-export interface MultiplayerState {
-  isConnected: boolean;
-  roomCode: string | null;
-  lobbyPlayers: LobbyPlayer[];
-  localClientId: string;
-  localPlayerSlot: number | null;
-  isHost: boolean;
-  isGameStarted: boolean;
-}
 

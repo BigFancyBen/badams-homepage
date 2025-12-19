@@ -16,7 +16,6 @@ interface UseMultiplayerProps {
 
 interface UseMultiplayerReturn {
   isConnected: boolean;
-  lobbyPlayers: LobbyPlayer[];
   isHost: boolean;
   localPlayerSlot: number | null;
   sendGameAction: (action: GameAction) => void;
@@ -167,7 +166,6 @@ export function useMultiplayer({
 
   return {
     isConnected,
-    lobbyPlayers,
     isHost,
     localPlayerSlot,
     sendGameAction,
