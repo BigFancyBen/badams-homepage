@@ -14,7 +14,7 @@ interface MultiplayerGameProps {
   localClientId: string;
   playerName: string;
   initialPlayers: PlayerState[];
-  localPlayerSlot: number;
+  localPlayerSlot: number | null; // null for spectators
   onLeaveGame: () => void;
 }
 
@@ -34,7 +34,9 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [rotatingPlayer, setRotatingPlayer] = useState<number | null>(null);
   const [undoStack, setUndoStack] = useState<{ sourcePlayerIndex: number; affectedPlayers: { playerIndex: number; lifeChange: number }[]; timestamp: number }[]>([]);
-  const [viewMode, setViewMode] = useState<'controller' | 'overview'>('controller');
+  // Spectators (null slot) default to overview, players default to controller
+  const isSpectator = props.localPlayerSlot === null;
+  const [viewMode, setViewMode] = useState<'controller' | 'overview'>(isSpectator ? 'overview' : 'controller');
 
   // Wake lock state
   const [wakeLockSentinel, setWakeLockSentinel] = useState<WakeLockSentinel | null>(null);
@@ -392,14 +394,6 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
         <span className="text-[10px] text-white/50">{roomCode}</span>
       </div>
 
-      {/* View Toggle Button */}
-      <button
-        onClick={() => setViewMode(viewMode === 'controller' ? 'overview' : 'controller')}
-        className="absolute top-1 left-1/2 -translate-x-1/2 z-30 bg-[#2a2a2a] border border-[#404040] px-3 py-1 text-[10px] text-[#a3a3a3] hover:text-white hover:bg-[#3a3a3a] transition-all"
-      >
-        {viewMode === 'controller' ? 'View All' : 'My Controls'}
-      </button>
-
       {/* Menu Button */}
       <button
         onClick={() => setIsMenuOpen(true)}
@@ -436,10 +430,12 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
         multiplayerMode
         onLeaveGame={onLeaveGame}
         isHost={isHost}
+        viewMode={isSpectator ? undefined : viewMode}
+        onToggleViewMode={isSpectator ? undefined : () => setViewMode(viewMode === 'controller' ? 'overview' : 'controller')}
       />
 
-      {/* Controller View - Full screen for local player only */}
-      {viewMode === 'controller' && (
+      {/* Controller View - Full screen for local player only (not available for spectators) */}
+      {viewMode === 'controller' && localPlayerSlot !== null && (
         <div className="h-full w-full">
           <PlayerQuadrant
             player={players[localPlayerSlot]}
@@ -460,8 +456,8 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
         </div>
       )}
 
-      {/* Overview View - All 4 players, only local is interactive */}
-      {viewMode === 'overview' && (
+      {/* Overview View - All 4 players, spectators see all read-only, players see their slot interactive */}
+      {(viewMode === 'overview' || isSpectator) && (
         <div className="grid grid-cols-2 grid-rows-2 h-full w-full">
           {[0, 1, 3, 2].map((playerIndex, gridIndex) => (
             <div key={gridIndex} className="w-full h-full">
@@ -473,7 +469,7 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
                 isMobilePortrait={isMobilePortrait}
                 rotatingPlayer={rotatingPlayer}
                 undoStackLength={undoStack.length}
-                readOnly={playerIndex !== localPlayerSlot}
+                readOnly={isSpectator || playerIndex !== localPlayerSlot}
                 onUpdateLife={updateLife}
                 onUpdatePoison={updatePoison}
                 onUpdateCommanderDamage={updateCommanderDamage}

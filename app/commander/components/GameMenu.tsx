@@ -19,6 +19,8 @@ interface GameMenuProps {
   multiplayerMode?: boolean;
   onLeaveGame?: () => void;
   isHost?: boolean;
+  viewMode?: 'controller' | 'overview';
+  onToggleViewMode?: () => void;
 }
 
 export function GameMenu({
@@ -40,6 +42,8 @@ export function GameMenu({
   multiplayerMode = false,
   onLeaveGame,
   isHost = false,
+  viewMode,
+  onToggleViewMode,
 }: GameMenuProps) {
   if (!isOpen) return null;
 
@@ -121,6 +125,37 @@ export function GameMenu({
             </div>
           )}
         </div>
+
+        {/* View Mode Toggle - Only in multiplayer */}
+        {multiplayerMode && viewMode && onToggleViewMode && (
+          <div className="mb-4">
+            <h4 className="text-sm font-bold text-[#a3a3a3] mb-3 tracking-wide">
+              VIEW MODE:
+            </h4>
+            <div className="flex gap-2">
+              <button
+                onClick={onToggleViewMode}
+                className={`flex-1 text-sm font-bold py-3 px-4 transition-all duration-200 ${
+                  viewMode === 'controller'
+                    ? 'bg-[#16a34a] text-white'
+                    : 'bg-[#2a2a2a] hover:bg-[#3a3a3a] text-[#cccccc]'
+                }`}
+              >
+                My Controls
+              </button>
+              <button
+                onClick={onToggleViewMode}
+                className={`flex-1 text-sm font-bold py-3 px-4 transition-all duration-200 ${
+                  viewMode === 'overview'
+                    ? 'bg-[#16a34a] text-white'
+                    : 'bg-[#2a2a2a] hover:bg-[#3a3a3a] text-[#cccccc]'
+                }`}
+              >
+                View All Players
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Reset Confirmation Text */}
         <div className="text-center mb-2">

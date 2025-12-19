@@ -9,7 +9,7 @@ interface MultiplayerLobbyProps {
   roomCode: string;
   localClientId: string;
   playerName: string;
-  onGameStart: (players: PlayerState[], localSlot: number) => void;
+  onGameStart: (players: PlayerState[], localSlot: number | null) => void;
   onLeave: () => void;
 }
 
@@ -52,7 +52,8 @@ export function MultiplayerLobby({
   const handleGameStartReceived = useCallback(
     (players: PlayerState[]) => {
       const localPlayer = lobbyPlayers.find((p) => p.clientId === localClientId);
-      if (localPlayer && localPlayer.playerSlot !== null) {
+      if (localPlayer) {
+        // Pass playerSlot (null for spectators) to game
         onGameStart(players, localPlayer.playerSlot);
       }
     },

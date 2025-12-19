@@ -20,7 +20,7 @@ function MultiplayerContent() {
   const [joinCode, setJoinCode] = useState<string>('');
   const [playerName, setPlayerName] = useState<string>('');
   const [clientId] = useState<string>(() => generateClientId());
-  const [gameState, setGameState] = useState<{ players: PlayerState[]; localSlot: number } | null>(null);
+  const [gameState, setGameState] = useState<{ players: PlayerState[]; localSlot: number | null } | null>(null);
   const [error, setError] = useState<string>('');
 
   // Check for join code in URL
@@ -71,7 +71,7 @@ function MultiplayerContent() {
     setPhase('lobby');
   }, [playerName, joinCode]);
 
-  const handleGameStart = useCallback((players: PlayerState[], localSlot: number) => {
+  const handleGameStart = useCallback((players: PlayerState[], localSlot: number | null) => {
     setGameState({ players, localSlot });
     setPhase('game');
   }, []);
