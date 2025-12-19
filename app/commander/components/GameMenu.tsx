@@ -23,6 +23,8 @@ interface GameMenuProps {
   viewMode?: 'controller' | 'overview';
   onToggleViewMode?: () => void;
   roomCode?: string;
+  connectedCount?: number;
+  latencyMs?: number | null;
 }
 
 export function GameMenu({
@@ -47,6 +49,8 @@ export function GameMenu({
   viewMode,
   onToggleViewMode,
   roomCode,
+  connectedCount,
+  latencyMs,
 }: GameMenuProps) {
   if (!isOpen) return null;
 
@@ -65,6 +69,20 @@ export function GameMenu({
         {multiplayerMode && roomCode && (
           <div className="mb-6">
             <RoomCodeDisplay roomCode={roomCode} showQR={true} size="small" />
+          </div>
+        )}
+
+        {/* Connection Quality - Only in multiplayer */}
+        {multiplayerMode && connectedCount !== undefined && (
+          <div className="mb-4 flex items-center justify-between text-xs">
+            <span className="text-[#888888]">
+              {connectedCount} player{connectedCount !== 1 ? 's' : ''} connected
+            </span>
+            {latencyMs !== null && latencyMs !== undefined && (
+              <span className={`${latencyMs < 100 ? 'text-[#16a34a]' : latencyMs < 300 ? 'text-[#f59e0b]' : 'text-[#dc2626]'}`}>
+                {latencyMs}ms latency
+              </span>
+            )}
           </div>
         )}
 

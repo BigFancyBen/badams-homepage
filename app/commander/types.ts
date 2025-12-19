@@ -97,6 +97,8 @@ export type GameAction =
   | (BaseAction & { type: 'UNDO_DAMAGE_ALL_OTHERS' })
   | (BaseAction & { type: 'RESET_GAME' })
   | (BaseAction & { type: 'FULL_STATE_SYNC'; players: PlayerState[]; slotOwners: (SlotOwner | null)[] })
-  | (BaseAction & { type: 'CLAIM_SLOT'; slotIndex: number; clientId: string; name: string })
-  | (BaseAction & { type: 'REQUEST_STATE_SYNC' });
+  | (BaseAction & { type: 'CLAIM_SLOT'; slotIndex: number; clientId: string; name: string; timestamp?: number })
+  | (BaseAction & { type: 'REQUEST_STATE_SYNC' })
+  | (BaseAction & { type: 'PING'; targetClientId: string; timestamp: number })
+  | (BaseAction & { type: 'PONG'; targetClientId: string; originalTimestamp: number });
 

@@ -150,7 +150,7 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
     }
   }, [localClientId]);
 
-  const { isConnected, isHost, slotOwners, localPlayerSlot, sendGameAction, claimSlot } = useMultiplayer({
+  const { isConnected, isHost, slotOwners, localPlayerSlot, connectedCount, latencyMs, sendGameAction, claimSlot } = useMultiplayer({
     roomCode,
     localClientId,
     playerName,
@@ -177,6 +177,22 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
       setPendingSyncRequest(null);
     }
   }, [pendingSyncRequest, isHost, players, slotOwners, localClientId, sendGameAction]);
+
+  // Periodic state sync from host (every 30 seconds)
+  useEffect(() => {
+    if (!isHost || !isConnected) return;
+
+    const syncInterval = setInterval(() => {
+      sendGameAction({
+        type: 'FULL_STATE_SYNC',
+        players,
+        slotOwners,
+        senderId: localClientId,
+      });
+    }, 30000);
+
+    return () => clearInterval(syncInterval);
+  }, [isHost, isConnected, players, slotOwners, localClientId, sendGameAction]);
 
   // Request state sync when joining as non-creator
   useEffect(() => {
@@ -523,6 +539,8 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
         viewMode={isSpectator ? undefined : viewMode}
         onToggleViewMode={isSpectator ? undefined : () => setViewMode(viewMode === 'controller' ? 'overview' : 'controller')}
         roomCode={roomCode}
+        connectedCount={connectedCount}
+        latencyMs={latencyMs}
       />
 
       {/* Controller View - Full screen for local player only */}
