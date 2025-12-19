@@ -73,18 +73,17 @@ export function useMultiplayer({
 
   // Update lobby players when presence changes
   useEffect(() => {
-    const players = presenceData.map((member) => member.data);
-
-    // Determine host (first player to join)
-    const sortedPlayers = [...players].sort((a: LobbyPlayer, b: LobbyPlayer) => {
-      // Host is determined by clientId order (first to connect)
-      return a.clientId.localeCompare(b.clientId);
+    // Sort by Ably's timestamp (when they actually joined) to determine host
+    const sortedByJoinTime = [...presenceData].sort((a, b) => {
+      // Ably provides timestamp in milliseconds for when presence was entered
+      return (a.timestamp || 0) - (b.timestamp || 0);
     });
 
-    const hostClientId = sortedPlayers[0]?.clientId;
-    const updatedPlayers = players.map((p: LobbyPlayer) => ({
-      ...p,
-      isHost: p.clientId === hostClientId,
+    const hostClientId = sortedByJoinTime[0]?.data?.clientId;
+
+    const updatedPlayers = presenceData.map((member) => ({
+      ...member.data,
+      isHost: member.data.clientId === hostClientId,
     }));
 
     setLobbyPlayers(updatedPlayers);
