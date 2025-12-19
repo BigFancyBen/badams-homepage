@@ -89,11 +89,11 @@ interface BaseAction {
 }
 
 export type GameAction =
-  | (BaseAction & { type: 'UPDATE_LIFE'; playerIndex: number; change: number })
-  | (BaseAction & { type: 'UPDATE_POISON'; playerIndex: number; change: number })
-  | (BaseAction & { type: 'UPDATE_COMMANDER_DAMAGE'; playerIndex: number; sourceIndex: number; change: number })
+  | (BaseAction & { type: 'UPDATE_LIFE'; playerIndex: number; change: number; historyAction?: string })
+  | (BaseAction & { type: 'UPDATE_POISON'; playerIndex: number; change: number; historyAction?: string })
+  | (BaseAction & { type: 'UPDATE_COMMANDER_DAMAGE'; playerIndex: number; sourceIndex: number; change: number; historyAction?: string })
   | (BaseAction & { type: 'TOGGLE_DEAD'; playerIndex: number })
-  | (BaseAction & { type: 'DAMAGE_ALL_OTHERS'; sourcePlayerIndex: number; damage: number })
+  | (BaseAction & { type: 'DAMAGE_ALL_OTHERS'; sourcePlayerIndex: number; damage: number; historyActions?: { playerIndex: number; action: string }[] })
   | (BaseAction & { type: 'UNDO_DAMAGE_ALL_OTHERS' })
   | (BaseAction & { type: 'RESET_GAME' })
   | (BaseAction & { type: 'FULL_STATE_SYNC'; players: PlayerState[]; slotOwners: (SlotOwner | null)[] })
