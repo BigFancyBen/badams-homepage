@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { PlayerState, GameAction, SlotOwner } from '../types';
+import { PlayerState, GameAction, SlotOwner, HistoryEntry } from '../types';
 import { useMultiplayer } from '../hooks/useMultiplayer';
 import { generateAbbreviations } from '../utils';
 import { useMobileDetection } from '../hooks/useMobileDetection';
@@ -72,9 +72,11 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
           prev.map((player, index) => {
             if (index === action.playerIndex) {
               const newLife = Math.max(0, player.life + action.change);
-              // Also sync history if provided
-              if (action.historyAction) {
-                const newHistory = collapseLifeActions(action.historyAction, player.history);
+              // Apply pre-collapsed history entry if provided
+              if (action.historyEntry) {
+                const newHistory = action.historyMerge
+                  ? [action.historyEntry, ...player.history.slice(1)]
+                  : [action.historyEntry, ...player.history];
                 return { ...player, life: newLife, history: newHistory };
               }
               return { ...player, life: newLife };
@@ -88,9 +90,11 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
           prev.map((player, index) => {
             if (index === action.playerIndex) {
               const newPoison = Math.max(0, player.poison + action.change);
-              // Also sync history if provided
-              if (action.historyAction) {
-                const newHistory = collapsePoisonActions(action.historyAction, player.history);
+              // Apply pre-collapsed history entry if provided
+              if (action.historyEntry) {
+                const newHistory = action.historyMerge
+                  ? [action.historyEntry, ...player.history.slice(1)]
+                  : [action.historyEntry, ...player.history];
                 return { ...player, poison: newPoison, history: newHistory };
               }
               return { ...player, poison: newPoison };
@@ -108,9 +112,11 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
               const actualChange = newDamageValue - currentDamage;
               const newDamage = [...player.commanderDamage];
               newDamage[action.sourceIndex] = newDamageValue;
-              // Also sync history if provided
-              if (action.historyAction) {
-                const newHistory = collapseCommanderDamageActions(action.historyAction, player.history);
+              // Apply pre-collapsed history entry if provided
+              if (action.historyEntry) {
+                const newHistory = action.historyMerge
+                  ? [action.historyEntry, ...player.history.slice(1)]
+                  : [action.historyEntry, ...player.history];
                 return {
                   ...player,
                   commanderDamage: newDamage as [number, number, number],
@@ -140,10 +146,12 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
           prev.map((player, index) => {
             if (index !== action.sourcePlayerIndex) {
               const newLife = Math.max(0, player.life + action.damage);
-              // Also sync history if provided
-              const historyEntry = action.historyActions?.find(h => h.playerIndex === index);
-              if (historyEntry) {
-                const newHistory = collapseLifeActionsWithFrom(historyEntry.action, player.history, historyEntry.action.match(/from (.+)\|/)?.[1] || '');
+              // Apply pre-collapsed history entry if provided
+              const historyData = action.historyEntries?.find(h => h.playerIndex === index);
+              if (historyData) {
+                const newHistory = historyData.merge
+                  ? [historyData.entry, ...player.history.slice(1)]
+                  : [historyData.entry, ...player.history];
                 return { ...player, life: newLife, history: newHistory };
               }
               return { ...player, life: newLife };
@@ -193,7 +201,7 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
         setTimeout(() => setPendingSyncRequest(action.senderId), 0);
         break;
     }
-  }, [localClientId, collapseLifeActions, collapseLifeActionsWithFrom, collapseCommanderDamageActions, collapsePoisonActions]);
+  }, [localClientId]);
 
   const { isConnected, isHost, slotOwners, localPlayerSlot, connectedCount, latencyMs, sendGameAction, claimSlot } = useMultiplayer({
     roomCode,
@@ -302,55 +310,48 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
   }, [sendGameAction, localClientId]);
 
   // Action handlers (broadcast to all players)
-  const addHistory = useCallback((playerIndex: number, action: string) => {
-    setPlayers((prev) =>
-      prev.map((player, index) => {
-        if (index === playerIndex) {
-          let newHistory;
-          if (action.includes('life|') && !action.includes('from ')) {
-            newHistory = collapseLifeActions(action, player.history);
-          } else if (action.includes('life from ')) {
-            const match = action.match(/life from (.+)\|/);
-            const fromPlayer = match ? match[1] : '';
-            newHistory = collapseLifeActionsWithFrom(action, player.history, fromPlayer);
-          } else if (action.includes('commander damage from ') && action.includes('|commander')) {
-            newHistory = collapseCommanderDamageActions(action, player.history);
-          } else if (action.includes('poison|poison')) {
-            newHistory = collapsePoisonActions(action, player.history);
-          } else {
-            newHistory = [{ action, timestamp: Date.now() }, ...player.history];
-          }
-          return { ...player, history: newHistory };
-        }
-        return player;
-      })
-    );
-  }, [collapseLifeActions, collapseLifeActionsWithFrom, collapseCommanderDamageActions, collapsePoisonActions]);
-
   const updateLife = useCallback((playerIndex: number, change: number) => {
-    setPlayers((prev) =>
-      prev.map((player, index) =>
-        index === playerIndex ? { ...player, life: Math.max(0, player.life + change) } : player
-      )
-    );
     const changeText = change > 0 ? `+${change}` : `${change}`;
     const actionType = change > 0 ? 'positive' : 'negative';
     const historyAction = `${changeText} life|${actionType}`;
-    addHistory(playerIndex, historyAction);
-    broadcastAction({ type: 'UPDATE_LIFE', playerIndex, change, historyAction });
-  }, [addHistory, broadcastAction]);
 
-  const updatePoison = useCallback((playerIndex: number, change: number) => {
+    // Collapse locally first, then sync the collapsed result
+    const currentHistory = players[playerIndex].history;
+    const newHistory = collapseLifeActions(historyAction, currentHistory);
+    const historyMerge = newHistory.length === currentHistory.length;
+    const historyEntry = newHistory[0];
+
     setPlayers((prev) =>
       prev.map((player, index) =>
-        index === playerIndex ? { ...player, poison: Math.max(0, player.poison + change) } : player
+        index === playerIndex
+          ? { ...player, life: Math.max(0, player.life + change), history: newHistory }
+          : player
       )
     );
+
+    broadcastAction({ type: 'UPDATE_LIFE', playerIndex, change, historyEntry, historyMerge });
+  }, [players, collapseLifeActions, broadcastAction]);
+
+  const updatePoison = useCallback((playerIndex: number, change: number) => {
     const changeText = change > 0 ? `+${change}` : `${change}`;
     const historyAction = `${changeText} poison|poison`;
-    addHistory(playerIndex, historyAction);
-    broadcastAction({ type: 'UPDATE_POISON', playerIndex, change, historyAction });
-  }, [addHistory, broadcastAction]);
+
+    // Collapse locally first, then sync the collapsed result
+    const currentHistory = players[playerIndex].history;
+    const newHistory = collapsePoisonActions(historyAction, currentHistory);
+    const historyMerge = newHistory.length === currentHistory.length;
+    const historyEntry = newHistory[0];
+
+    setPlayers((prev) =>
+      prev.map((player, index) =>
+        index === playerIndex
+          ? { ...player, poison: Math.max(0, player.poison + change), history: newHistory }
+          : player
+      )
+    );
+
+    broadcastAction({ type: 'UPDATE_POISON', playerIndex, change, historyEntry, historyMerge });
+  }, [players, collapsePoisonActions, broadcastAction]);
 
   const updateCommanderDamage = useCallback((playerIndex: number, sourceIndex: number, change: number) => {
     const currentDamage = players[playerIndex].commanderDamage[sourceIndex];
@@ -358,6 +359,18 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
     const actualChange = newDamageValue - currentDamage;
 
     if (actualChange !== 0) {
+      const commanderSources = [0, 1, 2, 3].filter((i) => i !== playerIndex);
+      const actualSourceIndex = commanderSources[sourceIndex];
+      const changeText = actualChange > 0 ? `+${actualChange}` : `${actualChange}`;
+      const sourceName = players[actualSourceIndex]?.name || `P${actualSourceIndex + 1}`;
+      const historyAction = `${changeText} commander damage from ${sourceName}|commander`;
+
+      // Collapse locally first, then sync the collapsed result
+      const currentHistory = players[playerIndex].history;
+      const newHistory = collapseCommanderDamageActions(historyAction, currentHistory);
+      const historyMerge = newHistory.length === currentHistory.length;
+      const historyEntry = newHistory[0];
+
       setPlayers((prev) =>
         prev.map((player, index) => {
           if (index === playerIndex) {
@@ -367,21 +380,16 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
               ...player,
               commanderDamage: newDamage as [number, number, number],
               life: Math.max(0, player.life - actualChange),
+              history: newHistory,
             };
           }
           return player;
         })
       );
 
-      const commanderSources = [0, 1, 2, 3].filter((i) => i !== playerIndex);
-      const actualSourceIndex = commanderSources[sourceIndex];
-      const changeText = actualChange > 0 ? `+${actualChange}` : `${actualChange}`;
-      const sourceName = players[actualSourceIndex]?.name || `P${actualSourceIndex + 1}`;
-      const historyAction = `${changeText} commander damage from ${sourceName}|commander`;
-      addHistory(playerIndex, historyAction);
-      broadcastAction({ type: 'UPDATE_COMMANDER_DAMAGE', playerIndex, sourceIndex, change: actualChange, historyAction });
+      broadcastAction({ type: 'UPDATE_COMMANDER_DAMAGE', playerIndex, sourceIndex, change: actualChange, historyEntry, historyMerge });
     }
-  }, [players, addHistory, broadcastAction]);
+  }, [players, collapseCommanderDamageActions, broadcastAction]);
 
   const updateRotation = useCallback((playerIndex: number) => {
     if (rotatingPlayer === playerIndex) return;
@@ -420,14 +428,21 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
     const changeText = damage > 0 ? `+${damage}` : `${damage}`;
     const actionType = damage > 0 ? 'positive' : 'negative';
     const sourceName = players[playerIndex]?.name || `P${playerIndex + 1}`;
+    const fromPlayerAction = `${changeText} life from ${sourceName}|${actionType}`;
 
     const affectedPlayers: Array<{ playerIndex: number; lifeChange: number }> = [];
-    const historyActions: Array<{ playerIndex: number; action: string }> = [];
+    const historyEntries: Array<{ playerIndex: number; entry: HistoryEntry; merge: boolean }> = [];
+    const newHistories: { [key: number]: HistoryEntry[] } = {};
 
+    // Collapse locally first for each affected player
     [0, 1, 2, 3].forEach((index) => {
       if (index !== playerIndex) {
         affectedPlayers.push({ playerIndex: index, lifeChange: damage });
-        historyActions.push({ playerIndex: index, action: `${changeText} life from ${sourceName}|${actionType}` });
+        const currentHistory = players[index].history;
+        const newHistory = collapseLifeActionsWithFrom(fromPlayerAction, currentHistory, sourceName);
+        const historyMerge = newHistory.length === currentHistory.length;
+        newHistories[index] = newHistory;
+        historyEntries.push({ playerIndex: index, entry: newHistory[0], merge: historyMerge });
       }
     });
 
@@ -435,16 +450,14 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
       prev.map((player, index) => {
         if (index !== playerIndex) {
           const newLife = Math.max(0, player.life + damage);
-          const fromPlayerAction = `${changeText} life from ${sourceName}|${actionType}`;
-          const collapsedHistory = collapseLifeActionsWithFrom(fromPlayerAction, player.history, sourceName);
-          return { ...player, life: newLife, history: collapsedHistory };
+          return { ...player, life: newLife, history: newHistories[index] };
         }
         return player;
       })
     );
 
     setUndoStack((prev) => [{ sourcePlayerIndex: playerIndex, affectedPlayers, timestamp: Date.now() }, ...prev]);
-    broadcastAction({ type: 'DAMAGE_ALL_OTHERS', sourcePlayerIndex: playerIndex, damage, historyActions });
+    broadcastAction({ type: 'DAMAGE_ALL_OTHERS', sourcePlayerIndex: playerIndex, damage, historyEntries });
   }, [players, collapseLifeActionsWithFrom, broadcastAction]);
 
   const undoDamageAllOthers = useCallback(() => {
