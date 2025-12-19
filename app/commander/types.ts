@@ -98,6 +98,8 @@ export type GameAction =
   | (BaseAction & { type: 'RESET_GAME' })
   | (BaseAction & { type: 'FULL_STATE_SYNC'; players: PlayerState[]; slotOwners: (SlotOwner | null)[] })
   | (BaseAction & { type: 'CLAIM_SLOT'; slotIndex: number; clientId: string; name: string; timestamp?: number })
+  | (BaseAction & { type: 'UPDATE_NAME'; playerIndex: number; name: string })
+  | (BaseAction & { type: 'RESET_NAMES' })
   | (BaseAction & { type: 'REQUEST_STATE_SYNC' })
   | (BaseAction & { type: 'PING'; targetClientId: string; timestamp: number })
   | (BaseAction & { type: 'PONG'; targetClientId: string; originalTimestamp: number });

@@ -143,6 +143,18 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
           )
         );
         break;
+      case 'UPDATE_NAME':
+        setPlayers((prev) =>
+          prev.map((player, index) =>
+            index === action.playerIndex ? { ...player, name: action.name } : player
+          )
+        );
+        break;
+      case 'RESET_NAMES':
+        setPlayers((prev) =>
+          prev.map((player, index) => ({ ...player, name: `Player ${index + 1}` }))
+        );
+        break;
       case 'REQUEST_STATE_SYNC':
         // Mark that someone requested a sync - host will respond via useEffect
         setPendingSyncRequest(action.senderId);
@@ -420,7 +432,8 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
     setPlayers((prev) =>
       prev.map((player, index) => (index === playerIndex ? { ...player, name } : player))
     );
-  }, []);
+    broadcastAction({ type: 'UPDATE_NAME', playerIndex, name });
+  }, [broadcastAction]);
 
   const resetGame = useCallback(() => {
     setPlayers((prev) =>
@@ -443,7 +456,8 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
     setPlayers((prev) =>
       prev.map((player, index) => ({ ...player, name: `Player ${index + 1}` }))
     );
-  }, []);
+    broadcastAction({ type: 'RESET_NAMES' });
+  }, [broadcastAction]);
 
   const handleClaimSlot = useCallback((slotIndex: number) => {
     claimSlot(slotIndex);
@@ -541,6 +555,7 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
         roomCode={roomCode}
         connectedCount={connectedCount}
         latencyMs={latencyMs}
+        localPlayerSlot={localPlayerSlot}
       />
 
       {/* Controller View - Full screen for local player only */}

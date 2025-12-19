@@ -25,6 +25,7 @@ interface GameMenuProps {
   roomCode?: string;
   connectedCount?: number;
   latencyMs?: number | null;
+  localPlayerSlot?: number | null;
 }
 
 export function GameMenu({
@@ -51,6 +52,7 @@ export function GameMenu({
   roomCode,
   connectedCount,
   latencyMs,
+  localPlayerSlot,
 }: GameMenuProps) {
   if (!isOpen) return null;
 
@@ -86,33 +88,41 @@ export function GameMenu({
           </div>
         )}
 
-        {/* Player Names */}
+        {/* Player Names - In multiplayer controller mode, only show local player */}
         <div className="mb-4">
           <h4 className="text-sm font-bold text-[#a3a3a3] mb-3 tracking-wide">
-            PLAYER NAMES:
+            {multiplayerMode && viewMode === 'controller' ? 'YOUR NAME:' : 'PLAYER NAMES:'}
           </h4>
           <div className="space-y-2">
-            {players.map((player, index) => (
-              <div key={index} className="flex items-center gap-3">
-                <span className="text-xs text-[#888888] font-semibold w-16">
-                  P{index + 1}:
-                </span>
-                <input
-                  type="text"
-                  value={
-                    player.name === `Player ${index + 1}` ? "" : player.name
-                  }
-                  onChange={(e) =>
-                    onUpdatePlayerName(
-                      index,
-                      e.target.value || `Player ${index + 1}`
-                    )
-                  }
-                  className="flex-1 bg-[#2a2a2a] text-[#e5e5e5] border border-[#404040] focus:border-[#4ade80] focus:ring-1 focus:ring-[#4ade80]/30 focus:outline-none transition-all duration-200 px-3 py-2 text-sm font-medium"
-                  placeholder={`Player ${index + 1}`}
-                />
-              </div>
-            ))}
+            {players.map((player, index) => {
+              // In multiplayer controller mode, only show local player's name
+              if (multiplayerMode && viewMode === 'controller' && index !== localPlayerSlot) {
+                return null;
+              }
+              return (
+                <div key={index} className="flex items-center gap-3">
+                  {!(multiplayerMode && viewMode === 'controller') && (
+                    <span className="text-xs text-[#888888] font-semibold w-16">
+                      P{index + 1}:
+                    </span>
+                  )}
+                  <input
+                    type="text"
+                    value={
+                      player.name === `Player ${index + 1}` ? "" : player.name
+                    }
+                    onChange={(e) =>
+                      onUpdatePlayerName(
+                        index,
+                        e.target.value || `Player ${index + 1}`
+                      )
+                    }
+                    className="flex-1 bg-[#2a2a2a] text-[#e5e5e5] border border-[#404040] focus:border-[#4ade80] focus:ring-1 focus:ring-[#4ade80]/30 focus:outline-none transition-all duration-200 px-3 py-2 text-sm font-medium"
+                    placeholder={`Player ${index + 1}`}
+                  />
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -206,8 +216,8 @@ export function GameMenu({
               Leave Game
             </button>
             {isHost && (
-              <p className="text-xs text-[#f97316] mt-2 text-center">
-                As the host, leaving will end the game for all players
+              <p className="text-xs text-[#888888] mt-2 text-center">
+                Another player will become host when you leave
               </p>
             )}
           </div>
