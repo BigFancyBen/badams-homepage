@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { PlayerState } from '../types';
 import { AblyProvider } from '../providers/AblyProvider';
 import { MultiplayerLobby, generateRoomCode } from '../components/MultiplayerLobby';
@@ -13,6 +14,7 @@ function generateClientId(): string {
 }
 
 function MultiplayerContent() {
+  const searchParams = useSearchParams();
   const [phase, setPhase] = useState<GamePhase>('menu');
   const [roomCode, setRoomCode] = useState<string>('');
   const [joinCode, setJoinCode] = useState<string>('');
@@ -20,6 +22,14 @@ function MultiplayerContent() {
   const [clientId] = useState<string>(() => generateClientId());
   const [gameState, setGameState] = useState<{ players: PlayerState[]; localSlot: number } | null>(null);
   const [error, setError] = useState<string>('');
+
+  // Check for join code in URL
+  useEffect(() => {
+    const joinParam = searchParams.get('join');
+    if (joinParam && joinParam.length === 6) {
+      setJoinCode(joinParam.toUpperCase());
+    }
+  }, [searchParams]);
 
   // Load saved player name
   useEffect(() => {
@@ -76,41 +86,41 @@ function MultiplayerContent() {
   // Render based on phase
   if (phase === 'menu') {
     return (
-      <div className="min-h-screen bg-[#1a1a1a] text-white flex flex-col items-center justify-center p-4">
-        <h1 className="text-3xl font-bold mb-2">Commander</h1>
-        <h2 className="text-xl text-gray-400 mb-8">Multiplayer</h2>
+      <div className="min-h-screen bg-[#1a1a1a] text-[#f5f5f5] flex flex-col items-center justify-center p-4">
+        <h1 className="text-2xl font-bold text-[#ffffff] tracking-wide mb-1">Commander</h1>
+        <h2 className="text-lg text-[#888888] mb-8">Multiplayer</h2>
 
         {/* Name Input */}
         <div className="w-full max-w-sm mb-6">
-          <label className="block text-sm text-gray-400 mb-2">Your Name</label>
+          <label className="block text-xs text-[#888888] mb-2 font-bold">YOUR NAME</label>
           <input
             type="text"
             value={playerName}
             onChange={(e) => setPlayerName(e.target.value)}
             placeholder="Enter your name"
-            className="w-full bg-gray-800 text-white border border-gray-600 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500"
+            className="w-full bg-[#222222] text-[#ffffff] border border-[#333333] px-4 py-3 focus:outline-none focus:border-[#666666] placeholder-[#666666]"
             maxLength={20}
           />
         </div>
 
         {/* Error Message */}
         {error && (
-          <div className="text-red-500 text-sm mb-4">{error}</div>
+          <div className="text-[#dc2626] text-xs mb-4 font-bold">{error}</div>
         )}
 
         {/* Create Room */}
         <button
           onClick={handleCreateRoom}
-          className="w-full max-w-sm bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-6 rounded-lg mb-4 transition-colors"
+          className="w-full max-w-sm bg-[#166534] hover:bg-[#16a34a] text-[#ffffff] font-bold py-3 px-6 mb-4 transition-all"
         >
           Create Room
         </button>
 
         {/* Or Divider */}
         <div className="flex items-center w-full max-w-sm mb-4">
-          <div className="flex-1 h-px bg-gray-600" />
-          <span className="px-4 text-gray-500 text-sm">or</span>
-          <div className="flex-1 h-px bg-gray-600" />
+          <div className="flex-1 h-px bg-[#333333]" />
+          <span className="px-4 text-[#666666] text-xs">or</span>
+          <div className="flex-1 h-px bg-[#333333]" />
         </div>
 
         {/* Join Room */}
@@ -119,13 +129,13 @@ function MultiplayerContent() {
             type="text"
             value={joinCode}
             onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-            placeholder="Enter room code"
-            className="w-full bg-gray-800 text-white border border-gray-600 rounded-lg px-4 py-3 mb-2 focus:outline-none focus:border-green-500 text-center font-mono text-lg tracking-wider"
+            placeholder="ENTER ROOM CODE"
+            className="w-full bg-[#222222] text-[#ffffff] border border-[#333333] px-4 py-3 mb-2 focus:outline-none focus:border-[#666666] text-center font-mono text-lg tracking-widest placeholder-[#666666]"
             maxLength={6}
           />
           <button
             onClick={handleJoinRoom}
-            className="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-3 px-6 rounded-lg transition-colors"
+            className="w-full bg-[#1e40af] hover:bg-[#2563eb] text-[#ffffff] font-bold py-3 px-6 transition-all"
           >
             Join Room
           </button>
@@ -134,7 +144,7 @@ function MultiplayerContent() {
         {/* Back Link */}
         <a
           href="/commander"
-          className="mt-8 text-gray-500 hover:text-gray-400 text-sm transition-colors"
+          className="mt-8 text-[#666666] hover:text-[#888888] text-sm transition-colors"
         >
           ← Back to Single Player
         </a>
@@ -177,10 +187,14 @@ export default function MultiplayerPage() {
   if (!isClient) {
     return (
       <div className="w-screen h-screen bg-[#1a1a1a] flex items-center justify-center">
-        <div className="text-[#cccccc] text-lg">Loading Multiplayer...</div>
+        <div className="text-[#888888] text-sm">Loading...</div>
       </div>
     );
   }
 
-  return <MultiplayerContent />;
+  return (
+    <Suspense fallback={<div className="w-screen h-screen bg-[#1a1a1a] flex items-center justify-center"><div className="text-[#888888] text-sm">Loading...</div></div>}>
+      <MultiplayerContent />
+    </Suspense>
+  );
 }

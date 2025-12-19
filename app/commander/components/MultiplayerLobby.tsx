@@ -3,6 +3,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import { LobbyPlayer, PlayerState } from '../types';
 import { useMultiplayer } from '../hooks/useMultiplayer';
+import { RoomCodeDisplay } from './RoomCodeDisplay';
 
 interface MultiplayerLobbyProps {
   roomCode: string;
@@ -12,11 +13,12 @@ interface MultiplayerLobbyProps {
   onLeave: () => void;
 }
 
-const PLAYER_COLORS = [
-  'bg-red-600',
-  'bg-blue-600',
-  'bg-green-600',
-  'bg-yellow-600',
+// Colors matching the Commander quadrant player colors
+const SLOT_COLORS = [
+  { bg: 'bg-[#991b1b]', hover: 'hover:bg-[#b91c1c]' }, // Red - Player 1
+  { bg: 'bg-[#1e40af]', hover: 'hover:bg-[#2563eb]' }, // Blue - Player 2
+  { bg: 'bg-[#166534]', hover: 'hover:bg-[#16a34a]' }, // Green - Player 3
+  { bg: 'bg-[#a16207]', hover: 'hover:bg-[#ca8a04]' }, // Yellow/Amber - Player 4
 ];
 
 const PLAYER_SLOT_NAMES = ['Player 1', 'Player 2', 'Player 3', 'Player 4'];
@@ -80,7 +82,6 @@ export function MultiplayerLobby({
   );
 
   const canStartGame = useMemo(() => {
-    // At least 2 players in slots and all are ready
     const playersInSlots = lobbyPlayers.filter((p) => p.playerSlot !== null);
     return (
       playersInSlots.length >= 2 &&
@@ -92,7 +93,6 @@ export function MultiplayerLobby({
   const handleStartGame = useCallback(() => {
     if (!canStartGame) return;
 
-    // Create initial game state with players in their slots
     const initialPlayers: PlayerState[] = [0, 1, 2, 3].map((slotIndex) => {
       const player = lobbyPlayers.find((p) => p.playerSlot === slotIndex);
       return {
@@ -114,47 +114,44 @@ export function MultiplayerLobby({
   };
 
   return (
-    <div className="min-h-screen bg-[#1a1a1a] text-white p-4 flex flex-col items-center justify-center">
+    <div className="min-h-screen bg-[#1a1a1a] text-[#f5f5f5] p-4 flex flex-col items-center justify-center">
       {/* Connection Status */}
-      <div className="absolute top-4 right-4 flex items-center gap-2">
+      <div className="absolute top-2 right-2 flex items-center gap-2">
         <div
-          className={`w-3 h-3 rounded-full ${
-            isConnected ? 'bg-green-500' : 'bg-red-500'
-          }`}
+          className={`w-2 h-2 ${isConnected ? 'bg-[#22c55e]' : 'bg-[#dc2626]'}`}
         />
-        <span className="text-sm text-gray-400">
+        <span className="text-xs text-[#888888]">
           {isConnected ? 'Connected' : 'Connecting...'}
         </span>
       </div>
 
-      {/* Room Code */}
-      <div className="mb-8 text-center">
-        <h1 className="text-2xl font-bold mb-2">Commander Lobby</h1>
-        <div className="bg-gray-800 rounded-lg px-6 py-3 inline-block">
-          <span className="text-gray-400 text-sm">Room Code:</span>
-          <span className="text-3xl font-mono font-bold ml-2 tracking-wider">
-            {roomCode}
-          </span>
-        </div>
+      {/* Header */}
+      <div className="mb-6 text-center">
+        <h1 className="text-xl font-bold text-[#ffffff] tracking-wide mb-4">Commander Lobby</h1>
+
+        {/* Room Code Display with QR */}
+        <RoomCodeDisplay roomCode={roomCode} showQR={true} size="large" />
+
         {isHost && (
-          <div className="mt-2 text-yellow-500 text-sm">You are the host</div>
+          <div className="mt-2 text-[#c2410c] text-xs font-bold">HOST</div>
         )}
       </div>
 
       {/* Player Slots Grid */}
-      <div className="grid grid-cols-2 gap-4 mb-8 w-full max-w-md">
+      <div className="grid grid-cols-2 gap-2 mb-6 w-full max-w-sm">
         {[0, 1, 2, 3].map((slotIndex) => {
           const slotPlayer = getSlotPlayer(slotIndex);
           const isLocalSlot = localPlayerSlot === slotIndex;
           const isEmpty = !slotPlayer;
+          const colors = SLOT_COLORS[slotIndex];
 
           return (
             <div
               key={slotIndex}
-              className={`relative rounded-lg p-4 transition-all ${
+              className={`relative p-3 transition-all cursor-pointer border ${
                 isEmpty
-                  ? 'bg-gray-800 border-2 border-dashed border-gray-600 hover:border-gray-400 cursor-pointer'
-                  : `${PLAYER_COLORS[slotIndex]} ${isLocalSlot ? 'ring-2 ring-white' : ''}`
+                  ? 'bg-[#2a2a2a] border-dashed border-[#404040] hover:border-[#666666]'
+                  : `${colors.bg} ${colors.hover} border-transparent ${isLocalSlot ? 'ring-2 ring-[#ffffff]' : ''}`
               }`}
               onClick={() => {
                 if (isEmpty && localPlayerSlot === null) {
@@ -162,22 +159,22 @@ export function MultiplayerLobby({
                 }
               }}
             >
-              <div className="text-sm text-gray-300 mb-1">
+              <div className="text-xs text-[#a3a3a3] mb-1 font-bold">
                 {PLAYER_SLOT_NAMES[slotIndex]}
               </div>
 
               {slotPlayer ? (
                 <div className="flex flex-col">
-                  <span className="font-bold truncate">{slotPlayer.name}</span>
-                  <div className="flex items-center gap-2 mt-2">
+                  <span className="font-bold text-[#ffffff] truncate text-sm">{slotPlayer.name}</span>
+                  <div className="flex items-center gap-1 mt-1">
                     {slotPlayer.isHost && (
-                      <span className="text-xs bg-yellow-500 text-black px-2 py-0.5 rounded">
-                        Host
+                      <span className="text-[10px] bg-[#c2410c] text-[#ffffff] px-1.5 py-0.5 font-bold">
+                        HOST
                       </span>
                     )}
                     {slotPlayer.isReady && (
-                      <span className="text-xs bg-green-500 text-black px-2 py-0.5 rounded">
-                        Ready
+                      <span className="text-[10px] bg-[#166534] text-[#ffffff] px-1.5 py-0.5 font-bold">
+                        READY
                       </span>
                     )}
                   </div>
@@ -187,14 +184,14 @@ export function MultiplayerLobby({
                         e.stopPropagation();
                         leaveSlot();
                       }}
-                      className="mt-2 text-xs text-white/70 hover:text-white underline"
+                      className="mt-2 text-xs text-[#ffffff]/70 hover:text-[#ffffff] underline"
                     >
                       Leave Slot
                     </button>
                   )}
                 </div>
               ) : (
-                <div className="text-gray-500 text-sm">
+                <div className="text-[#666666] text-xs">
                   {localPlayerSlot === null ? 'Click to join' : 'Empty'}
                 </div>
               )}
@@ -205,16 +202,16 @@ export function MultiplayerLobby({
 
       {/* Spectators */}
       {lobbyPlayers.filter((p) => p.playerSlot === null).length > 0 && (
-        <div className="mb-6 text-center">
-          <div className="text-gray-400 text-sm mb-2">Spectators:</div>
-          <div className="flex gap-2 flex-wrap justify-center">
+        <div className="mb-4 text-center">
+          <div className="text-[#888888] text-xs mb-2 font-bold">SPECTATORS</div>
+          <div className="flex gap-1 flex-wrap justify-center">
             {lobbyPlayers
               .filter((p) => p.playerSlot === null)
               .map((p) => (
                 <span
                   key={p.clientId}
-                  className={`bg-gray-700 px-3 py-1 rounded text-sm ${
-                    p.clientId === localClientId ? 'ring-1 ring-white' : ''
+                  className={`bg-[#2a2a2a] border border-[#404040] px-2 py-1 text-xs ${
+                    p.clientId === localClientId ? 'ring-1 ring-[#ffffff]' : ''
                   }`}
                 >
                   {p.name}
@@ -225,10 +222,10 @@ export function MultiplayerLobby({
       )}
 
       {/* Action Buttons */}
-      <div className="flex gap-4">
+      <div className="flex gap-2">
         <button
           onClick={onLeave}
-          className="px-6 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+          className="px-4 py-2 bg-[#404040] hover:bg-[#4a4a4a] text-[#e5e5e5] text-sm font-bold transition-all"
         >
           Leave
         </button>
@@ -236,10 +233,10 @@ export function MultiplayerLobby({
         {localPlayerSlot !== null && (
           <button
             onClick={() => setReady(!localPlayer?.isReady)}
-            className={`px-6 py-2 rounded-lg transition-colors ${
+            className={`px-4 py-2 text-sm font-bold transition-all ${
               localPlayer?.isReady
-                ? 'bg-yellow-600 hover:bg-yellow-500'
-                : 'bg-green-600 hover:bg-green-500'
+                ? 'bg-[#c2410c] hover:bg-[#ea580c] text-[#ffffff]'
+                : 'bg-[#166534] hover:bg-[#16a34a] text-[#ffffff]'
             }`}
           >
             {localPlayer?.isReady ? 'Not Ready' : 'Ready'}
@@ -250,10 +247,10 @@ export function MultiplayerLobby({
           <button
             onClick={handleStartGame}
             disabled={!canStartGame}
-            className={`px-6 py-2 rounded-lg transition-colors ${
+            className={`px-4 py-2 text-sm font-bold transition-all ${
               canStartGame
-                ? 'bg-blue-600 hover:bg-blue-500'
-                : 'bg-gray-600 cursor-not-allowed'
+                ? 'bg-[#166534] hover:bg-[#16a34a] text-[#ffffff]'
+                : 'bg-[#374151] text-[#6b7280] cursor-not-allowed'
             }`}
           >
             Start Game
@@ -263,7 +260,7 @@ export function MultiplayerLobby({
 
       {/* Start Requirements */}
       {isHost && !canStartGame && (
-        <div className="mt-4 text-gray-400 text-sm text-center">
+        <div className="mt-3 text-[#888888] text-xs text-center">
           {lobbyPlayers.filter((p) => p.playerSlot !== null).length < 2
             ? 'Need at least 2 players to start'
             : 'Waiting for all players to be ready...'}
