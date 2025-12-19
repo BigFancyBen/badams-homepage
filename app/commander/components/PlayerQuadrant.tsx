@@ -10,6 +10,8 @@ interface PlayerQuadrantProps {
   isMobilePortrait: boolean;
   rotatingPlayer: number | null;
   undoStackLength: number;
+  readOnly?: boolean;
+  fullScreen?: boolean;
   onUpdateLife: (playerIndex: number, change: number) => void;
   onUpdatePoison: (playerIndex: number, change: number) => void;
   onUpdateCommanderDamage: (
@@ -31,6 +33,8 @@ export function PlayerQuadrant({
   isMobilePortrait,
   rotatingPlayer,
   undoStackLength,
+  readOnly = false,
+  fullScreen = false,
   onUpdateLife,
   onUpdatePoison,
   onUpdateCommanderDamage,
@@ -56,7 +60,7 @@ export function PlayerQuadrant({
         <div className="absolute inset-0 bg-black/60 z-20 pointer-events-none" />
       )}
       {/* Desktop-only fixed position buttons */}
-      {!isMobileLandscape && !isMobilePortrait && (
+      {!readOnly && !isMobileLandscape && !isMobilePortrait && (
         <>
           {/* Rotation Control - fixed position on desktop */}
           <button
@@ -126,7 +130,15 @@ export function PlayerQuadrant({
       <div
         className={`absolute ${player.isDead ? "opacity-50" : ""}`}
         style={{
-          ...(player.rotation === 90 || player.rotation === 270
+          ...(fullScreen
+            ? {
+                // Full screen mode for controller view
+                top: "0.5rem",
+                left: "0.5rem",
+                width: "calc(100vw - 1rem)",
+                height: "calc(100vh - 1rem)",
+              }
+            : player.rotation === 90 || player.rotation === 270
             ? {
                 // Landscape container (rotated): center within quadrant
                 top: "50%",
@@ -147,7 +159,7 @@ export function PlayerQuadrant({
       >
         <div className={`w-full h-full flex flex-col ${rotationClass}`}>
           {/* Mobile-only buttons that rotate with quadrant - positioned in corners */}
-          {(isMobileLandscape || isMobilePortrait) && (
+          {!readOnly && (isMobileLandscape || isMobilePortrait) && (
             <>
               {/* Rotation Control - top left corner */}
               <button
@@ -222,88 +234,90 @@ export function PlayerQuadrant({
             </div>
 
             {/* Life Control Buttons */}
-            <div
-              className={`flex flex-col w-full max-w-xs ${
-                isMobileLandscape || isMobilePortrait ? "gap-1" : "gap-2"
-              }`}
-            >
+            {!readOnly && (
               <div
-                className={`grid grid-cols-4 ${
+                className={`flex flex-col w-full max-w-xs ${
                   isMobileLandscape || isMobilePortrait ? "gap-1" : "gap-2"
                 }`}
               >
-                <button
-                  onClick={() => onUpdateLife(playerIndex, -5)}
-                  className={`bg-[#991b1b] hover:bg-[#b91c1c] active:bg-[#7f1d1d] text-white font-bold transition-all duration-150 touch-manipulation ${
-                    isMobileLandscape || isMobilePortrait
-                      ? "text-xs py-3 px-0 min-h-[40px]"
-                      : "text-sm py-4 px-2 min-h-[44px]"
+                <div
+                  className={`grid grid-cols-4 ${
+                    isMobileLandscape || isMobilePortrait ? "gap-1" : "gap-2"
                   }`}
                 >
-                  -5
-                </button>
-                <button
-                  onClick={() => onUpdateLife(playerIndex, -1)}
-                  className={`bg-[#b91c1c] hover:bg-[#dc2626] active:bg-[#991b1b] text-white font-bold transition-all duration-150 touch-manipulation ${
-                    isMobileLandscape || isMobilePortrait
-                      ? "text-xs py-3 px-0 min-h-[40px]"
-                      : "text-sm py-4 px-2 min-h-[44px]"
-                  }`}
-                >
-                  -1
-                </button>
-                <button
-                  onClick={() => onUpdateLife(playerIndex, 1)}
-                  className={`bg-[#166534] hover:bg-[#16a34a] active:bg-[#14532d] text-white font-bold transition-all duration-150 touch-manipulation ${
-                    isMobileLandscape || isMobilePortrait
-                      ? "text-xs py-3 px-0 min-h-[40px]"
-                      : "text-sm py-4 px-2 min-h-[44px]"
-                  }`}
-                >
-                  +1
-                </button>
-                <button
-                  onClick={() => onUpdateLife(playerIndex, 5)}
-                  className={`bg-[#14532d] hover:bg-[#166534] active:bg-[#052e16] text-white font-bold transition-all duration-150 touch-manipulation ${
-                    isMobileLandscape || isMobilePortrait
-                      ? "text-xs py-3 px-0 min-h-[40px]"
-                      : "text-sm py-4 px-2 min-h-[44px]"
-                  }`}
-                >
-                  +5
-                </button>
-              </div>
+                  <button
+                    onClick={() => onUpdateLife(playerIndex, -5)}
+                    className={`bg-[#991b1b] hover:bg-[#b91c1c] active:bg-[#7f1d1d] text-white font-bold transition-all duration-150 touch-manipulation ${
+                      isMobileLandscape || isMobilePortrait
+                        ? "text-xs py-3 px-0 min-h-[40px]"
+                        : "text-sm py-4 px-2 min-h-[44px]"
+                    }`}
+                  >
+                    -5
+                  </button>
+                  <button
+                    onClick={() => onUpdateLife(playerIndex, -1)}
+                    className={`bg-[#b91c1c] hover:bg-[#dc2626] active:bg-[#991b1b] text-white font-bold transition-all duration-150 touch-manipulation ${
+                      isMobileLandscape || isMobilePortrait
+                        ? "text-xs py-3 px-0 min-h-[40px]"
+                        : "text-sm py-4 px-2 min-h-[44px]"
+                    }`}
+                  >
+                    -1
+                  </button>
+                  <button
+                    onClick={() => onUpdateLife(playerIndex, 1)}
+                    className={`bg-[#166534] hover:bg-[#16a34a] active:bg-[#14532d] text-white font-bold transition-all duration-150 touch-manipulation ${
+                      isMobileLandscape || isMobilePortrait
+                        ? "text-xs py-3 px-0 min-h-[40px]"
+                        : "text-sm py-4 px-2 min-h-[44px]"
+                    }`}
+                  >
+                    +1
+                  </button>
+                  <button
+                    onClick={() => onUpdateLife(playerIndex, 5)}
+                    className={`bg-[#14532d] hover:bg-[#166534] active:bg-[#052e16] text-white font-bold transition-all duration-150 touch-manipulation ${
+                      isMobileLandscape || isMobilePortrait
+                        ? "text-xs py-3 px-0 min-h-[40px]"
+                        : "text-sm py-4 px-2 min-h-[44px]"
+                    }`}
+                  >
+                    +5
+                  </button>
+                </div>
 
-              {/* Damage All Others Button and Undo */}
-              <div
-                className={`flex ${
-                  isMobileLandscape || isMobilePortrait ? "gap-1" : "gap-2"
-                }`}
-              >
-                <button
-                  onClick={() => onDamageAllOthers(playerIndex, -1)}
-                  className={`flex-1 bg-[#c2410c] hover:bg-[#ea580c] active:bg-[#9a3412] text-white font-bold transition-all duration-150 touch-manipulation ${
-                    isMobileLandscape || isMobilePortrait
-                      ? "text-xs py-3 px-1 min-h-[40px]"
-                      : "text-sm py-4 px-3 min-h-[44px]"
+                {/* Damage All Others Button and Undo */}
+                <div
+                  className={`flex ${
+                    isMobileLandscape || isMobilePortrait ? "gap-1" : "gap-2"
                   }`}
                 >
-                  -1 to all others
-                </button>
-                <button
-                  onClick={onUndoDamageAllOthers}
-                  disabled={undoStackLength === 0}
-                  className={`bg-[#6b7280] hover:bg-[#9ca3af] active:bg-[#4b5563] disabled:bg-[#374151] disabled:text-[#6b7280] disabled:cursor-not-allowed text-white font-bold transition-all duration-150 touch-manipulation ${
-                    isMobileLandscape || isMobilePortrait
-                      ? "text-base py-3 px-2 min-h-[40px] min-w-[40px]"
-                      : "text-lg py-4 px-4 min-h-[44px] min-w-[44px]"
-                  }`}
-                  title="Undo last damage to all others"
-                >
-                  ↶
-                </button>
+                  <button
+                    onClick={() => onDamageAllOthers(playerIndex, -1)}
+                    className={`flex-1 bg-[#c2410c] hover:bg-[#ea580c] active:bg-[#9a3412] text-white font-bold transition-all duration-150 touch-manipulation ${
+                      isMobileLandscape || isMobilePortrait
+                        ? "text-xs py-3 px-1 min-h-[40px]"
+                        : "text-sm py-4 px-3 min-h-[44px]"
+                    }`}
+                  >
+                    -1 to all others
+                  </button>
+                  <button
+                    onClick={onUndoDamageAllOthers}
+                    disabled={undoStackLength === 0}
+                    className={`bg-[#6b7280] hover:bg-[#9ca3af] active:bg-[#4b5563] disabled:bg-[#374151] disabled:text-[#6b7280] disabled:cursor-not-allowed text-white font-bold transition-all duration-150 touch-manipulation ${
+                      isMobileLandscape || isMobilePortrait
+                        ? "text-base py-3 px-2 min-h-[40px] min-w-[40px]"
+                        : "text-lg py-4 px-4 min-h-[44px] min-w-[44px]"
+                    }`}
+                    title="Undo last damage to all others"
+                  >
+                    ↶
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* History */}
@@ -423,58 +437,60 @@ export function PlayerQuadrant({
                       {playerAbbrevs[sourceIndex]} {player.commanderDamage[i]}
                     </span>
                   </div>
-                  <div
-                    className={`flex justify-center items-stretch ${
-                      isMobileLandscape || isMobilePortrait
-                        ? "flex-col gap-1"
-                        : "gap-1"
-                    }`}
-                  >
-                    <button
-                      onClick={() => onUpdateCommanderDamage(playerIndex, i, 1)}
-                      className={`bg-[#166534] hover:bg-[#16a34a] active:bg-[#14532d] text-white text-xs font-bold transition-all duration-150 flex items-center justify-center flex-shrink-0 touch-manipulation ${
+                  {!readOnly && (
+                    <div
+                      className={`flex justify-center items-stretch ${
                         isMobileLandscape || isMobilePortrait
-                          ? "w-full h-6"
-                          : "w-8 h-8"
+                          ? "flex-col gap-1"
+                          : "gap-1"
                       }`}
                     >
-                      <svg
-                        width={
-                          isMobileLandscape || isMobilePortrait ? "10" : "14"
-                        }
-                        height={
-                          isMobileLandscape || isMobilePortrait ? "10" : "14"
-                        }
-                        viewBox="0 0 24 24"
-                        fill="currentColor"
+                      <button
+                        onClick={() => onUpdateCommanderDamage(playerIndex, i, 1)}
+                        className={`bg-[#166534] hover:bg-[#16a34a] active:bg-[#14532d] text-white text-xs font-bold transition-all duration-150 flex items-center justify-center flex-shrink-0 touch-manipulation ${
+                          isMobileLandscape || isMobilePortrait
+                            ? "w-full h-6"
+                            : "w-8 h-8"
+                        }`}
                       >
-                        <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={() =>
-                        onUpdateCommanderDamage(playerIndex, i, -1)
-                      }
-                      className={`bg-[#991b1b] hover:bg-[#b91c1c] active:bg-[#7f1d1d] text-white text-xs font-bold transition-all duration-150 flex items-center justify-center flex-shrink-0 touch-manipulation ${
-                        isMobileLandscape || isMobilePortrait
-                          ? "w-full h-6"
-                          : "w-8 h-8"
-                      }`}
-                    >
-                      <svg
-                        width={
-                          isMobileLandscape || isMobilePortrait ? "10" : "14"
+                        <svg
+                          width={
+                            isMobileLandscape || isMobilePortrait ? "10" : "14"
+                          }
+                          height={
+                            isMobileLandscape || isMobilePortrait ? "10" : "14"
+                          }
+                          viewBox="0 0 24 24"
+                          fill="currentColor"
+                        >
+                          <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={() =>
+                          onUpdateCommanderDamage(playerIndex, i, -1)
                         }
-                        height={
-                          isMobileLandscape || isMobilePortrait ? "10" : "14"
-                        }
-                        viewBox="0 0 24 24"
-                        fill="currentColor"
+                        className={`bg-[#991b1b] hover:bg-[#b91c1c] active:bg-[#7f1d1d] text-white text-xs font-bold transition-all duration-150 flex items-center justify-center flex-shrink-0 touch-manipulation ${
+                          isMobileLandscape || isMobilePortrait
+                            ? "w-full h-6"
+                            : "w-8 h-8"
+                        }`}
                       >
-                        <path d="M19 13H5v-2h14v2z" />
-                      </svg>
-                    </button>
-                  </div>
+                        <svg
+                          width={
+                            isMobileLandscape || isMobilePortrait ? "10" : "14"
+                          }
+                          height={
+                            isMobileLandscape || isMobilePortrait ? "10" : "14"
+                          }
+                          viewBox="0 0 24 24"
+                          fill="currentColor"
+                        >
+                          <path d="M19 13H5v-2h14v2z" />
+                        </svg>
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
 
@@ -516,56 +532,58 @@ export function PlayerQuadrant({
                     </span>
                   </div>
                 </div>
-                <div
-                  className={`flex justify-center items-stretch ${
-                    isMobileLandscape || isMobilePortrait
-                      ? "flex-col gap-1"
-                      : "gap-1"
-                  }`}
-                >
-                  <button
-                    onClick={() => onUpdatePoison(playerIndex, 1)}
-                    className={`bg-[#064e3b] hover:bg-[#065f46] active:bg-[#022c22] text-white text-xs font-bold transition-all duration-150 flex items-center justify-center flex-shrink-0 touch-manipulation ${
+                {!readOnly && (
+                  <div
+                    className={`flex justify-center items-stretch ${
                       isMobileLandscape || isMobilePortrait
-                        ? "w-full h-6"
-                        : "w-8 h-8"
+                        ? "flex-col gap-1"
+                        : "gap-1"
                     }`}
                   >
-                    <svg
-                      width={
-                        isMobileLandscape || isMobilePortrait ? "10" : "14"
-                      }
-                      height={
-                        isMobileLandscape || isMobilePortrait ? "10" : "14"
-                      }
-                      viewBox="0 0 24 24"
-                      fill="currentColor"
+                    <button
+                      onClick={() => onUpdatePoison(playerIndex, 1)}
+                      className={`bg-[#064e3b] hover:bg-[#065f46] active:bg-[#022c22] text-white text-xs font-bold transition-all duration-150 flex items-center justify-center flex-shrink-0 touch-manipulation ${
+                        isMobileLandscape || isMobilePortrait
+                          ? "w-full h-6"
+                          : "w-8 h-8"
+                      }`}
                     >
-                      <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
-                    </svg>
-                  </button>
-                  <button
-                    onClick={() => onUpdatePoison(playerIndex, -1)}
-                    className={`bg-[#991b1b] hover:bg-[#b91c1c] active:bg-[#7f1d1d] text-white text-xs font-bold transition-all duration-150 flex items-center justify-center flex-shrink-0 touch-manipulation ${
-                      isMobileLandscape || isMobilePortrait
-                        ? "w-full h-6"
-                        : "w-8 h-8"
-                    }`}
-                  >
-                    <svg
-                      width={
-                        isMobileLandscape || isMobilePortrait ? "10" : "14"
-                      }
-                      height={
-                        isMobileLandscape || isMobilePortrait ? "10" : "14"
-                      }
-                      viewBox="0 0 24 24"
-                      fill="currentColor"
+                      <svg
+                        width={
+                          isMobileLandscape || isMobilePortrait ? "10" : "14"
+                        }
+                        height={
+                          isMobileLandscape || isMobilePortrait ? "10" : "14"
+                        }
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                      >
+                        <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => onUpdatePoison(playerIndex, -1)}
+                      className={`bg-[#991b1b] hover:bg-[#b91c1c] active:bg-[#7f1d1d] text-white text-xs font-bold transition-all duration-150 flex items-center justify-center flex-shrink-0 touch-manipulation ${
+                        isMobileLandscape || isMobilePortrait
+                          ? "w-full h-6"
+                          : "w-8 h-8"
+                      }`}
                     >
-                      <path d="M19 13H5v-2h14v2z" />
-                    </svg>
-                  </button>
-                </div>
+                      <svg
+                        width={
+                          isMobileLandscape || isMobilePortrait ? "10" : "14"
+                        }
+                        height={
+                          isMobileLandscape || isMobilePortrait ? "10" : "14"
+                        }
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                      >
+                        <path d="M19 13H5v-2h14v2z" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
