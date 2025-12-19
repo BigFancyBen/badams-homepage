@@ -84,15 +84,20 @@ export interface GameRoom {
   createdAt: number;
 }
 
+// Base action with senderId for echo filtering
+interface BaseAction {
+  senderId: string;
+}
+
 export type GameAction =
-  | { type: 'UPDATE_LIFE'; playerIndex: number; change: number }
-  | { type: 'UPDATE_POISON'; playerIndex: number; change: number }
-  | { type: 'UPDATE_COMMANDER_DAMAGE'; playerIndex: number; sourceIndex: number; change: number }
-  | { type: 'TOGGLE_DEAD'; playerIndex: number }
-  | { type: 'DAMAGE_ALL_OTHERS'; sourcePlayerIndex: number; damage: number }
-  | { type: 'UNDO_DAMAGE_ALL_OTHERS' }
-  | { type: 'RESET_GAME' }
-  | { type: 'FULL_STATE_SYNC'; players: PlayerState[] };
+  | (BaseAction & { type: 'UPDATE_LIFE'; playerIndex: number; change: number })
+  | (BaseAction & { type: 'UPDATE_POISON'; playerIndex: number; change: number })
+  | (BaseAction & { type: 'UPDATE_COMMANDER_DAMAGE'; playerIndex: number; sourceIndex: number; change: number })
+  | (BaseAction & { type: 'TOGGLE_DEAD'; playerIndex: number })
+  | (BaseAction & { type: 'DAMAGE_ALL_OTHERS'; sourcePlayerIndex: number; damage: number })
+  | (BaseAction & { type: 'UNDO_DAMAGE_ALL_OTHERS' })
+  | (BaseAction & { type: 'RESET_GAME' })
+  | (BaseAction & { type: 'FULL_STATE_SYNC'; players: PlayerState[] });
 
 export interface MultiplayerState {
   isConnected: boolean;

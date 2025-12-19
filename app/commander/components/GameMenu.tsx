@@ -1,4 +1,5 @@
 import { PlayerState } from "../types";
+import { RoomCodeDisplay } from "./RoomCodeDisplay";
 
 interface GameMenuProps {
   isOpen: boolean;
@@ -21,6 +22,7 @@ interface GameMenuProps {
   isHost?: boolean;
   viewMode?: 'controller' | 'overview';
   onToggleViewMode?: () => void;
+  roomCode?: string;
 }
 
 export function GameMenu({
@@ -44,6 +46,7 @@ export function GameMenu({
   isHost = false,
   viewMode,
   onToggleViewMode,
+  roomCode,
 }: GameMenuProps) {
   if (!isOpen) return null;
 
@@ -57,6 +60,13 @@ export function GameMenu({
         <h3 className="text-xl font-bold text-[#ffffff] mb-6 text-center tracking-wide">
           Game Settings
         </h3>
+
+        {/* Room Code - Only in multiplayer */}
+        {multiplayerMode && roomCode && (
+          <div className="mb-6">
+            <RoomCodeDisplay roomCode={roomCode} showQR={true} size="small" />
+          </div>
+        )}
 
         {/* Player Names */}
         <div className="mb-4">
@@ -187,13 +197,16 @@ export function GameMenu({
 
         {/* Action Buttons */}
         <div className="flex gap-2">
-          <button
-            onClick={onResetNames}
-            className="flex-1 bg-[#2a2a2a] hover:bg-[#3a3a3a] text-[#cccccc] text-sm font-bold py-3 px-4 transition-all duration-200"
-            title="Reset player names to defaults"
-          >
-            Reset Names
-          </button>
+          {/* Reset Names - only in single player or for host in multiplayer */}
+          {(!multiplayerMode || isHost) && (
+            <button
+              onClick={onResetNames}
+              className="flex-1 bg-[#2a2a2a] hover:bg-[#3a3a3a] text-[#cccccc] text-sm font-bold py-3 px-4 transition-all duration-200"
+              title="Reset player names to defaults"
+            >
+              Reset Names
+            </button>
+          )}
           {!showResetConfirm ? (
             <button
               onClick={onResetClick}

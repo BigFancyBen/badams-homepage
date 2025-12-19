@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { PlayerState, GameAction } from '../types';
 import { useMultiplayer } from '../hooks/useMultiplayer';
 import { generateAbbreviations } from '../utils';
@@ -43,15 +43,10 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
   const [isWakeLockSupported, setIsWakeLockSupported] = useState<boolean>(false);
   const [wakeLockError, setWakeLockError] = useState<string | null>(null);
 
-  // Ref to track if we should ignore the next game action (because we sent it)
-  const lastActionRef = useRef<string | null>(null);
-
   // Handle incoming game actions from other players
   const handleGameAction = useCallback((action: GameAction) => {
-    // Skip if this is an action we sent
-    const actionKey = JSON.stringify(action);
-    if (lastActionRef.current === actionKey) {
-      lastActionRef.current = null;
+    // Skip if this is an action we sent (filter by senderId)
+    if (action.senderId === localClientId) {
       return;
     }
 
@@ -126,7 +121,7 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
         setUndoStack([]);
         break;
     }
-  }, []);
+  }, [localClientId]);
 
   const handlePlayersUpdate = useCallback(() => {
     // Not used during game
@@ -184,11 +179,10 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
   // Generate abbreviations
   const playerAbbrevs = generateAbbreviations(players);
 
-  // Helper to broadcast action
-  const broadcastAction = useCallback((action: GameAction) => {
-    lastActionRef.current = JSON.stringify(action);
-    sendGameAction(action);
-  }, [sendGameAction]);
+  // Helper to broadcast action with senderId
+  const broadcastAction = useCallback((action: { type: string; [key: string]: unknown }) => {
+    sendGameAction({ ...action, senderId: localClientId } as GameAction);
+  }, [sendGameAction, localClientId]);
 
   // Action handlers (broadcast to all players)
   const addHistory = useCallback((playerIndex: number, action: string) => {
@@ -391,7 +385,6 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
       {/* Connection indicator */}
       <div className="absolute top-1 right-2 z-30 flex items-center gap-1.5">
         <div className={`w-2 h-2 ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
-        <span className="text-[10px] text-white/50">{roomCode}</span>
       </div>
 
       {/* Menu Button */}
@@ -432,6 +425,7 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
         isHost={isHost}
         viewMode={isSpectator ? undefined : viewMode}
         onToggleViewMode={isSpectator ? undefined : () => setViewMode(viewMode === 'controller' ? 'overview' : 'controller')}
+        roomCode={roomCode}
       />
 
       {/* Controller View - Full screen for local player only (not available for spectators) */}
