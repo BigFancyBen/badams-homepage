@@ -185,8 +185,7 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
         break;
       case 'REQUEST_STATE_SYNC':
         // Mark that someone requested a sync - host will respond via useEffect
-        // Using state instead of ref so it triggers effect re-evaluation
-        setTimeout(() => setPendingSyncRequest(action.senderId), 0);
+        setPendingSyncRequest(action.senderId);
         break;
     }
   }, [localClientId, collapseLifeActions, collapsePoisonActions, collapseCommanderDamageActions, collapseLifeActionsWithFrom]);
@@ -204,8 +203,8 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
   useEffect(() => {
     if (localPlayerSlot !== null && !hasSetInitialViewMode.current) {
       hasSetInitialViewMode.current = true;
-      // Use setTimeout to defer the state update to avoid synchronous setState in effect
-      setTimeout(() => setViewMode('controller'), 0);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- One-time initialization when slot is claimed
+      setViewMode('controller');
     }
   }, [localPlayerSlot]);
 
@@ -218,8 +217,8 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
         slotOwners,
         senderId: localClientId,
       });
-      // Defer to avoid synchronous setState in effect
-      setTimeout(() => setPendingSyncRequest(null), 0);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Clear pending request after processing
+      setPendingSyncRequest(null);
     }
   }, [pendingSyncRequest, isHost, players, slotOwners, localClientId, sendGameAction]);
 

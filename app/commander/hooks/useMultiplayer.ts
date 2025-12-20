@@ -116,8 +116,7 @@ export function useMultiplayer({
           (owner) => owner?.clientId === localClientId
         );
         if (ourSlot !== -1) {
-          // Defer to avoid synchronous setState in effect
-          setTimeout(() => setLocalPlayerSlot(ourSlot), 0);
+          setLocalPlayerSlot(ourSlot);
         }
       }
 
@@ -209,8 +208,9 @@ export function useMultiplayer({
       );
 
       if (existingSlot !== -1) {
-        // Reclaim our slot - defer to avoid synchronous setState in effect
-        setTimeout(() => setLocalPlayerSlot(existingSlot), 0);
+        // Reclaim our slot from Ably presence data on reconnect
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- Syncing with external Ably state
+        setLocalPlayerSlot(existingSlot);
         // Note: isConnected will be computed automatically from presence data
 
         // Update presence with our slot
