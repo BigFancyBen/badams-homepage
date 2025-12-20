@@ -45,9 +45,10 @@ export default function TutorHelperPage() {
       const activeDeck = getActiveDeck();
       if (activeDeck && activeDeck.decklist.cards.length > 0) {
         const cardNames = activeDeck.decklist.cards.map((card) => card.name);
-        setDecklistCards(cardNames);
+        // Defer state update to avoid synchronous setState in effect
+        setTimeout(() => setDecklistCards(cardNames), 0);
       } else {
-        setDecklistCards([]);
+        setTimeout(() => setDecklistCards([]), 0);
       }
     }
   }, [isLoaded, activeDeckId, getActiveDeck]);

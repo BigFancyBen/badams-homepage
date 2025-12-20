@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { RotateCcw } from "lucide-react";
 
 // All available images
@@ -54,64 +54,66 @@ function selectRandomImages(): string[] {
 }
 
 export default function TomsIdioTest() {
-  const [selectedButtons, setSelectedButtons] = useState<Set<number>>(
-    new Set()
-  );
-  const [currentView, setCurrentView] = useState<"grid" | number>("grid");
-  const [hasLoaded, setHasLoaded] = useState(false);
-  const [currentImages, setCurrentImages] = useState<string[]>([]);
-
-  // Load selected buttons and current images from localStorage on mount
-  useEffect(() => {
+  // Use lazy initialization for selectedButtons from localStorage
+  const [selectedButtons, setSelectedButtons] = useState<Set<number>>(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("idiotest-selected");
-      const savedImages = localStorage.getItem("idiotest-images");
-
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
-          setSelectedButtons(new Set(parsed));
+          return new Set(parsed);
         } catch (error) {
           console.error("Failed to load selected buttons:", error);
         }
       }
+    }
+    return new Set();
+  });
 
+  const [currentView, setCurrentView] = useState<"grid" | number>("grid");
+
+  // Use lazy initialization for currentImages from localStorage
+  const [currentImages, setCurrentImages] = useState<string[]>(() => {
+    if (typeof window !== "undefined") {
+      const savedImages = localStorage.getItem("idiotest-images");
       if (savedImages) {
         try {
           const parsed = JSON.parse(savedImages);
-          setCurrentImages(parsed);
+          return parsed;
         } catch (error) {
           console.error("Failed to load images:", error);
-          setCurrentImages(selectRandomImages());
         }
-      } else {
-        setCurrentImages(selectRandomImages());
       }
-
-      setHasLoaded(true);
     }
+    return selectRandomImages();
+  });
+
+  // Track if client-side to enable saving
+  const hasLoaded = useRef(false);
+  useEffect(() => {
+    hasLoaded.current = true;
   }, []);
 
   // Save selected buttons to localStorage whenever they change
   useEffect(() => {
-    if (hasLoaded && typeof window !== "undefined") {
+    if (hasLoaded.current && typeof window !== "undefined") {
       localStorage.setItem(
         "idiotest-selected",
         JSON.stringify(Array.from(selectedButtons))
       );
     }
-  }, [selectedButtons, hasLoaded]);
+  }, [selectedButtons]);
 
   // Save current images to localStorage whenever they change
   useEffect(() => {
     if (
-      hasLoaded &&
+      hasLoaded.current &&
       typeof window !== "undefined" &&
       currentImages.length > 0
     ) {
       localStorage.setItem("idiotest-images", JSON.stringify(currentImages));
     }
-  }, [currentImages, hasLoaded]);
+  }, [currentImages]);
 
   const handleButtonClick = (num: number) => {
     setSelectedButtons((prev) => new Set([...prev, num]));
@@ -208,7 +210,7 @@ interface ImageViewProps {
 
 function ImageView({ imageNumber, onBack, imagePath }: ImageViewProps) {
   const [timeLeft, setTimeLeft] = useState(25);
-  const [audioPlayed, setAudioPlayed] = useState(false);
+  const audioPlayedRef = useRef(false);
 
   useEffect(() => {
     // Start the timer
@@ -227,14 +229,14 @@ function ImageView({ imageNumber, onBack, imagePath }: ImageViewProps) {
 
   useEffect(() => {
     // Play audio when timer reaches 0
-    if (timeLeft === 0 && !audioPlayed) {
+    if (timeLeft === 0 && !audioPlayedRef.current) {
+      audioPlayedRef.current = true;
       const audio = new Audio("/times-up.mp3");
       audio.play().catch((error) => {
         console.error("Failed to play audio:", error);
       });
-      setAudioPlayed(true);
     }
-  }, [timeLeft, audioPlayed]);
+  }, [timeLeft]);
 
   return (
     <div

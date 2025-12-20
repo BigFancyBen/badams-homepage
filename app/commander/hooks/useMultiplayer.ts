@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useState, useRef, useMemo } from 'react';
 import { useChannel, usePresence, usePresenceListener, useConnectionStateListener } from 'ably/react';
 import { GameAction, SlotOwner } from '../types';
 
@@ -43,10 +43,10 @@ export function useMultiplayer({
 }: UseMultiplayerProps): UseMultiplayerReturn {
   const [isConnected, setIsConnected] = useState(false);
   const [localPlayerSlot, setLocalPlayerSlot] = useState<number | null>(null);
-  const [isHost, setIsHost] = useState(isCreator);
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
   // Track slot ownership: who owns each slot (persists even if disconnected)
-  const [slotOwners, setSlotOwners] = useState<(SlotOwner | null)[]>([null, null, null, null]);
+  // Store base info without isConnected - we compute that from presence
+  const [slotOwnersBase, setSlotOwnersBase] = useState<({ clientId: string; name: string } | null)[]>([null, null, null, null]);
 
   // Track pending slot claims with timestamps for conflict resolution
   const slotClaimTimestamps = useRef<(number | null)[]>([null, null, null, null]);
@@ -87,12 +87,11 @@ export function useMultiplayer({
 
         slotClaimTimestamps.current[action.slotIndex] = claimTime;
 
-        setSlotOwners((prev) => {
+        setSlotOwnersBase((prev) => {
           const newOwners = [...prev];
           newOwners[action.slotIndex] = {
             clientId: action.clientId,
             name: action.name,
-            isConnected: true,
           };
           return newOwners;
         });
@@ -104,7 +103,10 @@ export function useMultiplayer({
 
       // Handle full state sync (includes slot owners)
       if (action.type === 'FULL_STATE_SYNC') {
-        setSlotOwners(action.slotOwners);
+        // Convert SlotOwner to base format (without isConnected)
+        setSlotOwnersBase(action.slotOwners.map(owner =>
+          owner ? { clientId: owner.clientId, name: owner.name } : null
+        ));
         // Reset claim timestamps from synced state
         action.slotOwners.forEach((owner, idx) => {
           slotClaimTimestamps.current[idx] = owner ? Date.now() : null;
@@ -164,31 +166,36 @@ export function useMultiplayer({
   // Connected count
   const connectedCount = presenceData.length;
 
-  // Update slot connection status when presence changes
-  useEffect(() => {
-    const connectedClientIds = new Set(presenceData.map((member) => member.data.clientId));
+  // Compute connected client IDs from presence data
+  const connectedClientIds = useMemo(
+    () => new Set(presenceData.map((member) => member.data.clientId)),
+    [presenceData]
+  );
 
-    // Update isConnected for all slot owners
-    setSlotOwners((prev) =>
-      prev.map((owner) => {
-        if (!owner) return null;
-        return {
-          ...owner,
-          isConnected: connectedClientIds.has(owner.clientId),
-        };
-      })
-    );
+  // Compute slotOwners with connection status from presence data
+  const slotOwners = useMemo<(SlotOwner | null)[]>(
+    () => slotOwnersBase.map((owner) => {
+      if (!owner) return null;
+      return {
+        ...owner,
+        isConnected: connectedClientIds.has(owner.clientId),
+      };
+    }),
+    [slotOwnersBase, connectedClientIds]
+  );
 
-    // Determine host (creator, or first connected player if creator left)
+  // Compute host status from presence data (derived state)
+  const isHost = useMemo(() => {
     const creatorPresent = presenceData.find((member) => member.data.isCreator);
     if (creatorPresent) {
-      setIsHost(creatorPresent.data.clientId === localClientId);
+      return creatorPresent.data.clientId === localClientId;
     } else if (presenceData.length > 0) {
       // Sort by timestamp, first one is host
       const sorted = [...presenceData].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-      setIsHost(sorted[0]?.data.clientId === localClientId);
+      return sorted[0]?.data.clientId === localClientId;
     }
-  }, [presenceData, localClientId]);
+    return isCreator; // Fallback to initial value
+  }, [presenceData, localClientId, isCreator]);
 
   // Auto-reclaim slot on reconnect
   useEffect(() => {
@@ -196,23 +203,15 @@ export function useMultiplayer({
       hasAttemptedReclaim.current = true;
 
       // Check if we already own a slot
-      const existingSlot = slotOwners.findIndex(
+      const existingSlot = slotOwnersBase.findIndex(
         (owner) => owner?.clientId === localClientId
       );
 
       if (existingSlot !== -1) {
-        // Reclaim our slot
+        // Reclaim our slot from Ably presence data on reconnect
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- Syncing with external Ably state
         setLocalPlayerSlot(existingSlot);
-        setSlotOwners((prev) => {
-          const newOwners = [...prev];
-          if (newOwners[existingSlot]) {
-            newOwners[existingSlot] = {
-              ...newOwners[existingSlot]!,
-              isConnected: true,
-            };
-          }
-          return newOwners;
-        });
+        // Note: isConnected will be computed automatically from presence data
 
         // Update presence with our slot
         updateStatus({
@@ -223,7 +222,7 @@ export function useMultiplayer({
         });
       }
     }
-  }, [isConnected, slotOwners, localClientId, playerName, isCreator, updateStatus]);
+  }, [isConnected, slotOwnersBase, localClientId, playerName, isCreator, updateStatus]);
 
   // Measure latency periodically (every 30 seconds)
   useEffect(() => {
@@ -294,7 +293,7 @@ export function useMultiplayer({
   const claimSlot = useCallback(
     (slotIndex: number) => {
       // Check if slot is already taken
-      if (slotOwners[slotIndex]) {
+      if (slotOwnersBase[slotIndex]) {
         return;
       }
 
@@ -303,12 +302,11 @@ export function useMultiplayer({
 
       // Update local state immediately
       setLocalPlayerSlot(slotIndex);
-      setSlotOwners((prev) => {
+      setSlotOwnersBase((prev) => {
         const newOwners = [...prev];
         newOwners[slotIndex] = {
           clientId: localClientId,
           name: playerName,
-          isConnected: true,
         };
         return newOwners;
       });
@@ -331,7 +329,7 @@ export function useMultiplayer({
         timestamp: claimTimestamp,
       });
     },
-    [slotOwners, localClientId, playerName, isCreator, updateStatus, channel]
+    [slotOwnersBase, localClientId, playerName, isCreator, updateStatus, channel]
   );
 
   // Leave current slot (become spectator)
@@ -340,7 +338,7 @@ export function useMultiplayer({
 
     slotClaimTimestamps.current[localPlayerSlot] = null;
 
-    setSlotOwners((prev) => {
+    setSlotOwnersBase((prev) => {
       const newOwners = [...prev];
       newOwners[localPlayerSlot] = null;
       return newOwners;

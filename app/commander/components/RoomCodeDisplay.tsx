@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 
 interface RoomCodeDisplayProps {
   roomCode: string;
@@ -9,14 +9,13 @@ interface RoomCodeDisplayProps {
 }
 
 export function RoomCodeDisplay({ roomCode, showQR = true, size = 'large' }: RoomCodeDisplayProps) {
-  const [joinUrl, setJoinUrl] = useState<string>('');
   const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
+  const joinUrl = useMemo(() => {
     if (typeof window !== 'undefined') {
-      const url = `${window.location.origin}/commander/multiplayer?join=${roomCode}`;
-      setJoinUrl(url);
+      return `${window.location.origin}/commander/multiplayer?join=${roomCode}`;
     }
+    return '';
   }, [roomCode]);
 
   const handleCopy = useCallback(async () => {

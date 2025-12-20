@@ -26,6 +26,7 @@ interface GameMenuProps {
   connectedCount?: number;
   latencyMs?: number | null;
   localPlayerSlot?: number | null;
+  isConnected?: boolean;
 }
 
 export function GameMenu({
@@ -53,6 +54,7 @@ export function GameMenu({
   connectedCount,
   latencyMs,
   localPlayerSlot,
+  isConnected,
 }: GameMenuProps) {
   if (!isOpen) return null;
 
@@ -77,9 +79,12 @@ export function GameMenu({
         {/* Connection Quality - Only in multiplayer */}
         {multiplayerMode && connectedCount !== undefined && (
           <div className="mb-4 flex items-center justify-between text-xs">
-            <span className="text-[#888888]">
-              {connectedCount} player{connectedCount !== 1 ? 's' : ''} connected
-            </span>
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 ${isConnected ? 'bg-[#16a34a]' : 'bg-[#dc2626]'}`} />
+              <span className="text-[#888888]">
+                {connectedCount} player{connectedCount !== 1 ? 's' : ''} connected
+              </span>
+            </div>
             {latencyMs !== null && latencyMs !== undefined && (
               <span className={`${latencyMs < 100 ? 'text-[#16a34a]' : latencyMs < 300 ? 'text-[#f59e0b]' : 'text-[#dc2626]'}`}>
                 {latencyMs}ms latency

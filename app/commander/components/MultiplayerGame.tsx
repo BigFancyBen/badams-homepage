@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { PlayerState, GameAction, SlotOwner } from '../types';
 import { useMultiplayer } from '../hooks/useMultiplayer';
 import { generateAbbreviations } from '../utils';
@@ -48,7 +48,7 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [rotatingPlayer, setRotatingPlayer] = useState<number | null>(null);
   const [undoStack, setUndoStack] = useState<{ sourcePlayerIndex: number; affectedPlayers: { playerIndex: number; lifeChange: number }[]; timestamp: number }[]>([]);
-  const [viewMode, setViewMode] = useState<'controller' | 'overview'>('overview');
+  const [viewMode, setViewMode] = useState<'controller' | 'overview' | null>(null);
   const [pendingSyncRequest, setPendingSyncRequest] = useState<string | null>(null);
 
   // Wake lock state
@@ -69,20 +69,33 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
         break;
       case 'UPDATE_LIFE':
         setPlayers((prev) =>
-          prev.map((player, index) =>
-            index === action.playerIndex
-              ? { ...player, life: Math.max(0, player.life + action.change) }
-              : player
-          )
+          prev.map((player, index) => {
+            if (index === action.playerIndex) {
+              const newLife = Math.max(0, player.life + action.change);
+              // Collapse history locally
+              const changeText = action.change > 0 ? `+${action.change}` : `${action.change}`;
+              const actionType = action.change > 0 ? 'positive' : 'negative';
+              const historyAction = `${changeText} life|${actionType}`;
+              const newHistory = collapseLifeActions(historyAction, player.history);
+              return { ...player, life: newLife, history: newHistory };
+            }
+            return player;
+          })
         );
         break;
       case 'UPDATE_POISON':
         setPlayers((prev) =>
-          prev.map((player, index) =>
-            index === action.playerIndex
-              ? { ...player, poison: Math.max(0, player.poison + action.change) }
-              : player
-          )
+          prev.map((player, index) => {
+            if (index === action.playerIndex) {
+              const newPoison = Math.max(0, player.poison + action.change);
+              // Collapse history locally
+              const changeText = action.change > 0 ? `+${action.change}` : `${action.change}`;
+              const historyAction = `${changeText} poison|poison`;
+              const newHistory = collapsePoisonActions(historyAction, player.history);
+              return { ...player, poison: newPoison, history: newHistory };
+            }
+            return player;
+          })
         );
         break;
       case 'UPDATE_COMMANDER_DAMAGE':
@@ -94,10 +107,18 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
               const actualChange = newDamageValue - currentDamage;
               const newDamage = [...player.commanderDamage];
               newDamage[action.sourceIndex] = newDamageValue;
+              // Collapse history locally - compute source player name
+              const commanderSources = [0, 1, 2, 3].filter((i) => i !== action.playerIndex);
+              const actualSourceIndex = commanderSources[action.sourceIndex];
+              const sourceName = prev[actualSourceIndex]?.name || `P${actualSourceIndex + 1}`;
+              const changeText = actualChange > 0 ? `+${actualChange}` : `${actualChange}`;
+              const historyAction = `${changeText} commander damage from ${sourceName}|commander`;
+              const newHistory = collapseCommanderDamageActions(historyAction, player.history);
               return {
                 ...player,
                 commanderDamage: newDamage as [number, number, number],
                 life: Math.max(0, player.life - actualChange),
+                history: newHistory,
               };
             }
             return player;
@@ -113,11 +134,18 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
         break;
       case 'DAMAGE_ALL_OTHERS':
         setPlayers((prev) =>
-          prev.map((player, index) =>
-            index !== action.sourcePlayerIndex
-              ? { ...player, life: Math.max(0, player.life + action.damage) }
-              : player
-          )
+          prev.map((player, index) => {
+            if (index !== action.sourcePlayerIndex) {
+              const newLife = Math.max(0, player.life + action.damage);
+              // Collapse history locally
+              const changeText = action.damage > 0 ? `+${action.damage}` : `${action.damage}`;
+              const actionType = action.damage > 0 ? 'positive' : 'negative';
+              const historyAction = `${changeText} life from ${action.sourceName}|${actionType}`;
+              const newHistory = collapseLifeActionsWithFrom(historyAction, player.history, action.sourceName);
+              return { ...player, life: newLife, history: newHistory };
+            }
+            return player;
+          })
         );
         break;
       case 'RESET_GAME':
@@ -160,7 +188,7 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
         setPendingSyncRequest(action.senderId);
         break;
     }
-  }, [localClientId]);
+  }, [localClientId, collapseLifeActions, collapsePoisonActions, collapseCommanderDamageActions, collapseLifeActionsWithFrom]);
 
   const { isConnected, isHost, slotOwners, localPlayerSlot, connectedCount, latencyMs, sendGameAction, claimSlot } = useMultiplayer({
     roomCode,
@@ -170,9 +198,12 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
     onGameAction: handleGameAction,
   });
 
-  // Switch to controller mode when claiming a slot
+  // Switch to controller mode when claiming a slot for the first time
+  const hasSetInitialViewMode = useRef(false);
   useEffect(() => {
-    if (localPlayerSlot !== null) {
+    if (localPlayerSlot !== null && !hasSetInitialViewMode.current) {
+      hasSetInitialViewMode.current = true;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- One-time initialization when slot is claimed
       setViewMode('controller');
     }
   }, [localPlayerSlot]);
@@ -186,6 +217,7 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
         slotOwners,
         senderId: localClientId,
       });
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Clear pending request after processing
       setPendingSyncRequest(null);
     }
   }, [pendingSyncRequest, isHost, players, slotOwners, localClientId, sendGameAction]);
@@ -265,83 +297,74 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
   }, [sendGameAction, localClientId]);
 
   // Action handlers (broadcast to all players)
-  const addHistory = useCallback((playerIndex: number, action: string) => {
+  // Each client collapses history locally when receiving actions
+  const updateLife = useCallback((playerIndex: number, change: number) => {
     setPlayers((prev) =>
       prev.map((player, index) => {
         if (index === playerIndex) {
-          let newHistory;
-          if (action.includes('life|') && !action.includes('from ')) {
-            newHistory = collapseLifeActions(action, player.history);
-          } else if (action.includes('life from ')) {
-            const match = action.match(/life from (.+)\|/);
-            const fromPlayer = match ? match[1] : '';
-            newHistory = collapseLifeActionsWithFrom(action, player.history, fromPlayer);
-          } else if (action.includes('commander damage from ') && action.includes('|commander')) {
-            newHistory = collapseCommanderDamageActions(action, player.history);
-          } else if (action.includes('poison|poison')) {
-            newHistory = collapsePoisonActions(action, player.history);
-          } else {
-            newHistory = [{ action, timestamp: Date.now() }, ...player.history];
-          }
-          return { ...player, history: newHistory };
+          const newLife = Math.max(0, player.life + change);
+          // Collapse history locally
+          const changeText = change > 0 ? `+${change}` : `${change}`;
+          const actionType = change > 0 ? 'positive' : 'negative';
+          const historyAction = `${changeText} life|${actionType}`;
+          const newHistory = collapseLifeActions(historyAction, player.history);
+          return { ...player, life: newLife, history: newHistory };
         }
         return player;
       })
     );
-  }, [collapseLifeActions, collapseLifeActionsWithFrom, collapseCommanderDamageActions, collapsePoisonActions]);
-
-  const updateLife = useCallback((playerIndex: number, change: number) => {
-    setPlayers((prev) =>
-      prev.map((player, index) =>
-        index === playerIndex ? { ...player, life: Math.max(0, player.life + change) } : player
-      )
-    );
-    const changeText = change > 0 ? `+${change}` : `${change}`;
-    const actionType = change > 0 ? 'positive' : 'negative';
-    addHistory(playerIndex, `${changeText} life|${actionType}`);
     broadcastAction({ type: 'UPDATE_LIFE', playerIndex, change });
-  }, [addHistory, broadcastAction]);
+  }, [collapseLifeActions, broadcastAction]);
 
   const updatePoison = useCallback((playerIndex: number, change: number) => {
     setPlayers((prev) =>
-      prev.map((player, index) =>
-        index === playerIndex ? { ...player, poison: Math.max(0, player.poison + change) } : player
-      )
+      prev.map((player, index) => {
+        if (index === playerIndex) {
+          const newPoison = Math.max(0, player.poison + change);
+          // Collapse history locally
+          const changeText = change > 0 ? `+${change}` : `${change}`;
+          const historyAction = `${changeText} poison|poison`;
+          const newHistory = collapsePoisonActions(historyAction, player.history);
+          return { ...player, poison: newPoison, history: newHistory };
+        }
+        return player;
+      })
     );
-    const changeText = change > 0 ? `+${change}` : `${change}`;
-    addHistory(playerIndex, `${changeText} poison|poison`);
     broadcastAction({ type: 'UPDATE_POISON', playerIndex, change });
-  }, [addHistory, broadcastAction]);
+  }, [collapsePoisonActions, broadcastAction]);
 
   const updateCommanderDamage = useCallback((playerIndex: number, sourceIndex: number, change: number) => {
-    const currentDamage = players[playerIndex].commanderDamage[sourceIndex];
-    const newDamageValue = Math.max(0, Math.min(21, currentDamage + change));
-    const actualChange = newDamageValue - currentDamage;
+    setPlayers((prev) => {
+      const currentDamage = prev[playerIndex].commanderDamage[sourceIndex];
+      const newDamageValue = Math.max(0, Math.min(21, currentDamage + change));
+      const actualChange = newDamageValue - currentDamage;
 
-    if (actualChange !== 0) {
-      setPlayers((prev) =>
-        prev.map((player, index) => {
-          if (index === playerIndex) {
-            const newDamage = [...player.commanderDamage];
-            newDamage[sourceIndex] = newDamageValue;
-            return {
-              ...player,
-              commanderDamage: newDamage as [number, number, number],
-              life: Math.max(0, player.life - actualChange),
-            };
-          }
-          return player;
-        })
-      );
+      if (actualChange === 0) return prev;
 
-      const commanderSources = [0, 1, 2, 3].filter((i) => i !== playerIndex);
-      const actualSourceIndex = commanderSources[sourceIndex];
-      const changeText = actualChange > 0 ? `+${actualChange}` : `${actualChange}`;
-      const sourceName = players[actualSourceIndex]?.name || `P${actualSourceIndex + 1}`;
-      addHistory(playerIndex, `${changeText} commander damage from ${sourceName}|commander`);
-      broadcastAction({ type: 'UPDATE_COMMANDER_DAMAGE', playerIndex, sourceIndex, change: actualChange });
-    }
-  }, [players, addHistory, broadcastAction]);
+      return prev.map((player, index) => {
+        if (index === playerIndex) {
+          const newDamage = [...player.commanderDamage];
+          newDamage[sourceIndex] = newDamageValue;
+          // Collapse history locally
+          const commanderSources = [0, 1, 2, 3].filter((i) => i !== playerIndex);
+          const actualSourceIndex = commanderSources[sourceIndex];
+          const sourceName = prev[actualSourceIndex]?.name || `P${actualSourceIndex + 1}`;
+          const changeText = actualChange > 0 ? `+${actualChange}` : `${actualChange}`;
+          const historyAction = `${changeText} commander damage from ${sourceName}|commander`;
+          const newHistory = collapseCommanderDamageActions(historyAction, player.history);
+          return {
+            ...player,
+            commanderDamage: newDamage as [number, number, number],
+            life: Math.max(0, player.life - actualChange),
+            history: newHistory,
+          };
+        }
+        return player;
+      });
+    });
+    // Broadcast - actualChange will be recalculated by receiver
+    broadcastAction({ type: 'UPDATE_COMMANDER_DAMAGE', playerIndex, sourceIndex, change });
+  }, [collapseCommanderDamageActions, broadcastAction]);
 
   const updateRotation = useCallback((playerIndex: number) => {
     if (rotatingPlayer === playerIndex) return;
@@ -377,32 +400,30 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
   }, [broadcastAction]);
 
   const damageAllOthers = useCallback((playerIndex: number, damage: number) => {
-    const changeText = damage > 0 ? `+${damage}` : `${damage}`;
-    const actionType = damage > 0 ? 'positive' : 'negative';
-    const sourceName = players[playerIndex]?.name || `P${playerIndex + 1}`;
-
     const affectedPlayers: Array<{ playerIndex: number; lifeChange: number }> = [];
 
-    [0, 1, 2, 3].forEach((index) => {
-      if (index !== playerIndex) {
-        affectedPlayers.push({ playerIndex: index, lifeChange: damage });
-      }
-    });
+    setPlayers((prev) => {
+      const sourceName = prev[playerIndex]?.name || `P${playerIndex + 1}`;
+      const changeText = damage > 0 ? `+${damage}` : `${damage}`;
+      const actionType = damage > 0 ? 'positive' : 'negative';
+      const historyAction = `${changeText} life from ${sourceName}|${actionType}`;
 
-    setPlayers((prev) =>
-      prev.map((player, index) => {
+      return prev.map((player, index) => {
         if (index !== playerIndex) {
+          affectedPlayers.push({ playerIndex: index, lifeChange: damage });
           const newLife = Math.max(0, player.life + damage);
-          const fromPlayerAction = `${changeText} life from ${sourceName}|${actionType}`;
-          const collapsedHistory = collapseLifeActionsWithFrom(fromPlayerAction, player.history, sourceName);
-          return { ...player, life: newLife, history: collapsedHistory };
+          // Collapse history locally
+          const newHistory = collapseLifeActionsWithFrom(historyAction, player.history, sourceName);
+          return { ...player, life: newLife, history: newHistory };
         }
         return player;
-      })
-    );
+      });
+    });
 
     setUndoStack((prev) => [{ sourcePlayerIndex: playerIndex, affectedPlayers, timestamp: Date.now() }, ...prev]);
-    broadcastAction({ type: 'DAMAGE_ALL_OTHERS', sourcePlayerIndex: playerIndex, damage });
+    // Include sourceName so receivers can collapse history correctly
+    const sourceName = players[playerIndex]?.name || `P${playerIndex + 1}`;
+    broadcastAction({ type: 'DAMAGE_ALL_OTHERS', sourcePlayerIndex: playerIndex, damage, sourceName });
   }, [players, collapseLifeActionsWithFrom, broadcastAction]);
 
   const undoDamageAllOthers = useCallback(() => {
@@ -471,6 +492,9 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
 
   const isSpectator = localPlayerSlot === null;
 
+  // Compute effective view mode (null means use default based on slot)
+  const effectiveViewMode = viewMode ?? (localPlayerSlot !== null ? 'controller' : 'overview');
+
   // Render unclaimed slot placeholder
   const renderUnclaimedSlot = (slotIndex: number, gridIndex: number) => {
     const color = SLOT_COLORS[slotIndex];
@@ -509,11 +533,6 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
 
   return (
     <div className="h-screen w-screen bg-[#1a1a1a] overflow-hidden relative select-none">
-      {/* Connection indicator */}
-      <div className="absolute top-1 right-2 z-30 flex items-center gap-1.5">
-        <div className={`w-2 h-2 ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
-      </div>
-
       {/* Menu Button */}
       <button
         onClick={() => setIsMenuOpen(true)}
@@ -550,16 +569,17 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
         multiplayerMode
         onLeaveGame={onLeaveGame}
         isHost={isHost}
-        viewMode={isSpectator ? undefined : viewMode}
-        onToggleViewMode={isSpectator ? undefined : () => setViewMode(viewMode === 'controller' ? 'overview' : 'controller')}
+        viewMode={isSpectator ? undefined : effectiveViewMode}
+        onToggleViewMode={isSpectator ? undefined : () => setViewMode(effectiveViewMode === 'controller' ? 'overview' : 'controller')}
         roomCode={roomCode}
         connectedCount={connectedCount}
         latencyMs={latencyMs}
         localPlayerSlot={localPlayerSlot}
+        isConnected={isConnected}
       />
 
       {/* Controller View - Full screen for local player only */}
-      {viewMode === 'controller' && localPlayerSlot !== null && (
+      {effectiveViewMode === 'controller' && localPlayerSlot !== null && (
         <div className="h-full w-full">
           <PlayerQuadrant
             player={players[localPlayerSlot]}
@@ -582,7 +602,7 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
       )}
 
       {/* Overview View - All 4 quadrants */}
-      {(viewMode === 'overview' || isSpectator) && (
+      {(effectiveViewMode === 'overview' || isSpectator) && (
         <div className="relative h-full w-full">
           {/* Grid order: 0=top-left, 1=top-right, 3=bottom-left, 2=bottom-right */}
           {[0, 1, 3, 2].map((playerIndex, gridIndex) => {
