@@ -13,8 +13,9 @@
   },
   "dependencies": {
     "ably": "^2.15.0",
+    "geist": "^1.5.1",
     "lottie-react": "^2.4.1",
-    "lucide-react": "^0.460.0",
+    "lucide-react": "^0.562.0",
     "next": "^16.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
@@ -22,7 +23,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@next/eslint-plugin-next": "^16.1.0",
-    "@types/node": "^20",
+    "@types/node": "^22",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@typescript-eslint/eslint-plugin": "^8.50.0",
@@ -34,6 +35,6 @@
     "husky": "^9.1.7",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
-    "typescript": "5.9.2"
+    "typescript": "^5.9.3"
   }
 }

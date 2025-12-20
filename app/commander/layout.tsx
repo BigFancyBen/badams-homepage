@@ -1,4 +1,9 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+};
 
 export const metadata: Metadata = {
   title: "MTG Commander Life Tracker | badams-homepage",
@@ -15,7 +20,6 @@ export const metadata: Metadata = {
     title: "MTG Commander Life Tracker",
     description: "Track life, commander damage, and poison for MTG Commander games",
   },
-  viewport: "width=device-width, initial-scale=1",
   robots: "index, follow",
 };
 
