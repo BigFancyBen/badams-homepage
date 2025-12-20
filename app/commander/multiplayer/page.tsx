@@ -232,18 +232,20 @@ function MultiplayerContent() {
             placeholder="Enter your name"
             className="w-full bg-[#222222] text-[#ffffff] border border-[#333333] px-4 py-3 focus:outline-none focus:border-[#666666] placeholder-[#666666]"
             maxLength={20}
+            data-testid="player-name-input"
           />
         </div>
 
         {/* Error Message */}
         {error && (
-          <div className="text-[#dc2626] text-xs mb-4 font-bold">{error}</div>
+          <div className="text-[#dc2626] text-xs mb-4 font-bold" data-testid="error-message">{error}</div>
         )}
 
         {/* Create Room */}
         <button
           onClick={handleCreateRoom}
           className="w-full max-w-sm bg-[#166534] hover:bg-[#16a34a] text-[#ffffff] font-bold py-3 px-6 mb-4 transition-all"
+          data-testid="create-room-button"
         >
           Create Room
         </button>
@@ -264,10 +266,12 @@ function MultiplayerContent() {
             placeholder="ENTER ROOM CODE"
             className="w-full bg-[#222222] text-[#ffffff] border border-[#333333] px-4 py-3 mb-2 focus:outline-none focus:border-[#666666] text-center font-mono text-lg tracking-widest placeholder-[#666666]"
             maxLength={6}
+            data-testid="room-code-input"
           />
           <button
             onClick={handleJoinRoom}
             className="w-full bg-[#1e40af] hover:bg-[#2563eb] text-[#ffffff] font-bold py-3 px-6 transition-all"
+            data-testid="join-room-button"
           >
             Join Room
           </button>

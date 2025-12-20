@@ -78,10 +78,10 @@ export function GameMenu({
 
         {/* Connection Quality - Only in multiplayer */}
         {multiplayerMode && connectedCount !== undefined && (
-          <div className="mb-4 flex items-center justify-between text-xs">
+          <div className="mb-4 flex items-center justify-between text-xs" data-testid="connection-status">
             <div className="flex items-center gap-2">
-              <div className={`w-2 h-2 ${isConnected ? 'bg-[#16a34a]' : 'bg-[#dc2626]'}`} />
-              <span className="text-[#888888]">
+              <div className={`w-2 h-2 ${isConnected ? 'bg-[#16a34a]' : 'bg-[#dc2626]'}`} data-testid="connection-indicator" />
+              <span className="text-[#888888]" data-testid="connected-count">
                 {connectedCount} player{connectedCount !== 1 ? 's' : ''} connected
               </span>
             </div>
