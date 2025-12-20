@@ -1,6 +1,6 @@
 # badams-homepage Development Guide
 
-Personal homepage and project showcase featuring web development tools and utilities. This is a Next.js 15.5.0 application with TypeScript, React 19, and Tailwind CSS, containing three main interactive applications: an MTG Commander scorekeeper, a Magic card tutor helper, and a NOAA weather tracking application for outdoor activities.
+Personal homepage and project showcase featuring web development tools and utilities. This is a Next.js 16.1.0 application with TypeScript, React 19, and Tailwind CSS, containing three main interactive applications: an MTG Commander scorekeeper, a Magic card tutor helper, and a NOAA weather tracking application for outdoor activities.
 
 **ALWAYS reference these instructions first and fallback to search or bash commands only when you encounter unexpected information that does not match the info here.**
 
@@ -8,25 +8,24 @@ Personal homepage and project showcase featuring web development tools and utili
 
 ### Bootstrap and Setup
 
-- `npm install` -- Installs all dependencies. Takes ~35 seconds. NEVER CANCEL. Set timeout to 60+ minutes.
-- Check Node.js version: The project works with Node.js 16+ (uses package.json with Next.js 15.5.0)
+- `npm install` -- Installs all dependencies. Takes ~15 seconds.
+- Requires Node.js 18+ (see `engines` field in package.json)
 
 ### Development Workflow
 
-- **ALWAYS run the development server for testing changes:**
-  - `npm run dev` -- Starts development server with Turbopack. Takes ~1 second. Runs on http://localhost:3000
-  - The server supports hot reload and is the primary way to test changes
-- **NEVER try to build for production** -- Build fails due to network restrictions (Google Fonts blocked). See Build Limitations section below.
-- Linting: `npm run lint` -- Takes ~5 seconds. Uses ESLint with Next.js config.
-- Type checking: `npm run type-check` -- Takes ~3 seconds. Uses TypeScript compiler.
-- **Pre-commit validation**: `npm run lint && npm run type-check` -- Always run before committing changes.
+- **Development server:**
+  - `npm run dev` -- Starts development server with Turbopack. Runs on http://localhost:3000
+  - Supports hot reload for rapid iteration
+- **Production build:**
+  - `npm run build` -- Creates optimized production build
+- **Linting:** `npm run lint` -- ESLint with Next.js config
+- **Type checking:** `npm run type-check` -- TypeScript compiler check
+- **Pre-commit validation:** `npm run lint && npm run type-check && npm run build` -- Always run before committing
 
-### Build Limitations
+### Fonts
 
-- **CRITICAL**: `npm run build` fails due to Google Fonts network restrictions in sandboxed environments
-- The application uses Geist and Geist Mono fonts from fonts.googleapis.com which may be blocked
-- **Workaround for development**: Use `npm run dev` exclusively for testing - it works perfectly
-- **If you need to test build**: Temporarily modify app/layout.tsx to remove Google Fonts imports and use local fonts
+- Uses local Geist fonts via the `geist` npm package (not Google Fonts)
+- Font imports in `app/layout.tsx` use `geist/font/sans` and `geist/font/mono`
 
 ## Application Structure
 
@@ -147,17 +146,17 @@ Personal homepage and project showcase featuring web development tools and utili
 
 ### Common Issues
 
-- **Build failures**: Always due to Google Fonts - use development server instead
 - **Type errors**: Run `npm run type-check` to identify issues
 - **Linting errors**: Run `npm run lint` to identify and fix style issues
 - **Hot reload not working**: Restart development server with `npm run dev`
 
 ### Network Dependencies
 
-- **Scryfall API**: Used by tutor-helper for card data (may fail in restricted environments)
-- **NOAA API**: Used by floatwise for weather forecast data (may fail in restricted environments)
-- **OpenStreetMap Nominatim**: Used by floatwise for location search (may fail in restricted environments)
-- **Google Fonts**: Blocks production builds (workaround: use local fonts temporarily)
+These external services may be unavailable in sandboxed environments:
+- **Scryfall API**: Used by tutor-helper for card data
+- **NOAA API**: Used by floatwise for weather forecast data
+- **OpenStreetMap Nominatim**: Used by floatwise for location search
+- **Ably**: Used by commander for multiplayer functionality
 
 ### Performance Notes
 
@@ -199,13 +198,13 @@ Personal homepage and project showcase featuring web development tools and utili
 
 ## Build and Deployment Notes
 
-- **Development**: Use `npm run dev` exclusively
-- **Production**: Not buildable in sandboxed environments due to Google Fonts
+- **Development**: `npm run dev` for local development with hot reload
+- **Production build**: `npm run build` creates optimized build
 - **Deployment**: Designed for Vercel platform (see next.config.ts)
 - **Dependencies**: All managed through npm, no additional build tools required
 
 ---
 
-_Last Updated: January 2025_
-_Framework: Next.js 15.5.0 with React 19 and TypeScript_
+_Last Updated: December 2025_
+_Framework: Next.js 16.1.0 with React 19 and TypeScript_
 _Primary Applications: MTG Commander Scorekeeper, Magic Tutor Helper, and FloatWise Weather Tracker_

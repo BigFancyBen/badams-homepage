@@ -2,7 +2,6 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   images: {
-    domains: ['cards.scryfall.io'],
     remotePatterns: [
       {
         protocol: 'https',
