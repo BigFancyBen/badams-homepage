@@ -537,7 +537,7 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
       {/* Menu Button */}
       <button
         onClick={() => setIsMenuOpen(true)}
-        className={`absolute z-30 font-bold transition-all duration-200 flex items-center justify-center text-white/70 hover:text-white/50 text-xs p-0 ${
+        className={`absolute z-40 font-bold transition-all duration-200 flex items-center justify-center text-white/70 hover:text-white/50 text-xs p-0 ${
           isMobileLandscape || isMobilePortrait
             ? 'top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2'
             : 'top-1 left-2'

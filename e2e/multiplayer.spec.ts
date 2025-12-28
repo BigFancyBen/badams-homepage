@@ -104,6 +104,9 @@ test.describe('Multiplayer Lobby', () => {
 });
 
 test.describe('Multiplayer State Sync', () => {
+  // Tests in this block must run sequentially as they share state
+  test.describe.configure({ mode: 'serial' });
+
   let context1: BrowserContext;
   let context2: BrowserContext;
   let hostPage: Page;
