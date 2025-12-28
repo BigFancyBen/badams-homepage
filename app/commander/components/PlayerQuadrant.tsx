@@ -54,7 +54,7 @@ export function PlayerQuadrant({
   const commanderSources = [0, 1, 2, 3].filter((i) => i !== playerIndex);
 
   return (
-    <div className="relative w-full h-full border border-[#333333] bg-[#222222] overflow-hidden">
+    <div className="relative w-full h-full border border-[#333333] bg-[#222222] overflow-hidden" data-testid={`player-quadrant-${playerIndex}`}>
       {/* Dead overlay */}
       {player.isDead && (
         <div className="absolute inset-0 bg-black/60 z-20 pointer-events-none" />
@@ -225,7 +225,7 @@ export function PlayerQuadrant({
           {/* Life Counter */}
           <div className="shrink-0 flex flex-col items-center justify-center">
             <div className="relative mb-1">
-              <div className="text-4xl font-bold text-[#f5f5f5] mb-1 select-none tracking-tight">
+              <div className="text-4xl font-bold text-[#f5f5f5] mb-1 select-none tracking-tight" data-testid={`life-total-${playerIndex}`}>
                 {player.life}
               </div>
               <div className="absolute inset-0 text-4xl font-bold text-[#166534] mb-1 select-none tracking-tight opacity-15 blur-sm">
@@ -252,6 +252,7 @@ export function PlayerQuadrant({
                         ? "text-xs py-3 px-0 min-h-[40px]"
                         : "text-sm py-4 px-2 min-h-[44px]"
                     }`}
+                    data-testid={`life-minus-5-${playerIndex}`}
                   >
                     -5
                   </button>
@@ -262,6 +263,7 @@ export function PlayerQuadrant({
                         ? "text-xs py-3 px-0 min-h-[40px]"
                         : "text-sm py-4 px-2 min-h-[44px]"
                     }`}
+                    data-testid={`life-minus-1-${playerIndex}`}
                   >
                     -1
                   </button>
@@ -272,6 +274,7 @@ export function PlayerQuadrant({
                         ? "text-xs py-3 px-0 min-h-[40px]"
                         : "text-sm py-4 px-2 min-h-[44px]"
                     }`}
+                    data-testid={`life-plus-1-${playerIndex}`}
                   >
                     +1
                   </button>
@@ -282,6 +285,7 @@ export function PlayerQuadrant({
                         ? "text-xs py-3 px-0 min-h-[40px]"
                         : "text-sm py-4 px-2 min-h-[44px]"
                     }`}
+                    data-testid={`life-plus-5-${playerIndex}`}
                   >
                     +5
                   </button>
@@ -527,6 +531,7 @@ export function PlayerQuadrant({
                           ? "text-[9px]"
                           : "text-xs"
                       }`}
+                      data-testid={`poison-counter-${playerIndex}`}
                     >
                       {player.poison}
                     </span>

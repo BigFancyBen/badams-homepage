@@ -512,6 +512,7 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
         className={`absolute w-1/2 h-1/2 ${color.bg} opacity-40 flex items-center justify-center cursor-pointer hover:opacity-60 transition-opacity`}
         style={{ top: pos.top, left: pos.left }}
         onClick={() => handleClaimSlot(slotIndex)}
+        data-testid={`unclaimed-slot-${slotIndex}`}
       >
         <div className="text-center text-white/80">
           <div className="text-lg font-bold mb-2">{color.text}</div>
@@ -536,12 +537,13 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
       {/* Menu Button */}
       <button
         onClick={() => setIsMenuOpen(true)}
-        className={`absolute z-30 font-bold transition-all duration-200 flex items-center justify-center text-white/70 hover:text-white/50 text-xs p-0 ${
+        className={`absolute z-40 font-bold transition-all duration-200 flex items-center justify-center text-white/70 hover:text-white/50 text-xs p-0 ${
           isMobileLandscape || isMobilePortrait
             ? 'top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2'
             : 'top-1 left-2'
         }`}
         title="Game Settings"
+        data-testid="game-settings-button"
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M14 21h-4l-.551-2.48a6.991 6.991 0 0 1-1.819-1.05l-2.424.763-2-3.464 1.872-1.718a7.055 7.055 0 0 1 0-2.1L3.206 9.232l2-3.464 2.424.763A6.992 6.992 0 0 1 9.45 5.48L10 3h4l.551 2.48a6.992 6.992 0 0 1 1.819 1.05l2.424-.763 2 3.464-1.872 1.718a7.05 7.05 0 0 1 0 2.1l1.872 1.718-2 3.464-2.424-.763a6.99 6.99 0 0 1-1.819 1.052L14 21z" />
@@ -580,7 +582,7 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
 
       {/* Controller View - Full screen for local player only */}
       {effectiveViewMode === 'controller' && localPlayerSlot !== null && (
-        <div className="h-full w-full">
+        <div className="h-full w-full" data-testid="controller-view">
           <PlayerQuadrant
             player={players[localPlayerSlot]}
             playerIndex={localPlayerSlot}
@@ -603,7 +605,7 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
 
       {/* Overview View - All 4 quadrants */}
       {(effectiveViewMode === 'overview' || isSpectator) && (
-        <div className="relative h-full w-full">
+        <div className="relative h-full w-full" data-testid="overview-view">
           {/* Grid order: 0=top-left, 1=top-right, 3=bottom-left, 2=bottom-right */}
           {[0, 1, 3, 2].map((playerIndex, gridIndex) => {
             const slotOwner = slotOwners[playerIndex];
@@ -629,6 +631,7 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
                 key={gridIndex}
                 className="absolute w-1/2 h-1/2"
                 style={{ top: pos.top, left: pos.left }}
+                data-testid={`player-slot-${playerIndex}`}
               >
                 {isDisconnected && renderDisconnectedOverlay(slotOwner)}
                 <PlayerQuadrant

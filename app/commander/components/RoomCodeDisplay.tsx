@@ -62,7 +62,7 @@ export function RoomCodeDisplay({ roomCode, showQR = true, size = 'large' }: Roo
       <div className={`flex items-center justify-between ${isLarge ? 'px-4 py-3' : 'px-3 py-2'}`}>
         <div className="flex-1">
           <div className="text-[#888888] text-[10px] mb-0.5">ROOM CODE</div>
-          <div className={`font-mono font-bold text-[#ffffff] tracking-widest ${isLarge ? 'text-2xl' : 'text-lg'}`}>
+          <div className={`font-mono font-bold text-[#ffffff] tracking-widest ${isLarge ? 'text-2xl' : 'text-lg'}`} data-testid="room-code-display">
             {roomCode}
           </div>
         </div>
