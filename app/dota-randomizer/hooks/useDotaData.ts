@@ -17,208 +17,26 @@ interface DotaItemResponse {
   components?: string[] | null;
   recipe?: number;
   created?: boolean;
+  charges?: number | boolean;
+  tier?: number;
+  qual?: string;
+  notes?: string;
 }
 
-// Items that should be excluded (consumables, basic components, etc.)
-const EXCLUDED_ITEMS = new Set([
-  // Consumables
-  "tango",
-  "tango_single",
-  "flask",
-  "clarity",
-  "enchanted_mango",
-  "faerie_fire",
-  "ward_observer",
-  "ward_sentry",
-  "smoke_of_deceit",
-  "tome_of_knowledge",
-  "dust",
-  "bottle",
-  "aghanims_shard",
-  "cheese",
-  "refresher_shard",
-  // TP and neutral token
-  "tpscroll",
-  "neutral_slot",
-  // Basic components
-  "branches",
-  "ring_of_protection",
-  "quelling_blade",
-  "gauntlets",
-  "slippers",
-  "mantle",
-  "circlet",
-  "belt_of_strength",
-  "boots_of_elves",
-  "robe",
-  "ogre_axe",
-  "blade_of_alacrity",
-  "staff_of_wizardry",
-  "ring_of_regen",
-  "sobi_mask",
-  "gloves",
-  "blades_of_attack",
-  "chainmail",
-  "quarterstaff",
-  "helm_of_iron_will",
-  "broadsword",
-  "claymore",
-  "javelin",
-  "mithril_hammer",
-  "platemail",
-  "hyperstone",
-  "ultimate_orb",
-  "demon_edge",
-  "mystic_staff",
-  "reaver",
-  "eaglesong",
-  "relic",
-  "ring_of_health",
-  "void_stone",
-  "energy_booster",
-  "vitality_booster",
-  "point_booster",
-  "cloak",
-  "talisman_of_evasion",
-  "shadow_amulet",
-  "ghost",
-  "blight_stone",
-  "gem",
-  "orb_of_venom",
-  "orb_of_corrosion",
-  "wind_lace",
-  "crown",
-  "fluffy_hat",
-  "voodoo_mask",
-  "infused_raindrop",
-  "blitz_knuckles",
-  "diadem",
-  "blood_grenade",
-  "cornucopia",
-  // Recipes
-  "recipe_",
-]);
-
-// Non-upgradeable items (standalone items that don't build into anything else)
-const STANDALONE_ITEMS = new Set([
-  "blink",
-  "boots_of_bearing",
-  "guardian_greaves",
-  "overwhelming_blink",
-  "swift_blink",
-  "arcane_blink",
-  "travel_boots",
-  "travel_boots_2",
-  "phase_boots",
-  "power_treads",
-  "arcane_boots",
-  "tranquil_boots",
-  "octarine_core",
-  "refresher",
-  "black_king_bar",
-  "sphere",
-  "lotus_orb",
-  "aeon_disk",
-  "wind_waker",
-  "bloodstone",
-  "heart",
-  "shivas_guard",
-  "assault",
-  "butterfly",
-  "skadi",
-  "satanic",
-  "rapier",
-  "abyssal_blade",
-  "bloodthorn",
-  "sheepstick",
-  "monkey_king_bar",
-  "daedalus",
-  "greater_crit",
-  "nullifier",
-  "radiance",
-  "mjollnir",
-  "manta",
-  "sange_and_yasha",
-  "kaya_and_sange",
-  "yasha_and_kaya",
-  "silver_edge",
-  "ethereal_blade",
-  "hurricane_pike",
-  "harpoon",
-  "diffusal_blade",
-  "desolator",
-  "aghanims_scepter",
-  "rod_of_atos",
-  "gleipnir",
-  "euls",
-  "force_staff",
-  "dagon",
-  "dagon_2",
-  "dagon_3",
-  "dagon_4",
-  "dagon_5",
-  "necronomicon",
-  "necronomicon_2",
-  "necronomicon_3",
-  "hand_of_midas",
-  "solar_crest",
-  "heavens_halberd",
-  "crimson_guard",
-  "pipe",
-  "mekansm",
-  "holy_locket",
-  "spirit_vessel",
-  "vanguard",
-  "blade_mail",
-  "hood_of_defiance",
-  "eternal_shroud",
-  "aether_lens",
-  "veil_of_discord",
-  "maelstrom",
-  "armlet",
-  "meteor_hammer",
-  "mask_of_madness",
-  "helm_of_the_overlord",
-  "helm_of_the_dominator",
-  "dragon_lance",
-  "echo_sabre",
-  "shadow_blade",
-  "orchid",
-  "crystalys",
-  "medallion_of_courage",
-  "drum_of_endurance",
-  "vladmir",
-  "buckler",
-  "headdress",
-  "wraith_band",
-  "null_talisman",
-  "bracer",
-  "soul_ring",
-  "magic_wand",
-  "urn_of_shadows",
-  "falcon_blade",
-  "witch_blade",
-  "phylactery",
-  "pavise",
-  "bloodthorn",
-  "devastator",
-  "disperser",
-  "khanda",
-  "parasma",
-  "revenant_brooch",
-  "angels_demise",
-  "trident",
-  "force_boots",
-  "fallen_sky",
-  "ex_machina",
-  "mirror_shield",
-  "apex",
-  "pirate_hat",
-  "giants_ring",
-  "desolator_2",
-  "seer_stone",
-  "book_of_shadows",
-  "recipe",
+// Minimal exclusion list for things the API doesn't clearly mark
+const ALWAYS_EXCLUDE = new Set([
+  "river_painter",
+  "river_painter2",
+  "river_painter3",
+  "river_painter4",
+  "river_painter5",
+  "river_painter6",
+  "river_painter7",
+  "mystery_hook",
+  "mystery_arrow",
+  "mystery_missile",
+  "mystery_toss",
+  "mystery_vacuum",
 ]);
 
 export function useDotaData() {
@@ -249,7 +67,6 @@ export function useDotaData() {
 
         // Transform heroes
         const transformedHeroes: WheelItem[] = heroesData.map((hero) => {
-          // Convert name like "npc_dota_hero_antimage" to "antimage"
           const heroKey = hero.name.replace("npc_dota_hero_", "");
           return {
             id: hero.id,
@@ -259,25 +76,76 @@ export function useDotaData() {
           };
         });
 
-        // Transform items - only include upgraded/standalone items
+        // Build a set of all items that are used as components (basic building blocks)
+        const componentItems = new Set<string>();
+        Object.values(itemsData).forEach((item) => {
+          if (item.components && Array.isArray(item.components)) {
+            item.components.forEach((comp) => componentItems.add(comp));
+          }
+        });
+
+        // Build set of items that have upgrades (items that appear in components of other items)
+        const hasUpgrade = new Set<string>();
+        Object.values(itemsData).forEach((item) => {
+          if (item.components && Array.isArray(item.components)) {
+            item.components.forEach((comp) => {
+              // If the component itself has components, it can be upgraded
+              const compItem = itemsData[comp];
+              if (compItem?.components && compItem.components.length > 0) {
+                hasUpgrade.add(comp);
+              }
+            });
+          }
+        });
+
+        // Filter for upgraded/final items
         const transformedItems: WheelItem[] = Object.entries(itemsData)
           .filter(([key, item]) => {
-            // Skip if no display name or image
+            // Must have display name and image
             if (!item.dname || !item.img) return false;
 
             // Skip recipes
             if (key.startsWith("recipe_")) return false;
 
-            // Skip excluded items (consumables and basic components)
-            if (EXCLUDED_ITEMS.has(key)) return false;
+            // Skip always-excluded items
+            if (ALWAYS_EXCLUDE.has(key)) return false;
 
-            // Include if it's a standalone item or has components (upgraded item)
-            const hasComponents =
-              item.components && item.components.length > 0;
-            const isStandalone = STANDALONE_ITEMS.has(key);
-            const isCreated = item.created === true;
+            // Skip neutral items (they have a tier property)
+            if (item.tier !== undefined && item.tier > 0) return false;
 
-            return hasComponents || isStandalone || isCreated;
+            // Skip items with charges (consumables like tangos, clarities, wards)
+            if (item.charges) return false;
+
+            // Skip TP scroll specifically
+            if (key === "tpscroll") return false;
+
+            // An item is "final/upgraded" if:
+            // 1. It has components (it's crafted from other items), OR
+            // 2. It's purchasable (created=true) and costs >= 2000 gold and isn't used as a basic component
+
+            const hasComponents = item.components && item.components.length > 0;
+            const isExpensive = (item.cost || 0) >= 2000;
+            const isPurchasable = item.created === true;
+            const isBasicComponent = componentItems.has(key) && !hasComponents;
+            const canBeUpgraded = hasUpgrade.has(key);
+
+            // Include if it has components (upgraded item)
+            if (hasComponents) {
+              // But skip if it can be further upgraded (not a final item)
+              // Exception: include popular intermediate items like Maelstrom, Echo Sabre
+              if (canBeUpgraded && (item.cost || 0) < 3000) {
+                return false;
+              }
+              return true;
+            }
+
+            // Include standalone expensive items that aren't basic components
+            // These are items like Blink Dagger that don't build from anything
+            if (isPurchasable && isExpensive && !isBasicComponent) {
+              return true;
+            }
+
+            return false;
           })
           .map(([key, item]) => ({
             id: item.id,
