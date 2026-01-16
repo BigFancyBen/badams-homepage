@@ -80,7 +80,8 @@ export default function SpinWheel({
 
       if (wheelItems.length === 0) return;
 
-      const sliceAngle = (2 * Math.PI) / wheelItems.length;
+      const numItems = wheelItems.length;
+      const sliceAngle = (2 * Math.PI) / numItems;
 
       // Draw outer glow ring
       ctx.save();
@@ -89,32 +90,32 @@ export default function SpinWheel({
       ctx.strokeStyle = "#8b5cf6";
       ctx.lineWidth = 4;
       ctx.shadowColor = "#8b5cf6";
-      ctx.shadowBlur = 15;
+      ctx.shadowBlur = 20;
       ctx.stroke();
       ctx.restore();
 
       // Draw each slice
       wheelItems.forEach((item, i) => {
-        const startAngle = rotation + i * sliceAngle - Math.PI / 2; // Start from top
+        const startAngle = rotation + i * sliceAngle - Math.PI / 2;
         const endAngle = startAngle + sliceAngle;
         const midAngle = startAngle + sliceAngle / 2;
 
-        // Draw slice background with gradient
+        // Draw slice background
         ctx.save();
         ctx.beginPath();
         ctx.moveTo(centerX, centerY);
         ctx.arc(centerX, centerY, radius, startAngle, endAngle);
         ctx.closePath();
 
-        // Alternate darker/lighter backgrounds for contrast
+        // Alternate colors for contrast
         const baseHue = (i * 137.5) % 360;
         const gradient = ctx.createRadialGradient(
-          centerX, centerY, 0,
+          centerX, centerY, radius * 0.3,
           centerX, centerY, radius
         );
-        gradient.addColorStop(0, `hsl(${baseHue}, 40%, 12%)`);
-        gradient.addColorStop(0.7, `hsl(${baseHue}, 50%, 18%)`);
-        gradient.addColorStop(1, `hsl(${baseHue}, 60%, 22%)`);
+        gradient.addColorStop(0, `hsl(${baseHue}, 30%, 8%)`);
+        gradient.addColorStop(0.5, `hsl(${baseHue}, 40%, 12%)`);
+        gradient.addColorStop(1, `hsl(${baseHue}, 50%, 18%)`);
         ctx.fillStyle = gradient;
         ctx.fill();
 
@@ -124,7 +125,7 @@ export default function SpinWheel({
         ctx.stroke();
         ctx.restore();
 
-        // Draw image in the slice - make it larger and more visible
+        // Draw image at outer edge of slice for maximum visibility
         const img = imageCache.current[item.name];
         if (img) {
           ctx.save();
@@ -132,36 +133,43 @@ export default function SpinWheel({
           // Clip to slice
           ctx.beginPath();
           ctx.moveTo(centerX, centerY);
-          ctx.arc(centerX, centerY, radius - 4, startAngle, endAngle);
+          ctx.arc(centerX, centerY, radius - 2, startAngle, endAngle);
           ctx.closePath();
           ctx.clip();
 
-          // Calculate image position and size based on number of items
-          const numItems = wheelItems.length;
+          // Calculate image size based on number of items
+          // Position at outer edge, size to fill the arc width
           let imgSize: number;
           let imgDistance: number;
 
-          if (numItems <= 4) {
-            imgSize = radius * 0.6;
+          if (numItems === 1) {
+            // Single item - show large in center
+            imgSize = radius * 1.2;
+            imgDistance = 0;
+          } else if (numItems <= 3) {
+            imgSize = radius * 0.7;
+            imgDistance = radius * 0.45;
+          } else if (numItems <= 6) {
+            imgSize = radius * 0.55;
             imgDistance = radius * 0.55;
-          } else if (numItems <= 8) {
-            imgSize = radius * 0.5;
-            imgDistance = radius * 0.58;
-          } else if (numItems <= 16) {
-            imgSize = radius * 0.4;
-            imgDistance = radius * 0.6;
-          } else {
-            // Many items - show smaller images
-            imgSize = Math.max(30, radius * 0.35);
+          } else if (numItems <= 12) {
+            imgSize = radius * 0.45;
             imgDistance = radius * 0.62;
+          } else if (numItems <= 24) {
+            imgSize = radius * 0.38;
+            imgDistance = radius * 0.68;
+          } else {
+            // Many items - position at very outer edge
+            imgSize = Math.max(25, radius * 0.32);
+            imgDistance = radius * 0.72;
           }
 
           const imgX = centerX + Math.cos(midAngle) * imgDistance;
           const imgY = centerY + Math.sin(midAngle) * imgDistance;
 
-          // Draw image with slight shadow for visibility
-          ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
-          ctx.shadowBlur = 4;
+          // Draw shadow for depth
+          ctx.shadowColor = "rgba(0, 0, 0, 0.7)";
+          ctx.shadowBlur = 6;
           ctx.shadowOffsetX = 2;
           ctx.shadowOffsetY = 2;
 
@@ -175,38 +183,39 @@ export default function SpinWheel({
           ctx.restore();
         }
 
-        // Draw item name if few items remain (readable)
-        if (wheelItems.length <= 6) {
+        // Draw item name when few items remain
+        if (numItems <= 8 && numItems > 1) {
           ctx.save();
-          const textDistance = radius * 0.35;
+          const textDistance = radius * 0.28;
           const textX = centerX + Math.cos(midAngle) * textDistance;
           const textY = centerY + Math.sin(midAngle) * textDistance;
 
-          ctx.font = "bold 10px Inter, sans-serif";
+          const fontSize = numItems <= 4 ? 11 : 9;
+          ctx.font = `bold ${fontSize}px Inter, sans-serif`;
           ctx.fillStyle = "white";
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
-          ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
-          ctx.shadowBlur = 3;
+          ctx.shadowColor = "rgba(0, 0, 0, 0.9)";
+          ctx.shadowBlur = 4;
 
-          // Truncate long names
-          const displayText = item.displayName.length > 12
-            ? item.displayName.slice(0, 10) + "..."
+          const maxLen = numItems <= 4 ? 14 : 10;
+          const displayText = item.displayName.length > maxLen
+            ? item.displayName.slice(0, maxLen - 2) + "..."
             : item.displayName;
           ctx.fillText(displayText, textX, textY);
           ctx.restore();
         }
       });
 
-      // Draw center circle
+      // Draw center circle (smaller to show more of the slices)
       ctx.save();
       ctx.beginPath();
-      ctx.arc(centerX, centerY, 25, 0, 2 * Math.PI);
+      ctx.arc(centerX, centerY, 20, 0, 2 * Math.PI);
       const centerGradient = ctx.createRadialGradient(
         centerX, centerY, 0,
-        centerX, centerY, 25
+        centerX, centerY, 20
       );
-      centerGradient.addColorStop(0, "#2d1f4e");
+      centerGradient.addColorStop(0, "#3d2f5e");
       centerGradient.addColorStop(1, "#1a1a2e");
       ctx.fillStyle = centerGradient;
       ctx.fill();
@@ -215,16 +224,16 @@ export default function SpinWheel({
       ctx.stroke();
       ctx.restore();
 
-      // Draw pointer/indicator at top
+      // Draw pointer at top
       ctx.save();
       ctx.beginPath();
-      ctx.moveTo(centerX, 8);
-      ctx.lineTo(centerX - 12, 28);
-      ctx.lineTo(centerX + 12, 28);
+      ctx.moveTo(centerX, 6);
+      ctx.lineTo(centerX - 14, 30);
+      ctx.lineTo(centerX + 14, 30);
       ctx.closePath();
       ctx.fillStyle = "#f59e0b";
       ctx.shadowColor = "#f59e0b";
-      ctx.shadowBlur = 10;
+      ctx.shadowBlur = 12;
       ctx.fill();
       ctx.strokeStyle = "#fbbf24";
       ctx.lineWidth = 2;
@@ -242,7 +251,6 @@ export default function SpinWheel({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // Set up high DPI canvas
     const dpr = window.devicePixelRatio || 1;
     canvas.width = 400 * dpr;
     canvas.height = 400 * dpr;
@@ -251,7 +259,7 @@ export default function SpinWheel({
     drawWheel(ctx, items, rotationRef.current);
   }, [items, imagesLoaded, drawWheel]);
 
-  // Spin animation
+  // Spin animation with non-linear elimination timing
   useEffect(() => {
     if (!isSpinning || items.length === 0) return;
 
@@ -264,46 +272,61 @@ export default function SpinWheel({
     // Initialize remaining items
     remainingItemsRef.current = [...items];
     const totalItems = items.length;
-    const eliminationsNeeded = totalItems - 1;
-    const eliminationDelay = spinDuration / eliminationsNeeded;
 
-    // Select winner at start (but don't reveal)
+    // Select winner at start
     const winnerIndex = Math.floor(Math.random() * totalItems);
     const winner = items[winnerIndex];
 
+    // Create elimination schedule: last 5 items take last 4 seconds
+    // This means we need to eliminate (totalItems - 5) items in first 6 seconds
+    // and eliminate 4 items in last 4 seconds
+    const fastPhaseItems = Math.max(0, totalItems - 5);
+    const slowPhaseItems = Math.min(4, totalItems - 1);
+    const fastPhaseDuration = spinDuration * 0.6; // First 6 seconds
+    const slowPhaseDuration = spinDuration * 0.4; // Last 4 seconds
+
+    // Build elimination timestamps
+    const eliminationTimes: number[] = [];
+
+    // Fast phase eliminations (evenly spaced in first 6 seconds)
+    for (let i = 0; i < fastPhaseItems; i++) {
+      eliminationTimes.push((i + 1) * (fastPhaseDuration / fastPhaseItems));
+    }
+
+    // Slow phase eliminations (evenly spaced in last 4 seconds)
+    for (let i = 0; i < slowPhaseItems; i++) {
+      eliminationTimes.push(fastPhaseDuration + (i + 1) * (slowPhaseDuration / slowPhaseItems));
+    }
+
     let startTime: number | null = null;
-    let lastEliminationTime = 0;
     let eliminationsComplete = 0;
 
     const animate = (timestamp: number) => {
       if (!startTime) {
         startTime = timestamp;
-        lastEliminationTime = timestamp;
       }
 
       const elapsed = timestamp - startTime;
       const progress = Math.min(elapsed / spinDuration, 1);
 
-      // Enhanced easing: starts fast, slows down dramatically at the end
-      // Using a combination of exponential and quintic easing for dramatic slowdown
-      const easeOutQuint = 1 - Math.pow(1 - progress, 5);
-      const easeOutExpo = progress === 1 ? 1 : 1 - Math.pow(2, -10 * progress);
-      const easeOut = (easeOutQuint + easeOutExpo) / 2;
+      // Very aggressive easing for dramatic slowdown
+      // Combines multiple easing functions for extreme deceleration
+      const t = progress;
+      const easeOutSeventh = 1 - Math.pow(1 - t, 7);
+      const easeOutExpo = t === 1 ? 1 : 1 - Math.pow(2, -12 * t);
+      const combined = (easeOutSeventh * 0.4 + easeOutExpo * 0.6);
 
-      // Calculate rotation speed - starts at max, ends near zero
-      const maxSpeed = 0.25;
-      const minSpeed = 0.001;
-      const speedRange = maxSpeed - minSpeed;
-      const currentSpeed = minSpeed + speedRange * (1 - easeOut);
+      // Rotation speed: very fast start, crawling at end
+      const maxSpeed = 0.35;
+      const minSpeed = 0.0005;
+      const currentSpeed = minSpeed + (maxSpeed - minSpeed) * (1 - combined);
       rotationRef.current += currentSpeed;
 
-      // Handle eliminations
-      const timeSinceLastElimination = timestamp - lastEliminationTime;
-      if (
-        timeSinceLastElimination >= eliminationDelay &&
-        eliminationsComplete < eliminationsNeeded
+      // Handle eliminations based on schedule
+      while (
+        eliminationsComplete < eliminationTimes.length &&
+        elapsed >= eliminationTimes[eliminationsComplete]
       ) {
-        // Eliminate a random item that's not the winner
         const currentItems = remainingItemsRef.current;
         const nonWinners = currentItems.filter((item) => item.id !== winner.id);
 
@@ -313,8 +336,6 @@ export default function SpinWheel({
             (item) => item.id !== toRemove.id
           );
         }
-
-        lastEliminationTime = timestamp;
         eliminationsComplete++;
       }
 
@@ -324,13 +345,12 @@ export default function SpinWheel({
       canvas.height = 400 * dpr;
       ctx.scale(dpr, dpr);
 
-      // Draw with current remaining items
       drawWheel(ctx, remainingItemsRef.current, rotationRef.current);
 
       if (progress < 1) {
         animationRef.current = requestAnimationFrame(animate);
       } else {
-        // Animation complete - ensure only winner remains
+        // Animation complete
         remainingItemsRef.current = [winner];
         drawWheel(ctx, [winner], rotationRef.current);
         onSpinComplete(winner);
