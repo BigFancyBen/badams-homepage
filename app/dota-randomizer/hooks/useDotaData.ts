@@ -128,6 +128,7 @@ export function useDotaData() {
             // Exclude consumables
             if (item.charges) return false;
             if (key === "tpscroll" || key === "smoke_of_deceit" || key === "dust") return false;
+            if (key === "ward_observer" || key === "ward_sentry") return false;
 
             // Always include specific items (Aghanim's Shard, Blink, Ghost Scepter)
             if (ALWAYS_INCLUDE.has(key)) return true;
