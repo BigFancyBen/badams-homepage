@@ -8,9 +8,10 @@ interface ResultDisplayProps {
   hero: WheelItem | null;
   item: WheelItem | null;
   show: boolean;
+  onFanfare?: () => void;
 }
 
-export default function ResultDisplay({ hero, item, show }: ResultDisplayProps) {
+export default function ResultDisplay({ hero, item, show, onFanfare }: ResultDisplayProps) {
   const confettiFired = useRef(false);
 
   useEffect(() => {
@@ -23,6 +24,11 @@ export default function ResultDisplay({ hero, item, show }: ResultDisplayProps) 
     // Fire confetti when results are shown
     if (confettiFired.current) return;
     confettiFired.current = true;
+
+    // Play fanfare sound
+    if (onFanfare) {
+      onFanfare();
+    }
 
     // Fire confetti from multiple angles
     const duration = 3000;
@@ -58,7 +64,7 @@ export default function ResultDisplay({ hero, item, show }: ResultDisplayProps) 
     });
 
     frame();
-  }, [show]);
+  }, [show, onFanfare]);
 
   if (!show || !hero || !item) return null;
 

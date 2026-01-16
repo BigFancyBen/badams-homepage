@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import Link from "next/link";
 import { useDotaData } from "./hooks/useDotaData";
+import { useSoundEffects } from "./hooks/useSoundEffects";
 import SpinWheel from "./components/SpinWheel";
 import ResultDisplay from "./components/ResultDisplay";
 import { WheelItem, SpinState } from "./types";
@@ -11,6 +12,7 @@ const SPIN_DURATION = 10000; // 10 seconds
 
 export default function DotaRandomizerPage() {
   const { heroes, items, loading, error } = useDotaData();
+  const { playTick, playDing, playFanfare } = useSoundEffects();
   const [spinState, setSpinState] = useState<SpinState>({
     isSpinning: false,
     selectedHero: null,
@@ -127,6 +129,8 @@ export default function DotaRandomizerPage() {
             selectedItem={spinState.selectedHero}
             onSpinComplete={handleHeroComplete}
             spinDuration={SPIN_DURATION}
+            onTick={playTick}
+            onSelectionComplete={playDing}
           />
 
           <SpinWheel
@@ -136,6 +140,8 @@ export default function DotaRandomizerPage() {
             selectedItem={spinState.selectedItem}
             onSpinComplete={handleItemComplete}
             spinDuration={SPIN_DURATION}
+            onTick={playTick}
+            onSelectionComplete={playDing}
           />
         </div>
 
@@ -180,6 +186,7 @@ export default function DotaRandomizerPage() {
         hero={spinState.selectedHero}
         item={spinState.selectedItem}
         show={spinState.showResult}
+        onFanfare={playFanfare}
       />
 
       {/* Click anywhere to dismiss result */}
