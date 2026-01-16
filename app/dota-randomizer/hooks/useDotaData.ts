@@ -60,6 +60,7 @@ const ALWAYS_EXCLUDE = new Set([
   "perseverance",
   "perseverence",         // Alternate spelling
   "oblivion_staff",
+  "trident",              // Kaya-Sange-Yasha combined item
   "buckler",
   "headdress",
   "ring_of_basilius",
