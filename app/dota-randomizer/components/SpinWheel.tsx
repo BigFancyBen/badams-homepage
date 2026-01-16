@@ -277,28 +277,38 @@ export default function SpinWheel({
     const winnerIndex = Math.floor(Math.random() * totalItems);
     const winner = items[winnerIndex];
 
-    // Elimination schedule: fast at start, slow at end
-    // Last 5 items take last 40% of time
-    const fastPhaseItems = Math.max(0, totalItems - 5);
-    const slowPhaseItems = Math.min(4, totalItems - 1);
-    const fastPhaseDuration = spinDuration * 0.6;
-    const slowPhaseDuration = spinDuration * 0.4;
+    // Elimination phase: eliminate down to 4 items
+    // Takes 60% of total time
+    const itemsToEliminate = Math.max(0, totalItems - 4);
+    const eliminationDuration = spinDuration * 0.6;
+    const spinOnlyDuration = spinDuration * 0.4;
 
+    // Create elimination schedule
     const eliminationTimes: number[] = [];
-    for (let i = 0; i < fastPhaseItems; i++) {
-      eliminationTimes.push(((i + 1) / fastPhaseItems) * fastPhaseDuration);
+    if (itemsToEliminate > 0) {
+      for (let i = 0; i < itemsToEliminate; i++) {
+        // Accelerate eliminations over time
+        const progress = (i + 1) / itemsToEliminate;
+        eliminationTimes.push(progress * eliminationDuration);
+      }
     }
-    for (let i = 0; i < slowPhaseItems; i++) {
-      eliminationTimes.push(
-        fastPhaseDuration + ((i + 1) / slowPhaseItems) * slowPhaseDuration
-      );
-    }
+
+    // Find winner's index in the final items (determined dynamically during spin)
+    let winnerFinalIndex = 0;
+
+    // Calculate base rotations for spinning effect
+    // Add several full rotations plus offset to land on winner
+    const extraRotations = 5 + Math.random() * 3; // 5-8 full spins during spin phase
+    const baseSpinRotation = extraRotations * 2 * Math.PI;
 
     let startTime: number | null = null;
     let eliminationsComplete = 0;
+    let spinPhaseStartRotation = 0;
+    let targetRotation = 0;
+    let spinPhaseStartTime = 0;
 
-    // Initial rotation speed (radians per frame at 60fps)
-    const initialSpeed = 0.4;
+    // Initial rotation speed during elimination
+    const eliminationSpeed = 0.3;
 
     const animate = (timestamp: number) => {
       if (!startTime) {
@@ -306,48 +316,94 @@ export default function SpinWheel({
       }
 
       const elapsed = timestamp - startTime;
-      const progress = Math.min(elapsed / spinDuration, 1);
-
-      // Smooth deceleration using quintic ease-out
-      // Speed = initialSpeed * (1 - progress)^5
-      // This gives a smooth, consistent slowdown
-      const speedMultiplier = Math.pow(1 - progress, 5);
-      const currentSpeed = initialSpeed * speedMultiplier + 0.001; // Small minimum to keep moving
-
-      rotationRef.current += currentSpeed;
-
-      // Handle eliminations
-      while (
-        eliminationsComplete < eliminationTimes.length &&
-        elapsed >= eliminationTimes[eliminationsComplete]
-      ) {
-        const currentItems = remainingItemsRef.current;
-        const nonWinners = currentItems.filter((item) => item.id !== winner.id);
-
-        if (nonWinners.length > 0) {
-          const toRemove =
-            nonWinners[Math.floor(Math.random() * nonWinners.length)];
-          remainingItemsRef.current = currentItems.filter(
-            (item) => item.id !== toRemove.id
-          );
-        }
-        eliminationsComplete++;
-      }
-
-      // Redraw
       const dpr = window.devicePixelRatio || 1;
-      canvas.width = 400 * dpr;
-      canvas.height = 400 * dpr;
-      ctx.scale(dpr, dpr);
 
-      drawWheel(ctx, remainingItemsRef.current, rotationRef.current);
+      // Phase 1: Elimination (0 to eliminationDuration)
+      if (elapsed < eliminationDuration && itemsToEliminate > 0) {
+        // Handle eliminations
+        while (
+          eliminationsComplete < eliminationTimes.length &&
+          elapsed >= eliminationTimes[eliminationsComplete]
+        ) {
+          const currentItems = remainingItemsRef.current;
+          const nonWinners = currentItems.filter((item) => item.id !== winner.id);
 
-      if (progress < 1) {
+          if (nonWinners.length > 0 && currentItems.length > 4) {
+            const toRemove =
+              nonWinners[Math.floor(Math.random() * nonWinners.length)];
+            remainingItemsRef.current = currentItems.filter(
+              (item) => item.id !== toRemove.id
+            );
+          }
+          eliminationsComplete++;
+        }
+
+        // Continuous rotation during elimination
+        rotationRef.current += eliminationSpeed;
+
+        // Redraw
+        canvas.width = 400 * dpr;
+        canvas.height = 400 * dpr;
+        ctx.scale(dpr, dpr);
+        drawWheel(ctx, remainingItemsRef.current, rotationRef.current);
+
         animationRef.current = requestAnimationFrame(animate);
-      } else {
-        remainingItemsRef.current = [winner];
-        drawWheel(ctx, [winner], rotationRef.current);
-        onSpinComplete(winner);
+      }
+      // Phase 2: Spin to winner (eliminationDuration to end)
+      else {
+        // Initialize spin phase once
+        if (spinPhaseStartTime === 0) {
+          spinPhaseStartTime = timestamp;
+          spinPhaseStartRotation = rotationRef.current;
+
+          // Find winner's index in remaining items
+          const remaining = remainingItemsRef.current;
+          winnerFinalIndex = remaining.findIndex((item) => item.id === winner.id);
+          if (winnerFinalIndex === -1) winnerFinalIndex = 0;
+
+          // Calculate target rotation to land pointer on winner
+          // Pointer is at top (angle 0 from our draw perspective which starts at -PI/2)
+          // Each segment starts at: rotation + i * segmentAngle - PI/2
+          // We want winner's segment center under the pointer
+          const segmentAngle = (2 * Math.PI) / remaining.length;
+          const winnerCenterAngle = winnerFinalIndex * segmentAngle + segmentAngle / 2;
+
+          // Target: winner center should be at angle PI/2 (top, where pointer is)
+          // rotation + winnerCenterAngle - PI/2 = -PI/2 (mod 2PI for top)
+          // rotation = -winnerCenterAngle
+          // Add full rotations for spinning effect
+          const targetOffset = -winnerCenterAngle;
+          targetRotation = spinPhaseStartRotation + baseSpinRotation + targetOffset;
+
+          // Normalize so we're always spinning forward
+          while (targetRotation < spinPhaseStartRotation + 2 * Math.PI) {
+            targetRotation += 2 * Math.PI;
+          }
+        }
+
+        const spinElapsed = timestamp - spinPhaseStartTime;
+        const spinProgress = Math.min(spinElapsed / spinOnlyDuration, 1);
+
+        // Cubic ease-out for natural deceleration
+        const easedProgress = 1 - Math.pow(1 - spinProgress, 3);
+
+        // Interpolate rotation
+        rotationRef.current =
+          spinPhaseStartRotation +
+          (targetRotation - spinPhaseStartRotation) * easedProgress;
+
+        // Redraw
+        canvas.width = 400 * dpr;
+        canvas.height = 400 * dpr;
+        ctx.scale(dpr, dpr);
+        drawWheel(ctx, remainingItemsRef.current, rotationRef.current);
+
+        if (spinProgress < 1) {
+          animationRef.current = requestAnimationFrame(animate);
+        } else {
+          // Animation complete - winner is now under pointer
+          onSpinComplete(winner);
+        }
       }
     };
 
