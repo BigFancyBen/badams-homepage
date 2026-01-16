@@ -42,6 +42,10 @@ export default function SpinWheel({
   const lastTickTimeRef = useRef(0);
   const lastSliceIndexRef = useRef(-1);
 
+  // Cache DPR and context to avoid repeated lookups
+  const dprRef = useRef(1);
+  const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
+
   // Preload images
   useEffect(() => {
     if (items.length === 0) return;
@@ -238,18 +242,35 @@ export default function SpinWheel({
     []
   );
 
+  // Set up canvas size and context once (not on every frame)
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    dprRef.current = dpr;
+
+    // Only resize if dimensions actually changed
+    const targetWidth = size * dpr;
+    const targetHeight = size * dpr;
+    if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+    }
+
+    const ctx = canvas.getContext("2d", { alpha: false });
+    if (!ctx) return;
+
+    // Reset transform and apply DPR scaling
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctxRef.current = ctx;
+  }, [size]);
+
   // Initial draw
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !imagesLoaded) return;
-
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = size * dpr;
-    canvas.height = size * dpr;
-    ctx.scale(dpr, dpr);
+    const ctx = ctxRef.current;
+    if (!canvas || !ctx || !imagesLoaded) return;
 
     drawWheel(ctx, items, rotationRef.current, size);
   }, [items, imagesLoaded, drawWheel, size]);
@@ -259,10 +280,8 @@ export default function SpinWheel({
     if (!isSpinning || items.length === 0) return;
 
     const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    const ctx = ctxRef.current;
+    if (!canvas || !ctx) return;
 
     // Initialize
     remainingItemsRef.current = [...items];
@@ -309,7 +328,6 @@ export default function SpinWheel({
       }
 
       const elapsed = timestamp - startTime;
-      const dpr = window.devicePixelRatio || 1;
 
       // Phase 1: Elimination (0 to eliminationDuration)
       if (elapsed < eliminationDuration && itemsToEliminate > 0) {
@@ -348,9 +366,6 @@ export default function SpinWheel({
         }
 
         // Redraw
-        canvas.width = size * dpr;
-        canvas.height = size * dpr;
-        ctx.scale(dpr, dpr);
         drawWheel(ctx, remainingItemsRef.current, rotationRef.current, size);
 
         animationRef.current = requestAnimationFrame(animate);
@@ -431,9 +446,6 @@ export default function SpinWheel({
         }
 
         // Redraw
-        canvas.width = size * dpr;
-        canvas.height = size * dpr;
-        ctx.scale(dpr, dpr);
         drawWheel(ctx, remainingItemsRef.current, rotationRef.current, size);
 
         if (spinProgress < 1) {
@@ -461,16 +473,8 @@ export default function SpinWheel({
   useEffect(() => {
     if (!isSpinning && !selectedItem) {
       remainingItemsRef.current = items;
-      const canvas = canvasRef.current;
-      if (!canvas || !imagesLoaded) return;
-
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-
-      const dpr = window.devicePixelRatio || 1;
-      canvas.width = size * dpr;
-      canvas.height = size * dpr;
-      ctx.scale(dpr, dpr);
+      const ctx = ctxRef.current;
+      if (!ctx || !imagesLoaded) return;
 
       drawWheel(ctx, items, rotationRef.current, size);
     }
@@ -485,7 +489,12 @@ export default function SpinWheel({
         <canvas
           ref={canvasRef}
           className="w-full h-auto"
-          style={{ width: size, height: size }}
+          style={{
+            width: size,
+            height: size,
+            willChange: "transform",
+            transform: "translateZ(0)",
+          }}
         />
         {!imagesLoaded && items.length > 0 && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/70">
