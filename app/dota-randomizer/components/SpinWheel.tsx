@@ -139,34 +139,47 @@ export default function SpinWheel({
           ctx.closePath();
           ctx.clip();
 
-          // Calculate image size and position at outer edge
-          // Image should be as large as possible while fitting in the slice
-          let imgSize: number;
+          // Calculate max image size based on number of items
+          let maxImgSize: number;
           let imgDistance: number;
 
           if (numItems === 1) {
-            imgSize = outerRadius * 1.4;
+            maxImgSize = outerRadius * 1.4;
             imgDistance = 0;
           } else if (numItems <= 4) {
-            imgSize = outerRadius * 0.65;
+            maxImgSize = outerRadius * 0.65;
             imgDistance = outerRadius * 0.5;
           } else if (numItems <= 8) {
-            imgSize = outerRadius * 0.5;
+            maxImgSize = outerRadius * 0.5;
             imgDistance = outerRadius * 0.58;
           } else if (numItems <= 16) {
-            imgSize = outerRadius * 0.4;
+            maxImgSize = outerRadius * 0.4;
             imgDistance = outerRadius * 0.65;
           } else {
-            // Many items - smaller images at outer edge
-            imgSize = Math.max(20, outerRadius * 0.3);
+            maxImgSize = Math.max(20, outerRadius * 0.3);
             imgDistance = outerRadius * 0.72;
+          }
+
+          // Calculate actual image dimensions preserving aspect ratio
+          const imgAspect = img.naturalWidth / img.naturalHeight;
+          let imgWidth: number;
+          let imgHeight: number;
+
+          if (imgAspect > 1) {
+            // Wider than tall - fit width to maxImgSize
+            imgWidth = maxImgSize;
+            imgHeight = maxImgSize / imgAspect;
+          } else {
+            // Taller than wide - fit height to maxImgSize
+            imgHeight = maxImgSize;
+            imgWidth = maxImgSize * imgAspect;
           }
 
           // Position at outer edge of slice
           const imgX = centerX + Math.cos(midAngle) * imgDistance;
           const imgY = centerY + Math.sin(midAngle) * imgDistance;
 
-          // Draw image with shadow
+          // Draw image with shadow, preserving aspect ratio
           ctx.shadowColor = "rgba(0, 0, 0, 0.6)";
           ctx.shadowBlur = 4;
           ctx.shadowOffsetX = 1;
@@ -174,10 +187,10 @@ export default function SpinWheel({
 
           ctx.drawImage(
             img,
-            imgX - imgSize / 2,
-            imgY - imgSize / 2,
-            imgSize,
-            imgSize
+            imgX - imgWidth / 2,
+            imgY - imgHeight / 2,
+            imgWidth,
+            imgHeight
           );
           ctx.restore();
         }

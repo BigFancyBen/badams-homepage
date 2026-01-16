@@ -23,8 +23,9 @@ interface DotaItemResponse {
   tier?: number;
 }
 
-// Minimal exclusion list for things the API doesn't clearly mark
+// Items to exclude - cosmetics, event items, and confirmed removed items
 const ALWAYS_EXCLUDE = new Set([
+  // Cosmetic/event items
   "river_painter",
   "river_painter2",
   "river_painter3",
@@ -37,6 +38,17 @@ const ALWAYS_EXCLUDE = new Set([
   "mystery_missile",
   "mystery_toss",
   "mystery_vacuum",
+  // Confirmed removed items (no longer in the shop)
+  "wraith_pact",           // Removed in 7.33
+  "necronomicon",          // Removed in 7.29
+  "necronomicon_2",
+  "necronomicon_3",
+  "ring_of_aquila",        // Removed in 7.20
+  "iron_talon",            // Removed
+  "poor_mans_shield",      // Removed (now neutral only)
+  "helm_of_the_dominator", // Removed in 7.33
+  "helm_of_the_dominator_2",
+  "vladmir",               // Removed
 ]);
 
 export function useDotaData() {
@@ -97,34 +109,35 @@ export function useDotaData() {
           }
         });
 
-        // Filter for upgraded/final items
+        // Filter for upgraded/final items that are currently purchasable
         const transformedItems: WheelItem[] = Object.entries(itemsData)
           .filter(([key, item]) => {
+            // Basic validation
             if (!item.dname || !item.img) return false;
             if (key.startsWith("recipe_")) return false;
             if (ALWAYS_EXCLUDE.has(key)) return false;
+
+            // Must have a cost > 0 (free items aren't purchasable upgrades)
+            if (!item.cost || item.cost <= 0) return false;
+
+            // Exclude neutral items (tier > 0 means it's a neutral drop)
             if (item.tier !== undefined && item.tier > 0) return false;
+
+            // Exclude consumables
             if (item.charges) return false;
-            if (key === "tpscroll") return false;
+            if (key === "tpscroll" || key === "smoke_of_deceit" || key === "dust") return false;
 
+            // Must be an upgraded item (has components it's built from)
             const hasComponents = item.components && item.components.length > 0;
-            const isExpensive = (item.cost || 0) >= 2000;
-            const isPurchasable = item.created === true;
-            const isBasicComponent = componentItems.has(key) && !hasComponents;
+            if (!hasComponents) return false;
+
+            // Exclude items that can be upgraded further (unless they're expensive enough to be final-tier worthy)
             const canBeUpgraded = hasUpgrade.has(key);
-
-            if (hasComponents) {
-              if (canBeUpgraded && (item.cost || 0) < 3000) {
-                return false;
-              }
-              return true;
+            if (canBeUpgraded && item.cost < 4000) {
+              return false;
             }
 
-            if (isPurchasable && isExpensive && !isBasicComponent) {
-              return true;
-            }
-
-            return false;
+            return true;
           })
           .map(([key, item]) => ({
             id: item.id,
