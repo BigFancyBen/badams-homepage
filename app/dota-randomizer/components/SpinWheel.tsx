@@ -375,23 +375,25 @@ export default function SpinWheel({
           if (winnerFinalIndex === -1) winnerFinalIndex = 0;
 
           // Calculate target rotation to land pointer on winner
-          // Pointer is at top (angle 0 from our draw perspective which starts at -PI/2)
-          // Each segment starts at: rotation + i * segmentAngle - PI/2
-          // We want winner's segment center under the pointer
+          // Pointer is at top (-PI/2 in canvas coordinates)
+          // Segment i spans from: rotation + i * segmentAngle - PI/2 to rotation + (i+1) * segmentAngle - PI/2
+          // For winner's center to be at the pointer (-PI/2):
+          //   rotation + (winnerIndex + 0.5) * segmentAngle - PI/2 = -PI/2
+          //   rotation = -(winnerIndex + 0.5) * segmentAngle
           const segmentAngle = (2 * Math.PI) / remaining.length;
-          const winnerCenterAngle = winnerFinalIndex * segmentAngle + segmentAngle / 2;
 
-          // Target: winner center should be at angle PI/2 (top, where pointer is)
-          // rotation + winnerCenterAngle - PI/2 = -PI/2 (mod 2PI for top)
-          // rotation = -winnerCenterAngle
-          // Add full rotations for spinning effect
-          const targetOffset = -winnerCenterAngle;
-          targetRotation = spinPhaseStartRotation + baseSpinRotation + targetOffset;
+          // Target rotation (mod 2*PI) for winner to be under pointer
+          const targetAngleMod = (-(winnerFinalIndex + 0.5) * segmentAngle % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
 
-          // Normalize so we're always spinning forward
-          while (targetRotation < spinPhaseStartRotation + 2 * Math.PI) {
-            targetRotation += 2 * Math.PI;
-          }
+          // Current rotation (mod 2*PI)
+          const currentAngleMod = ((spinPhaseStartRotation % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+
+          // Calculate how much more we need to rotate to reach target
+          let angleDiff = targetAngleMod - currentAngleMod;
+          if (angleDiff <= 0) angleDiff += 2 * Math.PI; // Always spin forward
+
+          // Add full rotations for visual effect, plus the precise amount to land on winner
+          targetRotation = spinPhaseStartRotation + baseSpinRotation + angleDiff;
         }
 
         const spinElapsed = timestamp - spinPhaseStartTime;
