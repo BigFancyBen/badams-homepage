@@ -6,6 +6,7 @@ import { useDotaData } from "./hooks/useDotaData";
 import { useSoundEffects } from "./hooks/useSoundEffects";
 import SpinWheel from "./components/SpinWheel";
 import ResultDisplay from "./components/ResultDisplay";
+import CowardDisplay from "./components/CowardDisplay";
 import { WheelItem, SpinState } from "./types";
 
 const SPIN_DURATION = 10000; // 10 seconds
@@ -50,7 +51,9 @@ function useWheelSize() {
 export default function DotaRandomizerPage() {
   const { heroes, items, loading, error } = useDotaData();
   const wheelSize = useWheelSize();
-  const { playTick, playDing, playFanfare } = useSoundEffects();
+  const [isMuted, setIsMuted] = useState(false);
+  const [showCoward, setShowCoward] = useState(false);
+  const { playTick, playDing, playFanfare } = useSoundEffects(isMuted);
   const [spinState, setSpinState] = useState<SpinState>({
     isSpinning: false,
     selectedHero: null,
@@ -102,6 +105,17 @@ export default function DotaRandomizerPage() {
       showResult: false,
     });
     setCompletedCount(0);
+  }, []);
+
+  const handleMuteToggle = useCallback(() => {
+    if (!isMuted) {
+      setShowCoward(true);
+    }
+    setIsMuted((prev) => !prev);
+  }, [isMuted]);
+
+  const handleCowardDismiss = useCallback(() => {
+    setShowCoward(false);
   }, []);
 
   if (loading) {
@@ -236,6 +250,36 @@ export default function DotaRandomizerPage() {
           onClick={handleReset}
         />
       )}
+
+      {/* Mute button */}
+      <button
+        onClick={handleMuteToggle}
+        className={`
+          fixed bottom-4 right-4 z-30 p-3
+          transition-all duration-300 transform hover:scale-110
+          ${isMuted
+            ? "bg-red-900/80 border-2 border-red-500 text-red-300"
+            : "bg-gray-800/80 border-2 border-gray-600 text-gray-300 hover:border-gray-400"
+          }
+        `}
+        title={isMuted ? "Unmute sounds" : "Mute sounds"}
+      >
+        {isMuted ? (
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+            <line x1="23" y1="9" x2="17" y2="15" />
+            <line x1="17" y1="9" x2="23" y2="15" />
+          </svg>
+        ) : (
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
+          </svg>
+        )}
+      </button>
+
+      {/* Coward display overlay */}
+      <CowardDisplay show={showCoward} onComplete={handleCowardDismiss} />
     </div>
   );
 }
