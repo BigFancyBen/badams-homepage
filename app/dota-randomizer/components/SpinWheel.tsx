@@ -397,7 +397,6 @@ export default function SpinWheel({
           </div>
         )}
       </div>
-      <div className="mt-2 text-gray-400 text-sm">{items.length} options</div>
     </div>
   );
 }

@@ -65,15 +65,14 @@ export function useDotaData() {
         const itemsData: Record<string, DotaItemResponse> =
           await itemsResponse.json();
 
-        // Transform heroes - use OpenDota CDN which supports CORS
+        // Transform heroes - use Steam CDN
         const transformedHeroes: WheelItem[] = heroesData.map((hero) => {
           const heroKey = hero.name.replace("npc_dota_hero_", "");
           return {
             id: hero.id,
             name: heroKey,
             displayName: hero.localized_name,
-            // Use OpenDota's CDN which proxies Steam images and supports CORS
-            imageUrl: `https://cdn.opendota.com/apps/dota2/images/dota_react/heroes/${heroKey}.png`,
+            imageUrl: `https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/${heroKey}.png`,
           };
         });
 
@@ -131,8 +130,7 @@ export function useDotaData() {
             id: item.id,
             name: key,
             displayName: item.dname || key,
-            // Use OpenDota CDN - item.img contains path like /apps/dota2/images/dota_react/items/blink.png
-            imageUrl: `https://cdn.opendota.com${item.img}`,
+            imageUrl: `https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/items/${key}.png`,
           }));
 
         setHeroes(transformedHeroes);

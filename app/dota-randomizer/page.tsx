@@ -114,9 +114,6 @@ export default function DotaRandomizerPage() {
         <h1 className="text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-400 to-amber-400">
           Dota 2 Randomizer
         </h1>
-        <p className="text-gray-400 mt-2">
-          Spin to get a random hero and item challenge
-        </p>
       </header>
 
       {/* Main content */}
@@ -175,16 +172,6 @@ export default function DotaRandomizerPage() {
               Spin Again
             </button>
           )}
-        </div>
-
-        {/* Stats */}
-        <div className="text-center mt-8 text-gray-500 text-sm">
-          <p>
-            {heroes.length} heroes &bull; {items.length} items
-          </p>
-          <p className="mt-1">
-            Data auto-updates from OpenDota API
-          </p>
         </div>
       </main>
 
