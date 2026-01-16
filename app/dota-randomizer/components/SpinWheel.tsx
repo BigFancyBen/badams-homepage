@@ -11,6 +11,8 @@ interface SpinWheelProps {
   onSpinComplete: (item: WheelItem) => void;
   spinDuration: number;
   size?: number;
+  onTick?: () => void;
+  onSelectionComplete?: () => void;
 }
 
 interface ImageCache {
@@ -25,6 +27,8 @@ export default function SpinWheel({
   onSpinComplete,
   spinDuration,
   size = 400,
+  onTick,
+  onSelectionComplete,
 }: SpinWheelProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number | null>(null);
@@ -35,6 +39,8 @@ export default function SpinWheel({
   // Current animation state
   const rotationRef = useRef(0);
   const remainingItemsRef = useRef<WheelItem[]>([]);
+  const lastTickTimeRef = useRef(0);
+  const lastSliceIndexRef = useRef(-1);
 
   // Preload images
   useEffect(() => {
@@ -261,6 +267,8 @@ export default function SpinWheel({
     // Initialize
     remainingItemsRef.current = [...items];
     const totalItems = items.length;
+    lastSliceIndexRef.current = -1;
+    lastTickTimeRef.current = 0;
 
     // Select winner at start
     const winnerIndex = Math.floor(Math.random() * totalItems);
@@ -325,6 +333,19 @@ export default function SpinWheel({
 
         // Continuous rotation during elimination
         rotationRef.current += eliminationSpeed;
+
+        // Play tick sound when passing a slice boundary
+        if (onTick && remainingItemsRef.current.length > 0) {
+          const sliceAngle = (2 * Math.PI) / remainingItemsRef.current.length;
+          const currentSliceIndex = Math.floor(
+            ((rotationRef.current % (2 * Math.PI)) + 2 * Math.PI) / sliceAngle
+          ) % remainingItemsRef.current.length;
+
+          if (currentSliceIndex !== lastSliceIndexRef.current) {
+            lastSliceIndexRef.current = currentSliceIndex;
+            onTick();
+          }
+        }
 
         // Redraw
         canvas.width = size * dpr;
@@ -396,6 +417,19 @@ export default function SpinWheel({
           spinPhaseStartRotation +
           (targetRotation - spinPhaseStartRotation) * easedProgress;
 
+        // Play tick sound when passing a slice boundary during spin-down
+        if (onTick && remainingItemsRef.current.length > 0) {
+          const sliceAngle = (2 * Math.PI) / remainingItemsRef.current.length;
+          const currentSliceIndex = Math.floor(
+            ((rotationRef.current % (2 * Math.PI)) + 2 * Math.PI) / sliceAngle
+          ) % remainingItemsRef.current.length;
+
+          if (currentSliceIndex !== lastSliceIndexRef.current) {
+            lastSliceIndexRef.current = currentSliceIndex;
+            onTick();
+          }
+        }
+
         // Redraw
         canvas.width = size * dpr;
         canvas.height = size * dpr;
@@ -406,6 +440,9 @@ export default function SpinWheel({
           animationRef.current = requestAnimationFrame(animate);
         } else {
           // Animation complete - winner is now under pointer
+          if (onSelectionComplete) {
+            onSelectionComplete();
+          }
           onSpinComplete(winner);
         }
       }
@@ -418,7 +455,7 @@ export default function SpinWheel({
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [isSpinning, items, spinDuration, onSpinComplete, drawWheel, size]);
+  }, [isSpinning, items, spinDuration, onSpinComplete, onTick, onSelectionComplete, drawWheel, size]);
 
   // Reset wheel
   useEffect(() => {
