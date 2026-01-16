@@ -378,8 +378,8 @@ export default function SpinWheel({
             forwardDistance += 2 * Math.PI;
           }
 
-          // Add 5-8 extra full rotations for visual effect
-          const extraRotations = 5 + Math.random() * 3;
+          // Add 5-8 extra FULL rotations for visual effect (must be integer!)
+          const extraRotations = 5 + Math.floor(Math.random() * 4);
           const totalSpinAmount = extraRotations * 2 * Math.PI + forwardDistance;
 
           targetRotation = spinPhaseStartRotation + totalSpinAmount;
