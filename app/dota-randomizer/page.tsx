@@ -7,7 +7,7 @@ import SpinWheel from "./components/SpinWheel";
 import ResultDisplay from "./components/ResultDisplay";
 import { WheelItem, SpinState } from "./types";
 
-const SPIN_DURATION = 5000; // 5 seconds
+const SPIN_DURATION = 10000; // 10 seconds
 
 export default function DotaRandomizerPage() {
   const { heroes, items, loading, error } = useDotaData();

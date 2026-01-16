@@ -67,70 +67,104 @@ export default function SpinWheel({
     (
       ctx: CanvasRenderingContext2D,
       wheelItems: WheelItem[],
-      rotation: number,
-      canvas: HTMLCanvasElement
+      rotation: number
     ) => {
-      const centerX = canvas.width / 2;
-      const centerY = canvas.height / 2;
-      const radius = Math.min(centerX, centerY) - 10;
+      const displayWidth = 400;
+      const displayHeight = 400;
+      const centerX = displayWidth / 2;
+      const centerY = displayHeight / 2;
+      const radius = Math.min(centerX, centerY) - 15;
 
       // Clear canvas
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.clearRect(0, 0, displayWidth, displayHeight);
 
       if (wheelItems.length === 0) return;
 
       const sliceAngle = (2 * Math.PI) / wheelItems.length;
 
-      // Draw wheel background glow
+      // Draw outer glow ring
       ctx.save();
       ctx.beginPath();
-      ctx.arc(centerX, centerY, radius + 5, 0, 2 * Math.PI);
+      ctx.arc(centerX, centerY, radius + 8, 0, 2 * Math.PI);
+      ctx.strokeStyle = "#8b5cf6";
+      ctx.lineWidth = 4;
       ctx.shadowColor = "#8b5cf6";
-      ctx.shadowBlur = 20;
-      ctx.fillStyle = "transparent";
-      ctx.fill();
+      ctx.shadowBlur = 15;
+      ctx.stroke();
       ctx.restore();
 
       // Draw each slice
       wheelItems.forEach((item, i) => {
-        const startAngle = rotation + i * sliceAngle;
+        const startAngle = rotation + i * sliceAngle - Math.PI / 2; // Start from top
         const endAngle = startAngle + sliceAngle;
+        const midAngle = startAngle + sliceAngle / 2;
 
-        // Draw slice background
+        // Draw slice background with gradient
         ctx.save();
         ctx.beginPath();
         ctx.moveTo(centerX, centerY);
         ctx.arc(centerX, centerY, radius, startAngle, endAngle);
         ctx.closePath();
 
-        // Alternate colors
-        const hue = (i * 137.5) % 360;
-        ctx.fillStyle = `hsl(${hue}, 60%, 15%)`;
+        // Alternate darker/lighter backgrounds for contrast
+        const baseHue = (i * 137.5) % 360;
+        const gradient = ctx.createRadialGradient(
+          centerX, centerY, 0,
+          centerX, centerY, radius
+        );
+        gradient.addColorStop(0, `hsl(${baseHue}, 40%, 12%)`);
+        gradient.addColorStop(0.7, `hsl(${baseHue}, 50%, 18%)`);
+        gradient.addColorStop(1, `hsl(${baseHue}, 60%, 22%)`);
+        ctx.fillStyle = gradient;
         ctx.fill();
 
-        // Draw border
-        ctx.strokeStyle = "#8b5cf6";
+        // Draw slice border
+        ctx.strokeStyle = "#a78bfa";
         ctx.lineWidth = 2;
         ctx.stroke();
         ctx.restore();
 
-        // Draw image in the slice
+        // Draw image in the slice - make it larger and more visible
         const img = imageCache.current[item.name];
         if (img) {
           ctx.save();
+
+          // Clip to slice
           ctx.beginPath();
           ctx.moveTo(centerX, centerY);
-          ctx.arc(centerX, centerY, radius, startAngle, endAngle);
+          ctx.arc(centerX, centerY, radius - 4, startAngle, endAngle);
           ctx.closePath();
           ctx.clip();
 
-          const midAngle = startAngle + sliceAngle / 2;
-          const imgDistance = radius * 0.6;
+          // Calculate image position and size based on number of items
+          const numItems = wheelItems.length;
+          let imgSize: number;
+          let imgDistance: number;
+
+          if (numItems <= 4) {
+            imgSize = radius * 0.6;
+            imgDistance = radius * 0.55;
+          } else if (numItems <= 8) {
+            imgSize = radius * 0.5;
+            imgDistance = radius * 0.58;
+          } else if (numItems <= 16) {
+            imgSize = radius * 0.4;
+            imgDistance = radius * 0.6;
+          } else {
+            // Many items - show smaller images
+            imgSize = Math.max(30, radius * 0.35);
+            imgDistance = radius * 0.62;
+          }
+
           const imgX = centerX + Math.cos(midAngle) * imgDistance;
           const imgY = centerY + Math.sin(midAngle) * imgDistance;
-          const imgSize = Math.min(60, radius * 0.4);
 
-          ctx.globalAlpha = 0.9;
+          // Draw image with slight shadow for visibility
+          ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
+          ctx.shadowBlur = 4;
+          ctx.shadowOffsetX = 2;
+          ctx.shadowOffsetY = 2;
+
           ctx.drawImage(
             img,
             imgX - imgSize / 2,
@@ -140,27 +174,57 @@ export default function SpinWheel({
           );
           ctx.restore();
         }
+
+        // Draw item name if few items remain (readable)
+        if (wheelItems.length <= 6) {
+          ctx.save();
+          const textDistance = radius * 0.35;
+          const textX = centerX + Math.cos(midAngle) * textDistance;
+          const textY = centerY + Math.sin(midAngle) * textDistance;
+
+          ctx.font = "bold 10px Inter, sans-serif";
+          ctx.fillStyle = "white";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
+          ctx.shadowBlur = 3;
+
+          // Truncate long names
+          const displayText = item.displayName.length > 12
+            ? item.displayName.slice(0, 10) + "..."
+            : item.displayName;
+          ctx.fillText(displayText, textX, textY);
+          ctx.restore();
+        }
       });
 
       // Draw center circle
       ctx.save();
       ctx.beginPath();
-      ctx.arc(centerX, centerY, 30, 0, 2 * Math.PI);
-      ctx.fillStyle = "#1a1a2e";
+      ctx.arc(centerX, centerY, 25, 0, 2 * Math.PI);
+      const centerGradient = ctx.createRadialGradient(
+        centerX, centerY, 0,
+        centerX, centerY, 25
+      );
+      centerGradient.addColorStop(0, "#2d1f4e");
+      centerGradient.addColorStop(1, "#1a1a2e");
+      ctx.fillStyle = centerGradient;
       ctx.fill();
-      ctx.strokeStyle = "#8b5cf6";
+      ctx.strokeStyle = "#a78bfa";
       ctx.lineWidth = 3;
       ctx.stroke();
       ctx.restore();
 
-      // Draw pointer at top
+      // Draw pointer/indicator at top
       ctx.save();
       ctx.beginPath();
-      ctx.moveTo(centerX, 5);
-      ctx.lineTo(centerX - 15, 30);
-      ctx.lineTo(centerX + 15, 30);
+      ctx.moveTo(centerX, 8);
+      ctx.lineTo(centerX - 12, 28);
+      ctx.lineTo(centerX + 12, 28);
       ctx.closePath();
       ctx.fillStyle = "#f59e0b";
+      ctx.shadowColor = "#f59e0b";
+      ctx.shadowBlur = 10;
       ctx.fill();
       ctx.strokeStyle = "#fbbf24";
       ctx.lineWidth = 2;
@@ -180,12 +244,11 @@ export default function SpinWheel({
 
     // Set up high DPI canvas
     const dpr = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
+    canvas.width = 400 * dpr;
+    canvas.height = 400 * dpr;
     ctx.scale(dpr, dpr);
 
-    drawWheel(ctx, items, rotationRef.current, canvas);
+    drawWheel(ctx, items, rotationRef.current);
   }, [items, imagesLoaded, drawWheel]);
 
   // Spin animation
@@ -221,12 +284,17 @@ export default function SpinWheel({
       const elapsed = timestamp - startTime;
       const progress = Math.min(elapsed / spinDuration, 1);
 
-      // Easing function for smooth deceleration
-      const easeOut = 1 - Math.pow(1 - progress, 3);
+      // Enhanced easing: starts fast, slows down dramatically at the end
+      // Using a combination of exponential and quintic easing for dramatic slowdown
+      const easeOutQuint = 1 - Math.pow(1 - progress, 5);
+      const easeOutExpo = progress === 1 ? 1 : 1 - Math.pow(2, -10 * progress);
+      const easeOut = (easeOutQuint + easeOutExpo) / 2;
 
-      // Calculate rotation speed (fast at start, slow at end)
-      const baseSpeed = 0.3;
-      const currentSpeed = baseSpeed * (1 - easeOut * 0.95);
+      // Calculate rotation speed - starts at max, ends near zero
+      const maxSpeed = 0.25;
+      const minSpeed = 0.001;
+      const speedRange = maxSpeed - minSpeed;
+      const currentSpeed = minSpeed + speedRange * (1 - easeOut);
       rotationRef.current += currentSpeed;
 
       // Handle eliminations
@@ -252,20 +320,19 @@ export default function SpinWheel({
 
       // Set up canvas for drawing
       const dpr = window.devicePixelRatio || 1;
-      const rect = canvas.getBoundingClientRect();
-      canvas.width = rect.width * dpr;
-      canvas.height = rect.height * dpr;
+      canvas.width = 400 * dpr;
+      canvas.height = 400 * dpr;
       ctx.scale(dpr, dpr);
 
       // Draw with current remaining items
-      drawWheel(ctx, remainingItemsRef.current, rotationRef.current, canvas);
+      drawWheel(ctx, remainingItemsRef.current, rotationRef.current);
 
       if (progress < 1) {
         animationRef.current = requestAnimationFrame(animate);
       } else {
         // Animation complete - ensure only winner remains
         remainingItemsRef.current = [winner];
-        drawWheel(ctx, [winner], rotationRef.current, canvas);
+        drawWheel(ctx, [winner], rotationRef.current);
         onSpinComplete(winner);
       }
     };
@@ -290,12 +357,11 @@ export default function SpinWheel({
       if (!ctx) return;
 
       const dpr = window.devicePixelRatio || 1;
-      const rect = canvas.getBoundingClientRect();
-      canvas.width = rect.width * dpr;
-      canvas.height = rect.height * dpr;
+      canvas.width = 400 * dpr;
+      canvas.height = 400 * dpr;
       ctx.scale(dpr, dpr);
 
-      drawWheel(ctx, items, rotationRef.current, canvas);
+      drawWheel(ctx, items, rotationRef.current);
     }
   }, [isSpinning, selectedItem, items, imagesLoaded, drawWheel]);
 
@@ -315,9 +381,7 @@ export default function SpinWheel({
         )}
       </div>
       <div className="mt-2 text-gray-400 text-sm">
-        {remainingItemsRef.current.length > 0
-          ? `${items.length} options`
-          : `${items.length} options`}
+        {items.length} options
       </div>
     </div>
   );
