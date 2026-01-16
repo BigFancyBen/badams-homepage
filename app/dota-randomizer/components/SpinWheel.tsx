@@ -282,7 +282,8 @@ export default function SpinWheel({
 
     // Calculate base rotations for spinning effect
     // Add several full rotations plus offset to land on winner
-    const extraRotations = 5 + Math.random() * 3; // 5-8 full spins during spin phase
+    // MUST be an integer so baseSpinRotation is exact multiple of 2π
+    const extraRotations = 5 + Math.floor(Math.random() * 4); // 5, 6, 7, or 8 full spins
     const baseSpinRotation = extraRotations * 2 * Math.PI;
 
     let startTime: number | null = null;
