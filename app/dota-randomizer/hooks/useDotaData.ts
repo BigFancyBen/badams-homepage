@@ -49,6 +49,27 @@ const ALWAYS_EXCLUDE = new Set([
   "helm_of_the_dominator", // Removed in 7.33
   "helm_of_the_dominator_2",
   "vladmir",               // Removed
+  // Basic upgrade items to exclude (not interesting for randomizer)
+  "magic_wand",
+  "bracer",
+  "null_talisman",
+  "wraith_band",
+  "soul_ring",
+  "orb_of_corrosion",
+  "falcon_blade",
+  "perseverance",
+  "oblivion_staff",
+  "buckler",
+  "headdress",
+  "ring_of_basilius",
+  "soul_booster",
+]);
+
+// Non-upgrade items to explicitly include
+const ALWAYS_INCLUDE = new Set([
+  "aghanims_shard",
+  "blink",              // Blink Dagger
+  "ghost",              // Ghost Scepter
 ]);
 
 export function useDotaData() {
@@ -88,28 +109,7 @@ export function useDotaData() {
           };
         });
 
-        // Build a set of all items that are used as components
-        const componentItems = new Set<string>();
-        Object.values(itemsData).forEach((item) => {
-          if (item.components && Array.isArray(item.components)) {
-            item.components.forEach((comp) => componentItems.add(comp));
-          }
-        });
-
-        // Build set of items that have upgrades
-        const hasUpgrade = new Set<string>();
-        Object.values(itemsData).forEach((item) => {
-          if (item.components && Array.isArray(item.components)) {
-            item.components.forEach((comp) => {
-              const compItem = itemsData[comp];
-              if (compItem?.components && compItem.components.length > 0) {
-                hasUpgrade.add(comp);
-              }
-            });
-          }
-        });
-
-        // Filter for upgraded/final items that are currently purchasable
+        // Filter for upgraded items that are currently purchasable
         const transformedItems: WheelItem[] = Object.entries(itemsData)
           .filter(([key, item]) => {
             // Basic validation
@@ -117,7 +117,7 @@ export function useDotaData() {
             if (key.startsWith("recipe_")) return false;
             if (ALWAYS_EXCLUDE.has(key)) return false;
 
-            // Must have a cost > 0 (free items aren't purchasable upgrades)
+            // Must have a cost > 0 (free items aren't purchasable)
             if (!item.cost || item.cost <= 0) return false;
 
             // Exclude neutral items (tier > 0 means it's a neutral drop)
@@ -127,17 +127,12 @@ export function useDotaData() {
             if (item.charges) return false;
             if (key === "tpscroll" || key === "smoke_of_deceit" || key === "dust") return false;
 
-            // Must be an upgraded item (has components it's built from)
+            // Always include specific items (Aghanim's Shard, Blink, Ghost Scepter)
+            if (ALWAYS_INCLUDE.has(key)) return true;
+
+            // Include all upgraded items (items with components)
             const hasComponents = item.components && item.components.length > 0;
-            if (!hasComponents) return false;
-
-            // Exclude items that can be upgraded further (unless they're expensive enough to be final-tier worthy)
-            const canBeUpgraded = hasUpgrade.has(key);
-            if (canBeUpgraded && item.cost < 4000) {
-              return false;
-            }
-
-            return true;
+            return hasComponents;
           })
           .map(([key, item]) => ({
             id: item.id,
