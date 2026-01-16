@@ -9,7 +9,7 @@ interface SoundEffects {
   cleanup: () => void;
 }
 
-export function useSoundEffects(): SoundEffects {
+export function useSoundEffects(muted: boolean = false): SoundEffects {
   const audioContextRef = useRef<AudioContext | null>(null);
 
   // Initialize AudioContext lazily (must be triggered by user interaction)
@@ -28,6 +28,7 @@ export function useSoundEffects(): SoundEffects {
 
   // Tick sound - short click for wheel spinning
   const playTick = useCallback(() => {
+    if (muted) return;
     try {
       const ctx = getAudioContext();
       const oscillator = ctx.createOscillator();
@@ -51,10 +52,11 @@ export function useSoundEffects(): SoundEffects {
     } catch {
       // Audio may not be available
     }
-  }, [getAudioContext]);
+  }, [getAudioContext, muted]);
 
   // Ding sound - pleasant chime for selection complete
   const playDing = useCallback(() => {
+    if (muted) return;
     try {
       const ctx = getAudioContext();
 
@@ -82,10 +84,11 @@ export function useSoundEffects(): SoundEffects {
     } catch {
       // Audio may not be available
     }
-  }, [getAudioContext]);
+  }, [getAudioContext, muted]);
 
   // Fanfare sound - celebratory ascending notes
   const playFanfare = useCallback(() => {
+    if (muted) return;
     try {
       const ctx = getAudioContext();
 
@@ -140,7 +143,7 @@ export function useSoundEffects(): SoundEffects {
     } catch {
       // Audio may not be available
     }
-  }, [getAudioContext]);
+  }, [getAudioContext, muted]);
 
   // Cleanup on unmount
   const cleanup = useCallback(() => {
