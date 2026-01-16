@@ -28,6 +28,7 @@ export default function SpinWheel({
   const animationRef = useRef<number | null>(null);
   const imageCache = useRef<ImageCache>({});
   const [imagesLoaded, setImagesLoaded] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState(0);
 
   // Current animation state
   const rotationRef = useRef(0);
@@ -40,23 +41,32 @@ export default function SpinWheel({
     let loadedCount = 0;
     const totalImages = items.length;
 
+    // Reset loading state
+    setImagesLoaded(false);
+    setLoadingProgress(0);
+
     items.forEach((item) => {
+      // Skip if already cached
       if (imageCache.current[item.name]) {
         loadedCount++;
+        setLoadingProgress(Math.round((loadedCount / totalImages) * 100));
         if (loadedCount === totalImages) setImagesLoaded(true);
         return;
       }
 
       const img = new Image();
-      img.crossOrigin = "anonymous";
+      // Don't set crossOrigin - OpenDota CDN handles CORS properly
       img.onload = () => {
         imageCache.current[item.name] = img;
         loadedCount++;
+        setLoadingProgress(Math.round((loadedCount / totalImages) * 100));
         if (loadedCount === totalImages) setImagesLoaded(true);
       };
       img.onerror = () => {
+        // On error, still mark as processed but with null
         imageCache.current[item.name] = null;
         loadedCount++;
+        setLoadingProgress(Math.round((loadedCount / totalImages) * 100));
         if (loadedCount === totalImages) setImagesLoaded(true);
       };
       img.src = item.imageUrl;
@@ -69,28 +79,28 @@ export default function SpinWheel({
       wheelItems: WheelItem[],
       rotation: number
     ) => {
-      const displayWidth = 400;
-      const displayHeight = 400;
-      const centerX = displayWidth / 2;
-      const centerY = displayHeight / 2;
-      const radius = Math.min(centerX, centerY) - 15;
+      const size = 400;
+      const centerX = size / 2;
+      const centerY = size / 2;
+      const outerRadius = size / 2 - 20;
+      const innerRadius = 25;
 
       // Clear canvas
-      ctx.clearRect(0, 0, displayWidth, displayHeight);
+      ctx.clearRect(0, 0, size, size);
 
       if (wheelItems.length === 0) return;
 
       const numItems = wheelItems.length;
       const sliceAngle = (2 * Math.PI) / numItems;
 
-      // Draw outer glow ring
+      // Draw outer glow
       ctx.save();
       ctx.beginPath();
-      ctx.arc(centerX, centerY, radius + 8, 0, 2 * Math.PI);
+      ctx.arc(centerX, centerY, outerRadius + 5, 0, 2 * Math.PI);
       ctx.strokeStyle = "#8b5cf6";
-      ctx.lineWidth = 4;
+      ctx.lineWidth = 3;
       ctx.shadowColor = "#8b5cf6";
-      ctx.shadowBlur = 20;
+      ctx.shadowBlur = 15;
       ctx.stroke();
       ctx.restore();
 
@@ -104,74 +114,63 @@ export default function SpinWheel({
         ctx.save();
         ctx.beginPath();
         ctx.moveTo(centerX, centerY);
-        ctx.arc(centerX, centerY, radius, startAngle, endAngle);
+        ctx.arc(centerX, centerY, outerRadius, startAngle, endAngle);
         ctx.closePath();
 
-        // Alternate colors for contrast
-        const baseHue = (i * 137.5) % 360;
-        const gradient = ctx.createRadialGradient(
-          centerX, centerY, radius * 0.3,
-          centerX, centerY, radius
-        );
-        gradient.addColorStop(0, `hsl(${baseHue}, 30%, 8%)`);
-        gradient.addColorStop(0.5, `hsl(${baseHue}, 40%, 12%)`);
-        gradient.addColorStop(1, `hsl(${baseHue}, 50%, 18%)`);
-        ctx.fillStyle = gradient;
+        // Alternating colors for contrast
+        const hue = (i * 137.5) % 360;
+        ctx.fillStyle = `hsl(${hue}, 45%, 15%)`;
         ctx.fill();
 
-        // Draw slice border
-        ctx.strokeStyle = "#a78bfa";
-        ctx.lineWidth = 2;
+        ctx.strokeStyle = "#6d28d9";
+        ctx.lineWidth = 1;
         ctx.stroke();
         ctx.restore();
 
-        // Draw image at outer edge of slice for maximum visibility
+        // Draw image at OUTER edge of slice
         const img = imageCache.current[item.name];
         if (img) {
           ctx.save();
 
-          // Clip to slice
+          // Clip to slice shape
           ctx.beginPath();
           ctx.moveTo(centerX, centerY);
-          ctx.arc(centerX, centerY, radius - 2, startAngle, endAngle);
+          ctx.arc(centerX, centerY, outerRadius, startAngle, endAngle);
           ctx.closePath();
           ctx.clip();
 
-          // Calculate image size based on number of items
-          // Position at outer edge, size to fill the arc width
+          // Calculate image size and position at outer edge
+          // Image should be as large as possible while fitting in the slice
           let imgSize: number;
           let imgDistance: number;
 
           if (numItems === 1) {
-            // Single item - show large in center
-            imgSize = radius * 1.2;
+            imgSize = outerRadius * 1.4;
             imgDistance = 0;
-          } else if (numItems <= 3) {
-            imgSize = radius * 0.7;
-            imgDistance = radius * 0.45;
-          } else if (numItems <= 6) {
-            imgSize = radius * 0.55;
-            imgDistance = radius * 0.55;
-          } else if (numItems <= 12) {
-            imgSize = radius * 0.45;
-            imgDistance = radius * 0.62;
-          } else if (numItems <= 24) {
-            imgSize = radius * 0.38;
-            imgDistance = radius * 0.68;
+          } else if (numItems <= 4) {
+            imgSize = outerRadius * 0.65;
+            imgDistance = outerRadius * 0.5;
+          } else if (numItems <= 8) {
+            imgSize = outerRadius * 0.5;
+            imgDistance = outerRadius * 0.58;
+          } else if (numItems <= 16) {
+            imgSize = outerRadius * 0.4;
+            imgDistance = outerRadius * 0.65;
           } else {
-            // Many items - position at very outer edge
-            imgSize = Math.max(25, radius * 0.32);
-            imgDistance = radius * 0.72;
+            // Many items - smaller images at outer edge
+            imgSize = Math.max(20, outerRadius * 0.3);
+            imgDistance = outerRadius * 0.72;
           }
 
+          // Position at outer edge of slice
           const imgX = centerX + Math.cos(midAngle) * imgDistance;
           const imgY = centerY + Math.sin(midAngle) * imgDistance;
 
-          // Draw shadow for depth
-          ctx.shadowColor = "rgba(0, 0, 0, 0.7)";
-          ctx.shadowBlur = 6;
-          ctx.shadowOffsetX = 2;
-          ctx.shadowOffsetY = 2;
+          // Draw image with shadow
+          ctx.shadowColor = "rgba(0, 0, 0, 0.6)";
+          ctx.shadowBlur = 4;
+          ctx.shadowOffsetX = 1;
+          ctx.shadowOffsetY = 1;
 
           ctx.drawImage(
             img,
@@ -183,43 +182,44 @@ export default function SpinWheel({
           ctx.restore();
         }
 
-        // Draw item name when few items remain
-        if (numItems <= 8 && numItems > 1) {
+        // Draw text near CENTER (inner edge) when few items
+        if (numItems <= 10) {
           ctx.save();
-          const textDistance = radius * 0.28;
+          // Position text closer to center
+          const textDistance = innerRadius + 25;
           const textX = centerX + Math.cos(midAngle) * textDistance;
           const textY = centerY + Math.sin(midAngle) * textDistance;
 
-          const fontSize = numItems <= 4 ? 11 : 9;
-          ctx.font = `bold ${fontSize}px Inter, sans-serif`;
+          // Rotate text to follow the slice angle
+          ctx.translate(textX, textY);
+          ctx.rotate(midAngle + Math.PI / 2);
+
+          const fontSize = numItems <= 4 ? 10 : 8;
+          ctx.font = `bold ${fontSize}px Arial, sans-serif`;
           ctx.fillStyle = "white";
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
           ctx.shadowColor = "rgba(0, 0, 0, 0.9)";
-          ctx.shadowBlur = 4;
+          ctx.shadowBlur = 3;
 
-          const maxLen = numItems <= 4 ? 14 : 10;
-          const displayText = item.displayName.length > maxLen
-            ? item.displayName.slice(0, maxLen - 2) + "..."
-            : item.displayName;
-          ctx.fillText(displayText, textX, textY);
+          const maxLen = numItems <= 4 ? 12 : 8;
+          const displayText =
+            item.displayName.length > maxLen
+              ? item.displayName.slice(0, maxLen - 1) + "…"
+              : item.displayName;
+
+          ctx.fillText(displayText, 0, 0);
           ctx.restore();
         }
       });
 
-      // Draw center circle (smaller to show more of the slices)
+      // Draw center circle
       ctx.save();
       ctx.beginPath();
-      ctx.arc(centerX, centerY, 20, 0, 2 * Math.PI);
-      const centerGradient = ctx.createRadialGradient(
-        centerX, centerY, 0,
-        centerX, centerY, 20
-      );
-      centerGradient.addColorStop(0, "#3d2f5e");
-      centerGradient.addColorStop(1, "#1a1a2e");
-      ctx.fillStyle = centerGradient;
+      ctx.arc(centerX, centerY, innerRadius, 0, 2 * Math.PI);
+      ctx.fillStyle = "#1a1a2e";
       ctx.fill();
-      ctx.strokeStyle = "#a78bfa";
+      ctx.strokeStyle = "#8b5cf6";
       ctx.lineWidth = 3;
       ctx.stroke();
       ctx.restore();
@@ -227,15 +227,15 @@ export default function SpinWheel({
       // Draw pointer at top
       ctx.save();
       ctx.beginPath();
-      ctx.moveTo(centerX, 6);
-      ctx.lineTo(centerX - 14, 30);
-      ctx.lineTo(centerX + 14, 30);
+      ctx.moveTo(centerX, 8);
+      ctx.lineTo(centerX - 12, 28);
+      ctx.lineTo(centerX + 12, 28);
       ctx.closePath();
       ctx.fillStyle = "#f59e0b";
       ctx.shadowColor = "#f59e0b";
-      ctx.shadowBlur = 12;
+      ctx.shadowBlur = 10;
       ctx.fill();
-      ctx.strokeStyle = "#fbbf24";
+      ctx.strokeStyle = "#fcd34d";
       ctx.lineWidth = 2;
       ctx.stroke();
       ctx.restore();
@@ -259,7 +259,7 @@ export default function SpinWheel({
     drawWheel(ctx, items, rotationRef.current);
   }, [items, imagesLoaded, drawWheel]);
 
-  // Spin animation with non-linear elimination timing
+  // Spin animation
   useEffect(() => {
     if (!isSpinning || items.length === 0) return;
 
@@ -269,7 +269,7 @@ export default function SpinWheel({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // Initialize remaining items
+    // Initialize
     remainingItemsRef.current = [...items];
     const totalItems = items.length;
 
@@ -277,29 +277,28 @@ export default function SpinWheel({
     const winnerIndex = Math.floor(Math.random() * totalItems);
     const winner = items[winnerIndex];
 
-    // Create elimination schedule: last 5 items take last 4 seconds
-    // This means we need to eliminate (totalItems - 5) items in first 6 seconds
-    // and eliminate 4 items in last 4 seconds
+    // Elimination schedule: fast at start, slow at end
+    // Last 5 items take last 40% of time
     const fastPhaseItems = Math.max(0, totalItems - 5);
     const slowPhaseItems = Math.min(4, totalItems - 1);
-    const fastPhaseDuration = spinDuration * 0.6; // First 6 seconds
-    const slowPhaseDuration = spinDuration * 0.4; // Last 4 seconds
+    const fastPhaseDuration = spinDuration * 0.6;
+    const slowPhaseDuration = spinDuration * 0.4;
 
-    // Build elimination timestamps
     const eliminationTimes: number[] = [];
-
-    // Fast phase eliminations (evenly spaced in first 6 seconds)
     for (let i = 0; i < fastPhaseItems; i++) {
-      eliminationTimes.push((i + 1) * (fastPhaseDuration / fastPhaseItems));
+      eliminationTimes.push(((i + 1) / fastPhaseItems) * fastPhaseDuration);
     }
-
-    // Slow phase eliminations (evenly spaced in last 4 seconds)
     for (let i = 0; i < slowPhaseItems; i++) {
-      eliminationTimes.push(fastPhaseDuration + (i + 1) * (slowPhaseDuration / slowPhaseItems));
+      eliminationTimes.push(
+        fastPhaseDuration + ((i + 1) / slowPhaseItems) * slowPhaseDuration
+      );
     }
 
     let startTime: number | null = null;
     let eliminationsComplete = 0;
+
+    // Initial rotation speed (radians per frame at 60fps)
+    const initialSpeed = 0.4;
 
     const animate = (timestamp: number) => {
       if (!startTime) {
@@ -309,20 +308,15 @@ export default function SpinWheel({
       const elapsed = timestamp - startTime;
       const progress = Math.min(elapsed / spinDuration, 1);
 
-      // Very aggressive easing for dramatic slowdown
-      // Combines multiple easing functions for extreme deceleration
-      const t = progress;
-      const easeOutSeventh = 1 - Math.pow(1 - t, 7);
-      const easeOutExpo = t === 1 ? 1 : 1 - Math.pow(2, -12 * t);
-      const combined = (easeOutSeventh * 0.4 + easeOutExpo * 0.6);
+      // Smooth deceleration using quintic ease-out
+      // Speed = initialSpeed * (1 - progress)^5
+      // This gives a smooth, consistent slowdown
+      const speedMultiplier = Math.pow(1 - progress, 5);
+      const currentSpeed = initialSpeed * speedMultiplier + 0.001; // Small minimum to keep moving
 
-      // Rotation speed: very fast start, crawling at end
-      const maxSpeed = 0.35;
-      const minSpeed = 0.0005;
-      const currentSpeed = minSpeed + (maxSpeed - minSpeed) * (1 - combined);
       rotationRef.current += currentSpeed;
 
-      // Handle eliminations based on schedule
+      // Handle eliminations
       while (
         eliminationsComplete < eliminationTimes.length &&
         elapsed >= eliminationTimes[eliminationsComplete]
@@ -331,7 +325,8 @@ export default function SpinWheel({
         const nonWinners = currentItems.filter((item) => item.id !== winner.id);
 
         if (nonWinners.length > 0) {
-          const toRemove = nonWinners[Math.floor(Math.random() * nonWinners.length)];
+          const toRemove =
+            nonWinners[Math.floor(Math.random() * nonWinners.length)];
           remainingItemsRef.current = currentItems.filter(
             (item) => item.id !== toRemove.id
           );
@@ -339,7 +334,7 @@ export default function SpinWheel({
         eliminationsComplete++;
       }
 
-      // Set up canvas for drawing
+      // Redraw
       const dpr = window.devicePixelRatio || 1;
       canvas.width = 400 * dpr;
       canvas.height = 400 * dpr;
@@ -350,7 +345,6 @@ export default function SpinWheel({
       if (progress < 1) {
         animationRef.current = requestAnimationFrame(animate);
       } else {
-        // Animation complete
         remainingItemsRef.current = [winner];
         drawWheel(ctx, [winner], rotationRef.current);
         onSpinComplete(winner);
@@ -366,7 +360,7 @@ export default function SpinWheel({
     };
   }, [isSpinning, items, spinDuration, onSpinComplete, drawWheel]);
 
-  // Reset wheel when not spinning and no selection
+  // Reset wheel
   useEffect(() => {
     if (!isSpinning && !selectedItem) {
       remainingItemsRef.current = items;
@@ -395,14 +389,15 @@ export default function SpinWheel({
           style={{ width: 400, height: 400 }}
         />
         {!imagesLoaded && items.length > 0 && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-            <div className="text-white">Loading...</div>
+          <div className="absolute inset-0 flex items-center justify-center bg-black/70">
+            <div className="text-center">
+              <div className="text-white mb-2">Loading images...</div>
+              <div className="text-purple-400 text-sm">{loadingProgress}%</div>
+            </div>
           </div>
         )}
       </div>
-      <div className="mt-2 text-gray-400 text-sm">
-        {items.length} options
-      </div>
+      <div className="mt-2 text-gray-400 text-sm">{items.length} options</div>
     </div>
   );
 }

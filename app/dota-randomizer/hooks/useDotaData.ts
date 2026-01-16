@@ -7,6 +7,8 @@ interface DotaHeroResponse {
   id: number;
   name: string;
   localized_name: string;
+  img: string;
+  icon: string;
 }
 
 interface DotaItemResponse {
@@ -19,8 +21,6 @@ interface DotaItemResponse {
   created?: boolean;
   charges?: number | boolean;
   tier?: number;
-  qual?: string;
-  notes?: string;
 }
 
 // Minimal exclusion list for things the API doesn't clearly mark
@@ -65,18 +65,19 @@ export function useDotaData() {
         const itemsData: Record<string, DotaItemResponse> =
           await itemsResponse.json();
 
-        // Transform heroes
+        // Transform heroes - use OpenDota CDN which supports CORS
         const transformedHeroes: WheelItem[] = heroesData.map((hero) => {
           const heroKey = hero.name.replace("npc_dota_hero_", "");
           return {
             id: hero.id,
             name: heroKey,
             displayName: hero.localized_name,
-            imageUrl: `https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/${heroKey}.png`,
+            // Use OpenDota's CDN which proxies Steam images and supports CORS
+            imageUrl: `https://cdn.opendota.com/apps/dota2/images/dota_react/heroes/${heroKey}.png`,
           };
         });
 
-        // Build a set of all items that are used as components (basic building blocks)
+        // Build a set of all items that are used as components
         const componentItems = new Set<string>();
         Object.values(itemsData).forEach((item) => {
           if (item.components && Array.isArray(item.components)) {
@@ -84,12 +85,11 @@ export function useDotaData() {
           }
         });
 
-        // Build set of items that have upgrades (items that appear in components of other items)
+        // Build set of items that have upgrades
         const hasUpgrade = new Set<string>();
         Object.values(itemsData).forEach((item) => {
           if (item.components && Array.isArray(item.components)) {
             item.components.forEach((comp) => {
-              // If the component itself has components, it can be upgraded
               const compItem = itemsData[comp];
               if (compItem?.components && compItem.components.length > 0) {
                 hasUpgrade.add(comp);
@@ -101,27 +101,12 @@ export function useDotaData() {
         // Filter for upgraded/final items
         const transformedItems: WheelItem[] = Object.entries(itemsData)
           .filter(([key, item]) => {
-            // Must have display name and image
             if (!item.dname || !item.img) return false;
-
-            // Skip recipes
             if (key.startsWith("recipe_")) return false;
-
-            // Skip always-excluded items
             if (ALWAYS_EXCLUDE.has(key)) return false;
-
-            // Skip neutral items (they have a tier property)
             if (item.tier !== undefined && item.tier > 0) return false;
-
-            // Skip items with charges (consumables like tangos, clarities, wards)
             if (item.charges) return false;
-
-            // Skip TP scroll specifically
             if (key === "tpscroll") return false;
-
-            // An item is "final/upgraded" if:
-            // 1. It has components (it's crafted from other items), OR
-            // 2. It's purchasable (created=true) and costs >= 2000 gold and isn't used as a basic component
 
             const hasComponents = item.components && item.components.length > 0;
             const isExpensive = (item.cost || 0) >= 2000;
@@ -129,18 +114,13 @@ export function useDotaData() {
             const isBasicComponent = componentItems.has(key) && !hasComponents;
             const canBeUpgraded = hasUpgrade.has(key);
 
-            // Include if it has components (upgraded item)
             if (hasComponents) {
-              // But skip if it can be further upgraded (not a final item)
-              // Exception: include popular intermediate items like Maelstrom, Echo Sabre
               if (canBeUpgraded && (item.cost || 0) < 3000) {
                 return false;
               }
               return true;
             }
 
-            // Include standalone expensive items that aren't basic components
-            // These are items like Blink Dagger that don't build from anything
             if (isPurchasable && isExpensive && !isBasicComponent) {
               return true;
             }
@@ -151,7 +131,8 @@ export function useDotaData() {
             id: item.id,
             name: key,
             displayName: item.dname || key,
-            imageUrl: `https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/items/${key}.png`,
+            // Use OpenDota CDN - item.img contains path like /apps/dota2/images/dota_react/items/blink.png
+            imageUrl: `https://cdn.opendota.com${item.img}`,
           }));
 
         setHeroes(transformedHeroes);
