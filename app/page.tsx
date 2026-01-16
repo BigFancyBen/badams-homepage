@@ -83,6 +83,20 @@ export default function Home() {
               API • OSRS Wiki • Image Generation
             </div>
           </div>
+
+          {/* Dota 2 Randomizer */}
+          <a
+            href="/dota-randomizer"
+            className="block border-2 border-gray-700 p-6 hover:border-gray-500 transition-colors cursor-pointer"
+          >
+            <h3 className="text-xl font-bold mb-3">Dota 2 Randomizer</h3>
+            <p className="text-gray-300 mb-4 text-sm leading-relaxed">
+              Spin two wheels to get a random hero and item challenge for your
+              next Dota 2 game. Features canvas-based animations and real-time
+              data from the OpenDota API.
+            </p>
+            <div className="text-sm text-gray-400">Click to try it out →</div>
+          </a>
         </div>
       </div>
     </div>

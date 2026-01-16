@@ -29,3 +29,107 @@ body {
     box-shadow: inset -1px 0 0 0 rgba(255, 255, 255, 1);
   }
 }
+
+/* Dota Randomizer Animations */
+@keyframes slide-in-hero {
+  0% {
+    opacity: 0;
+    transform: scale(0.5) translateY(-80px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes slide-in-item {
+  0% {
+    opacity: 0;
+    transform: scale(0.5) translateY(80px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes scale-in {
+  0% {
+    opacity: 0;
+    transform: scale(0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes fade-in-delay {
+  0%, 30% {
+    opacity: 0;
+    transform: scale(0.75);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes fade-in-delay-long {
+  0%, 50% {
+    opacity: 0;
+    transform: scale(0.75);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes text-glow-purple {
+  0%, 100% {
+    text-shadow: 0 0 20px rgba(139, 92, 246, 0.5), 0 0 40px rgba(139, 92, 246, 0.3);
+  }
+  50% {
+    text-shadow: 0 0 30px rgba(139, 92, 246, 0.8), 0 0 60px rgba(139, 92, 246, 0.5);
+  }
+}
+
+@keyframes text-glow-amber {
+  0%, 100% {
+    text-shadow: 0 0 20px rgba(245, 158, 11, 0.5), 0 0 40px rgba(245, 158, 11, 0.3);
+  }
+  50% {
+    text-shadow: 0 0 30px rgba(245, 158, 11, 0.8), 0 0 60px rgba(245, 158, 11, 0.5);
+  }
+}
+
+.animate-slide-in-hero {
+  animation: slide-in-hero 0.7s ease-out forwards;
+}
+
+.animate-slide-in-item {
+  animation: slide-in-item 0.7s ease-out 0.8s forwards;
+  opacity: 0;
+}
+
+.animate-scale-in {
+  animation: scale-in 0.5s ease-out 0.4s forwards;
+  opacity: 0;
+}
+
+.animate-fade-in-delay {
+  animation: fade-in-delay 0.5s ease-out forwards;
+}
+
+.animate-fade-in-delay-long {
+  animation: fade-in-delay-long 0.5s ease-out forwards;
+}
+
+.animate-text-glow-purple {
+  animation: text-glow-purple 2s ease-in-out infinite;
+}
+
+.animate-text-glow-amber {
+  animation: text-glow-amber 2s ease-in-out infinite;
+}
