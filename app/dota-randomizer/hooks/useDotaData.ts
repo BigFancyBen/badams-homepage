@@ -58,11 +58,13 @@ const ALWAYS_EXCLUDE = new Set([
   "orb_of_corrosion",
   "falcon_blade",
   "perseverance",
+  "perseverence",         // Alternate spelling
   "oblivion_staff",
   "buckler",
   "headdress",
   "ring_of_basilius",
   "soul_booster",
+  "lunar_crest",
 ]);
 
 // Non-upgrade items to explicitly include
