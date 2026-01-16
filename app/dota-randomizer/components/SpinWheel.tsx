@@ -441,10 +441,10 @@ export default function SpinWheel({
 
   return (
     <div className="flex flex-col items-center w-full">
-      <h2 className="text-xl sm:text-2xl font-bold mb-2 sm:mb-4 text-pink-400">
+      <h2 className="text-lg sm:text-xl font-bold mb-1 text-pink-400">
         {title}
       </h2>
-      <div className="relative w-full" style={{ maxWidth: size }}>
+      <div className="relative" style={{ width: size, height: size }}>
         <canvas
           ref={canvasRef}
           className="w-full h-auto"

@@ -17,17 +17,23 @@ function useWheelSize() {
       const width = window.innerWidth;
       const height = window.innerHeight;
 
-      // For mobile/small screens (single column), use most of the width
+      // For mobile/small screens (single column), use nearly full width
       if (width < 1024) {
-        // Leave space for padding
-        const maxWidth = Math.min(width - 32, 500);
+        // Leave minimal padding - wheels stack vertically
+        const maxWidth = width - 16;
         setWheelSize(maxWidth);
       } else {
-        // For larger screens (side by side), calculate based on available space
-        // Each wheel gets roughly half the width minus padding
-        const availableWidth = (width - 128) / 2; // Account for gaps and padding
-        const availableHeight = height - 300; // Account for header, button, results
-        const maxSize = Math.min(availableWidth, availableHeight, 550);
+        // For larger screens (side by side), maximize both dimensions
+        // Each wheel gets roughly half the width minus gap
+        const gap = 32; // Gap between wheels
+        const horizontalPadding = 16; // Minimal side padding
+        const availableWidth = (width - gap - horizontalPadding * 2) / 2;
+
+        // Use most of vertical space - account for header (~100px) and button area (~120px)
+        const availableHeight = height - 220;
+
+        // Use the smaller of width/height to keep wheels circular and maximize size
+        const maxSize = Math.min(availableWidth, availableHeight);
         setWheelSize(Math.max(300, maxSize));
       }
     };
@@ -136,22 +142,22 @@ export default function DotaRandomizerPage() {
       <div className="absolute inset-0 bg-gradient-to-b from-purple-950/20 via-transparent to-amber-950/20 pointer-events-none" />
 
       {/* Header */}
-      <header className="relative z-10 text-center pt-8 pb-4">
+      <header className="relative z-10 text-center pt-4 pb-2">
         <Link
           href="/"
-          className="absolute top-4 left-4 text-gray-400 hover:text-white transition-colors text-sm"
+          className="absolute top-2 left-2 text-gray-400 hover:text-white transition-colors text-sm"
         >
           &larr; Back
         </Link>
-        <h1 className="text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-400 to-amber-400">
+        <h1 className="text-3xl md:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-400 to-amber-400">
           Dota 2 Randomizer
         </h1>
       </header>
 
       {/* Main content */}
-      <main className="relative z-10 w-full px-2 sm:px-4 py-4 sm:py-8">
+      <main className="relative z-10 w-full px-2 py-2">
         {/* Wheels container */}
-        <div className="flex flex-col lg:flex-row items-center justify-center gap-4 lg:gap-8 xl:gap-16">
+        <div className="flex flex-col lg:flex-row items-center justify-center gap-2 lg:gap-8">
           <SpinWheel
             items={heroes}
             title="Heroes"
@@ -174,7 +180,7 @@ export default function DotaRandomizerPage() {
         </div>
 
         {/* Spin button */}
-        <div className="text-center mt-6 sm:mt-12">
+        <div className="text-center mt-4">
           {!spinState.showResult ? (
             <button
               onClick={handleSpin}
