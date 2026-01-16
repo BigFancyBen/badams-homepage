@@ -10,6 +10,7 @@ interface SpinWheelProps {
   selectedItem: WheelItem | null;
   onSpinComplete: (item: WheelItem) => void;
   spinDuration: number;
+  size?: number;
 }
 
 interface ImageCache {
@@ -23,6 +24,7 @@ export default function SpinWheel({
   selectedItem,
   onSpinComplete,
   spinDuration,
+  size = 400,
 }: SpinWheelProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number | null>(null);
@@ -77,16 +79,16 @@ export default function SpinWheel({
     (
       ctx: CanvasRenderingContext2D,
       wheelItems: WheelItem[],
-      rotation: number
+      rotation: number,
+      canvasSize: number
     ) => {
-      const size = 400;
-      const centerX = size / 2;
-      const centerY = size / 2;
-      const outerRadius = size / 2 - 20;
-      const innerRadius = 25;
+      const centerX = canvasSize / 2;
+      const centerY = canvasSize / 2;
+      const outerRadius = canvasSize / 2 - 20;
+      const innerRadius = Math.max(20, canvasSize * 0.06);
 
       // Clear canvas
-      ctx.clearRect(0, 0, size, size);
+      ctx.clearRect(0, 0, canvasSize, canvasSize);
 
       if (wheelItems.length === 0) return;
 
@@ -208,12 +210,15 @@ export default function SpinWheel({
       ctx.stroke();
       ctx.restore();
 
-      // Draw pointer at top
+      // Draw pointer at top - scale with canvas size
+      const pointerTip = canvasSize * 0.02;
+      const pointerBase = canvasSize * 0.07;
+      const pointerWidth = canvasSize * 0.03;
       ctx.save();
       ctx.beginPath();
-      ctx.moveTo(centerX, 8);
-      ctx.lineTo(centerX - 12, 28);
-      ctx.lineTo(centerX + 12, 28);
+      ctx.moveTo(centerX, pointerTip);
+      ctx.lineTo(centerX - pointerWidth, pointerBase);
+      ctx.lineTo(centerX + pointerWidth, pointerBase);
       ctx.closePath();
       ctx.fillStyle = "#f59e0b";
       ctx.shadowColor = "#f59e0b";
@@ -236,12 +241,12 @@ export default function SpinWheel({
     if (!ctx) return;
 
     const dpr = window.devicePixelRatio || 1;
-    canvas.width = 400 * dpr;
-    canvas.height = 400 * dpr;
+    canvas.width = size * dpr;
+    canvas.height = size * dpr;
     ctx.scale(dpr, dpr);
 
-    drawWheel(ctx, items, rotationRef.current);
-  }, [items, imagesLoaded, drawWheel]);
+    drawWheel(ctx, items, rotationRef.current, size);
+  }, [items, imagesLoaded, drawWheel, size]);
 
   // Spin animation
   useEffect(() => {
@@ -261,9 +266,10 @@ export default function SpinWheel({
     const winnerIndex = Math.floor(Math.random() * totalItems);
     const winner = items[winnerIndex];
 
-    // Elimination phase: eliminate down to 4 items
+    // Elimination phase: eliminate down to 6 items
     // Takes 60% of total time
-    const itemsToEliminate = Math.max(0, totalItems - 4);
+    const finalItemCount = 6;
+    const itemsToEliminate = Math.max(0, totalItems - finalItemCount);
     const eliminationDuration = spinDuration * 0.6;
     const spinOnlyDuration = spinDuration * 0.4;
 
@@ -277,19 +283,14 @@ export default function SpinWheel({
       }
     }
 
-    // Find winner's index in the final items (determined dynamically during spin)
-    let winnerFinalIndex = 0;
-
-    // Calculate base rotations for spinning effect
-    // Add several full rotations plus offset to land on winner
-    const extraRotations = 5 + Math.random() * 3; // 5-8 full spins during spin phase
-    const baseSpinRotation = extraRotations * 2 * Math.PI;
-
-    let startTime: number | null = null;
-    let eliminationsComplete = 0;
+    // State for spin phase
+    let spinPhaseInitialized = false;
     let spinPhaseStartRotation = 0;
     let targetRotation = 0;
     let spinPhaseStartTime = 0;
+
+    let startTime: number | null = null;
+    let eliminationsComplete = 0;
 
     // Initial rotation speed during elimination
     const eliminationSpeed = 0.3;
@@ -312,7 +313,7 @@ export default function SpinWheel({
           const currentItems = remainingItemsRef.current;
           const nonWinners = currentItems.filter((item) => item.id !== winner.id);
 
-          if (nonWinners.length > 0 && currentItems.length > 4) {
+          if (nonWinners.length > 0 && currentItems.length > finalItemCount) {
             const toRemove =
               nonWinners[Math.floor(Math.random() * nonWinners.length)];
             remainingItemsRef.current = currentItems.filter(
@@ -326,45 +327,62 @@ export default function SpinWheel({
         rotationRef.current += eliminationSpeed;
 
         // Redraw
-        canvas.width = 400 * dpr;
-        canvas.height = 400 * dpr;
+        canvas.width = size * dpr;
+        canvas.height = size * dpr;
         ctx.scale(dpr, dpr);
-        drawWheel(ctx, remainingItemsRef.current, rotationRef.current);
+        drawWheel(ctx, remainingItemsRef.current, rotationRef.current, size);
 
         animationRef.current = requestAnimationFrame(animate);
       }
       // Phase 2: Spin to winner (eliminationDuration to end)
       else {
         // Initialize spin phase once
-        if (spinPhaseStartTime === 0) {
+        if (!spinPhaseInitialized) {
+          spinPhaseInitialized = true;
           spinPhaseStartTime = timestamp;
           spinPhaseStartRotation = rotationRef.current;
 
-          // Find winner's index in remaining items
+          // Get the final remaining items and find winner's index
           const remaining = remainingItemsRef.current;
-          winnerFinalIndex = remaining.findIndex((item) => item.id === winner.id);
-          if (winnerFinalIndex === -1) winnerFinalIndex = 0;
+          const winnerFinalIndex = remaining.findIndex(
+            (item) => item.id === winner.id
+          );
 
-          // Calculate target rotation to land pointer on winner
-          // Pointer is at top (-PI/2 in canvas coordinates)
-          // Segment i spans from: rotation + i * segmentAngle - PI/2 to rotation + (i+1) * segmentAngle - PI/2
-          // For winner's center to be at the pointer (-PI/2):
-          //   rotation + (winnerIndex + 0.5) * segmentAngle - PI/2 = -PI/2
-          //   rotation = -(winnerIndex + 0.5) * segmentAngle
-          const segmentAngle = (2 * Math.PI) / remaining.length;
+          // Safety check - winner must be in remaining items
+          if (winnerFinalIndex === -1) {
+            console.error("Winner not found in remaining items!");
+            onSpinComplete(winner);
+            return;
+          }
 
-          // Target rotation (mod 2*PI) for winner to be under pointer
-          const targetAngleMod = (-(winnerFinalIndex + 0.5) * segmentAngle % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+          const numRemaining = remaining.length;
+          const segmentAngle = (2 * Math.PI) / numRemaining;
 
-          // Current rotation (mod 2*PI)
-          const currentAngleMod = ((spinPhaseStartRotation % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+          // Calculate the rotation needed to put the winner's center at the pointer
+          // Pointer is at top of canvas (-π/2 in standard canvas coordinates)
+          // Segment i's center angle = rotation + (i + 0.5) * segmentAngle - π/2
+          // For center to be at -π/2: rotation = -(i + 0.5) * segmentAngle
+          const targetAngleForWinner = -(winnerFinalIndex + 0.5) * segmentAngle;
 
-          // Calculate how much more we need to rotate to reach target
-          let angleDiff = targetAngleMod - currentAngleMod;
-          if (angleDiff <= 0) angleDiff += 2 * Math.PI; // Always spin forward
+          // Normalize current rotation to [0, 2π)
+          const currentNormalized =
+            ((rotationRef.current % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
 
-          // Add full rotations for visual effect, plus the precise amount to land on winner
-          targetRotation = spinPhaseStartRotation + baseSpinRotation + angleDiff;
+          // Normalize target to [0, 2π)
+          const targetNormalized =
+            ((targetAngleForWinner % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+
+          // Calculate the forward distance to target (always positive)
+          let forwardDistance = targetNormalized - currentNormalized;
+          if (forwardDistance <= 0) {
+            forwardDistance += 2 * Math.PI;
+          }
+
+          // Add 5-8 extra full rotations for visual effect
+          const extraRotations = 5 + Math.random() * 3;
+          const totalSpinAmount = extraRotations * 2 * Math.PI + forwardDistance;
+
+          targetRotation = spinPhaseStartRotation + totalSpinAmount;
         }
 
         const spinElapsed = timestamp - spinPhaseStartTime;
@@ -379,10 +397,10 @@ export default function SpinWheel({
           (targetRotation - spinPhaseStartRotation) * easedProgress;
 
         // Redraw
-        canvas.width = 400 * dpr;
-        canvas.height = 400 * dpr;
+        canvas.width = size * dpr;
+        canvas.height = size * dpr;
         ctx.scale(dpr, dpr);
-        drawWheel(ctx, remainingItemsRef.current, rotationRef.current);
+        drawWheel(ctx, remainingItemsRef.current, rotationRef.current, size);
 
         if (spinProgress < 1) {
           animationRef.current = requestAnimationFrame(animate);
@@ -400,7 +418,7 @@ export default function SpinWheel({
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [isSpinning, items, spinDuration, onSpinComplete, drawWheel]);
+  }, [isSpinning, items, spinDuration, onSpinComplete, drawWheel, size]);
 
   // Reset wheel
   useEffect(() => {
@@ -413,22 +431,24 @@ export default function SpinWheel({
       if (!ctx) return;
 
       const dpr = window.devicePixelRatio || 1;
-      canvas.width = 400 * dpr;
-      canvas.height = 400 * dpr;
+      canvas.width = size * dpr;
+      canvas.height = size * dpr;
       ctx.scale(dpr, dpr);
 
-      drawWheel(ctx, items, rotationRef.current);
+      drawWheel(ctx, items, rotationRef.current, size);
     }
-  }, [isSpinning, selectedItem, items, imagesLoaded, drawWheel]);
+  }, [isSpinning, selectedItem, items, imagesLoaded, drawWheel, size]);
 
   return (
-    <div className="flex flex-col items-center">
-      <h2 className="text-2xl font-bold mb-4 text-purple-400">{title}</h2>
-      <div className="relative">
+    <div className="flex flex-col items-center w-full">
+      <h2 className="text-xl sm:text-2xl font-bold mb-2 sm:mb-4 text-pink-400">
+        {title}
+      </h2>
+      <div className="relative w-full" style={{ maxWidth: size }}>
         <canvas
           ref={canvasRef}
-          className="w-[300px] h-[300px] sm:w-[350px] sm:h-[350px] md:w-[400px] md:h-[400px]"
-          style={{ width: 400, height: 400 }}
+          className="w-full h-auto"
+          style={{ width: size, height: size }}
         />
         {!imagesLoaded && items.length > 0 && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/70">

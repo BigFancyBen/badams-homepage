@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import Link from "next/link";
 import { useDotaData } from "./hooks/useDotaData";
 import SpinWheel from "./components/SpinWheel";
@@ -9,8 +9,40 @@ import { WheelItem, SpinState } from "./types";
 
 const SPIN_DURATION = 10000; // 10 seconds
 
+function useWheelSize() {
+  const [wheelSize, setWheelSize] = useState(400);
+
+  useEffect(() => {
+    const calculateSize = () => {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+
+      // For mobile/small screens (single column), use most of the width
+      if (width < 1024) {
+        // Leave space for padding
+        const maxWidth = Math.min(width - 32, 500);
+        setWheelSize(maxWidth);
+      } else {
+        // For larger screens (side by side), calculate based on available space
+        // Each wheel gets roughly half the width minus padding
+        const availableWidth = (width - 128) / 2; // Account for gaps and padding
+        const availableHeight = height - 300; // Account for header, button, results
+        const maxSize = Math.min(availableWidth, availableHeight, 550);
+        setWheelSize(Math.max(300, maxSize));
+      }
+    };
+
+    calculateSize();
+    window.addEventListener("resize", calculateSize);
+    return () => window.removeEventListener("resize", calculateSize);
+  }, []);
+
+  return wheelSize;
+}
+
 export default function DotaRandomizerPage() {
   const { heroes, items, loading, error } = useDotaData();
+  const wheelSize = useWheelSize();
   const [spinState, setSpinState] = useState<SpinState>({
     isSpinning: false,
     selectedHero: null,
@@ -117,9 +149,9 @@ export default function DotaRandomizerPage() {
       </header>
 
       {/* Main content */}
-      <main className="relative z-10 container mx-auto px-4 py-8">
+      <main className="relative z-10 w-full px-2 sm:px-4 py-4 sm:py-8">
         {/* Wheels container */}
-        <div className="flex flex-col lg:flex-row items-center justify-center gap-8 lg:gap-16">
+        <div className="flex flex-col lg:flex-row items-center justify-center gap-4 lg:gap-8 xl:gap-16">
           <SpinWheel
             items={heroes}
             title="Heroes"
@@ -127,6 +159,7 @@ export default function DotaRandomizerPage() {
             selectedItem={spinState.selectedHero}
             onSpinComplete={handleHeroComplete}
             spinDuration={SPIN_DURATION}
+            size={wheelSize}
           />
 
           <SpinWheel
@@ -136,11 +169,12 @@ export default function DotaRandomizerPage() {
             selectedItem={spinState.selectedItem}
             onSpinComplete={handleItemComplete}
             spinDuration={SPIN_DURATION}
+            size={wheelSize}
           />
         </div>
 
         {/* Spin button */}
-        <div className="text-center mt-12">
+        <div className="text-center mt-6 sm:mt-12">
           {!spinState.showResult ? (
             <button
               onClick={handleSpin}
