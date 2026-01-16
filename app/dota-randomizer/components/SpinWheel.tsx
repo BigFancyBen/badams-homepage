@@ -195,35 +195,6 @@ export default function SpinWheel({
           ctx.restore();
         }
 
-        // Draw text near CENTER (inner edge) when few items
-        if (numItems <= 10) {
-          ctx.save();
-          // Position text closer to center
-          const textDistance = innerRadius + 25;
-          const textX = centerX + Math.cos(midAngle) * textDistance;
-          const textY = centerY + Math.sin(midAngle) * textDistance;
-
-          // Rotate text to follow the slice angle
-          ctx.translate(textX, textY);
-          ctx.rotate(midAngle + Math.PI / 2);
-
-          const fontSize = numItems <= 4 ? 10 : 8;
-          ctx.font = `bold ${fontSize}px Arial, sans-serif`;
-          ctx.fillStyle = "white";
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.shadowColor = "rgba(0, 0, 0, 0.9)";
-          ctx.shadowBlur = 3;
-
-          const maxLen = numItems <= 4 ? 12 : 8;
-          const displayText =
-            item.displayName.length > maxLen
-              ? item.displayName.slice(0, maxLen - 1) + "…"
-              : item.displayName;
-
-          ctx.fillText(displayText, 0, 0);
-          ctx.restore();
-        }
       });
 
       // Draw center circle
