@@ -63,17 +63,16 @@ export default function Home() {
 
         <motion.div
           className="mt-16 w-full max-w-7xl"
-          initial={{ opacity: 0 }}
+          initial={{ opacity: 1 }}
           animate={{ opacity: 1 }}
-          transition={{ delay: prefersReducedMotion ? 0 : 2.2, duration: 0.5 }}
         >
           <motion.h2
             className="text-2xl md:text-3xl font-bold text-center mb-8"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{
-              delay: prefersReducedMotion ? 0 : 2.4,
-              duration: 0.5,
+              delay: prefersReducedMotion ? 0 : 1.2,
+              duration: 0.25,
               ease: [0.25, 0.1, 0.25, 1],
             }}
           >

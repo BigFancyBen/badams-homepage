@@ -28,7 +28,7 @@ export function AnimatedHeroTitle({ text, reducedMotion = false }: AnimatedHeroT
       return;
     }
 
-    const totalDuration = 2000;
+    const totalDuration = 1000;
     const frameRate = 60;
     const totalFrames = (totalDuration / 1000) * frameRate;
     const revealInterval = totalFrames / text.length;
@@ -74,7 +74,7 @@ export function AnimatedHeroTitle({ text, reducedMotion = false }: AnimatedHeroT
       className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-center font-mono tracking-tight"
       initial={{ opacity: 0, y: -30 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.6, ease: [0.25, 0.1, 0.25, 1] }}
+      transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
     >
       {displayText.split("").map((char, i) => {
         const isRevealed = revealedIndices.has(i);

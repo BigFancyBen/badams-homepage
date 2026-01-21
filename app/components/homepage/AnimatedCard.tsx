@@ -9,6 +9,7 @@ interface AnimatedCardProps {
   href?: string;
   tags?: string;
   reducedMotion?: boolean;
+  isLoading?: boolean;
 }
 
 export function AnimatedCard({
@@ -17,6 +18,7 @@ export function AnimatedCard({
   href,
   tags,
   reducedMotion = false,
+  isLoading = false,
 }: AnimatedCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -118,7 +120,7 @@ export function AnimatedCard({
 
         {/* Main folder body - Win98 beveled style */}
         <div
-          className="relative h-full overflow-hidden"
+          className="relative h-full overflow-hidden flex flex-col"
           style={{
             background: "#1a1a1a",
             borderTop: "2px solid #404040",
@@ -165,7 +167,7 @@ export function AnimatedCard({
           </div>
 
           {/* Content area */}
-          <div className="p-4 relative">
+          <div className="p-4 relative flex flex-col flex-grow">
             {!reducedMotion && (
               <motion.div
                 className="absolute inset-0 pointer-events-none"
@@ -176,13 +178,16 @@ export function AnimatedCard({
               />
             )}
 
-            <p className="text-gray-300 mb-4 text-sm leading-relaxed min-h-[8rem]">
-              {description}
-            </p>
+
+            <div className="flex-grow">
+              <p className="text-gray-300 text-sm leading-relaxed">
+                {description}
+              </p>
+            </div>
 
             {/* Status bar style footer */}
             <div
-              className="text-xs text-gray-400 pt-2 flex items-center gap-1"
+              className="text-xs text-gray-400 pt-2 mt-4 flex items-center gap-1"
               style={{
                 borderTop: "1px solid #0a0a0a",
               }}
@@ -208,11 +213,14 @@ export function AnimatedCard({
 
   if (href) {
     return (
-      <a href={href} className="block cursor-pointer h-full pt-[18px]">
+      <a
+        href={href}
+        className={`block h-full pt-[18px] ${isLoading ? "pointer-events-none" : "cursor-pointer"}`}
+      >
         {content}
       </a>
     );
   }
 
-  return <div className="h-full pt-[18px]">{content}</div>;
+  return <div className={`h-full pt-[18px] ${isLoading ? "pointer-events-none" : ""}`}>{content}</div>;
 }
