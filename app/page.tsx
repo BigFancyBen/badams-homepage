@@ -1,103 +1,81 @@
+"use client";
+
+import { motion } from "motion/react";
+import { AnimatedHeroTitle } from "./components/homepage/AnimatedHeroTitle";
+import { ParticleField } from "./components/homepage/ParticleField";
+import { CardGrid } from "./components/homepage/CardGrid";
+import { useReducedMotion } from "./hooks/useReducedMotion";
+
+const projects = [
+  {
+    title: "MTG Commander Scorekeeper",
+    description:
+      "Full-screen, touch-friendly scorekeeper for Magic: The Gathering Commander format. Features 4-player quadrant layout, life tracking, commander damage, and mobile-optimized interface.",
+    href: "/commander",
+  },
+  {
+    title: "Magic Tutor Helper",
+    description:
+      "Advanced card filtering tool for Magic: The Gathering decklists. Import decklists, filter by mana cost and card types, and analyze your cards with Scryfall integration.",
+    href: "/tutor-helper",
+  },
+  {
+    title: "FloatWise",
+    description:
+      "NOAA weather tracker for multiple locations. View detailed hourly forecasts from 10am-7pm, track temperature and wind conditions, and manage your favorite float trip destinations.",
+    href: "/floatwise",
+  },
+  {
+    title: "Prognosticator",
+    description:
+      "Cross-platform desktop app for DJs and music curators. Import Spotify playlists, download songs, fetch DJ metadata (key, BPM), and integrate with VirtualDJ and OBS.",
+    tags: "Desktop App \u2022 VirtualDJ \u2022 OBS Integration",
+  },
+  {
+    title: "RuneScape Progress Image Generator",
+    description:
+      "API endpoint for generating progress report images for Old School RuneScape players. Features collection log items, OSRS Wiki integration, and comprehensive game database.",
+    tags: "API \u2022 OSRS Wiki \u2022 Image Generation",
+  },
+  {
+    title: "Dota 2 Randomizer",
+    description:
+      "Spin two wheels to get a random hero and item challenge for your next Dota 2 game. Features canvas-based animations and real-time data from the OpenDota API.",
+    href: "/dota-randomizer",
+  },
+];
+
 export default function Home() {
+  const prefersReducedMotion = useReducedMotion();
+
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8">
-      <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-center">
-        benadams.dev
-      </h1>
+    <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8 relative overflow-hidden">
+      {!prefersReducedMotion && <ParticleField particleCount={45} />}
 
-      {/* Projects Section */}
-      <div className="mt-16 w-full max-w-7xl">
-        <h2 className="text-2xl md:text-3xl font-bold text-center mb-8">
-          Projects
-        </h2>
+      <div className="relative z-10 flex flex-col items-center">
+        <AnimatedHeroTitle text="benadams.dev" reducedMotion={prefersReducedMotion} />
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {/* MTG Commander Scorekeeper */}
-          <a
-            href="/commander"
-            className="block border-2 border-gray-700 p-6 hover:border-gray-500 transition-colors cursor-pointer"
+        <motion.div
+          className="mt-16 w-full max-w-7xl"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: prefersReducedMotion ? 0 : 2.2, duration: 0.5 }}
+        >
+          <motion.h2
+            className="text-2xl md:text-3xl font-bold text-center mb-8"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{
+              delay: prefersReducedMotion ? 0 : 2.4,
+              duration: 0.5,
+              ease: [0.25, 0.1, 0.25, 1],
+            }}
           >
-            <h3 className="text-xl font-bold mb-3">
-              MTG Commander Scorekeeper
-            </h3>
-            <p className="text-gray-300 mb-4 text-sm leading-relaxed">
-              Full-screen, touch-friendly scorekeeper for Magic: The Gathering
-              Commander format. Features 4-player quadrant layout, life
-              tracking, commander damage, and mobile-optimized interface.
-            </p>
-            <div className="text-sm text-gray-400">Click to try it out →</div>
-          </a>
+            Projects
+          </motion.h2>
 
-          {/* Magic Tutor Helper */}
-          <a
-            href="/tutor-helper"
-            className="block border-2 border-gray-700 p-6 hover:border-gray-500 transition-colors cursor-pointer"
-          >
-            <h3 className="text-xl font-bold mb-3">Magic Tutor Helper</h3>
-            <p className="text-gray-300 mb-4 text-sm leading-relaxed">
-              Advanced card filtering tool for Magic: The Gathering decklists.
-              Import decklists, filter by mana cost and card types, and analyze
-              your cards with Scryfall integration.
-            </p>
-            <div className="text-sm text-gray-400">Click to try it out →</div>
-          </a>
-
-          {/* FloatWise */}
-          <a
-            href="/floatwise"
-            className="block border-2 border-gray-700 p-6 hover:border-gray-500 transition-colors cursor-pointer"
-          >
-            <h3 className="text-xl font-bold mb-3">FloatWise</h3>
-            <p className="text-gray-300 mb-4 text-sm leading-relaxed">
-              NOAA weather tracker for multiple locations. View detailed hourly
-              forecasts from 10am-7pm, track temperature and wind conditions,
-              and manage your favorite float trip destinations.
-            </p>
-            <div className="text-sm text-gray-400">Click to try it out →</div>
-          </a>
-
-          {/* Prognosticator */}
-          <div className="border-2 border-gray-700 p-6 hover:border-gray-500 transition-colors">
-            <h3 className="text-xl font-bold mb-3">Prognosticator</h3>
-            <p className="text-gray-300 mb-4 text-sm leading-relaxed">
-              Cross-platform desktop app for DJs and music curators. Import
-              Spotify playlists, download songs, fetch DJ metadata (key, BPM),
-              and integrate with VirtualDJ and OBS.
-            </p>
-            <div className="text-sm text-gray-400">
-              Desktop App • VirtualDJ • OBS Integration
-            </div>
-          </div>
-
-          {/* RuneScape Progress Image Generator */}
-          <div className="border-2 border-gray-700 p-6 hover:border-gray-500 transition-colors">
-            <h3 className="text-xl font-bold mb-3">
-              RuneScape Progress Image Generator
-            </h3>
-            <p className="text-gray-300 mb-4 text-sm leading-relaxed">
-              API endpoint for generating progress report images for Old School
-              RuneScape players. Features collection log items, OSRS Wiki
-              integration, and comprehensive game database.
-            </p>
-            <div className="text-sm text-gray-400">
-              API • OSRS Wiki • Image Generation
-            </div>
-          </div>
-
-          {/* Dota 2 Randomizer */}
-          <a
-            href="/dota-randomizer"
-            className="block border-2 border-gray-700 p-6 hover:border-gray-500 transition-colors cursor-pointer"
-          >
-            <h3 className="text-xl font-bold mb-3">Dota 2 Randomizer</h3>
-            <p className="text-gray-300 mb-4 text-sm leading-relaxed">
-              Spin two wheels to get a random hero and item challenge for your
-              next Dota 2 game. Features canvas-based animations and real-time
-              data from the OpenDota API.
-            </p>
-            <div className="text-sm text-gray-400">Click to try it out →</div>
-          </a>
-        </div>
+          <CardGrid projects={projects} reducedMotion={prefersReducedMotion} />
+        </motion.div>
       </div>
     </div>
   );
