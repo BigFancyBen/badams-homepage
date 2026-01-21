@@ -35,10 +35,6 @@ export function AnimatedCard({
   const glowX = useTransform(smoothMouseX, [-0.5, 0.5], [0, 100]);
   const glowY = useTransform(smoothMouseY, [-0.5, 0.5], [0, 100]);
 
-  const scale = useSpring(useTransform(isHovered, [0, 1], [1, 1.02]), {
-    stiffness: 200,
-    damping: 20,
-  });
   const borderGlow = useSpring(useTransform(isHovered, [0, 1], [0, 1]), {
     stiffness: 200,
     damping: 20,
@@ -100,7 +96,6 @@ export function AnimatedCard({
             : {
                 rotateX,
                 rotateY,
-                scale,
                 transformStyle: "preserve-3d",
               }
         }
