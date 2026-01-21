@@ -43,6 +43,12 @@ const projects = [
       "Spin two wheels to get a random hero and item challenge for your next Dota 2 game. Features canvas-based animations and real-time data from the OpenDota API.",
     href: "/dota-randomizer",
   },
+  {
+    title: "IRLScape",
+    description:
+      "IRL streaming overlay system for Old School RuneScape. Overlays game UI elements like minimap, chat, inventory, and XP tracker onto real-world camera footage with Twitch chat integration and Joycon motion controls.",
+    href: "https://www.youtube.com/watch?v=gCofVhR5HUQ",
+  },
 ];
 
 export default function Home() {
