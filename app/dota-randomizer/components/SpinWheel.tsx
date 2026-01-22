@@ -36,15 +36,20 @@ export default function SpinWheel({
   const [imagesLoaded, setImagesLoaded] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
 
+  // CSS rotation state for GPU-accelerated transforms
+  const [cssRotation, setCssRotation] = useState(0);
+
   // Current animation state
   const rotationRef = useRef(0);
   const remainingItemsRef = useRef<WheelItem[]>([]);
-  const lastTickTimeRef = useRef(0);
   const lastSliceIndexRef = useRef(-1);
 
   // Cache DPR and context to avoid repeated lookups
   const dprRef = useRef(1);
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
+
+  // Track if we need to redraw (only when items change)
+  const needsRedrawRef = useRef(true);
 
   // Preload images
   useEffect(() => {
@@ -85,11 +90,11 @@ export default function SpinWheel({
     });
   }, [items]);
 
+  // Draw the wheel at rotation=0 (CSS transform handles rotation for GPU acceleration)
   const drawWheel = useCallback(
     (
       ctx: CanvasRenderingContext2D,
       wheelItems: WheelItem[],
-      rotation: number,
       canvasSize: number
     ) => {
       const centerX = canvasSize / 2;
@@ -116,9 +121,9 @@ export default function SpinWheel({
       ctx.stroke();
       ctx.restore();
 
-      // Draw each slice
+      // Draw each slice (at rotation=0, CSS transform rotates the canvas)
       wheelItems.forEach((item, i) => {
-        const startAngle = rotation + i * sliceAngle - Math.PI / 2;
+        const startAngle = i * sliceAngle - Math.PI / 2;
         const endAngle = startAngle + sliceAngle;
         const midAngle = startAngle + sliceAngle / 2;
 
@@ -209,7 +214,7 @@ export default function SpinWheel({
 
       });
 
-      // Draw center circle
+      // Draw center circle (this rotates with the wheel, which is fine)
       ctx.save();
       ctx.beginPath();
       ctx.arc(centerX, centerY, innerRadius, 0, 2 * Math.PI);
@@ -220,24 +225,7 @@ export default function SpinWheel({
       ctx.stroke();
       ctx.restore();
 
-      // Draw pointer at top - scale with canvas size
-      const pointerTip = canvasSize * 0.02;
-      const pointerBase = canvasSize * 0.07;
-      const pointerWidth = canvasSize * 0.03;
-      ctx.save();
-      ctx.beginPath();
-      ctx.moveTo(centerX, pointerTip);
-      ctx.lineTo(centerX - pointerWidth, pointerBase);
-      ctx.lineTo(centerX + pointerWidth, pointerBase);
-      ctx.closePath();
-      ctx.fillStyle = "#f59e0b";
-      ctx.shadowColor = "#f59e0b";
-      ctx.shadowBlur = 10;
-      ctx.fill();
-      ctx.strokeStyle = "#fcd34d";
-      ctx.lineWidth = 2;
-      ctx.stroke();
-      ctx.restore();
+      // Note: Pointer is drawn separately as an overlay so it doesn't rotate
     },
     []
   );
@@ -266,28 +254,28 @@ export default function SpinWheel({
     ctxRef.current = ctx;
   }, [size]);
 
-  // Initial draw
+  // Initial draw and redraw when items change
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = ctxRef.current;
     if (!canvas || !ctx || !imagesLoaded) return;
 
-    drawWheel(ctx, items, rotationRef.current, size);
+    // Draw wheel at rotation=0 (CSS transform handles visual rotation)
+    drawWheel(ctx, items, size);
+    needsRedrawRef.current = false;
   }, [items, imagesLoaded, drawWheel, size]);
 
-  // Spin animation
+  // Spin animation using GPU-accelerated CSS transforms
   useEffect(() => {
     if (!isSpinning || items.length === 0) return;
 
-    const canvas = canvasRef.current;
     const ctx = ctxRef.current;
-    if (!canvas || !ctx) return;
+    if (!ctx) return;
 
     // Initialize
     remainingItemsRef.current = [...items];
     const totalItems = items.length;
     lastSliceIndexRef.current = -1;
-    lastTickTimeRef.current = 0;
 
     // Select winner at start
     const winnerIndex = Math.floor(Math.random() * totalItems);
@@ -318,8 +306,9 @@ export default function SpinWheel({
 
     let startTime: number | null = null;
     let eliminationsComplete = 0;
+    let lastEliminationCount = 0;
 
-    // Initial rotation speed during elimination
+    // Initial rotation speed during elimination (radians per frame at ~60fps)
     const eliminationSpeed = 0.3;
 
     const animate = (timestamp: number) => {
@@ -365,8 +354,14 @@ export default function SpinWheel({
           }
         }
 
-        // Redraw
-        drawWheel(ctx, remainingItemsRef.current, rotationRef.current, size);
+        // Only redraw canvas when items are eliminated (expensive operation)
+        if (eliminationsComplete > lastEliminationCount) {
+          lastEliminationCount = eliminationsComplete;
+          drawWheel(ctx, remainingItemsRef.current, size);
+        }
+
+        // Update CSS rotation for GPU-accelerated transform
+        setCssRotation(rotationRef.current);
 
         animationRef.current = requestAnimationFrame(animate);
       }
@@ -377,6 +372,9 @@ export default function SpinWheel({
           spinPhaseInitialized = true;
           spinPhaseStartTime = timestamp;
           spinPhaseStartRotation = rotationRef.current;
+
+          // Ensure final wheel state is drawn
+          drawWheel(ctx, remainingItemsRef.current, size);
 
           // Get the final remaining items and find winner's index
           const remaining = remainingItemsRef.current;
@@ -445,8 +443,8 @@ export default function SpinWheel({
           }
         }
 
-        // Redraw
-        drawWheel(ctx, remainingItemsRef.current, rotationRef.current, size);
+        // Update CSS rotation for GPU-accelerated transform (no canvas redraw needed!)
+        setCssRotation(rotationRef.current);
 
         if (spinProgress < 1) {
           animationRef.current = requestAnimationFrame(animate);
@@ -476,9 +474,15 @@ export default function SpinWheel({
       const ctx = ctxRef.current;
       if (!ctx || !imagesLoaded) return;
 
-      drawWheel(ctx, items, rotationRef.current, size);
+      // Redraw wheel at rotation=0 and reset CSS rotation
+      drawWheel(ctx, items, size);
+      setCssRotation(rotationRef.current);
     }
   }, [isSpinning, selectedItem, items, imagesLoaded, drawWheel, size]);
+
+  // Calculate pointer dimensions based on size
+  const pointerHeight = size * 0.07;
+  const pointerWidth = size * 0.06;
 
   return (
     <div className="flex flex-col items-center w-full">
@@ -486,16 +490,44 @@ export default function SpinWheel({
         {title}
       </h2>
       <div className="relative" style={{ width: size, height: size }}>
+        {/* Rotating wheel canvas - GPU accelerated via CSS transform */}
         <canvas
           ref={canvasRef}
           className="w-full h-auto"
           style={{
             width: size,
             height: size,
+            // Clip to circle so rotating square background isn't visible
+            borderRadius: "50%",
+            // GPU acceleration hints
             willChange: "transform",
-            transform: "translateZ(0)",
+            transform: `translateZ(0) rotate(${cssRotation}rad)`,
+            // Ensure smooth rendering
+            backfaceVisibility: "hidden",
+            perspective: 1000,
           }}
         />
+        {/* Fixed pointer overlay - does not rotate */}
+        <svg
+          className="absolute pointer-events-none"
+          style={{
+            top: size * 0.02,
+            left: "50%",
+            transform: "translateX(-50%)",
+            width: pointerWidth,
+            height: pointerHeight,
+            filter: "drop-shadow(0 0 10px #f59e0b)",
+          }}
+          viewBox="0 0 60 70"
+          fill="none"
+        >
+          <polygon
+            points="30,0 0,70 60,70"
+            fill="#f59e0b"
+            stroke="#fcd34d"
+            strokeWidth="4"
+          />
+        </svg>
         {!imagesLoaded && items.length > 0 && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/70">
             <div className="text-center">
