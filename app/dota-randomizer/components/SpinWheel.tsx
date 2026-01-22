@@ -497,6 +497,8 @@ export default function SpinWheel({
           style={{
             width: size,
             height: size,
+            // Clip to circle so rotating square background isn't visible
+            borderRadius: "50%",
             // GPU acceleration hints
             willChange: "transform",
             transform: `translateZ(0) rotate(${cssRotation}rad)`,
