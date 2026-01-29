@@ -89,72 +89,11 @@ function CRTBootCard({ project, index, isInView, reducedMotion, isBooted, isMobi
   const delay = index * staggerDelay;
   const shouldAnimate = isInView && !reducedMotion;
 
-  // Mobile path - simplified animations
-  if (isMobile) {
-    // No animation needed - show cards immediately
-    if (!shouldAnimate) {
-      return (
-        <div className="h-full">
-          <AnimatedCard
-            title={project.title}
-            description={project.description}
-            href={project.href}
-            tags={project.tags}
-            reducedMotion={reducedMotion}
-            isLoading={false}
-            isMobile={isMobile}
-          />
-        </div>
-      );
-    }
-
-    // Simplified mobile animation - just fade and scale up
-    return (
-      <div className="h-full relative">
-        {/* Simple glow pulse on entry */}
-        <motion.div
-          className="absolute inset-0 pointer-events-none will-change-opacity"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: [0, 0.6, 0] }}
-          transition={{
-            delay: delay,
-            duration: 0.4,
-            times: [0, 0.4, 1],
-          }}
-          style={{
-            background: "radial-gradient(ellipse at center, rgba(139, 92, 246, 0.3) 0%, transparent 70%)",
-          }}
-        />
-
-        {/* Card reveal - simple scale and fade */}
-        <motion.div
-          className="h-full will-change-transform"
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{
-            delay: delay + 0.1,
-            duration: bootDuration,
-            ease: [0.25, 0.1, 0.25, 1],
-          }}
-        >
-          <AnimatedCard
-            title={project.title}
-            description={project.description}
-            href={project.href}
-            tags={project.tags}
-            reducedMotion={reducedMotion}
-            isLoading={!isBooted}
-            isMobile={isMobile}
-          />
-        </motion.div>
-      </div>
-    );
-  }
-
-  // Full CRT animation for desktop
+  // Same CRT animation for both mobile and desktop
+  // Mobile optimizations: no blur filter, slightly faster timing
   return (
     <div className="h-full relative">
-      {/* CRT Power-on glow */}
+      {/* CRT Power-on glow - no blur on mobile for performance */}
       {shouldAnimate && (
         <motion.div
           className="absolute inset-0 pointer-events-none will-change-opacity"
@@ -167,7 +106,8 @@ function CRTBootCard({ project, index, isInView, reducedMotion, isBooted, isMobi
           }}
           style={{
             background: "radial-gradient(ellipse at center, rgba(139, 92, 246, 0.4) 0%, transparent 70%)",
-            filter: "blur(20px)",
+            // Only use blur on desktop - expensive on mobile
+            filter: isMobile ? undefined : "blur(20px)",
           }}
         />
       )}
@@ -190,7 +130,7 @@ function CRTBootCard({ project, index, isInView, reducedMotion, isBooted, isMobi
           }}
           transition={{
             delay: delay,
-            duration: BOOT_DURATION,
+            duration: bootDuration,
             times: [0, 0.3, 0.7, 1],
             ease: "easeOut",
           }}
@@ -207,21 +147,25 @@ function CRTBootCard({ project, index, isInView, reducedMotion, isBooted, isMobi
         animate={shouldAnimate ? {
           clipPath: "polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%)",
           opacity: 1,
-        } : { opacity: 1 }}
+        } : reducedMotion ? { opacity: 1 } : {
+          // Not in view yet - keep hidden until animation triggers
+          clipPath: "polygon(0% 50%, 100% 50%, 100% 50%, 0% 50%)",
+          opacity: 0,
+        }}
         transition={{
           delay: delay + 0.15,
-          duration: BOOT_DURATION,
+          duration: bootDuration,
           ease: [0.25, 0.1, 0.25, 1],
           opacity: { delay: delay + 0.1, duration: 0.2 },
         }}
       >
-        {/* Scanline overlay during boot */}
-        {shouldAnimate && !isBooted && (
+        {/* Scanline overlay during boot - skip on mobile for performance */}
+        {shouldAnimate && !isBooted && !isMobile && (
           <motion.div
             className="absolute inset-0 pointer-events-none z-10 will-change-opacity"
             initial={{ opacity: 0.6 }}
             animate={{ opacity: 0 }}
-            transition={{ delay: delay + BOOT_DURATION, duration: CONTENT_FADE_DURATION }}
+            transition={{ delay: delay + bootDuration, duration: CONTENT_FADE_DURATION }}
             style={{
               background: `repeating-linear-gradient(
                 0deg,
