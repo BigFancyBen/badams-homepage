@@ -191,3 +191,36 @@ body {
   animation: fade-in-coward-subtitle 1s ease-out forwards;
   opacity: 0;
 }
+
+/* Homepage Hero Glow Animation - GPU accelerated */
+@keyframes hero-glow {
+  0%, 100% {
+    text-shadow: 0 0 0px rgba(139, 92, 246, 0);
+  }
+  50% {
+    text-shadow: 0 0 20px rgba(139, 92, 246, 0.8);
+  }
+}
+
+/* Mobile-optimized glow using opacity instead of expensive text-shadow */
+@keyframes hero-glow-mobile {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.animate-glow {
+  animation: hero-glow 2.5s ease-in-out infinite;
+  will-change: text-shadow;
+}
+
+/* Use lighter animation on mobile/touch devices */
+@media (hover: none) and (pointer: coarse) {
+  .animate-glow {
+    animation: hero-glow-mobile 2.5s ease-in-out infinite;
+    will-change: opacity;
+  }
+}

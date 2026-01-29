@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { motion } from "motion/react";
+import { useMobileDevice } from "@/app/hooks/useMobileDevice";
 
 interface Particle {
   id: number;
@@ -32,26 +33,40 @@ function generateParticles(count: number): Particle[] {
 }
 
 export function ParticleField({ particleCount = 40 }: ParticleFieldProps) {
-  const [particles] = useState<Particle[]>(() => generateParticles(particleCount));
+  const isMobile = useMobileDevice();
+
+  // Significantly reduce particle count on mobile for performance
+  const effectiveCount = isMobile ? Math.min(particleCount, 18) : particleCount;
+
+  const [particles] = useState<Particle[]>(() => generateParticles(50)); // Generate max upfront
+
+  // Only render the effective count
+  const visibleParticles = useMemo(
+    () => particles.slice(0, effectiveCount),
+    [particles, effectiveCount]
+  );
 
   return (
     <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
       <div className="absolute inset-0 bg-gradient-to-b from-purple-950/10 via-transparent to-amber-950/5" />
 
-      {particles.map((particle) => (
+      {visibleParticles.map((particle) => (
         <motion.div
           key={particle.id}
-          className="absolute bg-purple-400"
+          className="absolute bg-purple-400 will-change-transform"
           style={{
             width: particle.size,
             height: particle.size,
-            left: `${particle.x}%`,
-            top: `${particle.y}%`,
+            // Use transform for initial position (GPU accelerated)
+            transform: `translate3d(${particle.x}vw, ${particle.y}vh, 0)`,
             opacity: particle.opacity,
           }}
           animate={{
+            // Use transform-based animation for GPU acceleration
             y: [`0vh`, `-120vh`],
-            x: [`0px`, `${particle.drift}px`, `0px`],
+            x: isMobile
+              ? [`0px`, `${particle.drift * 0.5}px`, `0px`] // Reduce drift on mobile
+              : [`0px`, `${particle.drift}px`, `0px`],
             opacity: [particle.opacity, particle.opacity * 1.5, particle.opacity, 0],
           }}
           transition={{
@@ -78,13 +93,16 @@ export function ParticleField({ particleCount = 40 }: ParticleFieldProps) {
         />
       ))}
 
-      <div
-        className="absolute inset-0 opacity-[0.02]"
-        style={{
-          backgroundImage:
-            "repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(139, 92, 246, 0.5) 2px, rgba(139, 92, 246, 0.5) 3px)",
-        }}
-      />
+      {/* Scanline overlay - simplified on mobile */}
+      {!isMobile && (
+        <div
+          className="absolute inset-0 opacity-[0.02]"
+          style={{
+            backgroundImage:
+              "repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(139, 92, 246, 0.5) 2px, rgba(139, 92, 246, 0.5) 3px)",
+          }}
+        />
+      )}
     </div>
   );
 }

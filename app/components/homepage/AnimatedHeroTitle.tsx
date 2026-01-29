@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { motion } from "motion/react";
+import { useMobileDevice } from "@/app/hooks/useMobileDevice";
 
 interface AnimatedHeroTitleProps {
   text: string;
@@ -11,11 +12,13 @@ interface AnimatedHeroTitleProps {
 const GLYPHS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&*<>[]{}";
 
 export function AnimatedHeroTitle({ text, reducedMotion = false }: AnimatedHeroTitleProps) {
+  const isMobile = useMobileDevice();
   const [displayText, setDisplayText] = useState(reducedMotion ? text : "");
   const [isComplete, setIsComplete] = useState(reducedMotion);
   const [revealedIndices, setRevealedIndices] = useState<Set<number>>(
     reducedMotion ? new Set(text.split("").map((_, i) => i)) : new Set()
   );
+  const rafRef = useRef<number | null>(null);
 
   const getRandomGlyph = useCallback(() => {
     return GLYPHS[Math.floor(Math.random() * GLYPHS.length)];
@@ -29,45 +32,61 @@ export function AnimatedHeroTitle({ text, reducedMotion = false }: AnimatedHeroT
     }
 
     const totalDuration = 1000;
-    const frameRate = 60;
+    // Use lower frame rate on mobile for performance
+    const frameRate = isMobile ? 30 : 60;
+    const frameTime = 1000 / frameRate;
     const totalFrames = (totalDuration / 1000) * frameRate;
     const revealInterval = totalFrames / text.length;
 
     let frame = 0;
     let currentRevealed = new Set<number>();
+    let lastTime = performance.now();
 
-    const interval = setInterval(() => {
-      frame++;
+    const animate = (currentTime: number) => {
+      const elapsed = currentTime - lastTime;
 
-      const shouldRevealCount = Math.floor(frame / revealInterval);
+      if (elapsed >= frameTime) {
+        frame++;
+        lastTime = currentTime - (elapsed % frameTime);
 
-      for (let i = 0; i < shouldRevealCount && i < text.length; i++) {
-        currentRevealed.add(i);
+        const shouldRevealCount = Math.floor(frame / revealInterval);
+
+        for (let i = 0; i < shouldRevealCount && i < text.length; i++) {
+          currentRevealed.add(i);
+        }
+
+        const newText = text
+          .split("")
+          .map((char, i) => {
+            if (char === " ") return " ";
+            if (char === ".") return ".";
+            if (currentRevealed.has(i)) return char;
+            return getRandomGlyph();
+          })
+          .join("");
+
+        setDisplayText(newText);
+        setRevealedIndices(new Set(currentRevealed));
+
+        if (currentRevealed.size >= text.length) {
+          setDisplayText(text);
+          setIsComplete(true);
+          setRevealedIndices(new Set(text.split("").map((_, i) => i)));
+          return;
+        }
       }
 
-      const newText = text
-        .split("")
-        .map((char, i) => {
-          if (char === " ") return " ";
-          if (char === ".") return ".";
-          if (currentRevealed.has(i)) return char;
-          return getRandomGlyph();
-        })
-        .join("");
+      rafRef.current = requestAnimationFrame(animate);
+    };
 
-      setDisplayText(newText);
-      setRevealedIndices(new Set(currentRevealed));
+    rafRef.current = requestAnimationFrame(animate);
 
-      if (currentRevealed.size >= text.length) {
-        clearInterval(interval);
-        setDisplayText(text);
-        setIsComplete(true);
-        setRevealedIndices(new Set(text.split("").map((_, i) => i)));
+    return () => {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
       }
-    }, 1000 / frameRate);
-
-    return () => clearInterval(interval);
-  }, [text, getRandomGlyph, reducedMotion]);
+    };
+  }, [text, getRandomGlyph, reducedMotion, isMobile]);
 
   return (
     <motion.h1
@@ -81,37 +100,20 @@ export function AnimatedHeroTitle({ text, reducedMotion = false }: AnimatedHeroT
         const isDot = text[i] === ".";
 
         return (
-          <motion.span
+          <span
             key={i}
-            className={`inline-block ${isDot ? "text-purple-400" : "text-white"}`}
-            animate={
-              isComplete && !reducedMotion
-                ? {
-                    textShadow: [
-                      "0 0 0px rgba(139, 92, 246, 0)",
-                      "0 0 20px rgba(139, 92, 246, 0.8)",
-                      "0 0 0px rgba(139, 92, 246, 0)",
-                    ],
-                  }
-                : {}
-            }
-            transition={
-              isComplete
-                ? {
-                    duration: 2.5,
-                    repeat: Infinity,
-                    delay: i * 0.15,
-                    ease: "easeInOut",
-                  }
-                : {}
-            }
+            className={`inline-block will-change-transform ${isDot ? "text-purple-400" : "text-white"} ${
+              isComplete && !reducedMotion ? "animate-glow" : ""
+            }`}
             style={{
               opacity: isRevealed || reducedMotion ? 1 : 0.7,
               filter: isRevealed || reducedMotion ? "none" : "blur(1px)",
+              // Stagger animation delay using CSS custom property
+              animationDelay: isComplete && !reducedMotion ? `${i * 0.15}s` : "0s",
             }}
           >
             {char}
-          </motion.span>
+          </span>
         );
       })}
     </motion.h1>
