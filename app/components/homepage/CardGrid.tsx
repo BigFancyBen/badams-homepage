@@ -89,8 +89,26 @@ function CRTBootCard({ project, index, isInView, reducedMotion, isBooted, isMobi
   const delay = index * staggerDelay;
   const shouldAnimate = isInView && !reducedMotion;
 
-  // Simplified mobile animation - just fade and scale up
-  if (isMobile && shouldAnimate) {
+  // Mobile path - simplified animations
+  if (isMobile) {
+    // No animation needed - show cards immediately
+    if (!shouldAnimate) {
+      return (
+        <div className="h-full">
+          <AnimatedCard
+            title={project.title}
+            description={project.description}
+            href={project.href}
+            tags={project.tags}
+            reducedMotion={reducedMotion}
+            isLoading={false}
+            isMobile={isMobile}
+          />
+        </div>
+      );
+    }
+
+    // Simplified mobile animation - just fade and scale up
     return (
       <div className="h-full relative">
         {/* Simple glow pulse on entry */}
