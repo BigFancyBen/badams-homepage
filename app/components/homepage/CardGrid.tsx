@@ -87,6 +87,8 @@ function CRTBootCard({ project, index, isInView, reducedMotion, isBooted, isMobi
   const staggerDelay = isMobile ? MOBILE_STAGGER_DELAY : STAGGER_DELAY;
   const bootDuration = isMobile ? MOBILE_BOOT_DURATION : BOOT_DURATION;
   const delay = index * staggerDelay;
+
+  // useInView with once:true already "latches" - stays true once triggered
   const shouldAnimate = isInView && !reducedMotion;
 
   // Same CRT animation for both mobile and desktop
@@ -138,24 +140,24 @@ function CRTBootCard({ project, index, isInView, reducedMotion, isBooted, isMobi
       )}
 
       {/* Card reveal with CRT expand effect */}
+      {/* Key changes when animation triggers to force remount with correct initial state */}
       <motion.div
+        key={shouldAnimate ? "animating" : "static"}
         className="h-full will-change-transform"
-        {...(shouldAnimate ? {
-          initial: {
-            clipPath: "polygon(0% 50%, 100% 50%, 100% 50%, 0% 50%)",
-            opacity: 0,
-          },
-          animate: {
-            clipPath: "polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%)",
-            opacity: 1,
-          },
-          transition: {
-            delay: delay + 0.15,
-            duration: bootDuration,
-            ease: [0.25, 0.1, 0.25, 1],
-            opacity: { delay: delay + 0.1, duration: 0.2 },
-          },
-        } : {})}
+        initial={shouldAnimate ? {
+          clipPath: "polygon(0% 50%, 100% 50%, 100% 50%, 0% 50%)",
+          opacity: 0,
+        } : false}
+        animate={{
+          clipPath: "polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%)",
+          opacity: 1,
+        }}
+        transition={shouldAnimate ? {
+          delay: delay + 0.15,
+          duration: bootDuration,
+          ease: [0.25, 0.1, 0.25, 1],
+          opacity: { delay: delay + 0.1, duration: 0.2 },
+        } : { duration: 0 }}
       >
         {/* Scanline overlay during boot - skip on mobile for performance */}
         {shouldAnimate && !isBooted && !isMobile && (
