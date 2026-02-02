@@ -22,7 +22,6 @@ const BOOT_DURATION = 0.4;
 
 // Faster timings for mobile
 const MOBILE_STAGGER_DELAY = 0.08;
-const MOBILE_BOOT_DURATION = 0.3;
 
 export function CardGrid({ projects, reducedMotion = false }: CardGridProps) {
   const isMobile = useMobileDevice();
@@ -30,7 +29,6 @@ export function CardGrid({ projects, reducedMotion = false }: CardGridProps) {
 
   // Trigger animation after mount
   useEffect(() => {
-    // Small delay to ensure hydration is complete
     const timer = setTimeout(() => setMounted(true), 50);
     return () => clearTimeout(timer);
   }, []);
@@ -62,15 +60,39 @@ interface CRTBootCardProps {
 }
 
 function CRTBootCard({ project, index, shouldAnimate, reducedMotion, isMobile }: CRTBootCardProps) {
-  const staggerDelay = isMobile ? MOBILE_STAGGER_DELAY : STAGGER_DELAY;
-  const bootDuration = isMobile ? MOBILE_BOOT_DURATION : BOOT_DURATION;
-  const delay = index * staggerDelay;
+  const delay = index * (isMobile ? MOBILE_STAGGER_DELAY : STAGGER_DELAY);
 
-  // CRT animation for both mobile and desktop
-  // Mobile optimizations: no blur filter, slightly faster timing
+  // Mobile: Use CSS animations (more reliable on mobile browsers)
+  if (isMobile) {
+    return (
+      <div className="h-full relative">
+        <div
+          className={shouldAnimate ? "animate-card-boot-mobile" : ""}
+          style={{
+            animationDelay: shouldAnimate ? `${delay}s` : undefined,
+            // If not animating yet, hide it; if reducedMotion, show it
+            opacity: shouldAnimate || reducedMotion ? undefined : 0,
+            transform: shouldAnimate || reducedMotion ? undefined : "scaleY(0)",
+            transformOrigin: "center",
+          }}
+        >
+          <AnimatedCard
+            title={project.title}
+            description={project.description}
+            href={project.href}
+            tags={project.tags}
+            reducedMotion={reducedMotion}
+            isMobile={isMobile}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // Desktop: Use motion library for full CRT effect
   return (
     <div className="h-full relative">
-      {/* CRT Power-on glow - no blur on mobile for performance */}
+      {/* CRT Power-on glow */}
       {shouldAnimate && (
         <motion.div
           className="absolute inset-0 pointer-events-none"
@@ -83,7 +105,7 @@ function CRTBootCard({ project, index, shouldAnimate, reducedMotion, isMobile }:
           }}
           style={{
             background: "radial-gradient(ellipse at center, rgba(139, 92, 246, 0.4) 0%, transparent 70%)",
-            filter: isMobile ? undefined : "blur(20px)",
+            filter: "blur(20px)",
           }}
         />
       )}
@@ -103,7 +125,7 @@ function CRTBootCard({ project, index, shouldAnimate, reducedMotion, isMobile }:
           animate={{ scaleX: [0, 1, 1, 0], opacity: [0, 1, 1, 0] }}
           transition={{
             delay: delay,
-            duration: bootDuration,
+            duration: BOOT_DURATION,
             times: [0, 0.3, 0.7, 1],
             ease: "easeOut",
           }}
@@ -111,7 +133,6 @@ function CRTBootCard({ project, index, shouldAnimate, reducedMotion, isMobile }:
       )}
 
       {/* Card reveal with CRT expand effect */}
-      {/* Key forces remount when shouldAnimate changes, so initial state is applied fresh */}
       <motion.div
         key={shouldAnimate ? "animating" : "static"}
         className="h-full"
@@ -125,7 +146,7 @@ function CRTBootCard({ project, index, shouldAnimate, reducedMotion, isMobile }:
         }}
         transition={shouldAnimate ? {
           delay: delay + 0.1,
-          duration: bootDuration,
+          duration: BOOT_DURATION,
           ease: [0.25, 0.1, 0.25, 1],
         } : { duration: 0 }}
       >

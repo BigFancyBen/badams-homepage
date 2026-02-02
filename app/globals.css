@@ -224,3 +224,36 @@ body {
     will-change: opacity;
   }
 }
+
+/* Mobile card boot animation - CSS fallback */
+@keyframes card-boot-mobile {
+  0% {
+    opacity: 0;
+    transform: scaleY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: scaleY(0.02);
+  }
+  100% {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
+@keyframes card-glow-mobile {
+  0% {
+    box-shadow: 0 0 0px rgba(139, 92, 246, 0);
+  }
+  30% {
+    box-shadow: 0 0 30px rgba(139, 92, 246, 0.6);
+  }
+  100% {
+    box-shadow: 0 0 0px rgba(139, 92, 246, 0);
+  }
+}
+
+.animate-card-boot-mobile {
+  transform-origin: center;
+  animation: card-boot-mobile 0.5s ease-out forwards, card-glow-mobile 0.6s ease-out forwards;
+}
