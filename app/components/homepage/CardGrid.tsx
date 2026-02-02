@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef, useState, useEffect } from "react";
-import { motion, useInView } from "motion/react";
+import { useState, useEffect } from "react";
+import { motion } from "motion/react";
 import { AnimatedCard } from "./AnimatedCard";
 import { useMobileDevice } from "@/app/hooks/useMobileDevice";
 
@@ -19,54 +19,33 @@ interface CardGridProps {
 
 const STAGGER_DELAY = 0.12;
 const BOOT_DURATION = 0.4;
-const CONTENT_FADE_DURATION = 0.3;
 
 // Faster timings for mobile
 const MOBILE_STAGGER_DELAY = 0.08;
 const MOBILE_BOOT_DURATION = 0.3;
 
 export function CardGrid({ projects, reducedMotion = false }: CardGridProps) {
-  const ref = useRef(null);
-  const isInView = useInView(ref, { once: true, margin: "-50px" });
   const isMobile = useMobileDevice();
-  const [bootedCards, setBootedCards] = useState<Set<number>>(
-    () => reducedMotion ? new Set(projects.map((_, i) => i)) : new Set()
-  );
+  const [mounted, setMounted] = useState(false);
 
-  const staggerDelay = isMobile ? MOBILE_STAGGER_DELAY : STAGGER_DELAY;
-  const bootDuration = isMobile ? MOBILE_BOOT_DURATION : BOOT_DURATION;
-
+  // Trigger animation after mount
   useEffect(() => {
-    if (!isInView || reducedMotion) return;
+    // Small delay to ensure hydration is complete
+    const timer = setTimeout(() => setMounted(true), 50);
+    return () => clearTimeout(timer);
+  }, []);
 
-    const timeouts: NodeJS.Timeout[] = [];
-
-    projects.forEach((_, index) => {
-      const bootCompleteTime = (index * staggerDelay + bootDuration + CONTENT_FADE_DURATION) * 1000;
-
-      const timeout = setTimeout(() => {
-        setBootedCards((prev) => new Set(prev).add(index));
-      }, bootCompleteTime);
-
-      timeouts.push(timeout);
-    });
-
-    return () => timeouts.forEach(clearTimeout);
-  }, [isInView, projects, reducedMotion, staggerDelay, bootDuration]);
+  const shouldAnimate = mounted && !reducedMotion;
 
   return (
-    <div
-      ref={ref}
-      className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
-    >
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
       {projects.map((project, index) => (
         <CRTBootCard
           key={project.title}
           project={project}
           index={index}
-          isInView={isInView}
+          shouldAnimate={shouldAnimate}
           reducedMotion={reducedMotion}
-          isBooted={bootedCards.has(index)}
           isMobile={isMobile}
         />
       ))}
@@ -77,28 +56,24 @@ export function CardGrid({ projects, reducedMotion = false }: CardGridProps) {
 interface CRTBootCardProps {
   project: Project;
   index: number;
-  isInView: boolean;
+  shouldAnimate: boolean;
   reducedMotion: boolean;
-  isBooted: boolean;
   isMobile: boolean;
 }
 
-function CRTBootCard({ project, index, isInView, reducedMotion, isBooted, isMobile }: CRTBootCardProps) {
+function CRTBootCard({ project, index, shouldAnimate, reducedMotion, isMobile }: CRTBootCardProps) {
   const staggerDelay = isMobile ? MOBILE_STAGGER_DELAY : STAGGER_DELAY;
   const bootDuration = isMobile ? MOBILE_BOOT_DURATION : BOOT_DURATION;
   const delay = index * staggerDelay;
 
-  // useInView with once:true already "latches" - stays true once triggered
-  const shouldAnimate = isInView && !reducedMotion;
-
-  // Same CRT animation for both mobile and desktop
+  // CRT animation for both mobile and desktop
   // Mobile optimizations: no blur filter, slightly faster timing
   return (
     <div className="h-full relative">
       {/* CRT Power-on glow - no blur on mobile for performance */}
       {shouldAnimate && (
         <motion.div
-          className="absolute inset-0 pointer-events-none will-change-opacity"
+          className="absolute inset-0 pointer-events-none"
           initial={{ opacity: 0 }}
           animate={{ opacity: [0, 0.8, 0] }}
           transition={{
@@ -108,7 +83,6 @@ function CRTBootCard({ project, index, isInView, reducedMotion, isBooted, isMobi
           }}
           style={{
             background: "radial-gradient(ellipse at center, rgba(139, 92, 246, 0.4) 0%, transparent 70%)",
-            // Only use blur on desktop - expensive on mobile
             filter: isMobile ? undefined : "blur(20px)",
           }}
         />
@@ -117,7 +91,7 @@ function CRTBootCard({ project, index, isInView, reducedMotion, isBooted, isMobi
       {/* Horizontal boot line */}
       {shouldAnimate && (
         <motion.div
-          className="absolute left-0 right-0 pointer-events-none will-change-transform"
+          className="absolute left-0 right-0 pointer-events-none"
           style={{
             top: "50%",
             height: "2px",
@@ -126,10 +100,7 @@ function CRTBootCard({ project, index, isInView, reducedMotion, isBooted, isMobi
             transformOrigin: "center",
           }}
           initial={{ scaleX: 0, opacity: 0 }}
-          animate={{
-            scaleX: [0, 1, 1, 0],
-            opacity: [0, 1, 1, 0],
-          }}
+          animate={{ scaleX: [0, 1, 1, 0], opacity: [0, 1, 1, 0] }}
           transition={{
             delay: delay,
             duration: bootDuration,
@@ -140,48 +111,26 @@ function CRTBootCard({ project, index, isInView, reducedMotion, isBooted, isMobi
       )}
 
       {/* Card reveal with CRT expand effect */}
-      {/* Key changes when animation triggers to force remount with correct initial state */}
       <motion.div
-        key={shouldAnimate ? "animating" : "static"}
-        className="h-full will-change-transform"
+        className="h-full"
         initial={shouldAnimate ? {
           clipPath: "polygon(0% 50%, 100% 50%, 100% 50%, 0% 50%)",
           opacity: 0,
-        } : false}
+        } : undefined}
         animate={{
           clipPath: "polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%)",
           opacity: 1,
         }}
         transition={shouldAnimate ? {
-          delay: delay + 0.15,
+          delay: delay + 0.1,
           duration: bootDuration,
           ease: [0.25, 0.1, 0.25, 1],
-          opacity: { delay: delay + 0.1, duration: 0.2 },
         } : { duration: 0 }}
       >
-        {/* Scanline overlay during boot - skip on mobile for performance */}
-        {shouldAnimate && !isBooted && !isMobile && (
-          <motion.div
-            className="absolute inset-0 pointer-events-none z-10 will-change-opacity"
-            initial={{ opacity: 0.6 }}
-            animate={{ opacity: 0 }}
-            transition={{ delay: delay + bootDuration, duration: CONTENT_FADE_DURATION }}
-            style={{
-              background: `repeating-linear-gradient(
-                0deg,
-                transparent,
-                transparent 2px,
-                rgba(0, 0, 0, 0.3) 2px,
-                rgba(0, 0, 0, 0.3) 4px
-              )`,
-            }}
-          />
-        )}
-
         {/* Phosphor glow effect */}
         {shouldAnimate && (
           <motion.div
-            className="absolute inset-0 pointer-events-none will-change-opacity"
+            className="absolute inset-0 pointer-events-none"
             initial={{ opacity: 0 }}
             animate={{ opacity: [0, 0.15, 0] }}
             transition={{
@@ -202,7 +151,6 @@ function CRTBootCard({ project, index, isInView, reducedMotion, isBooted, isMobi
           href={project.href}
           tags={project.tags}
           reducedMotion={reducedMotion}
-          isLoading={!isBooted}
           isMobile={isMobile}
         />
       </motion.div>

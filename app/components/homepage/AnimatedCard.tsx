@@ -9,7 +9,6 @@ interface AnimatedCardProps {
   href?: string;
   tags?: string;
   reducedMotion?: boolean;
-  isLoading?: boolean;
   isMobile?: boolean;
 }
 
@@ -19,7 +18,6 @@ export function AnimatedCard({
   href,
   tags,
   reducedMotion = false,
-  isLoading = false,
   isMobile = false,
 }: AnimatedCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
@@ -260,12 +258,12 @@ export function AnimatedCard({
     return (
       <a
         href={href}
-        className={`block h-full pt-[18px] ${isLoading ? "pointer-events-none" : "cursor-pointer"}`}
+        className="block h-full pt-[18px] cursor-pointer"
       >
         {content}
       </a>
     );
   }
 
-  return <div className={`h-full pt-[18px] ${isLoading ? "pointer-events-none" : ""}`}>{content}</div>;
+  return <div className="h-full pt-[18px]">{content}</div>;
 }
