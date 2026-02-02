@@ -111,7 +111,9 @@ function CRTBootCard({ project, index, shouldAnimate, reducedMotion, isMobile }:
       )}
 
       {/* Card reveal with CRT expand effect */}
+      {/* Key forces remount when shouldAnimate changes, so initial state is applied fresh */}
       <motion.div
+        key={shouldAnimate ? "animating" : "static"}
         className="h-full"
         initial={shouldAnimate ? {
           clipPath: "polygon(0% 50%, 100% 50%, 100% 50%, 0% 50%)",
