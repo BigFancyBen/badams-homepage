@@ -61,11 +61,7 @@ export default function Home() {
       <div className="relative z-10 flex flex-col items-center">
         <AnimatedHeroTitle text="benadams.dev" reducedMotion={prefersReducedMotion} />
 
-        <motion.div
-          className="mt-16 w-full max-w-7xl"
-          initial={{ opacity: 1 }}
-          animate={{ opacity: 1 }}
-        >
+        <div className="mt-16 w-full max-w-7xl">
           <motion.h2
             className="text-2xl md:text-3xl font-bold text-center mb-8"
             initial={{ opacity: 0, y: 20 }}
@@ -80,7 +76,7 @@ export default function Home() {
           </motion.h2>
 
           <CardGrid projects={projects} reducedMotion={prefersReducedMotion} />
-        </motion.div>
+        </div>
       </div>
     </div>
   );
