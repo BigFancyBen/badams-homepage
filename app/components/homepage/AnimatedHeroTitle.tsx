@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { motion } from "motion/react";
-import { useMobileDevice } from "@/app/hooks/useMobileDevice";
 
 interface AnimatedHeroTitleProps {
   text: string;
@@ -11,19 +10,24 @@ interface AnimatedHeroTitleProps {
 
 const GLYPHS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&*<>[]{}";
 
-export function AnimatedHeroTitle({ text, reducedMotion = false }: AnimatedHeroTitleProps) {
-  const isMobile = useMobileDevice();
+export function AnimatedHeroTitle({
+  text,
+  reducedMotion = false,
+}: AnimatedHeroTitleProps) {
   const [displayText, setDisplayText] = useState(reducedMotion ? text : "");
   const [isComplete, setIsComplete] = useState(reducedMotion);
   const [revealedIndices, setRevealedIndices] = useState<Set<number>>(
     reducedMotion ? new Set(text.split("").map((_, i) => i)) : new Set()
   );
+  const [isGlitching, setIsGlitching] = useState(false);
   const rafRef = useRef<number | null>(null);
+  const glitchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const getRandomGlyph = useCallback(() => {
     return GLYPHS[Math.floor(Math.random() * GLYPHS.length)];
   }, []);
 
+  // Text scramble decode animation
   useEffect(() => {
     if (reducedMotion) {
       setDisplayText(text);
@@ -31,11 +35,8 @@ export function AnimatedHeroTitle({ text, reducedMotion = false }: AnimatedHeroT
       return;
     }
 
-    const totalDuration = 1000;
-    // Use lower frame rate on mobile for performance
-    const frameRate = isMobile ? 30 : 60;
-    const frameTime = 1000 / frameRate;
-    const totalFrames = (totalDuration / 1000) * frameRate;
+    const frameTime = 1000 / 60;
+    const totalFrames = 60;
     const revealInterval = totalFrames / text.length;
 
     let frame = 0;
@@ -82,40 +83,91 @@ export function AnimatedHeroTitle({ text, reducedMotion = false }: AnimatedHeroT
     rafRef.current = requestAnimationFrame(animate);
 
     return () => {
-      if (rafRef.current) {
-        cancelAnimationFrame(rafRef.current);
-      }
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [text, getRandomGlyph, reducedMotion, isMobile]);
+  }, [text, getRandomGlyph, reducedMotion]);
+
+  // Periodic glitch bursts after scramble completes
+  useEffect(() => {
+    if (!isComplete || reducedMotion) return;
+
+    const scheduleGlitch = () => {
+      const delay = 3000 + Math.random() * 4000;
+      glitchTimeoutRef.current = setTimeout(() => {
+        setIsGlitching(true);
+        setTimeout(() => {
+          setIsGlitching(false);
+          scheduleGlitch();
+        }, 200 + Math.random() * 150);
+      }, delay);
+    };
+
+    // First glitch after a shorter initial delay
+    glitchTimeoutRef.current = setTimeout(() => {
+      setIsGlitching(true);
+      setTimeout(() => {
+        setIsGlitching(false);
+        scheduleGlitch();
+      }, 250);
+    }, 1500);
+
+    return () => {
+      if (glitchTimeoutRef.current) clearTimeout(glitchTimeoutRef.current);
+    };
+  }, [isComplete, reducedMotion]);
+
+  const titleClasses =
+    "text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-center font-mono tracking-tight";
 
   return (
-    <motion.h1
-      className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-center font-mono tracking-tight"
+    <motion.div
+      className="relative"
       initial={{ opacity: 0, y: -30 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
     >
-      {displayText.split("").map((char, i) => {
-        const isRevealed = revealedIndices.has(i);
-        const isDot = text[i] === ".";
+      {/* Main text */}
+      <h1
+        className={`${titleClasses} relative ${isGlitching ? "animate-glitch-jitter" : ""}`}
+      >
+        {displayText.split("").map((char, i) => {
+          const isRevealed = revealedIndices.has(i);
+          const isDot = text[i] === ".";
 
-        return (
+          return (
+            <span
+              key={i}
+              className={`inline-block ${isDot ? "text-purple-400" : "text-white"}`}
+              style={{
+                opacity: isRevealed || reducedMotion ? 1 : 0.7,
+                filter: isRevealed || reducedMotion ? "none" : "blur(1px)",
+              }}
+            >
+              {char}
+            </span>
+          );
+        })}
+      </h1>
+
+      {/* Glitch RGB-split layers - only rendered during glitch bursts */}
+      {isGlitching && !reducedMotion && (
+        <>
           <span
-            key={i}
-            className={`inline-block will-change-transform ${isDot ? "text-purple-400" : "text-white"} ${
-              isComplete && !reducedMotion ? "animate-glow" : ""
-            }`}
-            style={{
-              opacity: isRevealed || reducedMotion ? 1 : 0.7,
-              filter: isRevealed || reducedMotion ? "none" : "blur(1px)",
-              // Stagger animation delay using CSS custom property
-              animationDelay: isComplete && !reducedMotion ? `${i * 0.15}s` : "0s",
-            }}
+            className={`${titleClasses} absolute inset-0 text-cyan-400 animate-glitch-slice-1 pointer-events-none select-none`}
+            aria-hidden="true"
+            style={{ mixBlendMode: "screen", opacity: 0.8 }}
           >
-            {char}
+            {text}
           </span>
-        );
-      })}
-    </motion.h1>
+          <span
+            className={`${titleClasses} absolute inset-0 text-red-400 animate-glitch-slice-2 pointer-events-none select-none`}
+            aria-hidden="true"
+            style={{ mixBlendMode: "screen", opacity: 0.8 }}
+          >
+            {text}
+          </span>
+        </>
+      )}
+    </motion.div>
   );
 }

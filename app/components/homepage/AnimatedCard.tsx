@@ -1,7 +1,6 @@
 "use client";
 
-import { useRef, MouseEvent, TouchEvent, useState } from "react";
-import { motion, useMotionValue, useSpring, useTransform } from "motion/react";
+import { useRef, useState } from "react";
 
 interface AnimatedCardProps {
   title: string;
@@ -9,7 +8,6 @@ interface AnimatedCardProps {
   href?: string;
   tags?: string;
   reducedMotion?: boolean;
-  isMobile?: boolean;
 }
 
 export function AnimatedCard({
@@ -18,248 +16,166 @@ export function AnimatedCard({
   href,
   tags,
   reducedMotion = false,
-  isMobile = false,
 }: AnimatedCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
-  const [isTouched, setIsTouched] = useState(false);
+  const [isActive, setIsActive] = useState(false);
+  const [glowPos, setGlowPos] = useState({ x: 50, y: 50 });
 
-  const mouseX = useMotionValue(0);
-  const mouseY = useMotionValue(0);
-  const isHovered = useMotionValue(0);
-
-  // Lighter spring config for better mobile performance
-  const springConfig = isMobile
-    ? { stiffness: 200, damping: 30 }
-    : { stiffness: 150, damping: 20 };
-
-  const smoothMouseX = useSpring(mouseX, springConfig);
-  const smoothMouseY = useSpring(mouseY, springConfig);
-
-  const rotateX = useTransform(smoothMouseY, [-0.5, 0.5], [8, -8]);
-  const rotateY = useTransform(smoothMouseX, [-0.5, 0.5], [-8, 8]);
-
-  const glowX = useTransform(smoothMouseX, [-0.5, 0.5], [0, 100]);
-  const glowY = useTransform(smoothMouseY, [-0.5, 0.5], [0, 100]);
-
-  const borderGlow = useSpring(useTransform(isHovered, [0, 1], [0, 1]), {
-    stiffness: 200,
-    damping: 20,
-  });
-
-  const glowBackground = useTransform(
-    [glowX, glowY],
-    ([x, y]) =>
-      `radial-gradient(circle at ${x}% ${y}%, rgba(139, 92, 246, 0.15), transparent 60%)`
-  );
-
-  const glowBoxShadow = useTransform(
-    borderGlow,
-    (v) => `0 0 ${v * 20}px rgba(139, 92, 246, ${v * 0.4})`
-  );
-
-  const handleMouseMove = (e: MouseEvent<HTMLDivElement>) => {
-    if (!cardRef.current || reducedMotion || isMobile) return;
-
+  const updateGlowPosition = (clientX: number, clientY: number) => {
+    if (!cardRef.current) return;
     const rect = cardRef.current.getBoundingClientRect();
-    const centerX = rect.left + rect.width / 2;
-    const centerY = rect.top + rect.height / 2;
-
-    const normalizedX = (e.clientX - centerX) / rect.width;
-    const normalizedY = (e.clientY - centerY) / rect.height;
-
-    mouseX.set(normalizedX);
-    mouseY.set(normalizedY);
+    setGlowPos({
+      x: ((clientX - rect.left) / rect.width) * 100,
+      y: ((clientY - rect.top) / rect.height) * 100,
+    });
   };
 
   const handleMouseEnter = () => {
-    if (!reducedMotion && !isMobile) {
-      isHovered.set(1);
-    }
+    if (!reducedMotion) setIsActive(true);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!reducedMotion) updateGlowPosition(e.clientX, e.clientY);
   };
 
   const handleMouseLeave = () => {
-    mouseX.set(0);
-    mouseY.set(0);
-    isHovered.set(0);
+    setIsActive(false);
   };
 
-  // Touch handlers for mobile
-  const handleTouchStart = (e: TouchEvent<HTMLDivElement>) => {
-    if (reducedMotion) return;
-    setIsTouched(true);
-    isHovered.set(1);
-
-    // Set glow position to touch point
-    if (cardRef.current) {
-      const rect = cardRef.current.getBoundingClientRect();
-      const touch = e.touches[0];
-      const normalizedX = (touch.clientX - rect.left) / rect.width - 0.5;
-      const normalizedY = (touch.clientY - rect.top) / rect.height - 0.5;
-      mouseX.set(normalizedX);
-      mouseY.set(normalizedY);
-    }
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (reducedMotion || !e.touches[0]) return;
+    setIsActive(true);
+    updateGlowPosition(e.touches[0].clientX, e.touches[0].clientY);
   };
 
   const handleTouchEnd = () => {
-    setIsTouched(false);
-    isHovered.set(0);
-    mouseX.set(0);
-    mouseY.set(0);
+    setIsActive(false);
   };
 
   const content = (
-    <motion.div
+    <div
       ref={cardRef}
-      className="relative h-full"
-      style={{
-        // Disable 3D perspective on mobile for better performance
-        perspective: reducedMotion || isMobile ? "none" : "800px",
-      }}
-      onMouseMove={handleMouseMove}
+      className="relative h-full transition-transform duration-150"
+      style={{ transform: isActive ? "scale(0.98)" : "scale(1)" }}
       onMouseEnter={handleMouseEnter}
+      onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}
     >
-      <motion.div
-        className="relative h-full will-change-transform"
-        style={
-          reducedMotion || isMobile
-            ? {}
-            : {
-                rotateX,
-                rotateY,
-                transformStyle: "preserve-3d",
-              }
-        }
-        // Simple scale animation for mobile touch
-        animate={
-          isMobile && isTouched
-            ? { scale: 0.98 }
-            : { scale: 1 }
-        }
-        transition={{ duration: 0.15 }}
+      {/* Folder tab */}
+      <div
+        className="absolute -top-[18px] left-3 h-[20px] w-[90px]"
+        style={{
+          background: "#1a1a1a",
+          borderTop: "2px solid #404040",
+          borderLeft: "2px solid #404040",
+          borderRight: "2px solid #0a0a0a",
+          clipPath:
+            "polygon(0 100%, 0 30%, 15% 0, 85% 0, 100% 30%, 100% 100%)",
+        }}
+      />
+
+      {/* Main folder body - Win98 beveled style */}
+      <div
+        className="relative h-full overflow-hidden flex flex-col transition-shadow duration-300"
+        style={{
+          background: "#1a1a1a",
+          borderTop: "2px solid #404040",
+          borderLeft: "2px solid #404040",
+          borderRight: "2px solid #0a0a0a",
+          borderBottom: "2px solid #0a0a0a",
+          boxShadow: isActive
+            ? "inset 1px 1px 0 #2a2a2a, inset -1px -1px 0 #0a0a0a, 0 0 20px rgba(139, 92, 246, 0.4)"
+            : "inset 1px 1px 0 #2a2a2a, inset -1px -1px 0 #0a0a0a",
+        }}
       >
-        {/* Folder tab */}
+        {/* Inner bevel */}
         <div
-          className="absolute -top-[18px] left-3 h-[20px] w-[90px]"
+          className="absolute inset-[3px] pointer-events-none"
           style={{
-            background: "#1a1a1a",
-            borderTop: "2px solid #404040",
-            borderLeft: "2px solid #404040",
-            borderRight: "2px solid #0a0a0a",
-            clipPath:
-              "polygon(0 100%, 0 30%, 15% 0, 85% 0, 100% 30%, 100% 100%)",
+            borderTop: "1px solid #0a0a0a",
+            borderLeft: "1px solid #0a0a0a",
+            borderRight: "1px solid #303030",
+            borderBottom: "1px solid #303030",
           }}
         />
 
-        {/* Main folder body - Win98 beveled style */}
+        {/* Title bar - Win98 style */}
         <div
-          className="relative h-full overflow-hidden flex flex-col"
+          className="px-3 py-1.5 flex items-center gap-2"
           style={{
-            background: "#1a1a1a",
-            borderTop: "2px solid #404040",
-            borderLeft: "2px solid #404040",
-            borderRight: "2px solid #0a0a0a",
-            borderBottom: "2px solid #0a0a0a",
-            boxShadow: "inset 1px 1px 0 #2a2a2a, inset -1px -1px 0 #0a0a0a",
+            background:
+              "linear-gradient(90deg, #1a1a4a 0%, #2a2a6a 50%, #1a1a4a 100%)",
+            borderBottom: "1px solid #0a0a0a",
           }}
         >
-          {/* Inner bevel */}
-          <div
-            className="absolute inset-[3px] pointer-events-none"
-            style={{
-              borderTop: "1px solid #0a0a0a",
-              borderLeft: "1px solid #0a0a0a",
-              borderRight: "1px solid #303030",
-              borderBottom: "1px solid #303030",
-            }}
-          />
-
-          {/* Title bar - Win98 style */}
-          <div
-            className="px-3 py-1.5 flex items-center gap-2"
-            style={{
-              background:
-                "linear-gradient(90deg, #1a1a4a 0%, #2a2a6a 50%, #1a1a4a 100%)",
-              borderBottom: "1px solid #0a0a0a",
-            }}
-          >
-            {/* Folder icon */}
-            <div className="flex-shrink-0">
-              <svg width="16" height="14" viewBox="0 0 16 14" fill="none">
-                <path
-                  d="M0 2V12C0 13.1 0.9 14 2 14H14C15.1 14 16 13.1 16 12V4C16 2.9 15.1 2 14 2H8L6 0H2C0.9 0 0 0.9 0 2Z"
-                  fill="#f5c542"
-                />
-                <path
-                  d="M0 4H16V12C16 13.1 15.1 14 14 14H2C0.9 14 0 13.1 0 12V4Z"
-                  fill="#f5d442"
-                />
-              </svg>
-            </div>
-            <h3 className="text-sm font-bold text-white truncate">{title}</h3>
-          </div>
-
-          {/* Content area */}
-          <div className="p-4 relative flex flex-col flex-grow">
-            {!reducedMotion && (
-              <motion.div
-                className="absolute inset-0 pointer-events-none will-change-opacity"
-                style={{
-                  background: isMobile
-                    ? isTouched
-                      ? "radial-gradient(circle at 50% 50%, rgba(139, 92, 246, 0.15), transparent 60%)"
-                      : "transparent"
-                    : glowBackground,
-                  opacity: isMobile ? (isTouched ? 1 : 0) : borderGlow,
-                }}
+          {/* Folder icon */}
+          <div className="flex-shrink-0">
+            <svg width="16" height="14" viewBox="0 0 16 14" fill="none">
+              <path
+                d="M0 2V12C0 13.1 0.9 14 2 14H14C15.1 14 16 13.1 16 12V4C16 2.9 15.1 2 14 2H8L6 0H2C0.9 0 0 0.9 0 2Z"
+                fill="#f5c542"
               />
-            )}
-
-            <div className="flex-grow">
-              <p className="text-gray-300 text-sm leading-relaxed">
-                {description}
-              </p>
-            </div>
-
-            {/* Status bar style footer */}
-            <div
-              className="text-xs text-gray-400 pt-2 mt-4 flex items-center gap-1"
-              style={{
-                borderTop: "1px solid #0a0a0a",
-              }}
-            >
-              <span className="inline-block w-2 h-2 bg-green-500 mr-1" />
-              {href ? (isMobile ? "Tap to open" : "Double-click to open") : tags}
-            </div>
+              <path
+                d="M0 4H16V12C16 13.1 15.1 14 14 14H2C0.9 14 0 13.1 0 12V4Z"
+                fill="#f5d442"
+              />
+            </svg>
           </div>
+          <h3 className="text-sm font-bold text-white truncate">{title}</h3>
         </div>
 
-        {/* Outer glow on hover/touch */}
-        {!reducedMotion && (
-          <motion.div
-            className="absolute inset-0 pointer-events-none will-change-auto"
+        {/* Content area */}
+        <div className="p-4 relative flex flex-col flex-grow">
+          {/* Glow follow effect - works on both mouse and touch */}
+          {!reducedMotion && (
+            <div
+              className="absolute inset-0 pointer-events-none transition-opacity duration-300"
+              style={{
+                background: `radial-gradient(circle at ${glowPos.x}% ${glowPos.y}%, rgba(139, 92, 246, 0.15), transparent 60%)`,
+                opacity: isActive ? 1 : 0,
+              }}
+            />
+          )}
+
+          <div className="flex-grow">
+            <p className="text-gray-300 text-sm leading-relaxed">
+              {description}
+            </p>
+          </div>
+
+          {/* Status bar style footer */}
+          <div
+            className="text-xs text-gray-400 pt-2 mt-4 flex items-center gap-1"
             style={{
-              boxShadow: isMobile
-                ? isTouched
-                  ? "0 0 20px rgba(139, 92, 246, 0.4)"
-                  : "0 0 0px rgba(139, 92, 246, 0)"
-                : glowBoxShadow,
+              borderTop: "1px solid #0a0a0a",
             }}
-          />
-        )}
-      </motion.div>
-    </motion.div>
+          >
+            <span className="inline-block w-2 h-2 bg-green-500 mr-1" />
+            {href ? "Open" : tags}
+          </div>
+        </div>
+      </div>
+
+      {/* Outer glow on hover/touch */}
+      {!reducedMotion && (
+        <div
+          className="absolute inset-0 pointer-events-none transition-shadow duration-300"
+          style={{
+            boxShadow: isActive
+              ? "0 0 20px rgba(139, 92, 246, 0.4)"
+              : "0 0 0px rgba(139, 92, 246, 0)",
+          }}
+        />
+      )}
+    </div>
   );
 
   if (href) {
     return (
-      <a
-        href={href}
-        className="block h-full pt-[18px] cursor-pointer"
-      >
+      <a href={href} className="block h-full pt-[18px] cursor-pointer">
         {content}
       </a>
     );

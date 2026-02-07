@@ -2,7 +2,6 @@
 
 import { motion } from "motion/react";
 import { AnimatedCard } from "./AnimatedCard";
-import { useMobileDevice } from "@/app/hooks/useMobileDevice";
 
 interface Project {
   title: string;
@@ -19,8 +18,6 @@ interface CardGridProps {
 const STAGGER_DELAY = 0.15;
 
 export function CardGrid({ projects, reducedMotion = false }: CardGridProps) {
-  const isMobile = useMobileDevice();
-
   // If reduced motion, render without animations
   if (reducedMotion) {
     return (
@@ -33,7 +30,6 @@ export function CardGrid({ projects, reducedMotion = false }: CardGridProps) {
               href={project.href}
               tags={project.tags}
               reducedMotion={reducedMotion}
-              isMobile={isMobile}
             />
           </div>
         ))}
@@ -41,7 +37,7 @@ export function CardGrid({ projects, reducedMotion = false }: CardGridProps) {
     );
   }
 
-  // Animated version - uses same pattern as working AnimatedHeroTitle
+  // Animated version
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
       {projects.map((project, index) => (
@@ -62,7 +58,6 @@ export function CardGrid({ projects, reducedMotion = false }: CardGridProps) {
             href={project.href}
             tags={project.tags}
             reducedMotion={reducedMotion}
-            isMobile={isMobile}
           />
         </motion.div>
       ))}
