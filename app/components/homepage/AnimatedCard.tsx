@@ -10,6 +10,7 @@ interface AnimatedCardProps {
   tags?: string;
   reducedMotion?: boolean;
   isMobile?: boolean;
+  animationDelay?: number;
 }
 
 export function AnimatedCard({
@@ -19,6 +20,7 @@ export function AnimatedCard({
   tags,
   reducedMotion = false,
   isMobile = false,
+  animationDelay = 0,
 }: AnimatedCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [isTouched, setIsTouched] = useState(false);
@@ -254,16 +256,35 @@ export function AnimatedCard({
     </motion.div>
   );
 
+  // Entry animation - same pattern as AnimatedHeroTitle
+  const entryAnimation = reducedMotion ? {} : {
+    initial: { opacity: 0, y: 30 },
+    animate: { opacity: 1, y: 0 },
+    transition: {
+      delay: animationDelay,
+      duration: 0.4,
+      ease: [0.25, 0.1, 0.25, 1] as const,
+    },
+  };
+
   if (href) {
     return (
-      <a
+      <motion.a
         href={href}
         className="block h-full pt-[18px] cursor-pointer"
+        {...entryAnimation}
       >
         {content}
-      </a>
+      </motion.a>
     );
   }
 
-  return <div className="h-full pt-[18px]">{content}</div>;
+  return (
+    <motion.div
+      className="h-full pt-[18px]"
+      {...entryAnimation}
+    >
+      {content}
+    </motion.div>
+  );
 }

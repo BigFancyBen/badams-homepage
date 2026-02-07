@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "motion/react";
 import { AnimatedCard } from "./AnimatedCard";
 import { useMobileDevice } from "@/app/hooks/useMobileDevice";
 
@@ -41,30 +40,20 @@ export function CardGrid({ projects, reducedMotion = false }: CardGridProps) {
     );
   }
 
-  // Animated version - uses same pattern as working AnimatedHeroTitle
+  // Animated version - animation is handled inside AnimatedCard
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
       {projects.map((project, index) => (
-        <motion.div
+        <AnimatedCard
           key={project.title}
-          className="h-full"
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{
-            delay: 1.2 + index * STAGGER_DELAY,
-            duration: 0.4,
-            ease: [0.25, 0.1, 0.25, 1],
-          }}
-        >
-          <AnimatedCard
-            title={project.title}
-            description={project.description}
-            href={project.href}
-            tags={project.tags}
-            reducedMotion={reducedMotion}
-            isMobile={isMobile}
-          />
-        </motion.div>
+          title={project.title}
+          description={project.description}
+          href={project.href}
+          tags={project.tags}
+          reducedMotion={reducedMotion}
+          isMobile={isMobile}
+          animationDelay={1.2 + index * STAGGER_DELAY}
+        />
       ))}
     </div>
   );
