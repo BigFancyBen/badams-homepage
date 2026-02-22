@@ -22,8 +22,8 @@ export function AnimatedCard({
   const cardRef = useRef<HTMLDivElement>(null);
   const [isTouched, setIsTouched] = useState(false);
   const {
-    beta,
-    gamma,
+    beta: gyroBeta,
+    gamma: gyroGamma,
     isSupported: gyroSupported,
     permissionState,
     requestPermission,
@@ -41,22 +41,13 @@ export function AnimatedCard({
   const mouseY = useMotionValue(0);
   const isHovered = useMotionValue(0);
 
-  // Gyroscope-driven motion values for tilt
-  const gyroX = useMotionValue(0);
-  const gyroY = useMotionValue(0);
-
-  // Update gyro motion values during render (motion values are mutable, not React state)
-  if (gyroSupported && permissionState === "granted") {
-    gyroX.set(gamma); // left-right tilt → rotateY
-    gyroY.set(beta); // front-back tilt → rotateX
-  }
-
   const springConfig = { stiffness: 150, damping: 20 };
 
   const smoothMouseX = useSpring(mouseX, springConfig);
   const smoothMouseY = useSpring(mouseY, springConfig);
-  const smoothGyroX = useSpring(gyroX, springConfig);
-  const smoothGyroY = useSpring(gyroY, springConfig);
+  // gyroBeta/gyroGamma are already MotionValues from the hook — pipe through springs directly
+  const smoothGyroX = useSpring(gyroGamma, springConfig);
+  const smoothGyroY = useSpring(gyroBeta, springConfig);
 
   // Mouse-driven rotation (desktop)
   const rotateXMouse = useTransform(smoothMouseY, [-0.5, 0.5], [8, -8]);

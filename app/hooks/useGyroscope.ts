@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, useSyncExternalStore } from "react";
+import { useState, useEffect, useCallback, useSyncExternalStore } from "react";
+import { type MotionValue, useMotionValue } from "motion/react";
 
 interface GyroscopeState {
-  /** Normalized -0.5 to 0.5 (front-back tilt, maps to rotateX) */
-  beta: number;
-  /** Normalized -0.5 to 0.5 (left-right tilt, maps to rotateY) */
-  gamma: number;
+  /** MotionValue normalized -0.5 to 0.5 (front-back tilt, maps to rotateX) */
+  beta: MotionValue<number>;
+  /** MotionValue normalized -0.5 to 0.5 (left-right tilt, maps to rotateY) */
+  gamma: MotionValue<number>;
   isSupported: boolean;
   permissionState: "prompt" | "granted" | "denied" | "unavailable";
   requestPermission: () => Promise<boolean>;
@@ -21,7 +22,43 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-// Static capability detection via useSyncExternalStore (no setState in effects)
+// ── Singleton orientation listener ──────────────────────────────────
+// One DeviceOrientation listener feeds all hook instances via MotionValues.
+// Writes directly to MotionValues → zero React re-renders from orientation data.
+type OrientationSubscriber = (beta: number, gamma: number) => void;
+const subscribers = new Set<OrientationSubscriber>();
+let singletonAttached = false;
+let baseline: { beta: number; gamma: number } | null = null;
+let lastUpdate = 0;
+
+function handleOrientationEvent(event: DeviceOrientationEvent) {
+  const now = performance.now();
+  if (now - lastUpdate < THROTTLE_MS) return;
+  lastUpdate = now;
+
+  const rawBeta = event.beta ?? 0;
+  const rawGamma = event.gamma ?? 0;
+
+  if (!baseline) {
+    baseline = { beta: rawBeta, gamma: rawGamma };
+  }
+
+  const normalizedBeta = clamp((rawBeta - baseline.beta) / BETA_RANGE, -0.5, 0.5);
+  const normalizedGamma = clamp((rawGamma - baseline.gamma) / GAMMA_RANGE, -0.5, 0.5);
+
+  for (const sub of subscribers) {
+    sub(normalizedBeta, normalizedGamma);
+  }
+}
+
+function attachSingletonListener() {
+  if (!singletonAttached) {
+    window.addEventListener("deviceorientation", handleOrientationEvent);
+    singletonAttached = true;
+  }
+}
+
+// ── Static capability detection (SSR-safe, no setState in effects) ──
 const noopSubscribe = () => () => {};
 
 function getGyroSupported(): boolean {
@@ -51,12 +88,10 @@ export function useGyroscope(): GyroscopeState {
     () => false
   );
 
-  // Only set via user interaction (requestPermission callback), never in an effect
   const [permissionOverride, setPermissionOverride] = useState<
     "granted" | "denied" | null
   >(null);
 
-  // Derive permissionState from capabilities + user override
   const permissionState: GyroscopeState["permissionState"] = permissionOverride
     ? permissionOverride
     : !isSupported
@@ -65,58 +100,33 @@ export function useGyroscope(): GyroscopeState {
         ? "prompt"
         : "granted";
 
-  const [beta, setBeta] = useState(0);
-  const [gamma, setGamma] = useState(0);
-  const baselineRef = useRef<{ beta: number; gamma: number } | null>(null);
-  const lastUpdateRef = useRef(0);
-  const listenerAttachedRef = useRef(false);
+  // MotionValues instead of useState — orientation updates bypass React entirely
+  const beta = useMotionValue(0);
+  const gamma = useMotionValue(0);
 
-  const handleOrientation = useCallback(
-    (event: DeviceOrientationEvent) => {
-      const now = performance.now();
-      if (now - lastUpdateRef.current < THROTTLE_MS) return;
-      lastUpdateRef.current = now;
-
-      const rawBeta = event.beta ?? 0; // front-back
-      const rawGamma = event.gamma ?? 0; // left-right
-
-      // Set baseline on first reading (device resting position)
-      if (!baselineRef.current) {
-        baselineRef.current = { beta: rawBeta, gamma: rawGamma };
-      }
-
-      const deltaBeta = rawBeta - baselineRef.current.beta;
-      const deltaGamma = rawGamma - baselineRef.current.gamma;
-
-      // Normalize to -0.5..0.5 range
-      const normalizedBeta = clamp(deltaBeta / BETA_RANGE, -0.5, 0.5);
-      const normalizedGamma = clamp(deltaGamma / GAMMA_RANGE, -0.5, 0.5);
-
-      setBeta(normalizedBeta);
-      setGamma(normalizedGamma);
-    },
-    []
-  );
-
-  const attachListener = useCallback(() => {
-    if (!listenerAttachedRef.current) {
-      window.addEventListener("deviceorientation", handleOrientation);
-      listenerAttachedRef.current = true;
-    }
-  }, [handleOrientation]);
-
-  // Auto-attach on Android / older iOS where permission is pre-granted
+  // Subscribe to the singleton listener when permission is granted
   useEffect(() => {
-    if (permissionState === "granted" && isSupported) {
-      attachListener();
-    }
+    if (permissionState !== "granted" || !isSupported) return;
+
+    // Subscriber writes directly to MotionValues — zero React re-renders
+    const sub: OrientationSubscriber = (b, g) => {
+      beta.set(b);
+      gamma.set(g);
+    };
+
+    subscribers.add(sub);
+    attachSingletonListener();
+
     return () => {
-      if (listenerAttachedRef.current) {
-        window.removeEventListener("deviceorientation", handleOrientation);
-        listenerAttachedRef.current = false;
+      subscribers.delete(sub);
+      // Detach singleton when no subscribers remain
+      if (subscribers.size === 0 && singletonAttached) {
+        window.removeEventListener("deviceorientation", handleOrientationEvent);
+        singletonAttached = false;
+        baseline = null;
       }
     };
-  }, [permissionState, isSupported, attachListener, handleOrientation]);
+  }, [permissionState, isSupported, beta, gamma]);
 
   const requestPermission = useCallback(async (): Promise<boolean> => {
     if (!isSupported) return false;
@@ -130,7 +140,6 @@ export function useGyroscope(): GyroscopeState {
         const result = await DevOrientEvent.requestPermission();
         if (result === "granted") {
           setPermissionOverride("granted");
-          attachListener();
           return true;
         } else {
           setPermissionOverride("denied");
@@ -141,12 +150,10 @@ export function useGyroscope(): GyroscopeState {
         return false;
       }
     } else {
-      // No permission needed
       setPermissionOverride("granted");
-      attachListener();
       return true;
     }
-  }, [isSupported, attachListener]);
+  }, [isSupported]);
 
   return { beta, gamma, isSupported, permissionState, requestPermission };
 }
