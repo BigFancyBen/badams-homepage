@@ -6,9 +6,10 @@ import { MagicCard } from "../types";
 interface CardGridProps {
   cards: MagicCard[];
   loading: boolean;
+  cardQuantities?: Record<string, number>;
 }
 
-export function CardGrid({ cards, loading }: CardGridProps) {
+export function CardGrid({ cards, loading, cardQuantities = {} }: CardGridProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -37,11 +38,12 @@ export function CardGrid({ cards, loading }: CardGridProps) {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-1">
       {cards.map((card) => {
+        const quantity = cardQuantities[card.name.toLowerCase()] || 1;
         return (
           <div
             key={card.id}
             className="hover:opacity-80 transition-opacity cursor-pointer"
-            title={`${card.name} - ${card.type_line} (CMC: ${card.cmc})`}
+            title={`${card.name} - ${card.type_line} (CMC: ${card.cmc})${quantity > 1 ? ` x${quantity}` : ""}`}
           >
             <div className="aspect-[488/680] relative overflow-hidden">
               <Image
@@ -51,6 +53,11 @@ export function CardGrid({ cards, loading }: CardGridProps) {
                 className="object-cover"
                 sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, (max-width: 1280px) 20vw, 16vw"
               />
+              {quantity > 1 && (
+                <div className="absolute top-1 right-1 bg-black bg-opacity-80 text-white text-xs font-bold px-1.5 py-0.5 min-w-[1.5rem] text-center border border-[#404040]">
+                  x{quantity}
+                </div>
+              )}
             </div>
           </div>
         );

@@ -86,6 +86,27 @@ export default function TutorHelperPage() {
     });
   }, [cards, filters, sortBy, sortOrder]);
 
+  // Build a quantity map from the active deck's parsed decklist
+  const cardQuantities = useMemo(() => {
+    const quantityMap: Record<string, number> = {};
+    const deck = getActiveDeck();
+    if (deck) {
+      for (const card of deck.decklist.cards) {
+        quantityMap[card.name.toLowerCase()] = card.quantity;
+      }
+    }
+    return quantityMap;
+  }, [getActiveDeck]);
+
+  // Compute total card count using quantities
+  const totalCardCount = useMemo(() => {
+    return cards.reduce((sum, card) => sum + (cardQuantities[card.name.toLowerCase()] || 1), 0);
+  }, [cards, cardQuantities]);
+
+  const filteredCardCount = useMemo(() => {
+    return filteredCards.reduce((sum, card) => sum + (cardQuantities[card.name.toLowerCase()] || 1), 0);
+  }, [filteredCards, cardQuantities]);
+
   const hasActiveFilters =
     filters.manaCosts.length > 0 ||
     filters.cardTypes.length > 0 ||
@@ -200,8 +221,8 @@ export default function TutorHelperPage() {
               {/* Card Count - Left Side */}
               <span className="text-sm sm:text-base font-semibold text-[#e5e5e5]">
                 {hasActiveFilters
-                  ? `${filteredCards.length}/${cards.length}`
-                  : `${cards.length}/${cards.length}`}
+                  ? `${filteredCardCount}/${totalCardCount}`
+                  : `${totalCardCount}/${totalCardCount}`}
               </span>
 
               {/* Control Buttons - Right Side */}
@@ -301,7 +322,7 @@ export default function TutorHelperPage() {
           )}
 
           {filteredCards.length > 0 ? (
-            <CardGrid cards={filteredCards} loading={loading} />
+            <CardGrid cards={filteredCards} loading={loading} cardQuantities={cardQuantities} />
           ) : !loading && decklistCards.length === 0 ? (
             <div className="text-center py-16">
               <div className="text-[#6b7280] mb-4">
@@ -334,7 +355,7 @@ export default function TutorHelperPage() {
               </button>
             </div>
           ) : (
-            <CardGrid cards={filteredCards} loading={loading} />
+            <CardGrid cards={filteredCards} loading={loading} cardQuantities={cardQuantities} />
           )}
         </div>
       </div>
