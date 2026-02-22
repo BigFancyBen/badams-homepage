@@ -1,7 +1,8 @@
 "use client";
 
-import { useRef, MouseEvent, TouchEvent, useState } from "react";
+import { useRef, MouseEvent, TouchEvent, useState, useSyncExternalStore } from "react";
 import { motion, useMotionValue, useSpring, useTransform } from "motion/react";
+import { useGyroscope } from "@/app/hooks/useGyroscope";
 
 interface AnimatedCardProps {
   title: string;
@@ -9,7 +10,6 @@ interface AnimatedCardProps {
   href?: string;
   tags?: string;
   reducedMotion?: boolean;
-  isMobile?: boolean;
 }
 
 export function AnimatedCard({
@@ -18,25 +18,58 @@ export function AnimatedCard({
   href,
   tags,
   reducedMotion = false,
-  isMobile = false,
 }: AnimatedCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [isTouched, setIsTouched] = useState(false);
+  const {
+    beta,
+    gamma,
+    isSupported: gyroSupported,
+    permissionState,
+    requestPermission,
+  } = useGyroscope();
+  const gyroPermissionRequestedRef = useRef(false);
+
+  // Detect touch capability without setState-in-effect
+  const isTouchDevice = useSyncExternalStore(
+    () => () => {},
+    () => "ontouchstart" in window || navigator.maxTouchPoints > 0,
+    () => false
+  );
 
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
   const isHovered = useMotionValue(0);
 
-  // Lighter spring config for better mobile performance
-  const springConfig = isMobile
-    ? { stiffness: 200, damping: 30 }
-    : { stiffness: 150, damping: 20 };
+  // Gyroscope-driven motion values for tilt
+  const gyroX = useMotionValue(0);
+  const gyroY = useMotionValue(0);
+
+  // Update gyro motion values during render (motion values are mutable, not React state)
+  if (gyroSupported && permissionState === "granted") {
+    gyroX.set(gamma); // left-right tilt → rotateY
+    gyroY.set(beta); // front-back tilt → rotateX
+  }
+
+  const springConfig = { stiffness: 150, damping: 20 };
 
   const smoothMouseX = useSpring(mouseX, springConfig);
   const smoothMouseY = useSpring(mouseY, springConfig);
+  const smoothGyroX = useSpring(gyroX, springConfig);
+  const smoothGyroY = useSpring(gyroY, springConfig);
 
-  const rotateX = useTransform(smoothMouseY, [-0.5, 0.5], [8, -8]);
-  const rotateY = useTransform(smoothMouseX, [-0.5, 0.5], [-8, 8]);
+  // Mouse-driven rotation (desktop)
+  const rotateXMouse = useTransform(smoothMouseY, [-0.5, 0.5], [8, -8]);
+  const rotateYMouse = useTransform(smoothMouseX, [-0.5, 0.5], [-8, 8]);
+
+  // Gyroscope-driven rotation (mobile)
+  const rotateXGyro = useTransform(smoothGyroY, [-0.5, 0.5], [8, -8]);
+  const rotateYGyro = useTransform(smoothGyroX, [-0.5, 0.5], [-8, 8]);
+
+  // Use gyro when available and granted, otherwise use mouse/touch
+  const useGyro = gyroSupported && permissionState === "granted";
+  const rotateX = useGyro ? rotateXGyro : rotateXMouse;
+  const rotateY = useGyro ? rotateYGyro : rotateYMouse;
 
   const glowX = useTransform(smoothMouseX, [-0.5, 0.5], [0, 100]);
   const glowY = useTransform(smoothMouseY, [-0.5, 0.5], [0, 100]);
@@ -58,7 +91,7 @@ export function AnimatedCard({
   );
 
   const handleMouseMove = (e: MouseEvent<HTMLDivElement>) => {
-    if (!cardRef.current || reducedMotion || isMobile) return;
+    if (!cardRef.current || reducedMotion) return;
 
     const rect = cardRef.current.getBoundingClientRect();
     const centerX = rect.left + rect.width / 2;
@@ -72,7 +105,7 @@ export function AnimatedCard({
   };
 
   const handleMouseEnter = () => {
-    if (!reducedMotion && !isMobile) {
+    if (!reducedMotion) {
       isHovered.set(1);
     }
   };
@@ -83,13 +116,22 @@ export function AnimatedCard({
     isHovered.set(0);
   };
 
-  // Touch handlers for mobile
+  // Touch handlers — track finger position for glow + tilt fallback
   const handleTouchStart = (e: TouchEvent<HTMLDivElement>) => {
     if (reducedMotion) return;
     setIsTouched(true);
     isHovered.set(1);
 
-    // Set glow position to touch point
+    // Request gyroscope permission on first touch (iOS)
+    if (
+      gyroSupported &&
+      permissionState === "prompt" &&
+      !gyroPermissionRequestedRef.current
+    ) {
+      gyroPermissionRequestedRef.current = true;
+      requestPermission();
+    }
+
     if (cardRef.current) {
       const rect = cardRef.current.getBoundingClientRect();
       const touch = e.touches[0];
@@ -98,6 +140,17 @@ export function AnimatedCard({
       mouseX.set(normalizedX);
       mouseY.set(normalizedY);
     }
+  };
+
+  const handleTouchMove = (e: TouchEvent<HTMLDivElement>) => {
+    if (reducedMotion || !cardRef.current) return;
+
+    const rect = cardRef.current.getBoundingClientRect();
+    const touch = e.touches[0];
+    const normalizedX = (touch.clientX - rect.left) / rect.width - 0.5;
+    const normalizedY = (touch.clientY - rect.top) / rect.height - 0.5;
+    mouseX.set(normalizedX);
+    mouseY.set(normalizedY);
   };
 
   const handleTouchEnd = () => {
@@ -112,20 +165,20 @@ export function AnimatedCard({
       ref={cardRef}
       className="relative h-full"
       style={{
-        // Disable 3D perspective on mobile for better performance
-        perspective: reducedMotion || isMobile ? "none" : "800px",
+        perspective: reducedMotion ? "none" : "800px",
       }}
       onMouseMove={handleMouseMove}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}
     >
       <motion.div
         className="relative h-full will-change-transform"
         style={
-          reducedMotion || isMobile
+          reducedMotion
             ? {}
             : {
                 rotateX,
@@ -133,11 +186,9 @@ export function AnimatedCard({
                 transformStyle: "preserve-3d",
               }
         }
-        // Simple scale animation for mobile touch
+        // Touch scale feedback
         animate={
-          isMobile && isTouched
-            ? { scale: 0.98 }
-            : { scale: 1 }
+          isTouched && !reducedMotion ? { scale: 0.98 } : { scale: 1 }
         }
         transition={{ duration: 0.15 }}
       >
@@ -208,12 +259,8 @@ export function AnimatedCard({
               <motion.div
                 className="absolute inset-0 pointer-events-none will-change-opacity"
                 style={{
-                  background: isMobile
-                    ? isTouched
-                      ? "radial-gradient(circle at 50% 50%, rgba(139, 92, 246, 0.15), transparent 60%)"
-                      : "transparent"
-                    : glowBackground,
-                  opacity: isMobile ? (isTouched ? 1 : 0) : borderGlow,
+                  background: glowBackground,
+                  opacity: borderGlow,
                 }}
               />
             )}
@@ -232,7 +279,7 @@ export function AnimatedCard({
               }}
             >
               <span className="inline-block w-2 h-2 bg-green-500 mr-1" />
-              {href ? (isMobile ? "Tap to open" : "Double-click to open") : tags}
+              {href ? (isTouchDevice ? "Tap to open" : "Double-click to open") : tags}
             </div>
           </div>
         </div>
@@ -242,11 +289,7 @@ export function AnimatedCard({
           <motion.div
             className="absolute inset-0 pointer-events-none will-change-auto"
             style={{
-              boxShadow: isMobile
-                ? isTouched
-                  ? "0 0 20px rgba(139, 92, 246, 0.4)"
-                  : "0 0 0px rgba(139, 92, 246, 0)"
-                : glowBoxShadow,
+              boxShadow: glowBoxShadow,
             }}
           />
         )}
