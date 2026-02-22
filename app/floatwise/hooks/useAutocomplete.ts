@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { LocationSearchResult } from '../types';
 import { searchLocationByName, formatCityState, debounce } from '../utils';
 
@@ -13,8 +13,8 @@ export function useAutocomplete() {
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // Debounced search function
-  const debouncedSearch = useCallback(
-    debounce(async (searchQuery: string) => {
+  const debouncedSearch = useMemo(
+    () => debounce(async (searchQuery: string) => {
       if (!searchQuery.trim()) {
         setSuggestions([]);
         setIsOpen(false);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useMemo } from 'react';
+import Image from 'next/image';
 
 interface RoomCodeDisplayProps {
   roomCode: string;
@@ -48,12 +49,13 @@ export function RoomCodeDisplay({ roomCode, showQR = true, size = 'large' }: Roo
       {showQR && joinUrl && (
         <div className={`border-b border-[#333333] ${isLarge ? 'p-3' : 'p-2'}`}>
           <div className="text-[#888888] text-xs text-center mb-2">SCAN TO JOIN</div>
-          <img
+          <Image
             src={qrCodeUrl}
             alt="QR Code to join game"
             width={isLarge ? 150 : 100}
             height={isLarge ? 150 : 100}
             className="block mx-auto"
+            unoptimized
           />
         </div>
       )}
