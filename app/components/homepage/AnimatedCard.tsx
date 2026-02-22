@@ -9,7 +9,6 @@ interface AnimatedCardProps {
   description: string;
   href?: string;
   tags?: string;
-  reducedMotion?: boolean;
 }
 
 export function AnimatedCard({
@@ -17,7 +16,6 @@ export function AnimatedCard({
   description,
   href,
   tags,
-  reducedMotion: _reducedMotion = false,
 }: AnimatedCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [isTouched, setIsTouched] = useState(false);

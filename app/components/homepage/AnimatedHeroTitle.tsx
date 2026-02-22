@@ -5,17 +5,14 @@ import { motion } from "motion/react";
 
 interface AnimatedHeroTitleProps {
   text: string;
-  reducedMotion?: boolean;
 }
 
 const GLYPHS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&*<>[]{}";
 
-export function AnimatedHeroTitle({ text, reducedMotion = false }: AnimatedHeroTitleProps) {
-  const [displayText, setDisplayText] = useState(reducedMotion ? text : "");
-  const [isComplete, setIsComplete] = useState(reducedMotion);
-  const [revealedIndices, setRevealedIndices] = useState<Set<number>>(
-    reducedMotion ? new Set(text.split("").map((_, i) => i)) : new Set()
-  );
+export function AnimatedHeroTitle({ text }: AnimatedHeroTitleProps) {
+  const [displayText, setDisplayText] = useState("");
+  const [isComplete, setIsComplete] = useState(false);
+  const [revealedIndices, setRevealedIndices] = useState<Set<number>>(new Set());
   const rafRef = useRef<number | null>(null);
 
   const getRandomGlyph = useCallback(() => {
@@ -23,12 +20,6 @@ export function AnimatedHeroTitle({ text, reducedMotion = false }: AnimatedHeroT
   }, []);
 
   useEffect(() => {
-    if (reducedMotion) {
-      setDisplayText(text);
-      setIsComplete(true);
-      return;
-    }
-
     const totalDuration = 1000;
     // Full 60 FPS on all devices
     const frameRate = 60;
@@ -84,7 +75,7 @@ export function AnimatedHeroTitle({ text, reducedMotion = false }: AnimatedHeroT
         cancelAnimationFrame(rafRef.current);
       }
     };
-  }, [text, getRandomGlyph, reducedMotion]);
+  }, [text, getRandomGlyph]);
 
   return (
     <motion.h1
@@ -101,13 +92,13 @@ export function AnimatedHeroTitle({ text, reducedMotion = false }: AnimatedHeroT
           <span
             key={i}
             className={`inline-block will-change-transform ${isDot ? "text-purple-400" : "text-white"} ${
-              isComplete && !reducedMotion ? "animate-glow" : ""
+              isComplete ? "animate-glow" : ""
             }`}
             style={{
-              opacity: isRevealed || reducedMotion ? 1 : 0.7,
-              filter: isRevealed || reducedMotion ? "none" : "blur(1px)",
+              opacity: isRevealed ? 1 : 0.7,
+              filter: isRevealed ? "none" : "blur(1px)",
               // Stagger animation delay using CSS custom property
-              animationDelay: isComplete && !reducedMotion ? `${i * 0.15}s` : "0s",
+              animationDelay: isComplete ? `${i * 0.15}s` : "0s",
             }}
           >
             {char}

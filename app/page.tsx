@@ -4,7 +4,6 @@ import { motion } from "motion/react";
 import { AnimatedHeroTitle } from "./components/homepage/AnimatedHeroTitle";
 import { ParticleField } from "./components/homepage/ParticleField";
 import { CardGrid } from "./components/homepage/CardGrid";
-import { useReducedMotion } from "./hooks/useReducedMotion";
 
 const projects = [
   {
@@ -52,14 +51,12 @@ const projects = [
 ];
 
 export default function Home() {
-  const prefersReducedMotion = useReducedMotion();
-
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8 relative overflow-hidden">
-      {!prefersReducedMotion && <ParticleField particleCount={45} />}
+      <ParticleField particleCount={45} />
 
       <div className="relative z-10 flex flex-col items-center">
-        <AnimatedHeroTitle text="benadams.dev" reducedMotion={prefersReducedMotion} />
+        <AnimatedHeroTitle text="benadams.dev" />
 
         <div className="mt-16 w-full max-w-7xl">
           <motion.h2
@@ -67,7 +64,7 @@ export default function Home() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{
-              delay: prefersReducedMotion ? 0 : 1.2,
+              delay: 1.2,
               duration: 0.25,
               ease: [0.25, 0.1, 0.25, 1],
             }}
@@ -75,7 +72,7 @@ export default function Home() {
             Projects
           </motion.h2>
 
-          <CardGrid projects={projects} reducedMotion={prefersReducedMotion} />
+          <CardGrid projects={projects} />
         </div>
       </div>
     </div>
