@@ -126,11 +126,7 @@ function getDisplayNames(locationWeather: LocationWeather[]): {
 
 export function WeatherDisplay({ locationWeather, preferences }: WeatherDisplayProps) {
   if (locationWeather.length === 0) {
-    return (
-      <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-        <p>Add locations to view weather data</p>
-      </div>
-    );
+    return null;
   }
 
   // Get all unique hours from all locations to create unified column headers
