@@ -193,28 +193,28 @@ function MultiplayerContent() {
   // Render menu phase
   if (phase === 'menu') {
     return (
-      <div className="min-h-screen bg-[#1a1a1a] text-[#f5f5f5] flex flex-col items-center justify-center p-4">
-        <h1 className="text-2xl font-bold text-[#ffffff] tracking-wide mb-1">Commander</h1>
-        <h2 className="text-lg text-[#888888] mb-8">Multiplayer</h2>
+      <div className="min-h-screen bg-[#2d1e2f] text-[#fcf6b1] flex flex-col items-center justify-center p-4">
+        <h1 className="text-2xl font-bold text-[#fcf6b1] tracking-wide mb-1">Commander</h1>
+        <h2 className="text-lg text-[#8b7699] mb-8">Multiplayer</h2>
 
         {/* Rejoin Session Prompt */}
         {savedSession && (
-          <div className="w-full max-w-sm mb-6 bg-[#222222] border border-[#444444] p-4">
-            <div className="text-xs text-[#888888] mb-2 font-bold">PREVIOUS SESSION</div>
-            <div className="text-sm text-[#ffffff] mb-2">
+          <div className="w-full max-w-sm mb-6 bg-[#3a2942] border border-[#614a71] p-4">
+            <div className="text-xs text-[#8b7699] mb-2 font-bold">PREVIOUS SESSION</div>
+            <div className="text-sm text-[#fcf6b1] mb-2">
               Room: <span className="font-mono tracking-wider">{savedSession.roomCode}</span>
             </div>
-            <div className="text-xs text-[#888888] mb-3">as {savedSession.playerName}</div>
+            <div className="text-xs text-[#8b7699] mb-3">as {savedSession.playerName}</div>
             <div className="flex gap-2">
               <button
                 onClick={handleRejoinSession}
-                className="flex-1 bg-[#166534] hover:bg-[#16a34a] text-[#ffffff] font-bold py-2 px-4 text-sm transition-all"
+                className="flex-1 bg-[#1d6637] hover:bg-[#27874a] text-[#fcf6b1] font-bold py-2 px-4 text-sm transition-all"
               >
                 Rejoin
               </button>
               <button
                 onClick={handleDismissSession}
-                className="flex-1 bg-[#404040] hover:bg-[#4a4a4a] text-[#e5e5e5] font-bold py-2 px-4 text-sm transition-all"
+                className="flex-1 bg-[#614a71] hover:bg-[#6e5580] text-[#e8e0a0] font-bold py-2 px-4 text-sm transition-all"
               >
                 Dismiss
               </button>
@@ -224,13 +224,13 @@ function MultiplayerContent() {
 
         {/* Name Input */}
         <div className="w-full max-w-sm mb-6">
-          <label className="block text-xs text-[#888888] mb-2 font-bold">YOUR NAME</label>
+          <label className="block text-xs text-[#8b7699] mb-2 font-bold">YOUR NAME</label>
           <input
             type="text"
             value={playerName}
             onChange={(e) => setPlayerName(e.target.value)}
             placeholder="Enter your name"
-            className="w-full bg-[#222222] text-[#ffffff] border border-[#333333] px-4 py-3 focus:outline-none focus:border-[#666666] placeholder-[#666666]"
+            className="w-full bg-[#3a2942] text-[#fcf6b1] border border-[#543f63] px-4 py-3 focus:outline-none focus:border-[#7a6388] placeholder-[#7a6388]"
             maxLength={20}
             data-testid="player-name-input"
           />
@@ -238,13 +238,13 @@ function MultiplayerContent() {
 
         {/* Error Message */}
         {error && (
-          <div className="text-[#dc2626] text-xs mb-4 font-bold" data-testid="error-message">{error}</div>
+          <div className="text-[#e3170a] text-xs mb-4 font-bold" data-testid="error-message">{error}</div>
         )}
 
         {/* Create Room */}
         <button
           onClick={handleCreateRoom}
-          className="w-full max-w-sm bg-[#166534] hover:bg-[#16a34a] text-[#ffffff] font-bold py-3 px-6 mb-4 transition-all"
+          className="w-full max-w-sm bg-[#1d6637] hover:bg-[#27874a] text-[#fcf6b1] font-bold py-3 px-6 mb-4 transition-all"
           data-testid="create-room-button"
         >
           Create Room
@@ -252,9 +252,9 @@ function MultiplayerContent() {
 
         {/* Or Divider */}
         <div className="flex items-center w-full max-w-sm mb-4">
-          <div className="flex-1 h-px bg-[#333333]" />
-          <span className="px-4 text-[#666666] text-xs">or</span>
-          <div className="flex-1 h-px bg-[#333333]" />
+          <div className="flex-1 h-px bg-[#543f63]" />
+          <span className="px-4 text-[#7a6388] text-xs">or</span>
+          <div className="flex-1 h-px bg-[#543f63]" />
         </div>
 
         {/* Join Room */}
@@ -264,13 +264,13 @@ function MultiplayerContent() {
             value={joinCode}
             onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
             placeholder="ENTER ROOM CODE"
-            className="w-full bg-[#222222] text-[#ffffff] border border-[#333333] px-4 py-3 mb-2 focus:outline-none focus:border-[#666666] text-center font-mono text-lg tracking-widest placeholder-[#666666]"
+            className="w-full bg-[#3a2942] text-[#fcf6b1] border border-[#543f63] px-4 py-3 mb-2 focus:outline-none focus:border-[#7a6388] text-center font-mono text-lg tracking-widest placeholder-[#7a6388]"
             maxLength={6}
             data-testid="room-code-input"
           />
           <button
             onClick={handleJoinRoom}
-            className="w-full bg-[#1e40af] hover:bg-[#2563eb] text-[#ffffff] font-bold py-3 px-6 transition-all"
+            className="w-full bg-[#a07b14] hover:bg-[#c99a1c] text-[#fcf6b1] font-bold py-3 px-6 transition-all"
             data-testid="join-room-button"
           >
             Join Room
@@ -280,7 +280,7 @@ function MultiplayerContent() {
         {/* Back Link */}
         <a
           href="/commander"
-          className="mt-8 text-[#666666] hover:text-[#888888] text-sm transition-colors"
+          className="mt-8 text-[#7a6388] hover:text-[#8b7699] text-sm transition-colors"
         >
           ← Back to Single Player
         </a>
@@ -291,8 +291,8 @@ function MultiplayerContent() {
   // Game phase - wrap with AblyProvider
   if (!clientId) {
     return (
-      <div className="w-screen h-screen bg-[#1a1a1a] flex items-center justify-center">
-        <div className="text-[#888888] text-sm">Loading...</div>
+      <div className="w-screen h-screen bg-[#2d1e2f] flex items-center justify-center">
+        <div className="text-[#8b7699] text-sm">Loading...</div>
       </div>
     );
   }
@@ -316,14 +316,14 @@ export default function MultiplayerPage() {
 
   if (!isClient) {
     return (
-      <div className="w-screen h-screen bg-[#1a1a1a] flex items-center justify-center">
-        <div className="text-[#888888] text-sm">Loading...</div>
+      <div className="w-screen h-screen bg-[#2d1e2f] flex items-center justify-center">
+        <div className="text-[#8b7699] text-sm">Loading...</div>
       </div>
     );
   }
 
   return (
-    <Suspense fallback={<div className="w-screen h-screen bg-[#1a1a1a] flex items-center justify-center"><div className="text-[#888888] text-sm">Loading...</div></div>}>
+    <Suspense fallback={<div className="w-screen h-screen bg-[#2d1e2f] flex items-center justify-center"><div className="text-[#8b7699] text-sm">Loading...</div></div>}>
       <MultiplayerContent />
     </Suspense>
   );
