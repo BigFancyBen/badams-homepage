@@ -11,8 +11,8 @@ interface ImportModalProps {
   decks: SavedDeck[];
   activeDeckId: string | null;
   onSelectDeck: (deckId: string) => void;
-  onAddDeck: (name: string, decklist: ParsedDecklist, originalInput: string) => void;
-  onUpdateDeck: (deckId: string, name: string, decklist: ParsedDecklist, originalInput: string) => void;
+  onAddDeck: (name: string, decklist: ParsedDecklist, originalInput: string, sourceUrl?: string) => void;
+  onUpdateDeck: (deckId: string, name: string, decklist: ParsedDecklist, originalInput: string, sourceUrl?: string) => void;
   onRemoveDeck: (deckId: string) => void;
 }
 

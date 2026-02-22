@@ -53,12 +53,12 @@ export default function TutorHelperPage() {
     }
   }, [isLoaded, activeDeckId, getActiveDeck]);
 
-  const handleAddDeck = (name: string, decklist: ParsedDecklist, originalInput: string) => {
-    addDeck(name, decklist, originalInput);
+  const handleAddDeck = (name: string, decklist: ParsedDecklist, originalInput: string, sourceUrl?: string) => {
+    addDeck(name, decklist, originalInput, sourceUrl);
   };
 
-  const handleUpdateDeck = (deckId: string, name: string, decklist: ParsedDecklist, originalInput: string) => {
-    updateDeck(deckId, name, decklist, originalInput);
+  const handleUpdateDeck = (deckId: string, name: string, decklist: ParsedDecklist, originalInput: string, sourceUrl?: string) => {
+    updateDeck(deckId, name, decklist, originalInput, sourceUrl);
   };
 
   const handleRemoveDeck = (deckId: string) => {

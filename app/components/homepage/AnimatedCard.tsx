@@ -17,7 +17,7 @@ export function AnimatedCard({
   description,
   href,
   tags,
-  reducedMotion = false,
+  reducedMotion: _reducedMotion = false,
 }: AnimatedCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [isTouched, setIsTouched] = useState(false);
@@ -82,7 +82,7 @@ export function AnimatedCard({
   );
 
   const handleMouseMove = (e: MouseEvent<HTMLDivElement>) => {
-    if (!cardRef.current || reducedMotion) return;
+    if (!cardRef.current) return;
 
     const rect = cardRef.current.getBoundingClientRect();
     const centerX = rect.left + rect.width / 2;
@@ -96,9 +96,7 @@ export function AnimatedCard({
   };
 
   const handleMouseEnter = () => {
-    if (!reducedMotion) {
-      isHovered.set(1);
-    }
+    isHovered.set(1);
   };
 
   const handleMouseLeave = () => {
@@ -109,7 +107,6 @@ export function AnimatedCard({
 
   // Touch handlers — track finger position for glow + tilt fallback
   const handleTouchStart = (e: TouchEvent<HTMLDivElement>) => {
-    if (reducedMotion) return;
     setIsTouched(true);
     isHovered.set(1);
 
@@ -134,7 +131,7 @@ export function AnimatedCard({
   };
 
   const handleTouchMove = (e: TouchEvent<HTMLDivElement>) => {
-    if (reducedMotion || !cardRef.current) return;
+    if (!cardRef.current) return;
 
     const rect = cardRef.current.getBoundingClientRect();
     const touch = e.touches[0];
@@ -156,7 +153,7 @@ export function AnimatedCard({
       ref={cardRef}
       className="relative h-full"
       style={{
-        perspective: reducedMotion ? "none" : "800px",
+        perspective: "800px",
       }}
       onMouseMove={handleMouseMove}
       onMouseEnter={handleMouseEnter}
@@ -168,18 +165,14 @@ export function AnimatedCard({
     >
       <motion.div
         className="relative h-full will-change-transform"
-        style={
-          reducedMotion
-            ? {}
-            : {
-                rotateX,
-                rotateY,
-                transformStyle: "preserve-3d",
-              }
-        }
+        style={{
+          rotateX,
+          rotateY,
+          transformStyle: "preserve-3d",
+        }}
         // Touch scale feedback
         animate={
-          isTouched && !reducedMotion ? { scale: 0.98 } : { scale: 1 }
+          isTouched ? { scale: 0.98 } : { scale: 1 }
         }
         transition={{ duration: 0.15 }}
       >
@@ -246,15 +239,13 @@ export function AnimatedCard({
 
           {/* Content area */}
           <div className="p-4 relative flex flex-col flex-grow">
-            {!reducedMotion && (
-              <motion.div
-                className="absolute inset-0 pointer-events-none will-change-opacity"
-                style={{
-                  background: glowBackground,
-                  opacity: borderGlow,
-                }}
-              />
-            )}
+            <motion.div
+              className="absolute inset-0 pointer-events-none will-change-opacity"
+              style={{
+                background: glowBackground,
+                opacity: borderGlow,
+              }}
+            />
 
             <div className="flex-grow">
               <p className="text-gray-300 text-sm leading-relaxed">
@@ -276,14 +267,12 @@ export function AnimatedCard({
         </div>
 
         {/* Outer glow on hover/touch */}
-        {!reducedMotion && (
-          <motion.div
-            className="absolute inset-0 pointer-events-none will-change-auto"
-            style={{
-              boxShadow: glowBoxShadow,
-            }}
-          />
-        )}
+        <motion.div
+          className="absolute inset-0 pointer-events-none will-change-auto"
+          style={{
+            boxShadow: glowBoxShadow,
+          }}
+        />
       </motion.div>
     </motion.div>
   );
