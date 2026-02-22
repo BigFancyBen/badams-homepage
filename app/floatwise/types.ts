@@ -4,6 +4,19 @@ export interface Location {
   name: string;
   lat: number;
   lon: number;
+  subtitle?: string;
+  preferredWindDirection?: string;
+}
+
+// Wind direction constants
+export const WIND_DIRECTIONS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'] as const;
+export type WindDirection = typeof WIND_DIRECTIONS[number];
+
+// User preferences for display thresholds
+export interface UserPreferences {
+  temperatureThreshold: number;   // Below this = red (default 65)
+  precipThreshold: number;        // Above this = red (default 30)
+  windSpeedThreshold: number;     // Above this = red (default 10)
 }
 
 // Weather data from NOAA API
@@ -62,13 +75,18 @@ export interface LocationManagerProps {
   onRemoveLocation: (locationId: string) => void;
   onReorderLocations: (locations: Location[]) => void;
   onRenameLocation: (locationId: string, newName: string) => void;
+  onUpdateLocation: (locationId: string, updates: Partial<Location>) => void;
+  onImportLocations: (locations: Location[]) => void;
   showShareButton?: boolean;
   onShareClick?: () => Promise<void>;
   isViewingSharedLink?: boolean;
+  preferences: UserPreferences;
+  onUpdatePreferences: (prefs: UserPreferences) => void;
 }
 
 export interface WeatherDisplayProps {
   locationWeather: LocationWeather[];
+  preferences: UserPreferences;
 }
 
 export interface AddLocationModalProps {
@@ -79,6 +97,8 @@ export interface AddLocationModalProps {
   onRemove: (locationId: string) => void;
   onReorder: (locations: Location[]) => void;
   onRename: (locationId: string, newName: string) => void;
+  onUpdateLocation: (locationId: string, updates: Partial<Location>) => void;
+  onImportLocations: (locations: Location[]) => void;
 }
 
 export interface LocationSearchResult {
