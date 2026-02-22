@@ -23,7 +23,6 @@
     "ably": "^2.15.0",
     "canvas-confetti": "^1.9.4",
     "geist": "^1.5.1",
-    "lottie-react": "^2.4.1",
     "lucide-react": "^0.562.0",
     "motion": "^12.27.5",
     "next": "^16.1.0",

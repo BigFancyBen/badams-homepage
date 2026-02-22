@@ -1,4 +1,11 @@
-import { NOAAResponse, WeatherHour } from './types';
+import { Location, NOAAResponse, UserPreferences, WeatherHour } from './types';
+
+// Default user preferences
+export const DEFAULT_PREFERENCES: UserPreferences = {
+  temperatureThreshold: 65,
+  precipThreshold: 30,
+  windSpeedThreshold: 10,
+};
 
 // NOAA API base URL
 const NOAA_BASE_URL = 'https://api.weather.gov';
@@ -457,4 +464,168 @@ export function debounce<T extends (...args: never[]) => Promise<void> | void>(f
     }
     timeoutId = setTimeout(() => func(...args), delay);
   }) as T;
+}
+
+/**
+ * Get weather emoji based on precipitation chance percentage
+ * 0-4%: ☀️ (full sun)
+ * 5-20%: ⛅ (partly cloudy)
+ * 21-40%: 🌦️ (cloud with rain drop)
+ * 41-60%: 🌧️ (cloud with rain)
+ * 61-100%: ⛈️ (cloud with lightning)
+ */
+export function getPrecipEmoji(precipChance: number | null): string {
+  if (precipChance === null || precipChance === undefined) return '☀️';
+  if (precipChance <= 4) return '☀️';
+  if (precipChance <= 20) return '⛅';
+  if (precipChance <= 40) return '🌦️';
+  if (precipChance <= 60) return '🌧️';
+  return '⛈️';
+}
+
+/**
+ * Normalize wind direction string to a standard cardinal/intercardinal direction
+ * E.g., "North" -> "N", "NNW" -> "NW", "SSE" -> "SE"
+ */
+export function normalizeWindDirection(direction: string): string {
+  const d = direction.trim().toUpperCase();
+  // Map full names
+  const nameMap: { [key: string]: string } = {
+    'NORTH': 'N', 'SOUTH': 'S', 'EAST': 'E', 'WEST': 'W',
+    'NORTHEAST': 'NE', 'NORTHWEST': 'NW', 'SOUTHEAST': 'SE', 'SOUTHWEST': 'SW',
+  };
+  if (nameMap[d]) return nameMap[d];
+  // Map 3-letter intercardinals to nearest 2-letter
+  const threeLetterMap: { [key: string]: string } = {
+    'NNE': 'NE', 'ENE': 'NE', 'ESE': 'SE', 'SSE': 'SE',
+    'SSW': 'SW', 'WSW': 'SW', 'WNW': 'NW', 'NNW': 'NW',
+  };
+  if (threeLetterMap[d]) return threeLetterMap[d];
+  // Already a standard direction
+  if (['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'].includes(d)) return d;
+  return d;
+}
+
+/**
+ * Parse CSV text into Location objects
+ * Expected format: name, subtitle, latitude, longitude (one per line)
+ * Subtitle column is optional — if only 3 columns, treated as name, lat, lon
+ * Header row is auto-detected and skipped if present
+ */
+export function parseLocationCSV(csvText: string): { locations: Location[]; errors: string[] } {
+  const lines = csvText.trim().split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  const locations: Location[] = [];
+  const errors: string[] = [];
+
+  if (lines.length === 0) {
+    errors.push('No data found in CSV');
+    return { locations, errors };
+  }
+
+  // Detect header row: if the 3rd or 4th column of the first row is non-numeric, skip it
+  let startIndex = 0;
+  const firstLineParts = lines[0].split(',').map(p => p.trim());
+  if (firstLineParts.length >= 3) {
+    const potentialLat = parseFloat(firstLineParts[firstLineParts.length - 2]);
+    const potentialLon = parseFloat(firstLineParts[firstLineParts.length - 1]);
+    if (isNaN(potentialLat) || isNaN(potentialLon)) {
+      startIndex = 1; // Skip header
+    }
+  }
+
+  for (let i = startIndex; i < lines.length; i++) {
+    const parts = lines[i].split(',').map(p => p.trim());
+    const lineNum = i + 1;
+
+    if (parts.length < 3) {
+      errors.push(`Line ${lineNum}: Need at least 3 columns (name, lat, lon)`);
+      continue;
+    }
+
+    let name: string;
+    let subtitle: string | undefined;
+    let latStr: string;
+    let lonStr: string;
+
+    if (parts.length >= 4) {
+      // 4+ columns: name, subtitle, lat, lon
+      name = parts[0];
+      subtitle = parts[1] || undefined;
+      latStr = parts[2];
+      lonStr = parts[3];
+    } else {
+      // 3 columns: name, lat, lon
+      name = parts[0];
+      latStr = parts[1];
+      lonStr = parts[2];
+    }
+
+    if (!name) {
+      errors.push(`Line ${lineNum}: Missing location name`);
+      continue;
+    }
+
+    const lat = parseFloat(latStr);
+    const lon = parseFloat(lonStr);
+
+    if (isNaN(lat) || isNaN(lon)) {
+      errors.push(`Line ${lineNum}: Invalid coordinates "${latStr}, ${lonStr}"`);
+      continue;
+    }
+
+    if (!isValidCoordinate(lat, lon)) {
+      errors.push(`Line ${lineNum}: Coordinates out of range (lat: -90 to 90, lon: -180 to 180)`);
+      continue;
+    }
+
+    locations.push({
+      id: generateLocationId(name, lat, lon),
+      name,
+      lat,
+      lon,
+      subtitle,
+    });
+  }
+
+  return { locations, errors };
+}
+
+/**
+ * Export configuration (locations + preferences) as a JSON string
+ */
+export function exportConfigJSON(locations: Location[], preferences: UserPreferences): string {
+  return JSON.stringify({ locations, preferences }, null, 2);
+}
+
+/**
+ * Parse and validate imported config JSON
+ */
+export function parseConfigJSON(jsonText: string): { locations: Location[]; preferences: UserPreferences } | null {
+  try {
+    const data = JSON.parse(jsonText);
+    if (!data || !Array.isArray(data.locations)) return null;
+    
+    // Validate locations
+    const validLocations = data.locations.every((loc: Record<string, unknown>) =>
+      loc.name && typeof loc.lat === 'number' && typeof loc.lon === 'number'
+    );
+    if (!validLocations) return null;
+
+    // Ensure locations have IDs
+    const locations: Location[] = data.locations.map((loc: Location) => ({
+      ...loc,
+      id: loc.id || generateLocationId(loc.name, loc.lat, loc.lon),
+    }));
+
+    // Validate preferences (use defaults for missing fields)
+    const preferences: UserPreferences = {
+      temperatureThreshold: data.preferences?.temperatureThreshold ?? DEFAULT_PREFERENCES.temperatureThreshold,
+      precipThreshold: data.preferences?.precipThreshold ?? DEFAULT_PREFERENCES.precipThreshold,
+      windSpeedThreshold: data.preferences?.windSpeedThreshold ?? DEFAULT_PREFERENCES.windSpeedThreshold,
+    };
+
+    return { locations, preferences };
+  } catch {
+    return null;
+  }
 }

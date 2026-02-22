@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { Calendar } from "./components/Calendar";
 import { LocationManager } from "./components/LocationManager";
 import { WeatherDisplay } from "./components/WeatherDisplay";
 import { useLocationStorage } from "./hooks/useLocationStorage";
 import { useWeatherData } from "./hooks/useWeatherData";
+import { useUserPreferences } from "./hooks/useUserPreferences";
 import { Location } from "./types";
 import {
   encodeLocationsToURL,
@@ -28,11 +29,13 @@ export default function FloatWisePage() {
     isLoaded,
     addLocation,
     removeLocation,
+    updateLocation,
     reorderLocations,
     renameLocation,
     isViewingSharedLink,
   } = useLocationStorage(urlLocations);
   const { weatherData, fetchWeatherForLocations } = useWeatherData();
+  const { preferences, updatePreferences } = useUserPreferences();
 
   // Fetch weather data when locations or selected date changes
   useEffect(() => {
@@ -53,13 +56,24 @@ export default function FloatWisePage() {
     removeLocation(locationId);
   };
 
-  const handleReorderLocations = (locations: Location[]) => {
-    reorderLocations(locations);
+  const handleReorderLocations = (newLocations: Location[]) => {
+    reorderLocations(newLocations);
   };
 
   const handleRenameLocation = (locationId: string, newName: string) => {
     renameLocation(locationId, newName);
   };
+
+  const handleUpdateLocation = (locationId: string, updates: Partial<Location>) => {
+    updateLocation(locationId, updates);
+  };
+
+  const handleImportLocations = useCallback((newLocations: Location[]) => {
+    // Add each location (deduplicates by id)
+    newLocations.forEach((loc) => {
+      addLocation(loc);
+    });
+  }, [addLocation]);
 
   const handleShareClick = async () => {
     if (locations.length === 0) {
@@ -106,19 +120,37 @@ export default function FloatWisePage() {
                 onRemoveLocation={handleRemoveLocation}
                 onReorderLocations={handleReorderLocations}
                 onRenameLocation={handleRenameLocation}
+                onUpdateLocation={handleUpdateLocation}
+                onImportLocations={handleImportLocations}
                 showShareButton={locations.length > 0}
                 onShareClick={handleShareClick}
                 isViewingSharedLink={isViewingSharedLink}
+                preferences={preferences}
+                onUpdatePreferences={updatePreferences}
               />
             </div>
           </div>
-          {/* Calendar */}
-          <Calendar
-            selectedDate={selectedDate}
-            onDateSelect={handleDateSelect}
-          />
-          {/* Weather Display */}
-          <WeatherDisplay locationWeather={weatherData} />
+          {locations.length === 0 ? (
+            <div className="text-center py-12 sm:py-16 text-gray-500 dark:text-gray-400 border-2 border-dashed border-gray-300 dark:border-gray-600 mt-2">
+              <p className="mb-2 text-sm sm:text-base">No locations added yet</p>
+              <p className="text-xs sm:text-sm">
+                Click the <span className="inline-flex items-center justify-center w-5 h-5 border border-current align-text-bottom">+</span> button to add locations
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Calendar */}
+              <Calendar
+                selectedDate={selectedDate}
+                onDateSelect={handleDateSelect}
+              />
+              {/* Weather Display */}
+              <WeatherDisplay
+                locationWeather={weatherData}
+                preferences={preferences}
+              />
+            </>
+          )}
         </div>
       </div>
     </div>
