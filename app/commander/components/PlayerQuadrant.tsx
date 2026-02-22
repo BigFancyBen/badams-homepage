@@ -237,9 +237,6 @@ export function PlayerQuadrant({
           >
             <h2 className={`font-bold text-[#fcf6b1] tracking-wide truncate group-hover:text-[#a9e5bb] transition-colors ${isMobile ? "text-base" : "text-lg"}`}>
               {player.name}
-              {player.history.length > 0 && (
-                <span className={`ml-1.5 text-[#8b7699] font-normal ${isMobile ? "text-[9px]" : "text-[11px]"}`}>({player.history.length})</span>
-              )}
             </h2>
             <div className="relative">
               <div className={`font-bold text-[#fcf6b1] select-none tracking-tight leading-none ${isMobile ? "text-7xl" : "text-8xl"}`} data-testid={`life-total-${playerIndex}`}>
