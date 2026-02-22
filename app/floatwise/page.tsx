@@ -130,16 +130,27 @@ export default function FloatWisePage() {
               />
             </div>
           </div>
-          {/* Calendar */}
-          <Calendar
-            selectedDate={selectedDate}
-            onDateSelect={handleDateSelect}
-          />
-          {/* Weather Display */}
-          <WeatherDisplay
-            locationWeather={weatherData}
-            preferences={preferences}
-          />
+          {locations.length === 0 ? (
+            <div className="text-center py-12 sm:py-16 text-gray-500 dark:text-gray-400 border-2 border-dashed border-gray-300 dark:border-gray-600 mt-2">
+              <p className="mb-2 text-sm sm:text-base">No locations added yet</p>
+              <p className="text-xs sm:text-sm">
+                Click the <span className="inline-flex items-center justify-center w-5 h-5 border border-current align-text-bottom">+</span> button to add locations
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Calendar */}
+              <Calendar
+                selectedDate={selectedDate}
+                onDateSelect={handleDateSelect}
+              />
+              {/* Weather Display */}
+              <WeatherDisplay
+                locationWeather={weatherData}
+                preferences={preferences}
+              />
+            </>
+          )}
         </div>
       </div>
     </div>
