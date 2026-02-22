@@ -38,17 +38,17 @@ export function RoomCodeDisplay({ roomCode, showQR = true, size = 'large' }: Roo
   }, [roomCode]);
 
   const qrCodeUrl = joinUrl
-    ? `https://api.qrserver.com/v1/create-qr-code/?size=${size === 'large' ? '150x150' : '100x100'}&data=${encodeURIComponent(joinUrl)}&bgcolor=222222&color=ffffff`
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=${size === 'large' ? '150x150' : '100x100'}&data=${encodeURIComponent(joinUrl)}&bgcolor=3a2942&color=fcf6b1`
     : '';
 
   const isLarge = size === 'large';
 
   return (
-    <div className="bg-[#222222] border border-[#333333] inline-block">
+    <div className="bg-[#3a2942] border border-[#543f63] inline-block">
       {/* QR Code */}
       {showQR && joinUrl && (
-        <div className={`border-b border-[#333333] ${isLarge ? 'p-3' : 'p-2'}`}>
-          <div className="text-[#888888] text-xs text-center mb-2">SCAN TO JOIN</div>
+        <div className={`border-b border-[#543f63] ${isLarge ? 'p-3' : 'p-2'}`}>
+          <div className="text-[#8b7699] text-xs text-center mb-2">SCAN TO JOIN</div>
           <Image
             src={qrCodeUrl}
             alt="QR Code to join game"
@@ -63,14 +63,14 @@ export function RoomCodeDisplay({ roomCode, showQR = true, size = 'large' }: Roo
       {/* Room Code with Copy Button */}
       <div className={`flex items-center justify-between ${isLarge ? 'px-4 py-3' : 'px-3 py-2'}`}>
         <div className="flex-1">
-          <div className="text-[#888888] text-[10px] mb-0.5">ROOM CODE</div>
-          <div className={`font-mono font-bold text-[#ffffff] tracking-widest ${isLarge ? 'text-2xl' : 'text-lg'}`} data-testid="room-code-display">
+          <div className="text-[#8b7699] text-[10px] mb-0.5">ROOM CODE</div>
+          <div className={`font-mono font-bold text-[#fcf6b1] tracking-widest ${isLarge ? 'text-2xl' : 'text-lg'}`} data-testid="room-code-display">
             {roomCode}
           </div>
         </div>
         <button
           onClick={handleCopy}
-          className={`ml-3 bg-[#2a2a2a] hover:bg-[#3a3a3a] border border-[#404040] transition-all flex items-center justify-center ${isLarge ? 'w-10 h-10' : 'w-8 h-8'}`}
+          className={`ml-3 bg-[#473455] hover:bg-[#5e4a6e] border border-[#614a71] transition-all flex items-center justify-center ${isLarge ? 'w-10 h-10' : 'w-8 h-8'}`}
           title={copied ? 'Copied!' : 'Copy room code'}
         >
           {copied ? (
@@ -79,7 +79,7 @@ export function RoomCodeDisplay({ roomCode, showQR = true, size = 'large' }: Roo
               height={isLarge ? 18 : 14}
               viewBox="0 0 24 24"
               fill="none"
-              stroke="#22c55e"
+              stroke="#a9e5bb"
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -92,7 +92,7 @@ export function RoomCodeDisplay({ roomCode, showQR = true, size = 'large' }: Roo
               height={isLarge ? 18 : 14}
               viewBox="0 0 24 24"
               fill="none"
-              stroke="#a3a3a3"
+              stroke="#9d88aa"
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"

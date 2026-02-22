@@ -551,11 +551,11 @@ function CommanderPageContent() {
   }, []);
 
   return (
-    <div className="h-screen w-screen bg-[#1a1a1a] overflow-hidden relative select-none">
+    <div className="h-screen w-screen bg-[#2d1e2f] overflow-hidden relative select-none">
       {/* Menu Button - centered on mobile, top-left on desktop */}
       <button
         onClick={() => setIsMenuOpen(true)}
-        className={`absolute z-30 font-bold transition-all duration-200 flex items-center justify-center text-white/70 hover:text-white/50 text-xs p-0 ${
+        className={`absolute z-30 font-bold transition-all duration-200 flex items-center justify-center text-[#fcf6b1]/70 hover:text-[#fcf6b1]/50 text-xs p-0 ${
           isMobileLandscape || isMobilePortrait
             ? "top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2" // Center on mobile
             : "top-1 left-2" // Top-left on desktop
@@ -683,8 +683,8 @@ export default function CommanderPage() {
   // Show loading state during hydration
   if (!isClient) {
     return (
-      <div className="w-screen h-screen bg-[#1a1a1a] flex items-center justify-center">
-        <div className="text-[#cccccc] text-lg">Loading Commander...</div>
+      <div className="w-screen h-screen bg-[#2d1e2f] flex items-center justify-center">
+        <div className="text-[#d4ca88] text-lg">Loading Commander...</div>
       </div>
     );
   }

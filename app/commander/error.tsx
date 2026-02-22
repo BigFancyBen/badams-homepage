@@ -15,24 +15,24 @@ export default function CommanderError({
   }, [error]);
 
   return (
-    <div className="w-screen h-screen bg-[#1a1a1a] flex items-center justify-center">
-      <div className="bg-[#2a2a2a] p-8 rounded-lg max-w-md mx-4 text-center">
-        <h2 className="text-[#f5f5f5] text-2xl font-bold mb-4">
+    <div className="w-screen h-screen bg-[#2d1e2f] flex items-center justify-center">
+      <div className="bg-[#473455] p-8 rounded-lg max-w-md mx-4 text-center">
+        <h2 className="text-[#fcf6b1] text-2xl font-bold mb-4">
           Commander Error
         </h2>
-        <p className="text-[#cccccc] mb-6">
+        <p className="text-[#d4ca88] mb-6">
           Something went wrong with the Commander page. This might be due to a loading issue or browser compatibility.
         </p>
         <div className="space-y-3">
           <button
             onClick={reset}
-            className="w-full bg-[#4ade80] hover:bg-[#22c55e] text-black font-bold py-3 px-6 rounded transition-all duration-200"
+            className="w-full bg-[#a9e5bb] hover:bg-[#89d4a0] text-black font-bold py-3 px-6 rounded transition-all duration-200"
           >
             Try Again
           </button>
           <button
             onClick={() => window.location.href = "/"}
-            className="w-full bg-[#404040] hover:bg-[#4a4a4a] text-[#e5e5e5] font-bold py-3 px-6 rounded transition-all duration-200"
+            className="w-full bg-[#614a71] hover:bg-[#6e5580] text-[#e8e0a0] font-bold py-3 px-6 rounded transition-all duration-200"
           >
             Go Home
           </button>

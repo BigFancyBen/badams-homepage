@@ -19,10 +19,10 @@ const DEFAULT_PLAYERS: PlayerState[] = [
 
 // Slot colors matching the Commander design
 const SLOT_COLORS = [
-  { bg: 'bg-[#991b1b]', text: 'Player 1' }, // Red
-  { bg: 'bg-[#1e40af]', text: 'Player 2' }, // Blue
-  { bg: 'bg-[#166534]', text: 'Player 3' }, // Green
-  { bg: 'bg-[#a16207]', text: 'Player 4' }, // Yellow/Amber
+  { bg: 'bg-[#9a0f08]', text: 'Player 1' }, // Burnt Tangerine
+  { bg: 'bg-[#a07b14]', text: 'Player 2' }, // Sunflower Gold
+  { bg: 'bg-[#1d6637]', text: 'Player 3' }, // Celadon
+  { bg: 'bg-[#6b5a78]', text: 'Player 4' }, // Violet
 ];
 
 interface MultiplayerGameProps {
@@ -514,7 +514,7 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
         onClick={() => handleClaimSlot(slotIndex)}
         data-testid={`unclaimed-slot-${slotIndex}`}
       >
-        <div className="text-center text-white/80">
+        <div className="text-center text-[#fcf6b1]/80">
           <div className="text-lg font-bold mb-2">{color.text}</div>
           <div className="text-sm">Tap to join</div>
         </div>
@@ -524,8 +524,8 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
 
   // Render disconnected overlay
   const renderDisconnectedOverlay = (slotOwner: SlotOwner) => (
-    <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-20 pointer-events-none">
-      <div className="text-white/60 text-center">
+    <div className="absolute inset-0 bg-[#1a0f1c]/60 flex items-center justify-center z-20 pointer-events-none">
+      <div className="text-[#fcf6b1]/60 text-center">
         <div className="text-sm font-bold">{slotOwner.name}</div>
         <div className="text-xs">Disconnected</div>
       </div>
@@ -533,11 +533,11 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
   );
 
   return (
-    <div className="h-screen w-screen bg-[#1a1a1a] overflow-hidden relative select-none">
+    <div className="h-screen w-screen bg-[#2d1e2f] overflow-hidden relative select-none">
       {/* Menu Button */}
       <button
         onClick={() => setIsMenuOpen(true)}
-        className={`absolute z-40 font-bold transition-all duration-200 flex items-center justify-center text-white/70 hover:text-white/50 text-xs p-0 ${
+        className={`absolute z-40 font-bold transition-all duration-200 flex items-center justify-center text-[#fcf6b1]/70 hover:text-[#fcf6b1]/50 text-xs p-0 ${
           isMobileLandscape || isMobilePortrait
             ? 'top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2'
             : 'top-1 left-2'

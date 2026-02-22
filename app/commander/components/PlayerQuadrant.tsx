@@ -59,7 +59,7 @@ export function PlayerQuadrant({
   const commanderSources = [0, 1, 2, 3].filter((i) => i !== playerIndex);
 
   return (
-    <div className="relative w-full h-full border border-[#333333] bg-[#222222] overflow-hidden" data-testid={`player-quadrant-${playerIndex}`}>
+    <div className="relative w-full h-full border border-[#543f63] bg-[#3a2942] overflow-hidden" data-testid={`player-quadrant-${playerIndex}`}>
       {/* History Modal - covers this quadrant only */}
       <HistoryModal
         isOpen={isHistoryOpen}
@@ -72,7 +72,7 @@ export function PlayerQuadrant({
 
       {/* Dead overlay */}
       {player.isDead && (
-        <div className="absolute inset-0 bg-black/60 z-20 pointer-events-none" />
+        <div className="absolute inset-0 bg-[#1a0f1c]/60 z-20 pointer-events-none" />
       )}
       {/* Desktop-only fixed position buttons */}
       {!readOnly && !isMobileLandscape && !isMobilePortrait && (
@@ -81,9 +81,9 @@ export function PlayerQuadrant({
           <button
             onClick={() => onUpdateRotation(playerIndex)}
             disabled={rotatingPlayer === playerIndex}
-            className={`absolute z-30 w-11 h-11 font-bold transition-all duration-200 flex items-center justify-center text-white/70 hover:text-white/50 text-sm p-0 ${
+            className={`absolute z-30 w-11 h-11 font-bold transition-all duration-200 flex items-center justify-center text-[#fcf6b1]/70 hover:text-[#fcf6b1]/50 text-sm p-0 ${
               rotatingPlayer === playerIndex
-                ? "text-white/40 cursor-not-allowed"
+                ? "text-[#fcf6b1]/40 cursor-not-allowed"
                 : ""
             } ${
               playerIndex === 0
@@ -116,8 +116,8 @@ export function PlayerQuadrant({
             onClick={() => onTogglePlayerDead(playerIndex)}
             className={`absolute z-30 w-11 h-11 transition-all duration-200 flex items-center justify-center ${
               player.isDead
-                ? "text-red-500 hover:text-red-400"
-                : "text-white/70 hover:text-red-400"
+                ? "text-[#e3170a] hover:text-[#f04a3e]"
+                : "text-[#fcf6b1]/70 hover:text-[#f04a3e]"
             } ${
               playerIndex === 0
                 ? "bottom-2 left-2" // Player 1: bottom-left (away from center)
@@ -180,9 +180,9 @@ export function PlayerQuadrant({
               <button
                 onClick={() => onUpdateRotation(playerIndex)}
                 disabled={rotatingPlayer === playerIndex}
-                className={`absolute top-1 left-1 z-10 w-10 h-10 font-bold transition-all duration-200 flex items-center justify-center text-white/70 hover:text-white/50 text-xs p-0 ${
+                className={`absolute top-1 left-1 z-10 w-10 h-10 font-bold transition-all duration-200 flex items-center justify-center text-[#fcf6b1]/70 hover:text-[#fcf6b1]/50 text-xs p-0 ${
                   rotatingPlayer === playerIndex
-                    ? "text-white/40 cursor-not-allowed"
+                    ? "text-[#fcf6b1]/40 cursor-not-allowed"
                     : ""
                 }`}
                 title={
@@ -211,8 +211,8 @@ export function PlayerQuadrant({
                 onClick={() => onTogglePlayerDead(playerIndex)}
                 className={`absolute top-1 right-1 z-10 w-10 h-10 transition-all duration-200 flex items-center justify-center ${
                   player.isDead
-                    ? "text-red-500 hover:text-red-400"
-                    : "text-white/70 hover:text-red-400"
+                    ? "text-[#e3170a] hover:text-[#f04a3e]"
+                    : "text-[#fcf6b1]/70 hover:text-[#f04a3e]"
                 }`}
                 title={player.isDead ? "Revive player" : "Mark as dead"}
               >
@@ -235,17 +235,17 @@ export function PlayerQuadrant({
             onClick={() => setIsHistoryOpen(true)}
             className="shrink-0 w-full flex flex-col items-center cursor-pointer group pt-1"
           >
-            <h2 className={`font-bold text-[#ffffff] tracking-wide truncate group-hover:text-[#4ade80] transition-colors ${isMobile ? "text-base" : "text-lg"}`}>
+            <h2 className={`font-bold text-[#fcf6b1] tracking-wide truncate group-hover:text-[#a9e5bb] transition-colors ${isMobile ? "text-base" : "text-lg"}`}>
               {player.name}
               {player.history.length > 0 && (
-                <span className={`ml-1.5 text-[#888888] font-normal ${isMobile ? "text-[9px]" : "text-[11px]"}`}>({player.history.length})</span>
+                <span className={`ml-1.5 text-[#8b7699] font-normal ${isMobile ? "text-[9px]" : "text-[11px]"}`}>({player.history.length})</span>
               )}
             </h2>
             <div className="relative">
-              <div className={`font-bold text-[#f5f5f5] select-none tracking-tight leading-none ${isMobile ? "text-7xl" : "text-8xl"}`} data-testid={`life-total-${playerIndex}`}>
+              <div className={`font-bold text-[#fcf6b1] select-none tracking-tight leading-none ${isMobile ? "text-7xl" : "text-8xl"}`} data-testid={`life-total-${playerIndex}`}>
                 {player.life}
               </div>
-              <div className={`absolute inset-0 font-bold text-[#166534] select-none tracking-tight leading-none opacity-15 blur-sm ${isMobile ? "text-7xl" : "text-8xl"}`}>
+              <div className={`absolute inset-0 font-bold text-[#1d6637] select-none tracking-tight leading-none opacity-15 blur-sm ${isMobile ? "text-7xl" : "text-8xl"}`}>
                 {player.life}
               </div>
             </div>
@@ -257,28 +257,28 @@ export function PlayerQuadrant({
               <div className={`grid grid-cols-4 flex-[3] min-h-0 ${isMobile ? "gap-1" : "gap-2"}`}>
                 <button
                   onClick={() => onUpdateLife(playerIndex, -5)}
-                  className={`bg-[#991b1b] hover:bg-[#b91c1c] active:bg-[#7f1d1d] text-white font-bold transition-all duration-150 touch-manipulation flex items-center justify-center ${isMobile ? "text-xl" : "text-2xl"}`}
+                  className={`bg-[#9a0f08] hover:bg-[#c0140b] active:bg-[#7a0c06] text-white font-bold transition-all duration-150 touch-manipulation flex items-center justify-center ${isMobile ? "text-xl" : "text-2xl"}`}
                   data-testid={`life-minus-5-${playerIndex}`}
                 >
                   -5
                 </button>
                 <button
                   onClick={() => onUpdateLife(playerIndex, -1)}
-                  className={`bg-[#b91c1c] hover:bg-[#dc2626] active:bg-[#991b1b] text-white font-bold transition-all duration-150 touch-manipulation flex items-center justify-center ${isMobile ? "text-xl" : "text-2xl"}`}
+                  className={`bg-[#c0140b] hover:bg-[#e3170a] active:bg-[#9a0f08] text-white font-bold transition-all duration-150 touch-manipulation flex items-center justify-center ${isMobile ? "text-xl" : "text-2xl"}`}
                   data-testid={`life-minus-1-${playerIndex}`}
                 >
                   -1
                 </button>
                 <button
                   onClick={() => onUpdateLife(playerIndex, 1)}
-                  className={`bg-[#166534] hover:bg-[#16a34a] active:bg-[#14532d] text-white font-bold transition-all duration-150 touch-manipulation flex items-center justify-center ${isMobile ? "text-xl" : "text-2xl"}`}
+                  className={`bg-[#1d6637] hover:bg-[#27874a] active:bg-[#17522c] text-white font-bold transition-all duration-150 touch-manipulation flex items-center justify-center ${isMobile ? "text-xl" : "text-2xl"}`}
                   data-testid={`life-plus-1-${playerIndex}`}
                 >
                   +1
                 </button>
                 <button
                   onClick={() => onUpdateLife(playerIndex, 5)}
-                  className={`bg-[#14532d] hover:bg-[#166534] active:bg-[#052e16] text-white font-bold transition-all duration-150 touch-manipulation flex items-center justify-center ${isMobile ? "text-xl" : "text-2xl"}`}
+                  className={`bg-[#17522c] hover:bg-[#1d6637] active:bg-[#0f4420] text-white font-bold transition-all duration-150 touch-manipulation flex items-center justify-center ${isMobile ? "text-xl" : "text-2xl"}`}
                   data-testid={`life-plus-5-${playerIndex}`}
                 >
                   +5
@@ -289,14 +289,14 @@ export function PlayerQuadrant({
               <div className={`flex flex-1 min-h-0 ${isMobile ? "gap-1" : "gap-2"}`}>
                 <button
                   onClick={() => onDamageAllOthers(playerIndex, -1)}
-                  className={`flex-1 bg-[#c2410c] hover:bg-[#ea580c] active:bg-[#9a3412] text-white font-bold transition-all duration-150 touch-manipulation flex items-center justify-center ${isMobile ? "text-base" : "text-lg"}`}
+                  className={`flex-1 bg-[#c99a1c] hover:bg-[#f7b32b] active:bg-[#a58018] text-white font-bold transition-all duration-150 touch-manipulation flex items-center justify-center ${isMobile ? "text-base" : "text-lg"}`}
                 >
-                  -1 to all others
+                  -1 others
                 </button>
                 <button
                   onClick={onUndoDamageAllOthers}
                   disabled={undoStackLength === 0}
-                  className={`bg-[#6b7280] hover:bg-[#9ca3af] active:bg-[#4b5563] disabled:bg-[#374151] disabled:text-[#6b7280] disabled:cursor-not-allowed text-white font-bold transition-all duration-150 touch-manipulation flex items-center justify-center ${isMobile ? "text-xl px-4" : "text-2xl px-6"}`}
+                  className={`bg-[#6b5a78] hover:bg-[#8a7899] active:bg-[#4e3c57] disabled:bg-[#382840] disabled:text-[#5a4a66] disabled:cursor-not-allowed text-white font-bold transition-all duration-150 touch-manipulation flex items-center justify-center ${isMobile ? "text-xl px-4" : "text-2xl px-6"}`}
                   title="Undo last damage to all others"
                 >
                   ↶
@@ -310,9 +310,9 @@ export function PlayerQuadrant({
             {/* Toggle bar */}
             <button
               onClick={() => setIsCommanderExpanded(!isCommanderExpanded)}
-              className={`w-full flex items-center justify-center bg-[#2a2a2a] hover:bg-[#333333] transition-colors touch-manipulation ${isMobile ? "py-1" : "py-1.5"}`}
+              className={`w-full flex items-center justify-center bg-[#473455] hover:bg-[#543f63] transition-colors touch-manipulation ${isMobile ? "py-1" : "py-1.5"}`}
             >
-              <span className={`text-[#a3a3a3] font-semibold mr-1.5 ${isMobile ? "text-[9px]" : "text-[11px]"}`}>
+              <span className={`text-[#9d88aa] font-semibold mr-1.5 ${isMobile ? "text-[9px]" : "text-[11px]"}`}>
                 Cmdr / Poison
               </span>
               <svg
@@ -320,7 +320,7 @@ export function PlayerQuadrant({
                 height={isMobile ? "10" : "12"}
                 viewBox="0 0 24 24"
                 fill="currentColor"
-                className={`text-[#a3a3a3] transition-transform duration-200 ${isCommanderExpanded ? "rotate-180" : ""}`}
+                className={`text-[#9d88aa] transition-transform duration-200 ${isCommanderExpanded ? "rotate-180" : ""}`}
               >
                 <path d="M7 10l5 5 5-5z" />
               </svg>
@@ -335,10 +335,10 @@ export function PlayerQuadrant({
                 {commanderSources.map((sourceIndex, i) => (
                   <div
                     key={sourceIndex}
-                    className={`bg-[#2a2a2a] text-center ${isMobile ? "p-1" : "p-2"}`}
+                    className={`bg-[#473455] text-center ${isMobile ? "p-1" : "p-2"}`}
                   >
                     <div className={`flex items-center justify-center h-5 ${isMobile ? "mb-0.5" : "mb-2"}`}>
-                      <span className={`text-[#e5e5e5] font-bold leading-none tracking-wide whitespace-nowrap ${isMobile ? "text-[9px]" : "text-xs"}`}>
+                      <span className={`text-[#e8e0a0] font-bold leading-none tracking-wide whitespace-nowrap ${isMobile ? "text-[9px]" : "text-xs"}`}>
                         {playerAbbrevs[sourceIndex]} {player.commanderDamage[i]}
                       </span>
                     </div>
@@ -346,7 +346,7 @@ export function PlayerQuadrant({
                       <div className={`flex justify-center items-stretch ${isMobile ? "flex-col gap-1" : "gap-1"}`}>
                         <button
                           onClick={() => onUpdateCommanderDamage(playerIndex, i, 1)}
-                          className={`bg-[#166534] hover:bg-[#16a34a] active:bg-[#14532d] text-white text-xs font-bold transition-all duration-150 flex items-center justify-center flex-shrink-0 touch-manipulation ${isMobile ? "w-full h-6" : "w-8 h-8"}`}
+                          className={`bg-[#1d6637] hover:bg-[#27874a] active:bg-[#17522c] text-white text-xs font-bold transition-all duration-150 flex items-center justify-center flex-shrink-0 touch-manipulation ${isMobile ? "w-full h-6" : "w-8 h-8"}`}
                         >
                           <svg width={isMobile ? "10" : "14"} height={isMobile ? "10" : "14"} viewBox="0 0 24 24" fill="currentColor">
                             <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
@@ -354,7 +354,7 @@ export function PlayerQuadrant({
                         </button>
                         <button
                           onClick={() => onUpdateCommanderDamage(playerIndex, i, -1)}
-                          className={`bg-[#991b1b] hover:bg-[#b91c1c] active:bg-[#7f1d1d] text-white text-xs font-bold transition-all duration-150 flex items-center justify-center flex-shrink-0 touch-manipulation ${isMobile ? "w-full h-6" : "w-8 h-8"}`}
+                          className={`bg-[#9a0f08] hover:bg-[#c0140b] active:bg-[#7a0c06] text-white text-xs font-bold transition-all duration-150 flex items-center justify-center flex-shrink-0 touch-manipulation ${isMobile ? "w-full h-6" : "w-8 h-8"}`}
                         >
                           <svg width={isMobile ? "10" : "14"} height={isMobile ? "10" : "14"} viewBox="0 0 24 24" fill="currentColor">
                             <path d="M19 13H5v-2h14v2z" />
@@ -366,7 +366,7 @@ export function PlayerQuadrant({
                 ))}
 
                 {/* Poison Counter */}
-                <div className={`bg-[#2a2a2a] text-center ${isMobile ? "p-1" : "p-2"}`}>
+                <div className={`bg-[#473455] text-center ${isMobile ? "p-1" : "p-2"}`}>
                   <div className={`flex items-center justify-center h-5 ${isMobile ? "mb-0.5" : "mb-2"}`}>
                     <div className="flex items-center whitespace-nowrap">
                       <svg
@@ -381,7 +381,7 @@ export function PlayerQuadrant({
                         />
                       </svg>
                       <span
-                        className={`text-[#e5e5e5] font-bold leading-none tracking-wide ${isMobile ? "text-[9px]" : "text-xs"}`}
+                        className={`text-[#e8e0a0] font-bold leading-none tracking-wide ${isMobile ? "text-[9px]" : "text-xs"}`}
                         data-testid={`poison-counter-${playerIndex}`}
                       >
                         {player.poison}
@@ -392,7 +392,7 @@ export function PlayerQuadrant({
                     <div className={`flex justify-center items-stretch ${isMobile ? "flex-col gap-1" : "gap-1"}`}>
                       <button
                         onClick={() => onUpdatePoison(playerIndex, 1)}
-                        className={`bg-[#064e3b] hover:bg-[#065f46] active:bg-[#022c22] text-white text-xs font-bold transition-all duration-150 flex items-center justify-center flex-shrink-0 touch-manipulation ${isMobile ? "w-full h-6" : "w-8 h-8"}`}
+                        className={`bg-[#1d6637] hover:bg-[#27874a] active:bg-[#0f4420] text-white text-xs font-bold transition-all duration-150 flex items-center justify-center flex-shrink-0 touch-manipulation ${isMobile ? "w-full h-6" : "w-8 h-8"}`}
                       >
                         <svg width={isMobile ? "10" : "14"} height={isMobile ? "10" : "14"} viewBox="0 0 24 24" fill="currentColor">
                           <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
@@ -400,7 +400,7 @@ export function PlayerQuadrant({
                       </button>
                       <button
                         onClick={() => onUpdatePoison(playerIndex, -1)}
-                        className={`bg-[#991b1b] hover:bg-[#b91c1c] active:bg-[#7f1d1d] text-white text-xs font-bold transition-all duration-150 flex items-center justify-center flex-shrink-0 touch-manipulation ${isMobile ? "w-full h-6" : "w-8 h-8"}`}
+                        className={`bg-[#9a0f08] hover:bg-[#c0140b] active:bg-[#7a0c06] text-white text-xs font-bold transition-all duration-150 flex items-center justify-center flex-shrink-0 touch-manipulation ${isMobile ? "w-full h-6" : "w-8 h-8"}`}
                       >
                         <svg width={isMobile ? "10" : "14"} height={isMobile ? "10" : "14"} viewBox="0 0 24 24" fill="currentColor">
                           <path d="M19 13H5v-2h14v2z" />
