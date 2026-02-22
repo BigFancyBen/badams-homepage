@@ -3,13 +3,14 @@
 import { useState } from "react";
 import { SavedDeck } from "../hooks/useDeckStorage";
 import { parseDecklist, ParsedDecklist } from "../utils/decklistParser";
+import { isArchidektUrl, fetchArchidektDeck } from "../utils/archidektImport";
 
 interface DeckManagerProps {
   decks: SavedDeck[];
   activeDeckId: string | null;
   onSelectDeck: (deckId: string) => void;
-  onAddDeck: (name: string, decklist: ParsedDecklist, originalInput: string) => void;
-  onUpdateDeck: (deckId: string, name: string, decklist: ParsedDecklist, originalInput: string) => void;
+  onAddDeck: (name: string, decklist: ParsedDecklist, originalInput: string, sourceUrl?: string) => void;
+  onUpdateDeck: (deckId: string, name: string, decklist: ParsedDecklist, originalInput: string, sourceUrl?: string) => void;
   onRemoveDeck: (deckId: string) => void;
   onClose: () => void;
 }
@@ -27,7 +28,10 @@ export function DeckManager({
   const [editingDeckId, setEditingDeckId] = useState<string | null>(null);
   const [newDeckName, setNewDeckName] = useState("");
   const [newDeckInput, setNewDeckInput] = useState("");
+  const [archidektUrl, setArchidektUrl] = useState("");
   const [parseError, setParseError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [syncingDeckId, setSyncingDeckId] = useState<string | null>(null);
 
   const handleAddDeck = () => {
     if (!newDeckName.trim()) {
@@ -56,6 +60,52 @@ export function DeckManager({
       onClose();
     } catch (error) {
       setParseError(error instanceof Error ? error.message : "Failed to parse decklist");
+    }
+  };
+
+  const handleImportFromArchidekt = async () => {
+    if (!archidektUrl.trim()) {
+      setParseError("Please enter an Archidekt URL");
+      return;
+    }
+
+    if (!isArchidektUrl(archidektUrl)) {
+      setParseError("Invalid Archidekt URL. Expected format: https://archidekt.com/decks/12345/deck-name");
+      return;
+    }
+
+    setImporting(true);
+    setParseError(null);
+
+    try {
+      const result = await fetchArchidektDeck(archidektUrl);
+      onAddDeck(result.name, result.decklist, result.originalInput, archidektUrl.trim());
+      setArchidektUrl("");
+      setNewDeckName("");
+      setNewDeckInput("");
+      setParseError(null);
+      setIsAdding(false);
+      onClose();
+    } catch (error) {
+      setParseError(error instanceof Error ? error.message : "Failed to import from Archidekt");
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleSyncDeck = async (deck: SavedDeck) => {
+    if (!deck.sourceUrl) return;
+
+    setSyncingDeckId(deck.id);
+    setParseError(null);
+
+    try {
+      const result = await fetchArchidektDeck(deck.sourceUrl);
+      onUpdateDeck(deck.id, result.name, result.decklist, result.originalInput, deck.sourceUrl);
+    } catch (error) {
+      setParseError(error instanceof Error ? error.message : "Failed to sync deck");
+    } finally {
+      setSyncingDeckId(null);
     }
   };
 
@@ -107,11 +157,19 @@ export function DeckManager({
     setEditingDeckId(null);
     setNewDeckName("");
     setNewDeckInput("");
+    setArchidektUrl("");
     setParseError(null);
   };
 
   return (
     <div className="space-y-4">
+      {/* Sync error display */}
+      {parseError && !isAdding && !editingDeckId && (
+        <div className="p-3 bg-[#991b1b] bg-opacity-20 border border-[#991b1b] text-red-300">
+          {parseError}
+        </div>
+      )}
+
       {/* Deck List */}
       {!isAdding && !editingDeckId && decks.length > 0 && (
         <div>
@@ -134,8 +192,38 @@ export function DeckManager({
                   <div className="text-sm text-[#cccccc]">
                     {deck.decklist.cards.length} unique cards ({deck.decklist.totalCards} total)
                   </div>
+                  {deck.sourceUrl && (
+                    <div className="text-xs text-[#60a5fa] mt-0.5">
+                      Linked to Archidekt
+                    </div>
+                  )}
                 </button>
                 <div className="flex items-center gap-2">
+                  {deck.sourceUrl && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSyncDeck(deck);
+                      }}
+                      disabled={syncingDeckId === deck.id}
+                      className="p-2 text-[#60a5fa] hover:text-white hover:bg-[#60a5fa] transition-colors disabled:opacity-50"
+                      title="Sync from Archidekt"
+                    >
+                      <svg
+                        className={`w-5 h-5 ${syncingDeckId === deck.id ? "animate-spin" : ""}`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                        />
+                      </svg>
+                    </button>
+                  )}
                   <button
                     onClick={() => handleEditDeck(deck)}
                     className="p-2 text-[#4ade80] hover:text-white hover:bg-[#4ade80] transition-colors"
@@ -247,6 +335,42 @@ Or: Lightning Bolt, Forest, Jace the Mind Sculptor"
         <>
           {isAdding ? (
         <div className="space-y-4">
+          {/* Archidekt Import */}
+          <div className="p-4 border-2 border-[#404040] bg-[#1a1a1a]">
+            <label htmlFor="archidekt-url" className="block text-lg font-semibold text-[#e5e5e5] mb-2">
+              Import from Archidekt
+            </label>
+            <div className="flex gap-2">
+              <input
+                id="archidekt-url"
+                type="text"
+                value={archidektUrl}
+                onChange={(e) => setArchidektUrl(e.target.value)}
+                placeholder="https://archidekt.com/decks/12345/deck-name"
+                className="flex-1 p-3 border-2 border-[#404040] bg-[#2a2a2a] text-[#e5e5e5] focus:ring-2 focus:ring-[#60a5fa] focus:border-[#60a5fa] transition-colors"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleImportFromArchidekt();
+                  }
+                }}
+              />
+              <button
+                onClick={handleImportFromArchidekt}
+                disabled={importing}
+                className="px-6 py-3 bg-[#60a5fa] text-black font-semibold hover:bg-[#3b82f6] transition-colors disabled:opacity-50 whitespace-nowrap"
+              >
+                {importing ? "Importing..." : "Import"}
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <div className="flex-1 h-px bg-[#404040]" />
+            <span className="text-[#6b7280] text-sm">or paste manually</span>
+            <div className="flex-1 h-px bg-[#404040]" />
+          </div>
+
           <div>
             <label htmlFor="deck-name" className="block text-lg font-semibold text-[#e5e5e5] mb-2">
               Deck Name
@@ -299,6 +423,7 @@ Or: Lightning Bolt, Forest, Jace the Mind Sculptor"
                 setIsAdding(false);
                 setNewDeckName("");
                 setNewDeckInput("");
+                setArchidektUrl("");
                 setParseError(null);
               }}
               className="px-6 py-3 bg-[#404040] text-white font-semibold hover:bg-[#606060] transition-colors"

@@ -238,14 +238,6 @@ body {
   will-change: text-shadow;
 }
 
-/* Use lighter animation on mobile/touch devices */
-@media (hover: none) and (pointer: coarse) {
-  .animate-glow {
-    animation: hero-glow-mobile 2.5s ease-in-out infinite;
-    will-change: opacity;
-  }
-}
-
 /* Mobile card boot animation - CSS fallback */
 @keyframes card-boot-mobile {
   0% {

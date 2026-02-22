@@ -2,7 +2,6 @@
 
 import { useState, useMemo } from "react";
 import { motion } from "motion/react";
-import { useMobileDevice } from "@/app/hooks/useMobileDevice";
 
 interface Particle {
   id: number;
@@ -33,17 +32,12 @@ function generateParticles(count: number): Particle[] {
 }
 
 export function ParticleField({ particleCount = 40 }: ParticleFieldProps) {
-  const isMobile = useMobileDevice();
-
-  // Significantly reduce particle count on mobile for performance
-  const effectiveCount = isMobile ? Math.min(particleCount, 18) : particleCount;
-
   const [particles] = useState<Particle[]>(() => generateParticles(50)); // Generate max upfront
 
-  // Only render the effective count
+  // Render full particle count on all devices
   const visibleParticles = useMemo(
-    () => particles.slice(0, effectiveCount),
-    [particles, effectiveCount]
+    () => particles.slice(0, particleCount),
+    [particles, particleCount]
   );
 
   return (
@@ -57,16 +51,12 @@ export function ParticleField({ particleCount = 40 }: ParticleFieldProps) {
           style={{
             width: particle.size,
             height: particle.size,
-            // Use transform for initial position (GPU accelerated)
             transform: `translate3d(${particle.x}vw, ${particle.y}vh, 0)`,
             opacity: particle.opacity,
           }}
           animate={{
-            // Use transform-based animation for GPU acceleration
             y: [`0vh`, `-120vh`],
-            x: isMobile
-              ? [`0px`, `${particle.drift * 0.5}px`, `0px`] // Reduce drift on mobile
-              : [`0px`, `${particle.drift}px`, `0px`],
+            x: [`0px`, `${particle.drift}px`, `0px`],
             opacity: [particle.opacity, particle.opacity * 1.5, particle.opacity, 0],
           }}
           transition={{
@@ -93,16 +83,14 @@ export function ParticleField({ particleCount = 40 }: ParticleFieldProps) {
         />
       ))}
 
-      {/* Scanline overlay - simplified on mobile */}
-      {!isMobile && (
-        <div
-          className="absolute inset-0 opacity-[0.02]"
-          style={{
-            backgroundImage:
-              "repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(139, 92, 246, 0.5) 2px, rgba(139, 92, 246, 0.5) 3px)",
-          }}
-        />
-      )}
+      {/* Scanline overlay — rendered on all devices */}
+      <div
+        className="absolute inset-0 opacity-[0.02]"
+        style={{
+          backgroundImage:
+            "repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(139, 92, 246, 0.5) 2px, rgba(139, 92, 246, 0.5) 3px)",
+        }}
+      />
     </div>
   );
 }

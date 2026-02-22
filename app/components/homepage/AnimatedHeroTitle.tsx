@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { motion } from "motion/react";
-import { useMobileDevice } from "@/app/hooks/useMobileDevice";
 
 interface AnimatedHeroTitleProps {
   text: string;
@@ -12,7 +11,6 @@ interface AnimatedHeroTitleProps {
 const GLYPHS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&*<>[]{}";
 
 export function AnimatedHeroTitle({ text, reducedMotion = false }: AnimatedHeroTitleProps) {
-  const isMobile = useMobileDevice();
   const [displayText, setDisplayText] = useState(reducedMotion ? text : "");
   const [isComplete, setIsComplete] = useState(reducedMotion);
   const [revealedIndices, setRevealedIndices] = useState<Set<number>>(
@@ -32,8 +30,8 @@ export function AnimatedHeroTitle({ text, reducedMotion = false }: AnimatedHeroT
     }
 
     const totalDuration = 1000;
-    // Use lower frame rate on mobile for performance
-    const frameRate = isMobile ? 30 : 60;
+    // Full 60 FPS on all devices
+    const frameRate = 60;
     const frameTime = 1000 / frameRate;
     const totalFrames = (totalDuration / 1000) * frameRate;
     const revealInterval = totalFrames / text.length;
@@ -86,7 +84,7 @@ export function AnimatedHeroTitle({ text, reducedMotion = false }: AnimatedHeroT
         cancelAnimationFrame(rafRef.current);
       }
     };
-  }, [text, getRandomGlyph, reducedMotion, isMobile]);
+  }, [text, getRandomGlyph, reducedMotion]);
 
   return (
     <motion.h1
