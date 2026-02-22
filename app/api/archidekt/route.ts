@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 interface ArchidektCard {
   quantity: number;
+  categories: string[];
   card: {
     oracleCard: {
       name: string;
@@ -77,6 +78,7 @@ export async function GET(request: NextRequest) {
 
     const cards = data.cards
       .filter((c) => c.card?.oracleCard?.name)
+      .filter((c) => !c.categories?.some((cat) => cat.toLowerCase() === "maybeboard"))
       .map((c) => ({
         quantity: c.quantity,
         name: c.card.oracleCard.name,

@@ -8,6 +8,7 @@ export interface SavedDeck {
   name: string;
   decklist: ParsedDecklist;
   originalInput: string;
+  sourceUrl?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -49,12 +50,13 @@ export function useDeckStorage() {
     }
   }, [decks, isLoaded]);
 
-  const addDeck = useCallback((name: string, decklist: ParsedDecklist, originalInput: string) => {
+  const addDeck = useCallback((name: string, decklist: ParsedDecklist, originalInput: string, sourceUrl?: string) => {
     const newDeck: SavedDeck = {
       id: `deck-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       name,
       decklist,
       originalInput,
+      sourceUrl,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
@@ -77,10 +79,10 @@ export function useDeckStorage() {
     });
   }, [activeDeckId]);
 
-  const updateDeck = useCallback((deckId: string, name: string, decklist: ParsedDecklist, originalInput: string) => {
+  const updateDeck = useCallback((deckId: string, name: string, decklist: ParsedDecklist, originalInput: string, sourceUrl?: string) => {
     setDecks(prev => prev.map(deck => 
       deck.id === deckId 
-        ? { ...deck, name, decklist, originalInput, updatedAt: Date.now() }
+        ? { ...deck, name, decklist, originalInput, ...(sourceUrl !== undefined ? { sourceUrl } : {}), updatedAt: Date.now() }
         : deck
     ));
   }, []);
@@ -109,5 +111,5 @@ export function useDeckStorage() {
     selectDeck,
     getActiveDeck,
     clearAllDecks,
-  };
+  } as const;
 }
