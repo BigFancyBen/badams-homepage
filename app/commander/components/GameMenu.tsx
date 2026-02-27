@@ -7,7 +7,7 @@ interface GameMenuProps {
   players: PlayerState[];
   isMobileLandscape: boolean;
   isMobilePortrait: boolean;
-  wakeLockSentinel: WakeLockSentinel | null;
+  wakeLockEnabled: boolean;
   isWakeLockSupported: boolean;
   wakeLockError: string | null;
   onClose: () => void;
@@ -35,7 +35,7 @@ export function GameMenu({
   players,
   isMobileLandscape,
   isMobilePortrait,
-  wakeLockSentinel,
+  wakeLockEnabled,
   isWakeLockSupported,
   wakeLockError,
   onClose,
@@ -138,7 +138,7 @@ export function GameMenu({
               <div className="flex-1 bg-[#614a71] text-[#8b7699] text-sm font-bold py-3 px-4 text-center">
                 Wake Lock Not Supported
               </div>
-            ) : wakeLockSentinel ? (
+            ) : wakeLockEnabled ? (
               <button
                 onClick={onToggleWakeLock}
                 className="flex-1 bg-[#1d6637] hover:bg-[#17522c] text-white text-sm font-bold py-3 px-4 transition-all duration-200"
@@ -162,9 +162,9 @@ export function GameMenu({
               {wakeLockError}
             </div>
           )}
-          {wakeLockSentinel && (
+          {wakeLockEnabled && !wakeLockError && (
             <div className="text-xs text-[#a9e5bb] mt-2 text-center">
-              Screen lock active - your screen will not turn off
+              Screen will stay on between sessions
             </div>
           )}
         </div>

@@ -6,6 +6,7 @@ import { useMultiplayer } from '../hooks/useMultiplayer';
 import { generateAbbreviations } from '../utils';
 import { useMobileDetection } from '../hooks/useMobileDetection';
 import { useHistoryManagement } from '../hooks/useHistoryManagement';
+import { useWakeLock } from '../hooks/useWakeLock';
 import { PlayerQuadrant } from './PlayerQuadrant';
 import { GameMenu } from './GameMenu';
 
@@ -51,10 +52,8 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
   const [viewMode, setViewMode] = useState<'controller' | 'overview' | null>(null);
   const [pendingSyncRequest, setPendingSyncRequest] = useState<string | null>(null);
 
-  // Wake lock state
-  const [wakeLockSentinel, setWakeLockSentinel] = useState<WakeLockSentinel | null>(null);
-  const [isWakeLockSupported, setIsWakeLockSupported] = useState<boolean>(false);
-  const [wakeLockError, setWakeLockError] = useState<string | null>(null);
+  // Wake lock with persistence and auto-reacquisition
+  const { wakeLockEnabled, isWakeLockSupported, wakeLockError, toggleWakeLock } = useWakeLock(isClient);
 
   // Handle incoming game actions from other players
   const handleGameAction = useCallback((action: GameAction) => {
@@ -251,42 +250,6 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
       return () => clearTimeout(timer);
     }
   }, [isConnected, isCreator, localClientId, sendGameAction]);
-
-  // Wake lock support check
-  useEffect(() => {
-    const checkSupport = () => {
-      const isSupported = 'wakeLock' in navigator && window.isSecureContext;
-      setIsWakeLockSupported(isSupported);
-      if (!isSupported) {
-        if (!window.isSecureContext) {
-          setWakeLockError('Requires HTTPS or localhost');
-        } else if (!('wakeLock' in navigator)) {
-          setWakeLockError('Not supported in this browser');
-        }
-      }
-    };
-    if (isClient) {
-      checkSupport();
-    }
-  }, [isClient]);
-
-  const toggleWakeLock = useCallback(async () => {
-    if (!isWakeLockSupported) return;
-    try {
-      if (wakeLockSentinel) {
-        await wakeLockSentinel.release();
-        setWakeLockSentinel(null);
-        setWakeLockError(null);
-      } else {
-        const sentinel = await navigator.wakeLock.request('screen');
-        setWakeLockSentinel(sentinel);
-        sentinel.addEventListener('release', () => setWakeLockSentinel(null));
-      }
-    } catch (error) {
-      console.error('Wake lock error:', error);
-      setWakeLockSentinel(null);
-    }
-  }, [isWakeLockSupported, wakeLockSentinel]);
 
   // Generate abbreviations
   const playerAbbrevs = generateAbbreviations(players);
@@ -558,7 +521,7 @@ export function MultiplayerGame(props: MultiplayerGameProps) {
         players={players}
         isMobileLandscape={isMobileLandscape}
         isMobilePortrait={isMobilePortrait}
-        wakeLockSentinel={wakeLockSentinel}
+        wakeLockEnabled={wakeLockEnabled}
         isWakeLockSupported={isWakeLockSupported}
         wakeLockError={wakeLockError}
         onClose={() => setIsMenuOpen(false)}
