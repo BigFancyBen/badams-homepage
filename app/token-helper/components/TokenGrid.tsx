@@ -79,7 +79,7 @@ export function TokenGrid({
 
           {/* Stacks grid */}
           <div
-            className={`grid gap-3 ${
+            className={`grid gap-3 items-start ${
               token.stacks.length > 1
                 ? "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 pl-2 border-l-2 border-[#4ade80]/30"
                 : "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5"

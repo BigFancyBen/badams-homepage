@@ -281,6 +281,19 @@ export function useTokenGameState({
     token.stacks.some((s) => s.temporaryCounters > 0)
   );
 
+  const untapAll = useCallback(() => {
+    updateTokens((prev) =>
+      prev.map((token) => ({
+        ...token,
+        stacks: token.stacks.map((s) => ({ ...s, isTapped: false })),
+      }))
+    );
+  }, [updateTokens]);
+
+  const hasTappedTokens = activeTokens.some((token) =>
+    token.stacks.some((s) => s.isTapped)
+  );
+
   const resetGame = useCallback(() => {
     setActiveTokens([]);
     persist([]);
@@ -302,6 +315,8 @@ export function useTokenGameState({
     mergeStacks,
     clearTemporaryCounters,
     hasTemporaryCounters,
+    untapAll,
+    hasTappedTokens,
     resetGame,
   } as const;
 }

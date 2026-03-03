@@ -42,6 +42,8 @@ export default function TokenHelperPage() {
     mergeStacks,
     clearTemporaryCounters,
     hasTemporaryCounters,
+    untapAll,
+    hasTappedTokens,
     resetGame,
   } = useTokenGameState({
     initialState: gameState,
@@ -133,6 +135,16 @@ export default function TokenHelperPage() {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Untap All */}
+            {hasTappedTokens && (
+              <button
+                onClick={untapAll}
+                className="px-3 py-1.5 text-sm border border-[#fbbf24]/40 text-[#fbbf24] font-medium hover:bg-[#fbbf24]/20 transition-colors"
+              >
+                Untap All
+              </button>
+            )}
+
             {/* Token Picker */}
             {availableTokens.length > 0 && (
               <button
