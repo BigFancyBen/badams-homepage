@@ -293,6 +293,18 @@ export function useTokenGameState({
     );
   }, [updateTokens]);
 
+  const removePermanentCounterAll = useCallback(() => {
+    updateTokens((prev) =>
+      prev.map((token) => ({
+        ...token,
+        stacks: token.stacks.map((s) => ({
+          ...s,
+          permanentCounters: Math.max(0, s.permanentCounters - 1),
+        })),
+      }))
+    );
+  }, [updateTokens]);
+
   const addTemporaryCounterAll = useCallback(() => {
     updateTokens((prev) =>
       prev.map((token) => ({
@@ -344,6 +356,7 @@ export function useTokenGameState({
     clearTemporaryCounters,
     hasTemporaryCounters,
     addPermanentCounterAll,
+    removePermanentCounterAll,
     addTemporaryCounterAll,
     hasPTTokens,
     untapAll,
