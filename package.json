@@ -3,13 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
+    "lint": "eslint .",
     "type-check": "tsc --noEmit",
     "pre-commit": "npm run lint && npm run type-check && npm run build",
     "prepare": "husky",
@@ -23,7 +23,7 @@
     "ably": "^2.15.0",
     "canvas-confetti": "^1.9.4",
     "geist": "^1.5.1",
-    "lucide-react": "^0.562.0",
+    "lucide-react": "^0.576.0",
     "motion": "^12.27.5",
     "next": "^16.1.0",
     "react": "^19.2.0",
@@ -33,7 +33,7 @@
     "@eslint/eslintrc": "^3",
     "@next/eslint-plugin-next": "^16.1.0",
     "@playwright/test": "^1.57.0",
-    "@types/node": "^22",
+    "@types/node": "^24",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@typescript-eslint/eslint-plugin": "^8.50.0",
