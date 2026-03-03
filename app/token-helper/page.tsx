@@ -42,6 +42,9 @@ export default function TokenHelperPage() {
     mergeStacks,
     clearTemporaryCounters,
     hasTemporaryCounters,
+    addPermanentCounterAll,
+    addTemporaryCounterAll,
+    hasPTTokens,
     untapAll,
     hasTappedTokens,
     resetGame,
@@ -123,10 +126,10 @@ export default function TokenHelperPage() {
   return (
     <div className="min-h-screen bg-[#1a1a1a] pb-16">
       {/* Header */}
-      <div className="bg-[#222222] border-b border-[#333333] px-4 py-3">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <h1 className="text-lg font-bold text-[#e5e5e5]">Token Helper</h1>
+      <div className="bg-[#222222] border-b border-[#333333] px-2 sm:px-4 py-1.5 sm:py-3">
+        <div className="sm:max-w-7xl sm:mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <h1 className="text-base sm:text-lg font-bold text-[#e5e5e5]">Token Helper</h1>
             {deckState && (
               <span className="text-sm text-[#6b7280] hidden sm:inline">
                 {deckState.deckName}
@@ -139,9 +142,29 @@ export default function TokenHelperPage() {
             {hasTappedTokens && (
               <button
                 onClick={untapAll}
-                className="px-3 py-1.5 text-sm border border-[#fbbf24]/40 text-[#fbbf24] font-medium hover:bg-[#fbbf24]/20 transition-colors"
+                className="px-2 py-1 text-xs sm:px-3 sm:py-1.5 sm:text-sm border border-[#fbbf24]/40 text-[#fbbf24] font-medium hover:bg-[#fbbf24]/20 transition-colors"
               >
                 Untap All
+              </button>
+            )}
+
+            {/* +1/+1 All */}
+            {hasTokens && hasPTTokens && (
+              <button
+                onClick={addPermanentCounterAll}
+                className="px-2 py-1 text-xs sm:px-3 sm:py-1.5 sm:text-sm border border-[#4ade80]/40 text-[#4ade80] font-medium hover:bg-[#4ade80]/20 transition-colors"
+              >
+                +1/+1 All
+              </button>
+            )}
+
+            {/* Buff All */}
+            {hasTokens && hasPTTokens && (
+              <button
+                onClick={addTemporaryCounterAll}
+                className="px-2 py-1 text-xs sm:px-3 sm:py-1.5 sm:text-sm border border-[#fbbf24]/40 text-[#fbbf24] font-medium hover:bg-[#fbbf24]/20 transition-colors"
+              >
+                Buff All
               </button>
             )}
 
@@ -152,7 +175,7 @@ export default function TokenHelperPage() {
                   setPickerKey((k) => k + 1);
                   setShowPicker(true);
                 }}
-                className="px-3 py-1.5 text-sm bg-[#4ade80] text-black font-medium hover:bg-[#22c55e] transition-colors"
+                className="px-2 py-1 text-xs sm:px-3 sm:py-1.5 sm:text-sm bg-[#4ade80] text-black font-medium hover:bg-[#22c55e] transition-colors"
               >
                 Tokens
               </button>
@@ -161,7 +184,7 @@ export default function TokenHelperPage() {
             {/* Import */}
             <button
               onClick={() => setShowImport(true)}
-              className="px-3 py-1.5 text-sm border border-[#404040] text-[#cccccc] hover:bg-[#2a2a2a] transition-colors"
+              className="px-2 py-1 text-xs sm:px-3 sm:py-1.5 sm:text-sm border border-[#404040] text-[#cccccc] hover:bg-[#2a2a2a] transition-colors"
             >
               Import
             </button>
@@ -170,7 +193,7 @@ export default function TokenHelperPage() {
             {(hasDeck || hasTokens) && (
               <button
                 onClick={handleReset}
-                className="px-3 py-1.5 text-sm border border-[#991b1b] text-red-400 hover:bg-[#991b1b]/20 transition-colors"
+                className="px-2 py-1 text-xs sm:px-3 sm:py-1.5 sm:text-sm border border-[#991b1b] text-red-400 hover:bg-[#991b1b]/20 transition-colors"
               >
                 Reset
               </button>
@@ -213,7 +236,7 @@ export default function TokenHelperPage() {
       )}
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto p-4">
+      <div className="px-1 pt-1 sm:px-4 sm:pt-4 sm:max-w-7xl sm:mx-auto">
         {!hasDeck && !hasTokens && !loading ? (
           /* State A: Empty - show import prompt */
           <div className="text-center py-16">

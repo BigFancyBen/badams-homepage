@@ -10,6 +10,7 @@ interface TokenCardProps {
   imageUrl: string;
   basePower: number | null;
   baseToughness: number | null;
+  canMerge?: boolean;
   onToggleTap: () => void;
   onIncrementCount: () => void;
   onDecrementCount: () => void;
@@ -19,6 +20,7 @@ interface TokenCardProps {
   onRemoveTemporary: () => void;
   onSplit: () => void;
   onRemove: () => void;
+  onMerge?: () => void;
 }
 
 function CounterRow({
@@ -89,6 +91,7 @@ export function TokenCard({
   imageUrl,
   basePower,
   baseToughness,
+  canMerge,
   onToggleTap,
   onIncrementCount,
   onDecrementCount,
@@ -98,6 +101,7 @@ export function TokenCard({
   onRemoveTemporary,
   onSplit,
   onRemove,
+  onMerge,
 }: TokenCardProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -193,7 +197,7 @@ export function TokenCard({
             alt={name}
             fill
             className="object-cover"
-            sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, 25vw"
+            sizes="(max-width: 640px) 33vw, (max-width: 768px) 25vw, 20vw"
           />
 
           {/* Tapped dark overlay */}
@@ -209,9 +213,9 @@ export function TokenCard({
               }`}
             >
               <span
-                className="text-6xl font-black text-white"
+                className="text-4xl sm:text-6xl font-black text-white"
                 style={{
-                  WebkitTextStroke: "3px black",
+                  WebkitTextStroke: "2px black",
                   paintOrder: "stroke fill",
                   textShadow: "0 2px 8px rgba(0,0,0,0.7)",
                 }}
@@ -229,7 +233,7 @@ export function TokenCard({
               }`}
             >
               <div
-                className={`bg-white border-2 border-black px-2 py-0.5 text-sm font-bold ${
+                className={`bg-white border-2 border-black px-1.5 py-0 text-xs sm:text-sm font-bold ${
                   isBuffed ? "text-green-600" : "text-black"
                 }`}
               >
@@ -249,7 +253,7 @@ export function TokenCard({
           e.stopPropagation();
           setMenuOpen((prev) => !prev);
         }}
-        className="absolute top-1.5 left-1.5 z-10 w-8 h-8 flex items-center justify-center bg-black/60 text-white hover:bg-black/80 transition-colors"
+        className="absolute top-1 left-1 z-10 w-6 h-6 sm:w-8 sm:h-8 flex items-center justify-center bg-black/60 text-white hover:bg-black/80 transition-colors"
       >
         <svg
           width="18"
@@ -268,13 +272,13 @@ export function TokenCard({
       </button>
 
       {/* +/- count buttons (bottom-left, on outer wrapper so they never rotate) */}
-      <div className="absolute bottom-1.5 left-1.5 z-10 flex flex-col gap-1">
+      <div className="absolute bottom-1 left-1 z-10 flex flex-col gap-0.5 sm:bottom-1.5 sm:left-1.5 sm:gap-1">
         <button
           onClick={(e) => {
             e.stopPropagation();
             onIncrementCount();
           }}
-          className="w-8 h-8 flex items-center justify-center bg-black/60 text-white hover:bg-black/80 transition-colors text-lg font-bold"
+          className="w-6 h-6 sm:w-8 sm:h-8 flex items-center justify-center bg-black/60 text-white hover:bg-black/80 transition-colors text-base sm:text-lg font-bold"
         >
           +
         </button>
@@ -283,7 +287,7 @@ export function TokenCard({
             e.stopPropagation();
             onDecrementCount();
           }}
-          className="w-8 h-8 flex items-center justify-center bg-black/60 text-white hover:bg-black/80 transition-colors text-lg font-bold"
+          className="w-6 h-6 sm:w-8 sm:h-8 flex items-center justify-center bg-black/60 text-white hover:bg-black/80 transition-colors text-base sm:text-lg font-bold"
         >
           -
         </button>
@@ -293,7 +297,7 @@ export function TokenCard({
       {menuOpen && (
         <div
           ref={menuRef}
-          className="absolute top-11 left-1.5 z-20 w-52 bg-[#1a1a1a] border-2 border-[#333333] shadow-xl"
+          className="absolute top-8 left-1 sm:top-11 sm:left-1.5 z-20 w-48 sm:w-52 bg-[#1a1a1a] border-2 border-[#333333] shadow-xl"
         >
           {/* Token name header */}
           <div className="px-3 py-2 border-b border-[#333333]">
@@ -359,6 +363,18 @@ export function TokenCard({
             >
               SPLIT
             </button>
+            {canMerge && onMerge && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onMerge();
+                  setMenuOpen(false);
+                }}
+                className="w-full px-3 py-1.5 text-xs font-medium text-left text-[#4ade80] hover:bg-[#4ade80]/20 transition-colors"
+              >
+                MERGE ALL
+              </button>
+            )}
             <button
               onClick={(e) => {
                 e.stopPropagation();

@@ -58,54 +58,37 @@ export function TokenGrid({
     );
   }
 
-  return (
-    <div className="space-y-4">
-      {activeTokens.map((token) => (
-        <div key={token.tokenId}>
-          {/* Token group header when multiple stacks */}
-          {token.stacks.length > 1 && (
-            <div className="flex items-center justify-between mb-2 px-1">
-              <span className="text-sm font-medium text-[#9ca3af]">
-                {token.name} ({token.stacks.length} stacks)
-              </span>
-              <button
-                onClick={() => onMerge(token.tokenId)}
-                className="px-2 py-0.5 text-xs text-[#4ade80] border border-[#4ade80]/40 hover:bg-[#4ade80]/20 transition-colors"
-              >
-                Merge All
-              </button>
-            </div>
-          )}
+  // Flatten all stacks into a single list for inline flow
+  const allStacks = activeTokens.flatMap((token) =>
+    token.stacks.map((stack) => ({
+      stack,
+      token,
+      canMerge: token.stacks.length > 1,
+    }))
+  );
 
-          {/* Stacks grid */}
-          <div
-            className={`grid gap-3 items-start ${
-              token.stacks.length > 1
-                ? "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 pl-2 border-l-2 border-[#4ade80]/30"
-                : "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5"
-            }`}
-          >
-            {token.stacks.map((stack) => (
-              <TokenCard
-                key={stack.id}
-                stack={stack}
-                name={token.name}
-                imageUrl={token.imageUrl}
-                basePower={token.basePower}
-                baseToughness={token.baseToughness}
-                onToggleTap={() => onToggleTap(stack.id)}
-                onIncrementCount={() => onIncrementCount(stack.id)}
-                onDecrementCount={() => onDecrementCount(stack.id)}
-                onAddPermanent={() => onAddPermanent(stack.id)}
-                onRemovePermanent={() => onRemovePermanent(stack.id)}
-                onAddTemporary={() => onAddTemporary(stack.id)}
-                onRemoveTemporary={() => onRemoveTemporary(stack.id)}
-                onSplit={() => onSplit(stack.id)}
-                onRemove={() => onRemoveStack(stack.id)}
-              />
-            ))}
-          </div>
-        </div>
+  return (
+    <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-1 items-start">
+      {allStacks.map(({ stack, token, canMerge }) => (
+        <TokenCard
+          key={stack.id}
+          stack={stack}
+          name={token.name}
+          imageUrl={token.imageUrl}
+          basePower={token.basePower}
+          baseToughness={token.baseToughness}
+          canMerge={canMerge}
+          onToggleTap={() => onToggleTap(stack.id)}
+          onIncrementCount={() => onIncrementCount(stack.id)}
+          onDecrementCount={() => onDecrementCount(stack.id)}
+          onAddPermanent={() => onAddPermanent(stack.id)}
+          onRemovePermanent={() => onRemovePermanent(stack.id)}
+          onAddTemporary={() => onAddTemporary(stack.id)}
+          onRemoveTemporary={() => onRemoveTemporary(stack.id)}
+          onSplit={() => onSplit(stack.id)}
+          onRemove={() => onRemoveStack(stack.id)}
+          onMerge={() => onMerge(token.tokenId)}
+        />
       ))}
     </div>
   );

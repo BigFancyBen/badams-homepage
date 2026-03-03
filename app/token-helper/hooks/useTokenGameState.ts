@@ -281,6 +281,34 @@ export function useTokenGameState({
     token.stacks.some((s) => s.temporaryCounters > 0)
   );
 
+  const addPermanentCounterAll = useCallback(() => {
+    updateTokens((prev) =>
+      prev.map((token) => ({
+        ...token,
+        stacks: token.stacks.map((s) => ({
+          ...s,
+          permanentCounters: s.permanentCounters + 1,
+        })),
+      }))
+    );
+  }, [updateTokens]);
+
+  const addTemporaryCounterAll = useCallback(() => {
+    updateTokens((prev) =>
+      prev.map((token) => ({
+        ...token,
+        stacks: token.stacks.map((s) => ({
+          ...s,
+          temporaryCounters: s.temporaryCounters + 1,
+        })),
+      }))
+    );
+  }, [updateTokens]);
+
+  const hasPTTokens = activeTokens.some(
+    (token) => token.basePower !== null && token.baseToughness !== null
+  );
+
   const untapAll = useCallback(() => {
     updateTokens((prev) =>
       prev.map((token) => ({
@@ -315,6 +343,9 @@ export function useTokenGameState({
     mergeStacks,
     clearTemporaryCounters,
     hasTemporaryCounters,
+    addPermanentCounterAll,
+    addTemporaryCounterAll,
+    hasPTTokens,
     untapAll,
     hasTappedTokens,
     resetGame,
