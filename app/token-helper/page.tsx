@@ -63,6 +63,17 @@ export default function TokenHelperPage() {
     ) => {
       setShowImport(false);
 
+      // Deck-level skip: reuse saved tokens if the exact same input is re-imported
+      if (
+        deckState &&
+        deckState.originalInput === originalInput &&
+        deckState.discoveredTokens.length > 0
+      ) {
+        setPickerKey((k) => k + 1);
+        setShowPicker(true);
+        return;
+      }
+
       const tokens = await discoverTokens(cardNames);
 
       saveDeckState({
@@ -78,7 +89,7 @@ export default function TokenHelperPage() {
         setShowPicker(true);
       }
     },
-    [discoverTokens, saveDeckState]
+    [discoverTokens, saveDeckState, deckState]
   );
 
   const handleAddTokens = useCallback(

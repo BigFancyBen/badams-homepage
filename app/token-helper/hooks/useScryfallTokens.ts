@@ -11,6 +11,13 @@ import {
   deduplicateTokenParts,
   buildDiscoveredToken,
 } from "../utils/tokenDiscovery";
+import {
+  loadCachedCardParts,
+  saveCachedCardParts,
+  loadCachedTokenCards,
+  saveCachedTokenCards,
+  cleanupExpiredEntries,
+} from "../utils/scryfallCache";
 
 interface ScryfallCardResponse {
   id: string;
@@ -50,6 +57,9 @@ export function useScryfallTokens(): UseScryfallTokensResult {
       setError(null);
       setDiscoveredTokens([]);
 
+      // Clean up expired entries on each discovery run
+      cleanupExpiredEntries();
+
       const uniqueNames = [...new Set(cardNames)];
       const totalCards = uniqueNames.length;
 
@@ -62,10 +72,36 @@ export function useScryfallTokens(): UseScryfallTokensResult {
           sourceCard: string;
         }> = [];
 
-        for (let i = 0; i < uniqueNames.length; i++) {
-          const cardName = uniqueNames[i];
+        // Check card-level cache first
+        const { cached: cachedCards, missing: missingCards } =
+          loadCachedCardParts(uniqueNames);
+
+        // Populate from cache immediately
+        let processed = 0;
+        for (const [, { name, parts }] of cachedCards) {
+          processed++;
           setProgress({
-            current: i + 1,
+            current: processed,
+            total: totalCards,
+            phase: "Scanning cards",
+          });
+          for (const part of parts) {
+            allTokenParts.push({ part, sourceCard: name });
+          }
+        }
+
+        // Fetch only missing cards from API
+        const newCardResults: {
+          searchTerm: string;
+          cardName: string;
+          parts: ScryfallRelatedPart[];
+        }[] = [];
+
+        for (let i = 0; i < missingCards.length; i++) {
+          const cardName = missingCards[i];
+          processed++;
+          setProgress({
+            current: processed,
             total: totalCards,
             phase: "Scanning cards",
           });
@@ -82,15 +118,26 @@ export function useScryfallTokens(): UseScryfallTokensResult {
               for (const part of tokenParts) {
                 allTokenParts.push({ part, sourceCard: card.name });
               }
+
+              newCardResults.push({
+                searchTerm: cardName,
+                cardName: card.name,
+                parts: tokenParts,
+              });
             }
           } catch {
             // Skip cards that fail to fetch
           }
 
           // Rate limit: 100ms between requests
-          if (i < uniqueNames.length - 1) {
+          if (i < missingCards.length - 1) {
             await delay(100);
           }
+        }
+
+        // Save newly fetched card results to cache
+        if (newCardResults.length > 0) {
+          saveCachedCardParts(newCardResults);
         }
 
         // Deduplicate tokens by ID
@@ -105,6 +152,8 @@ export function useScryfallTokens(): UseScryfallTokensResult {
 
         // Phase 2: Fetch full token details
         const tokenEntries = Array.from(tokenMap.values());
+        const tokenIds = tokenEntries.map((e) => e.part.id);
+
         setProgress({
           current: 0,
           total: tokenEntries.length,
@@ -113,10 +162,38 @@ export function useScryfallTokens(): UseScryfallTokensResult {
 
         const tokens: DiscoveredToken[] = [];
 
-        for (let i = 0; i < tokenEntries.length; i++) {
-          const { part, sourceCards } = tokenEntries[i];
+        // Check token-level cache first
+        const { cached: cachedTokens, missing: missingTokenIds } =
+          loadCachedTokenCards(tokenIds);
+
+        // Build DiscoveredToken objects from cached token cards
+        let tokenProcessed = 0;
+        for (const entry of tokenEntries) {
+          const cachedToken = cachedTokens.get(entry.part.id);
+          if (cachedToken) {
+            tokenProcessed++;
+            setProgress({
+              current: tokenProcessed,
+              total: tokenEntries.length,
+              phase: "Fetching tokens",
+            });
+            tokens.push(buildDiscoveredToken(cachedToken, entry.sourceCards));
+          }
+        }
+
+        // Build a set for quick lookup of missing IDs
+        const missingIdSet = new Set(missingTokenIds);
+
+        // Fetch only missing tokens from API
+        const newTokenResults: { id: string; card: ScryfallTokenCard }[] = [];
+
+        for (const entry of tokenEntries) {
+          if (!missingIdSet.has(entry.part.id)) continue;
+
+          const { part, sourceCards } = entry;
+          tokenProcessed++;
           setProgress({
-            current: i + 1,
+            current: tokenProcessed,
             total: tokenEntries.length,
             phase: "Fetching tokens",
           });
@@ -127,15 +204,21 @@ export function useScryfallTokens(): UseScryfallTokensResult {
             if (response.ok) {
               const tokenCard = (await response.json()) as ScryfallTokenCard;
               tokens.push(buildDiscoveredToken(tokenCard, sourceCards));
+              newTokenResults.push({ id: part.id, card: tokenCard });
             }
           } catch {
             // Skip tokens that fail to fetch
           }
 
           // Rate limit
-          if (i < tokenEntries.length - 1) {
+          if (tokenProcessed < tokenEntries.length) {
             await delay(100);
           }
+        }
+
+        // Save newly fetched token cards to cache
+        if (newTokenResults.length > 0) {
+          saveCachedTokenCards(newTokenResults);
         }
 
         setDiscoveredTokens(tokens);
