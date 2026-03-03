@@ -8,6 +8,7 @@ import { ManaCostFilter } from "./components/ManaCostFilter";
 import { CardTypeFilter } from "./components/CardTypeFilter";
 import { CardGrid } from "./components/CardGrid";
 import { ImportModal } from "./components/ImportModal";
+import { DeckPicker } from "./components/DeckPicker";
 import { TypeSearchField } from "./components/TypeSearchField";
 import { filterCards } from "./utils/cardFilters";
 import { ParsedDecklist } from "./utils/decklistParser";
@@ -143,8 +144,6 @@ export default function TutorHelperPage() {
     );
   }
 
-  const activeDeck = getActiveDeck();
-
   return (
     <div className="min-h-screen bg-[#1a1a1a] p-2 sm:p-4">
       <div className="max-w-7xl mx-auto">
@@ -162,35 +161,17 @@ export default function TutorHelperPage() {
 
         {/* Filters */}
         <div className="bg-[#222222] border border-[#333333] p-3 sm:p-6 mb-3 sm:mb-6 relative">
-          {/* Deck selector and Import Button - Absolutely positioned top right */}
-          <div className="absolute top-2 right-2 sm:top-4 sm:right-4 flex items-center gap-2">
-            {activeDeck && (
-              <div className="hidden sm:block text-sm text-[#cccccc] px-3 py-1.5 bg-[#2a2a2a] border border-[#404040]">
-                {activeDeck.name}
-              </div>
-            )}
-            <button
-              onClick={() => setShowImport(!showImport)}
-              className="p-1.5 bg-[#4ade80] text-black hover:bg-[#22c55e] transition-colors"
-              title={showImport ? "Hide Decks" : "Manage Decks"}
-            >
-              <svg
-                className="w-3 h-3"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 4v16m8-8H4"
-                />
-              </svg>
-            </button>
+          {/* Deck selector - Absolutely positioned top right */}
+          <div className="absolute top-2 right-2 sm:top-4 sm:right-4">
+            <DeckPicker
+              decks={decks}
+              activeDeckId={activeDeckId}
+              onSelectDeck={handleSelectDeck}
+              onManageDecks={() => setShowImport(true)}
+            />
           </div>
 
-          <div className="mb-2 sm:mb-4 pr-12">
+          <div className="mb-2 sm:mb-4 pr-24">
             <div className="flex gap-1 sm:gap-2 flex-wrap">
               <ManaCostFilter
                 selectedCosts={filters.manaCosts}
