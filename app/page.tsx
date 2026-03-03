@@ -19,6 +19,12 @@ const projects = [
     href: "/tutor-helper",
   },
   {
+    title: "MTG Token Helper",
+    description:
+      "Import a deck, discover all tokens it can produce via Scryfall, and track them on the battlefield with tap/untap, counters, splitting, and temporary buffs.",
+    href: "/token-helper",
+  },
+  {
     title: "FloatWise",
     description:
       "NOAA weather tracker for multiple locations. View detailed hourly forecasts from 10am-7pm, track temperature and wind conditions, and manage your favorite float trip destinations.",
