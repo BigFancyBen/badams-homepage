@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useLayoutEffect } from "react";
 import { TokenStack } from "../types";
 
 interface TokenCardProps {
@@ -102,6 +102,8 @@ export function TokenCard({
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [cardWidth, setCardWidth] = useState<number | null>(null);
 
   const hasPT = basePower !== null && baseToughness !== null;
   const buffAmount = stack.permanentCounters + stack.temporaryCounters;
@@ -135,22 +137,53 @@ export function TokenCard({
     };
   }, [menuOpen]);
 
+  // Measure column width (only when untapped, so we get single-column width)
+  useLayoutEffect(() => {
+    if (!stack.isTapped && wrapperRef.current) {
+      setCardWidth(wrapperRef.current.offsetWidth);
+    }
+  }, [stack.isTapped]);
+
+  useEffect(() => {
+    if (stack.isTapped) return;
+    const el = wrapperRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setCardWidth(Math.round(entry.contentBoxSize[0].inlineSize));
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [stack.isTapped]);
+
+  const wrapperHeight = cardWidth
+    ? stack.isTapped
+      ? cardWidth
+      : cardWidth * (680 / 488)
+    : undefined;
+
   return (
     // Outer wrapper: controls space reservation, never rotates
     <div
-      className="relative transition-all duration-200"
+      ref={wrapperRef}
+      className={`relative ${stack.isTapped ? "col-span-2" : ""}`}
       style={{
-        aspectRatio: stack.isTapped ? "680/488" : "488/680",
+        height: wrapperHeight != null ? `${wrapperHeight}px` : undefined,
+        aspectRatio: cardWidth == null ? "488/680" : undefined,
+        transition: "height 200ms ease",
       }}
     >
       {/* Inner card: rotates when tapped */}
       <div
-        className="absolute inset-0 origin-center transition-transform duration-200 cursor-pointer"
-        style={
-          stack.isTapped
-            ? { transform: "rotate(90deg) scale(0.718)" }
-            : undefined
-        }
+        className="absolute transition-transform duration-200 cursor-pointer"
+        style={{
+          width: cardWidth != null ? `${cardWidth}px` : "100%",
+          aspectRatio: "488/680",
+          top: "50%",
+          left: "50%",
+          transform: `translate(-50%, -50%)${stack.isTapped ? " rotate(90deg)" : ""}`,
+        }}
         onClick={onToggleTap}
       >
         {/* Card image */}
@@ -233,6 +266,28 @@ export function TokenCard({
           <line x1="3" y1="18" x2="21" y2="18" />
         </svg>
       </button>
+
+      {/* +/- count buttons (bottom-left, on outer wrapper so they never rotate) */}
+      <div className="absolute bottom-1.5 left-1.5 z-10 flex flex-col gap-1">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onIncrementCount();
+          }}
+          className="w-8 h-8 flex items-center justify-center bg-black/60 text-white hover:bg-black/80 transition-colors text-lg font-bold"
+        >
+          +
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onDecrementCount();
+          }}
+          className="w-8 h-8 flex items-center justify-center bg-black/60 text-white hover:bg-black/80 transition-colors text-lg font-bold"
+        >
+          -
+        </button>
+      </div>
 
       {/* Menu popover */}
       {menuOpen && (
