@@ -43,6 +43,7 @@ export default function TokenHelperPage() {
     clearTemporaryCounters,
     hasTemporaryCounters,
     addPermanentCounterAll,
+    removePermanentCounterAll,
     addTemporaryCounterAll,
     hasPTTokens,
     untapAll,
@@ -124,9 +125,9 @@ export default function TokenHelperPage() {
   const hasTokens = activeTokens.length > 0;
 
   return (
-    <div className="min-h-screen bg-[#1a1a1a] pb-16">
+    <div className="min-h-screen bg-[#1a1a1a] pb-16 max-lg:landscape:pb-0">
       {/* Header */}
-      <div className="bg-[#222222] border-b border-[#333333] px-2 sm:px-4 py-1.5 sm:py-3">
+      <div className="bg-[#222222] border-b border-[#333333] px-2 sm:px-4 py-1.5 sm:py-3 max-lg:landscape:py-0.5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 sm:gap-3">
             <h1 className="text-base sm:text-lg font-bold text-[#e5e5e5]">Token Helper</h1>
@@ -158,6 +159,16 @@ export default function TokenHelperPage() {
               </button>
             )}
 
+            {/* -1/-1 All */}
+            {hasTokens && hasPTTokens && (
+              <button
+                onClick={removePermanentCounterAll}
+                className="px-2 py-1 text-xs sm:px-3 sm:py-1.5 sm:text-sm border border-[#ef4444]/40 text-[#ef4444] font-medium hover:bg-[#ef4444]/20 transition-colors"
+              >
+                -1/-1 All
+              </button>
+            )}
+
             {/* Buff All */}
             {hasTokens && hasPTTokens && (
               <button
@@ -181,23 +192,26 @@ export default function TokenHelperPage() {
               </button>
             )}
 
-            {/* Import */}
+            {/* Menu */}
             <button
               onClick={() => setShowImport(true)}
-              className="px-2 py-1 text-xs sm:px-3 sm:py-1.5 sm:text-sm border border-[#404040] text-[#cccccc] hover:bg-[#2a2a2a] transition-colors"
+              className="w-8 h-8 flex items-center justify-center text-[#cccccc] hover:bg-[#2a2a2a] transition-colors"
             >
-              Import
-            </button>
-
-            {/* Reset */}
-            {(hasDeck || hasTokens) && (
-              <button
-                onClick={handleReset}
-                className="px-2 py-1 text-xs sm:px-3 sm:py-1.5 sm:text-sm border border-[#991b1b] text-red-400 hover:bg-[#991b1b]/20 transition-colors"
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
               >
-                Reset
-              </button>
-            )}
+                <line x1="3" y1="6" x2="21" y2="6" />
+                <line x1="3" y1="12" x2="21" y2="12" />
+                <line x1="3" y1="18" x2="21" y2="18" />
+              </svg>
+            </button>
           </div>
         </div>
       </div>
@@ -236,7 +250,7 @@ export default function TokenHelperPage() {
       )}
 
       {/* Main Content */}
-      <div className="px-1 pt-1 sm:px-4 sm:pt-4">
+      <div className="px-1 pt-1 sm:px-4 sm:pt-4 max-lg:landscape:pt-0.5 max-lg:landscape:px-0.5">
         {!hasDeck && !hasTokens && !loading ? (
           /* State A: Empty - show import prompt */
           <div className="text-center py-16">
@@ -292,6 +306,7 @@ export default function TokenHelperPage() {
         onClose={() => setShowImport(false)}
         onImport={handleImport}
         loading={loading}
+        onReset={hasDeck || hasTokens ? handleReset : undefined}
       />
 
       <TokenPickerModal

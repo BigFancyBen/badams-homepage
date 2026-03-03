@@ -195,7 +195,7 @@ export function TokenCard({
             alt={name}
             fill
             className="object-cover"
-            sizes="(max-width: 640px) 33vw, (max-width: 768px) 25vw, 20vw"
+            sizes="(max-width: 640px) 33vw, (max-width: 768px) 25vw, (orientation: landscape) 14vw, 20vw"
           />
 
           {/* Tapped dark overlay */}

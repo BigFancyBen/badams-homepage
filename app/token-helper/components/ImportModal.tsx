@@ -8,6 +8,7 @@ interface ImportModalProps {
   onClose: () => void;
   onImport: (deckName: string, cardNames: string[], originalInput: string, sourceUrl?: string) => void;
   loading?: boolean;
+  onReset?: () => void;
 }
 
 export function ImportModal({
@@ -15,6 +16,7 @@ export function ImportModal({
   onClose,
   onImport,
   loading,
+  onReset,
 }: ImportModalProps) {
   // Escape key handler
   useEffect(() => {
@@ -48,7 +50,7 @@ export function ImportModal({
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 bg-[#1a1a1a] border-b border-[#333333]">
           <h2 className="text-lg font-semibold text-[#e5e5e5]">
-            Import Deck
+            Menu
           </h2>
           <button
             onClick={onClose}
@@ -74,6 +76,21 @@ export function ImportModal({
         <div className="p-4">
           <DeckImportForm onImport={onImport} loading={loading} />
         </div>
+
+        {/* Reset */}
+        {onReset && (
+          <div className="px-4 pb-4">
+            <button
+              onClick={() => {
+                onReset();
+                onClose();
+              }}
+              className="w-full py-2 text-sm border border-[#991b1b] text-red-400 hover:bg-[#991b1b]/20 transition-colors font-medium"
+            >
+              Reset All
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
