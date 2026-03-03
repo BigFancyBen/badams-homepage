@@ -127,7 +127,7 @@ export default function TokenHelperPage() {
     <div className="min-h-screen bg-[#1a1a1a] pb-16">
       {/* Header */}
       <div className="bg-[#222222] border-b border-[#333333] px-2 sm:px-4 py-1.5 sm:py-3">
-        <div className="sm:max-w-7xl sm:mx-auto flex items-center justify-between">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 sm:gap-3">
             <h1 className="text-base sm:text-lg font-bold text-[#e5e5e5]">Token Helper</h1>
             {deckState && (
@@ -205,7 +205,7 @@ export default function TokenHelperPage() {
       {/* Progress Bar */}
       {loading && (
         <div className="bg-[#222222] border-b border-[#333333] px-4 py-2">
-          <div className="max-w-7xl mx-auto">
+          <div>
             <div className="flex items-center gap-3">
               <div className="flex-1 bg-[#333333] h-2">
                 <div
@@ -229,14 +229,14 @@ export default function TokenHelperPage() {
       {/* Error */}
       {error && (
         <div className="bg-[#991b1b]/20 border-b border-[#991b1b] px-4 py-2">
-          <div className="max-w-7xl mx-auto text-sm text-red-400">
+          <div className="text-sm text-red-400">
             {error}
           </div>
         </div>
       )}
 
       {/* Main Content */}
-      <div className="px-1 pt-1 sm:px-4 sm:pt-4 sm:max-w-7xl sm:mx-auto">
+      <div className="px-1 pt-1 sm:px-4 sm:pt-4">
         {!hasDeck && !hasTokens && !loading ? (
           /* State A: Empty - show import prompt */
           <div className="text-center py-16">

@@ -159,16 +159,9 @@ export function TokenCard({
     return () => observer.disconnect();
   }, [stack.isTapped]);
 
-  // When tapped, scale the card down so the rotated bounding box fits in one column
-  const tappedScale = 488 / 680;
-  const innerWidth = cardWidth
-    ? stack.isTapped
-      ? cardWidth * tappedScale
-      : cardWidth
-    : undefined;
   const wrapperHeight = cardWidth
     ? stack.isTapped
-      ? cardWidth * tappedScale
+      ? cardWidth
       : cardWidth * (680 / 488)
     : undefined;
 
@@ -176,7 +169,7 @@ export function TokenCard({
     // Outer wrapper: controls space reservation, never rotates
     <div
       ref={wrapperRef}
-      className="relative"
+      className={`relative col-span-2 ${stack.isTapped ? "col-span-3" : ""}`}
       style={{
         height: wrapperHeight != null ? `${wrapperHeight}px` : undefined,
         aspectRatio: cardWidth == null ? "488/680" : undefined,

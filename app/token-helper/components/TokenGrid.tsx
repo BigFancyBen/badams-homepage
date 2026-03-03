@@ -68,7 +68,7 @@ export function TokenGrid({
   );
 
   return (
-    <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-1 items-start">
+    <div className="grid grid-cols-6 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-1 items-start">
       {allStacks.map(({ stack, token, canMerge }) => (
         <TokenCard
           key={stack.id}
