@@ -111,8 +111,6 @@ export function TokenCard({
 
   const hasPT = basePower !== null && baseToughness !== null;
   const buffAmount = stack.permanentCounters + stack.temporaryCounters;
-  const isBuffed =
-    hasPT && (stack.permanentCounters > 0 || stack.temporaryCounters > 0);
 
   // Close menu on click outside or Escape
   useEffect(() => {
@@ -161,9 +159,16 @@ export function TokenCard({
     return () => observer.disconnect();
   }, [stack.isTapped]);
 
+  // When tapped, scale the card down so the rotated bounding box fits in one column
+  const tappedScale = 488 / 680;
+  const innerWidth = cardWidth
+    ? stack.isTapped
+      ? cardWidth * tappedScale
+      : cardWidth
+    : undefined;
   const wrapperHeight = cardWidth
     ? stack.isTapped
-      ? cardWidth
+      ? cardWidth * tappedScale
       : cardWidth * (680 / 488)
     : undefined;
 
@@ -171,7 +176,7 @@ export function TokenCard({
     // Outer wrapper: controls space reservation, never rotates
     <div
       ref={wrapperRef}
-      className={`relative ${stack.isTapped ? "col-span-2" : ""}`}
+      className="relative"
       style={{
         height: wrapperHeight != null ? `${wrapperHeight}px` : undefined,
         aspectRatio: cardWidth == null ? "488/680" : undefined,
@@ -225,21 +230,17 @@ export function TokenCard({
             </div>
           )}
 
-          {/* P/T badge (bottom-center) */}
-          {hasPT && (
+          {/* P/T badge (bottom-center) — only shown when buffed */}
+          {hasPT && buffAmount > 0 && (
             <div
               className={`absolute bottom-1.5 left-1/2 -translate-x-1/2 pointer-events-none ${
                 stack.isTapped ? "-rotate-90" : ""
               }`}
             >
               <div
-                className={`bg-white border-2 border-black px-1.5 py-0 text-xs sm:text-sm font-bold ${
-                  isBuffed ? "text-green-600" : "text-black"
-                }`}
+                className="bg-white border-2 border-black px-1.5 py-0 text-xs sm:text-sm font-bold text-green-600"
               >
-                {buffAmount > 0
-                  ? `+${buffAmount}/+${buffAmount}`
-                  : "+0/+0"}
+                {`+${buffAmount}/+${buffAmount}`}
               </div>
             </div>
           )}
