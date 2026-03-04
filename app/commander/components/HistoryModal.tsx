@@ -23,7 +23,7 @@ export function HistoryModal({
 
   return (
     <div
-      className="absolute inset-0 bg-[#1a0f1c]/70 z-[35] flex flex-col"
+      className="absolute inset-0 bg-[#1a0f1c]/70 z-35 flex flex-col"
       onClick={onClose}
     >
       <div

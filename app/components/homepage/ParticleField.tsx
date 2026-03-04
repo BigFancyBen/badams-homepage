@@ -42,7 +42,7 @@ export function ParticleField({ particleCount = 40 }: ParticleFieldProps) {
 
   return (
     <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
-      <div className="absolute inset-0 bg-gradient-to-b from-purple-950/10 via-transparent to-amber-950/5" />
+      <div className="absolute inset-0 bg-linear-to-b from-purple-950/10 via-transparent to-amber-950/5" />
 
       {visibleParticles.map((particle) => (
         <motion.div

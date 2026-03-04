@@ -315,7 +315,7 @@ export function AddLocationModal({
                               value={editingName}
                               onChange={(e) => setEditingName(e.target.value)}
                               onKeyDown={(e) => handleEditKeyDown(e, location.id)}
-                              className="w-full px-2 py-1 border border-blue-500 dark:border-blue-400 bg-white dark:bg-gray-600 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm min-h-[36px]"
+                              className="w-full px-2 py-1 border border-blue-500 dark:border-blue-400 bg-white dark:bg-gray-600 text-gray-900 dark:text-gray-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-sm min-h-[36px]"
                               placeholder="Location name"
                               autoFocus
                             />
@@ -325,14 +325,14 @@ export function AddLocationModal({
                               value={editingSubtitle}
                               onChange={(e) => setEditingSubtitle(e.target.value)}
                               onKeyDown={(e) => handleEditKeyDown(e, location.id)}
-                              className="w-full px-2 py-1 border border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-600 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm min-h-[36px]"
+                              className="w-full px-2 py-1 border border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-600 text-gray-900 dark:text-gray-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-sm min-h-[36px]"
                               placeholder="Subtitle / Mile Marker (optional)"
                             />
                             {/* Edit Preferred Wind */}
                             <select
                               value={editingWind}
                               onChange={(e) => setEditingWind(e.target.value)}
-                              className="w-full px-2 py-1 border border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-600 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm min-h-[36px]"
+                              className="w-full px-2 py-1 border border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-600 text-gray-900 dark:text-gray-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-sm min-h-[36px]"
                             >
                               <option value="">No preferred wind</option>
                               {WIND_DIRECTIONS.map((dir) => (
@@ -432,7 +432,7 @@ export function AddLocationModal({
                     onKeyDown={handleCityKeyDown}
                     onFocus={() => setSuggestionsOpen(true)}
                     placeholder="e.g., Harrison, Arkansas"
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[44px]"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500 min-h-[44px]"
                     disabled={isSubmitting}
                     autoComplete="off"
                   />
@@ -451,7 +451,7 @@ export function AddLocationModal({
                         key={index}
                         type="button"
                         onClick={() => handleSelectAutocomplete(suggestion)}
-                        className={`w-full text-left px-3 py-2 border-b border-gray-100 dark:border-gray-600 last:border-b-0 focus:outline-none text-gray-900 dark:text-gray-100 min-h-[44px] ${
+                        className={`w-full text-left px-3 py-2 border-b border-gray-100 dark:border-gray-600 last:border-b-0 focus:outline-hidden text-gray-900 dark:text-gray-100 min-h-[44px] ${
                           index === highlightedIndex
                             ? "bg-blue-50 dark:bg-blue-900"
                             : "hover:bg-gray-50 dark:hover:bg-gray-600"
@@ -499,7 +499,7 @@ export function AddLocationModal({
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="e.g., Buffalo National River"
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[44px]"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500 min-h-[44px]"
                   disabled={isSubmitting}
                 />
               </div>
@@ -527,7 +527,7 @@ export function AddLocationModal({
                   value={subtitle}
                   onChange={(e) => setSubtitle(e.target.value)}
                   placeholder="e.g., MM 2.4"
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[44px]"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500 min-h-[44px]"
                   disabled={isSubmitting}
                 />
               </div>
@@ -547,7 +547,7 @@ export function AddLocationModal({
                   id="preferredWind"
                   value={preferredWind}
                   onChange={(e) => setPreferredWind(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[44px]"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500 min-h-[44px]"
                   disabled={isSubmitting}
                 >
                   <option value="">None</option>
@@ -575,7 +575,7 @@ export function AddLocationModal({
                     value={lat}
                     onChange={(e) => setLat(e.target.value)}
                     placeholder="35.1234"
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[44px]"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500 min-h-[44px]"
                     disabled={isSubmitting}
                   />
                 </div>
@@ -595,7 +595,7 @@ export function AddLocationModal({
                     value={lon}
                     onChange={(e) => setLon(e.target.value)}
                     placeholder="-93.5678"
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[44px]"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500 min-h-[44px]"
                     disabled={isSubmitting}
                   />
                 </div>

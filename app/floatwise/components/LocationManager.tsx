@@ -83,7 +83,7 @@ export function LocationManager({
               </svg>
             </button>
             {showCopiedMessage && (
-              <div className="absolute top-1/2 right-full mr-2 -translate-y-1/2 px-2 py-1 bg-gray-800 dark:bg-gray-700 text-white text-xs rounded whitespace-nowrap z-50">
+              <div className="absolute top-1/2 right-full mr-2 -translate-y-1/2 px-2 py-1 bg-gray-800 dark:bg-gray-700 text-white text-xs rounded-sm whitespace-nowrap z-50">
                 Link copied!
               </div>
             )}

@@ -26,13 +26,13 @@ export default function CommanderError({
         <div className="space-y-3">
           <button
             onClick={reset}
-            className="w-full bg-[#a9e5bb] hover:bg-[#89d4a0] text-black font-bold py-3 px-6 rounded transition-all duration-200"
+            className="w-full bg-[#a9e5bb] hover:bg-[#89d4a0] text-black font-bold py-3 px-6 rounded-sm transition-all duration-200"
           >
             Try Again
           </button>
           <button
             onClick={() => window.location.href = "/"}
-            className="w-full bg-[#614a71] hover:bg-[#6e5580] text-[#e8e0a0] font-bold py-3 px-6 rounded transition-all duration-200"
+            className="w-full bg-[#614a71] hover:bg-[#6e5580] text-[#e8e0a0] font-bold py-3 px-6 rounded-sm transition-all duration-200"
           >
             Go Home
           </button>

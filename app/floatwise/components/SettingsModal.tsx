@@ -227,7 +227,7 @@ export function SettingsModal({
                   onChange={(e) =>
                     setTempThreshold(parseInt(e.target.value) || 0)
                   }
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[44px]"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500 min-h-[44px]"
                 />
               </div>
 
@@ -250,7 +250,7 @@ export function SettingsModal({
                   onChange={(e) =>
                     setPrecipThreshold(parseInt(e.target.value) || 0)
                   }
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[44px]"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500 min-h-[44px]"
                 />
               </div>
 
@@ -273,7 +273,7 @@ export function SettingsModal({
                   onChange={(e) =>
                     setWindThreshold(parseInt(e.target.value) || 0)
                   }
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[44px]"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500 min-h-[44px]"
                 />
               </div>
 
@@ -338,7 +338,7 @@ export function SettingsModal({
                   onChange={(e) => setCsvText(e.target.value)}
                   placeholder="Buffalo Point, MM 2.4, 35.994, -92.856"
                   rows={5}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-mono"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-sm font-mono"
                 />
               </div>
 

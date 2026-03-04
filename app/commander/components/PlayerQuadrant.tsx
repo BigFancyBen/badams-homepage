@@ -242,7 +242,7 @@ export function PlayerQuadrant({
               <div className={`font-bold text-[#fcf6b1] select-none tracking-tight leading-none ${isMobile ? "text-7xl" : "text-8xl"}`} data-testid={`life-total-${playerIndex}`}>
                 {player.life}
               </div>
-              <div className={`absolute inset-0 font-bold text-[#1d6637] select-none tracking-tight leading-none opacity-15 blur-sm ${isMobile ? "text-7xl" : "text-8xl"}`}>
+              <div className={`absolute inset-0 font-bold text-[#1d6637] select-none tracking-tight leading-none opacity-15 blur-xs ${isMobile ? "text-7xl" : "text-8xl"}`}>
                 {player.life}
               </div>
             </div>
@@ -251,7 +251,7 @@ export function PlayerQuadrant({
           {/* Life Control Buttons - flex-1 to fill available space */}
           {!readOnly && (
             <div className={`flex-1 flex flex-col w-[96%] mx-auto min-h-0 ${isMobile ? "gap-1 py-1" : "gap-2 py-2"}`}>
-              <div className={`grid grid-cols-4 flex-[3] min-h-0 ${isMobile ? "gap-1" : "gap-2"}`}>
+              <div className={`grid grid-cols-4 flex-3 min-h-0 ${isMobile ? "gap-1" : "gap-2"}`}>
                 <button
                   onClick={() => onUpdateLife(playerIndex, -5)}
                   className={`bg-[#9a0f08] hover:bg-[#c0140b] active:bg-[#7a0c06] text-white font-bold transition-all duration-150 touch-manipulation flex items-center justify-center ${isMobile ? "text-xl" : "text-2xl"}`}
@@ -343,7 +343,7 @@ export function PlayerQuadrant({
                       <div className={`flex justify-center items-stretch ${isMobile ? "flex-col gap-1" : "gap-1"}`}>
                         <button
                           onClick={() => onUpdateCommanderDamage(playerIndex, i, 1)}
-                          className={`bg-[#1d6637] hover:bg-[#27874a] active:bg-[#17522c] text-white text-xs font-bold transition-all duration-150 flex items-center justify-center flex-shrink-0 touch-manipulation ${isMobile ? "w-full h-6" : "w-8 h-8"}`}
+                          className={`bg-[#1d6637] hover:bg-[#27874a] active:bg-[#17522c] text-white text-xs font-bold transition-all duration-150 flex items-center justify-center shrink-0 touch-manipulation ${isMobile ? "w-full h-6" : "w-8 h-8"}`}
                         >
                           <svg width={isMobile ? "10" : "14"} height={isMobile ? "10" : "14"} viewBox="0 0 24 24" fill="currentColor">
                             <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
@@ -351,7 +351,7 @@ export function PlayerQuadrant({
                         </button>
                         <button
                           onClick={() => onUpdateCommanderDamage(playerIndex, i, -1)}
-                          className={`bg-[#9a0f08] hover:bg-[#c0140b] active:bg-[#7a0c06] text-white text-xs font-bold transition-all duration-150 flex items-center justify-center flex-shrink-0 touch-manipulation ${isMobile ? "w-full h-6" : "w-8 h-8"}`}
+                          className={`bg-[#9a0f08] hover:bg-[#c0140b] active:bg-[#7a0c06] text-white text-xs font-bold transition-all duration-150 flex items-center justify-center shrink-0 touch-manipulation ${isMobile ? "w-full h-6" : "w-8 h-8"}`}
                         >
                           <svg width={isMobile ? "10" : "14"} height={isMobile ? "10" : "14"} viewBox="0 0 24 24" fill="currentColor">
                             <path d="M19 13H5v-2h14v2z" />
@@ -369,7 +369,7 @@ export function PlayerQuadrant({
                       <svg
                         xmlns="http://www.w3.org/2000/svg"
                         viewBox="0 0 600 1059.7"
-                        className={`mr-1 flex-shrink-0 ${isMobile ? "w-2 h-2" : "w-3 h-3"}`}
+                        className={`mr-1 shrink-0 ${isMobile ? "w-2 h-2" : "w-3 h-3"}`}
                         fill="currentColor"
                       >
                         <path
@@ -389,7 +389,7 @@ export function PlayerQuadrant({
                     <div className={`flex justify-center items-stretch ${isMobile ? "flex-col gap-1" : "gap-1"}`}>
                       <button
                         onClick={() => onUpdatePoison(playerIndex, 1)}
-                        className={`bg-[#1d6637] hover:bg-[#27874a] active:bg-[#0f4420] text-white text-xs font-bold transition-all duration-150 flex items-center justify-center flex-shrink-0 touch-manipulation ${isMobile ? "w-full h-6" : "w-8 h-8"}`}
+                        className={`bg-[#1d6637] hover:bg-[#27874a] active:bg-[#0f4420] text-white text-xs font-bold transition-all duration-150 flex items-center justify-center shrink-0 touch-manipulation ${isMobile ? "w-full h-6" : "w-8 h-8"}`}
                       >
                         <svg width={isMobile ? "10" : "14"} height={isMobile ? "10" : "14"} viewBox="0 0 24 24" fill="currentColor">
                           <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
@@ -397,7 +397,7 @@ export function PlayerQuadrant({
                       </button>
                       <button
                         onClick={() => onUpdatePoison(playerIndex, -1)}
-                        className={`bg-[#9a0f08] hover:bg-[#c0140b] active:bg-[#7a0c06] text-white text-xs font-bold transition-all duration-150 flex items-center justify-center flex-shrink-0 touch-manipulation ${isMobile ? "w-full h-6" : "w-8 h-8"}`}
+                        className={`bg-[#9a0f08] hover:bg-[#c0140b] active:bg-[#7a0c06] text-white text-xs font-bold transition-all duration-150 flex items-center justify-center shrink-0 touch-manipulation ${isMobile ? "w-full h-6" : "w-8 h-8"}`}
                       >
                         <svg width={isMobile ? "10" : "14"} height={isMobile ? "10" : "14"} viewBox="0 0 24 24" fill="currentColor">
                           <path d="M19 13H5v-2h14v2z" />

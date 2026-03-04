@@ -16,7 +16,7 @@ export function Calendar({ selectedDate, onDateSelect }: CalendarProps) {
               key={date.toISOString()}
               onClick={() => onDateSelect(date)}
               className={`
-                flex-shrink-0 border-2 transition-colors min-w-[60px]
+                shrink-0 border-2 transition-colors min-w-[60px]
                 ${
                   isSelected
                     ? "border-blue-500 bg-blue-50 dark:bg-blue-900 text-blue-700 dark:text-blue-300"

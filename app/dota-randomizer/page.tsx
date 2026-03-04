@@ -155,7 +155,7 @@ export default function DotaRandomizerPage() {
   return (
     <div className="min-h-screen bg-[#0a0a0f] relative overflow-hidden">
       {/* Background gradient */}
-      <div className="absolute inset-0 bg-gradient-to-b from-purple-950/20 via-transparent to-amber-950/20 pointer-events-none" />
+      <div className="absolute inset-0 bg-linear-to-b from-purple-950/20 via-transparent to-amber-950/20 pointer-events-none" />
 
       {/* Header */}
       <header className="relative z-10 text-center pt-4 pb-2">
@@ -165,7 +165,7 @@ export default function DotaRandomizerPage() {
         >
           &larr; Back
         </Link>
-        <h1 className="text-3xl md:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-400 to-amber-400">
+        <h1 className="text-3xl md:text-4xl font-black text-transparent bg-clip-text bg-linear-to-r from-purple-400 via-pink-400 to-amber-400">
           Dota 2 Randomizer
         </h1>
       </header>
@@ -211,7 +211,7 @@ export default function DotaRandomizerPage() {
                 ${
                   spinState.isSpinning
                     ? "bg-gray-700 text-gray-400 cursor-not-allowed"
-                    : "bg-gradient-to-r from-purple-600 to-amber-600 hover:from-purple-500 hover:to-amber-500 text-white hover:scale-105 hover:shadow-lg hover:shadow-purple-500/30"
+                    : "bg-linear-to-r from-purple-600 to-amber-600 hover:from-purple-500 hover:to-amber-500 text-white hover:scale-105 hover:shadow-lg hover:shadow-purple-500/30"
                 }
               `}
             >
@@ -227,7 +227,7 @@ export default function DotaRandomizerPage() {
           ) : (
             <button
               onClick={handleReset}
-              className="px-12 py-4 text-xl font-black uppercase tracking-wider bg-gradient-to-r from-purple-600 to-amber-600 hover:from-purple-500 hover:to-amber-500 text-white transition-all duration-300 transform hover:scale-105"
+              className="px-12 py-4 text-xl font-black uppercase tracking-wider bg-linear-to-r from-purple-600 to-amber-600 hover:from-purple-500 hover:to-amber-500 text-white transition-all duration-300 transform hover:scale-105"
             >
               Spin Again
             </button>

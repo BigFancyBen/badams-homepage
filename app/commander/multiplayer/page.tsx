@@ -230,7 +230,7 @@ function MultiplayerContent() {
             value={playerName}
             onChange={(e) => setPlayerName(e.target.value)}
             placeholder="Enter your name"
-            className="w-full bg-[#3a2942] text-[#fcf6b1] border border-[#543f63] px-4 py-3 focus:outline-none focus:border-[#7a6388] placeholder-[#7a6388]"
+            className="w-full bg-[#3a2942] text-[#fcf6b1] border border-[#543f63] px-4 py-3 focus:outline-hidden focus:border-[#7a6388] placeholder-[#7a6388]"
             maxLength={20}
             data-testid="player-name-input"
           />
@@ -264,7 +264,7 @@ function MultiplayerContent() {
             value={joinCode}
             onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
             placeholder="ENTER ROOM CODE"
-            className="w-full bg-[#3a2942] text-[#fcf6b1] border border-[#543f63] px-4 py-3 mb-2 focus:outline-none focus:border-[#7a6388] text-center font-mono text-lg tracking-widest placeholder-[#7a6388]"
+            className="w-full bg-[#3a2942] text-[#fcf6b1] border border-[#543f63] px-4 py-3 mb-2 focus:outline-hidden focus:border-[#7a6388] text-center font-mono text-lg tracking-widest placeholder-[#7a6388]"
             maxLength={6}
             data-testid="room-code-input"
           />

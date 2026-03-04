@@ -45,7 +45,7 @@ export function CardGrid({ cards, loading, cardQuantities = {} }: CardGridProps)
             className="hover:opacity-80 transition-opacity cursor-pointer"
             title={`${card.name} - ${card.type_line} (CMC: ${card.cmc})${quantity > 1 ? ` x${quantity}` : ""}`}
           >
-            <div className="aspect-[488/680] relative overflow-hidden">
+            <div className="aspect-488/680 relative overflow-hidden">
               <Image
                 src={getCardImage(card)}
                 alt={card.name}
@@ -54,7 +54,7 @@ export function CardGrid({ cards, loading, cardQuantities = {} }: CardGridProps)
                 sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, (max-width: 1280px) 20vw, 16vw"
               />
               {quantity > 1 && (
-                <div className="absolute top-1 right-1 bg-black bg-opacity-80 text-white text-xs font-bold px-1.5 py-0.5 min-w-[1.5rem] text-center border border-[#404040]">
+                <div className="absolute top-1 right-1 bg-black bg-opacity-80 text-white text-xs font-bold px-1.5 py-0.5 min-w-6 text-center border border-[#404040]">
                   x{quantity}
                 </div>
               )}

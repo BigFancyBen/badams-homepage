@@ -78,7 +78,7 @@ export default function ResultDisplay({ hero, item, show, onFanfare }: ResultDis
             <div className="absolute inset-0 bg-purple-500/30 blur-3xl animate-pulse" />
 
             {/* Hero card */}
-            <div className="relative bg-gradient-to-b from-purple-900/90 to-purple-950/90 border-2 border-purple-500 p-6 backdrop-blur-sm">
+            <div className="relative bg-linear-to-b from-purple-900/90 to-purple-950/90 border-2 border-purple-500 p-6 backdrop-blur-xs">
               <div className="text-center">
                 <div className="text-sm text-purple-300 uppercase tracking-widest mb-2">
                   Your Hero
@@ -92,7 +92,7 @@ export default function ResultDisplay({ hero, item, show, onFanfare }: ResultDis
                   />
                 </div>
                 <h3
-                  className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-300 via-white to-purple-300 animate-text-glow-purple"
+                  className="text-3xl font-black text-transparent bg-clip-text bg-linear-to-r from-purple-300 via-white to-purple-300 animate-text-glow-purple"
                 >
                   {hero.displayName}
                 </h3>
@@ -115,7 +115,7 @@ export default function ResultDisplay({ hero, item, show, onFanfare }: ResultDis
             <div className="absolute inset-0 bg-amber-500/30 blur-3xl animate-pulse" />
 
             {/* Item card */}
-            <div className="relative bg-gradient-to-b from-amber-900/90 to-amber-950/90 border-2 border-amber-500 p-6 backdrop-blur-sm">
+            <div className="relative bg-linear-to-b from-amber-900/90 to-amber-950/90 border-2 border-amber-500 p-6 backdrop-blur-xs">
               <div className="text-center">
                 <div className="text-sm text-amber-300 uppercase tracking-widest mb-2">
                   Your Item
@@ -129,7 +129,7 @@ export default function ResultDisplay({ hero, item, show, onFanfare }: ResultDis
                   />
                 </div>
                 <h3
-                  className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-white to-amber-300 animate-text-glow-amber"
+                  className="text-3xl font-black text-transparent bg-clip-text bg-linear-to-r from-amber-300 via-white to-amber-300 animate-text-glow-amber"
                 >
                   {item.displayName}
                 </h3>

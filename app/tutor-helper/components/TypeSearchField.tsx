@@ -659,7 +659,7 @@ export function TypeSearchField({
           onKeyDown={handleKeyDown}
           onFocus={() => setShowDropdown(true)}
           placeholder="Search for card types"
-          className="w-full px-3 py-2 bg-[#2a2a2a] text-[#e5e5e5] border border-[#404040] focus:border-[#4ade80] focus:ring-1 focus:ring-[#4ade80]/30 focus:outline-none transition-all duration-200 text-sm"
+          className="w-full px-3 py-2 bg-[#2a2a2a] text-[#e5e5e5] border border-[#404040] focus:border-[#4ade80] focus:ring-1 focus:ring-[#4ade80]/30 focus:outline-hidden transition-all duration-200 text-sm"
         />
 
         {/* Dropdown */}
