@@ -94,7 +94,7 @@ export function TokenPickerModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/60 backdrop-blur-xs"
         onClick={handleClose}
       />
 
@@ -147,7 +147,7 @@ export function TokenPickerModal({
                   placeholder="Search by token or card name..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="w-full min-h-[44px] pl-9 pr-8 py-2 bg-[#1a1a1a] border border-[#333333] text-[#e5e5e5] placeholder-[#6b7280] text-sm focus:border-[#4ade80] focus:ring-1 focus:ring-[#4ade80]/30 focus:outline-none transition-colors"
+                  className="w-full min-h-[44px] pl-9 pr-8 py-2 bg-[#1a1a1a] border border-[#333333] text-[#e5e5e5] placeholder-[#6b7280] text-sm focus:border-[#4ade80] focus:ring-1 focus:ring-[#4ade80]/30 focus:outline-hidden transition-colors"
                 />
                 {search && (
                   <button
@@ -203,7 +203,7 @@ export function TokenPickerModal({
                         : "border-[#333333] bg-[#1a1a1a] hover:border-[#404040]"
                     }`}
                   >
-                    <div className="relative aspect-[488/680] w-full">
+                    <div className="relative aspect-488/680 w-full">
                       <Image
                         src={token.imageUrl}
                         alt={token.name}

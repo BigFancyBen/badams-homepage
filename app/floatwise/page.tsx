@@ -108,7 +108,7 @@ export default function FloatWisePage() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-800">
       <div className="max-w-7xl mx-auto">
         {/* Main Content */}
-        <div className="bg-white dark:bg-gray-800 shadow-sm  p-1 sm:p-3">
+        <div className="bg-white dark:bg-gray-800 shadow-xs  p-1 sm:p-3">
           <div className="flex items-center justify-between mb-2 w-full px-2 sm:px-0">
             <h1 className="text-2xl sm:text-4xl font-bold text-gray-900 dark:text-gray-100 mb-1 sm:mb-2">
               FloatWise

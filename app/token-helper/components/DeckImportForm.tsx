@@ -66,7 +66,7 @@ export function DeckImportForm({ onImport, loading }: DeckImportFormProps) {
             value={urlInput}
             onChange={(e) => setUrlInput(e.target.value)}
             placeholder="https://archidekt.com/decks/..."
-            className="flex-1 px-3 py-2 bg-[#1a1a1a] border border-[#404040] text-[#e5e5e5] text-sm placeholder-[#6b7280] focus:outline-none focus:border-[#4ade80]"
+            className="flex-1 px-3 py-2 bg-[#1a1a1a] border border-[#404040] text-[#e5e5e5] text-sm placeholder-[#6b7280] focus:outline-hidden focus:border-[#4ade80]"
             disabled={isDisabled}
             onKeyDown={(e) => {
               if (e.key === "Enter" && isArchidektUrl(urlInput)) {
@@ -101,7 +101,7 @@ export function DeckImportForm({ onImport, loading }: DeckImportFormProps) {
           onChange={(e) => setTextInput(e.target.value)}
           placeholder={"1 Sol Ring\n1 Avenger of Zendikar\n1 Smothering Tithe\n..."}
           rows={8}
-          className="w-full px-3 py-2 bg-[#1a1a1a] border border-[#404040] text-[#e5e5e5] text-sm placeholder-[#6b7280] focus:outline-none focus:border-[#4ade80] resize-y font-mono"
+          className="w-full px-3 py-2 bg-[#1a1a1a] border border-[#404040] text-[#e5e5e5] text-sm placeholder-[#6b7280] focus:outline-hidden focus:border-[#4ade80] resize-y font-mono"
           disabled={isDisabled}
         />
         <button

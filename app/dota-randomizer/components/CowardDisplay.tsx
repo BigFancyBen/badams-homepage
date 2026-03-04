@@ -79,13 +79,13 @@ export default function CowardDisplay({ show, onComplete }: CowardDisplayProps) 
 
         {/* Main COWARD text */}
         <div className="animate-coward-slam relative">
-          <h1 className="text-[8rem] md:text-[12rem] font-black text-transparent bg-clip-text bg-gradient-to-b from-red-400 via-red-600 to-red-900 animate-text-glow-coward tracking-tighter select-none">
+          <h1 className="text-[8rem] md:text-[12rem] font-black text-transparent bg-clip-text bg-linear-to-b from-red-400 via-red-600 to-red-900 animate-text-glow-coward tracking-tighter select-none">
             COWARD
           </h1>
 
           {/* Shadow text for depth */}
           <h1
-            className="absolute inset-0 text-[8rem] md:text-[12rem] font-black text-red-950/50 tracking-tighter select-none blur-sm -z-10"
+            className="absolute inset-0 text-[8rem] md:text-[12rem] font-black text-red-950/50 tracking-tighter select-none blur-xs -z-10"
             style={{ transform: "translate(8px, 8px)" }}
           >
             COWARD

@@ -34,7 +34,7 @@ function guessCardTypeFromName(name: string): string {
   }
   
   // Common artifact patterns
-  if (lowerName.includes('ring') || 
+  if (lowerName.includes('ring-3') || 
       lowerName.includes('sword') || 
       lowerName.includes('staff') || 
       lowerName.includes('orb') ||

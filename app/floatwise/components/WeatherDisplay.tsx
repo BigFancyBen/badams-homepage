@@ -242,7 +242,7 @@ export function WeatherDisplay({ locationWeather, preferences }: WeatherDisplayP
                       }`}
                     >
                       <div
-                        className="font-semibold mx-1 text-[8px] sm:text-[9px] leading-tight line-clamp-3 break-words"
+                        className="font-semibold mx-1 text-[8px] sm:text-[9px] leading-tight line-clamp-3 wrap-break-word"
                         title={
                           displayNames[locationData.location.id] ||
                           locationData.location.name
@@ -282,7 +282,7 @@ export function WeatherDisplay({ locationWeather, preferences }: WeatherDisplayP
                         >
                           {hourData ? (
                             <div className="ml-2 sm:mx-auto flex flex-row items-center justify-between sm:max-w-[65px] relative">
-                              <div className="flex flex-col items-start justify-center gap-[1px]">
+                              <div className="flex flex-col items-start justify-center gap-px">
                                 {/* Temperature */}
                                 <span className={`text-[10px] sm:text-[11px] font-medium leading-none ${getTemperatureColor(hourData.temperature, preferences.temperatureThreshold)}`}>
                                   {hourData.temperature}°

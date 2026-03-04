@@ -220,7 +220,7 @@ export function AnimatedCard({
             }}
           >
             {/* Folder icon */}
-            <div className="flex-shrink-0">
+            <div className="shrink-0">
               <svg width="16" height="14" viewBox="0 0 16 14" fill="none">
                 <path
                   d="M0 2V12C0 13.1 0.9 14 2 14H14C15.1 14 16 13.1 16 12V4C16 2.9 15.1 2 14 2H8L6 0H2C0.9 0 0 0.9 0 2Z"
@@ -236,7 +236,7 @@ export function AnimatedCard({
           </div>
 
           {/* Content area */}
-          <div className="p-4 relative flex flex-col flex-grow">
+          <div className="p-4 relative flex flex-col grow">
             <motion.div
               className="absolute inset-0 pointer-events-none will-change-opacity"
               style={{
@@ -245,7 +245,7 @@ export function AnimatedCard({
               }}
             />
 
-            <div className="flex-grow">
+            <div className="grow">
               <p className="text-gray-300 text-sm leading-relaxed">
                 {description}
               </p>

@@ -122,7 +122,7 @@ export function GameMenu({
                         e.target.value || `Player ${index + 1}`
                       )
                     }
-                    className="flex-1 bg-[#473455] text-[#e8e0a0] border border-[#614a71] focus:border-[#a9e5bb] focus:ring-1 focus:ring-[#a9e5bb]/30 focus:outline-none transition-all duration-200 px-3 py-2 text-sm font-medium"
+                    className="flex-1 bg-[#473455] text-[#e8e0a0] border border-[#614a71] focus:border-[#a9e5bb] focus:ring-1 focus:ring-[#a9e5bb]/30 focus:outline-hidden transition-all duration-200 px-3 py-2 text-sm font-medium"
                     placeholder={`Player ${index + 1}`}
                   />
                 </div>
