@@ -124,7 +124,7 @@ function getDisplayNames(locationWeather: LocationWeather[]): {
   return displayNames;
 }
 
-export function WeatherDisplay({ locationWeather, preferences }: WeatherDisplayProps) {
+export function WeatherDisplay({ locationWeather, preferences, loadedCount, totalCount }: WeatherDisplayProps) {
   if (locationWeather.length === 0) {
     return null;
   }
@@ -157,7 +157,7 @@ export function WeatherDisplay({ locationWeather, preferences }: WeatherDisplayP
           <div className="flex items-center justify-center py-8">
             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500 mr-3"></div>
             <span className="text-gray-600 dark:text-gray-300">
-              Loading weather data...
+              Loading weather data...{totalCount && totalCount > 1 ? ` (${loadedCount}/${totalCount} locations)` : ''}
             </span>
           </div>
         </div>

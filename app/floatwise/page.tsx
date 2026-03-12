@@ -34,7 +34,7 @@ export default function FloatWisePage() {
     renameLocation,
     isViewingSharedLink,
   } = useLocationStorage(urlLocations);
-  const { weatherData, fetchWeatherForLocations } = useWeatherData();
+  const { weatherData, loadedCount, totalCount, fetchWeatherForLocations } = useWeatherData();
   const { preferences, updatePreferences } = useUserPreferences();
 
   // Fetch weather data when locations or selected date changes
@@ -148,6 +148,8 @@ export default function FloatWisePage() {
               <WeatherDisplay
                 locationWeather={weatherData}
                 preferences={preferences}
+                loadedCount={loadedCount}
+                totalCount={totalCount}
               />
             </>
           )}

@@ -87,6 +87,8 @@ export interface LocationManagerProps {
 export interface WeatherDisplayProps {
   locationWeather: LocationWeather[];
   preferences: UserPreferences;
+  loadedCount?: number;
+  totalCount?: number;
 }
 
 export interface AddLocationModalProps {

@@ -153,26 +153,27 @@ export function getInitialDate(): Date {
 }
 
 /**
- * Generate next 10 days starting from today (or tomorrow if past 7pm)
+ * Generate next 7 days starting from today (or tomorrow if past 7pm)
  * Uses user's local timezone to determine the appropriate starting date
+ * Limited to 7 days because NOAA's forecastHourly API returns ~156 hours (~6.5 days)
  */
-export function getNext10Days(): Date[] {
+export function getNext7Days(): Date[] {
   const days: Date[] = [];
   const now = new Date();
   const currentHour = now.getHours();
-  
+
   // If it's past 7pm (19:00), start with tomorrow as the first day
   // since there's no useful weather data left for today
   const startOffset = currentHour >= 19 ? 1 : 0;
-  
-  for (let i = 0; i < 10; i++) {
+
+  for (let i = 0; i < 7; i++) {
     const date = new Date(now);
     date.setDate(now.getDate() + startOffset + i);
     // Set to start of day in user's timezone
     date.setHours(0, 0, 0, 0);
     days.push(date);
   }
-  
+
   return days;
 }
 
