@@ -1,4 +1,4 @@
-import { Location, NOAAResponse, UserPreferences, WeatherHour } from './types';
+import { Location, UserPreferences } from './types';
 
 // Default user preferences
 export const DEFAULT_PREFERENCES: UserPreferences = {
@@ -7,132 +7,10 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   windSpeedThreshold: 10,
 };
 
-// NOAA API base URL
-const NOAA_BASE_URL = 'https://api.weather.gov';
-
 /**
- * Validate if coordinates are within NOAA coverage area (roughly US and territories)
+ * Fetch weather data for a specific location and date using Open-Meteo
  */
-function isWithinNOAACoverage(lat: number, lon: number): boolean {
-  // Basic bounds for NOAA coverage (US and territories)
-  // Mainland US, Alaska, Hawaii, Puerto Rico, etc.
-  return (
-    (lat >= 24.0 && lat <= 71.5 && lon >= -179.0 && lon <= -66.0) || // Mainland US + Alaska
-    (lat >= 18.0 && lat <= 28.5 && lon >= -179.0 && lon <= -154.0) || // Hawaii
-    (lat >= 17.0 && lat <= 19.0 && lon >= -68.0 && lon <= -65.0)     // Puerto Rico/VI
-  );
-}
-
-/**
- * Get the NOAA grid point for a given lat/lon
- */
-export async function getNOAAGridPoint(lat: number, lon: number) {
-  // Check if coordinates are within NOAA coverage area
-  if (!isWithinNOAACoverage(lat, lon)) {
-    throw new Error(`Location is outside NOAA weather service coverage area. NOAA only provides weather data for US locations.`);
-  }
-
-  const response = await fetch(`${NOAA_BASE_URL}/points/${lat},${lon}`);
-  if (!response.ok) {
-    if (response.status === 404) {
-      throw new Error(`Weather data not available for this location. NOAA may not have coverage for this specific coordinate.`);
-    }
-    throw new Error(`Failed to get grid point: ${response.statusText}`);
-  }
-  return await response.json();
-}
-
-/**
- * Get the forecast URL from grid point data
- */
-export function getForecastUrl(gridPointData: { properties: { forecastHourly: string } }): string {
-  // Use hourly forecast instead of regular forecast for more detailed data
-  return gridPointData.properties.forecastHourly;
-}
-
-/**
- * Fetch weather forecast from NOAA API
- */
-export async function fetchNOAAWeather(lat: number, lon: number): Promise<NOAAResponse> {
-  try {
-    // First get the grid point
-    const gridPoint = await getNOAAGridPoint(lat, lon);
-    const forecastUrl = getForecastUrl(gridPoint);
-    
-    // Then get the forecast
-    const response = await fetch(forecastUrl);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch weather: ${response.statusText}`);
-    }
-    
-    return await response.json();
-  } catch (error) {
-    console.error('Error fetching NOAA weather:', error);
-    throw error;
-  }
-}
-
-/**
- * Parse NOAA forecast periods and extract hourly data for 10am-7pm
- * Converts NOAA times to user's local timezone for display
- */
-export function parseWeatherForTimeRange(
-  forecast: NOAAResponse, 
-  targetDate: Date
-): WeatherHour[] {
-  const hours: WeatherHour[] = [];
-  
-  // Format target date as YYYY-MM-DD in user's local timezone
-  const targetYear = targetDate.getFullYear();
-  const targetMonth = String(targetDate.getMonth() + 1).padStart(2, '0');
-  const targetDay = String(targetDate.getDate()).padStart(2, '0');
-  const targetDateStr = `${targetYear}-${targetMonth}-${targetDay}`;
-  
-  // Filter periods for the target date and time range (10am-7pm)
-  const relevantPeriods = forecast.properties.periods.filter(period => {
-    // Parse NOAA time to Date object (converts to user's local timezone)
-    const periodDate = new Date(period.startTime);
-    
-    // Get date components in user's local timezone
-    const periodYear = periodDate.getFullYear();
-    const periodMonth = String(periodDate.getMonth() + 1).padStart(2, '0');
-    const periodDay = String(periodDate.getDate()).padStart(2, '0');
-    const periodDateStr = `${periodYear}-${periodMonth}-${periodDay}`;
-    
-    // Get hour in user's local timezone
-    const periodHour = periodDate.getHours();
-    
-    // Check if same date and within time range (10am-7pm) in user's timezone
-    return periodDateStr === targetDateStr && periodHour >= 10 && periodHour <= 19;
-  });
-  
-  // Convert periods to our hourly format
-  relevantPeriods.forEach(period => {
-    // Parse to Date object to get time in user's local timezone
-    const periodDate = new Date(period.startTime);
-    const hour = periodDate.getHours();
-    
-    // Format time display
-    const hour12 = hour === 0 ? 12 : (hour > 12 ? hour - 12 : hour);
-    const ampm = hour >= 12 ? 'PM' : 'AM';
-    const time = `${hour12} ${ampm}`;
-    
-    hours.push({
-      time,
-      hour,
-      temperature: period.temperature,
-      windSpeed: period.windSpeed,
-      windDirection: period.windDirection,
-      precipChance: period.probabilityOfPrecipitation?.value ?? null,
-      shortForecast: period.shortForecast
-    });
-  });
-  
-  // Sort by hour
-  hours.sort((a, b) => a.hour - b.hour);
-  
-  return hours;
-}
+export { fetchOpenMeteoWeather as fetchWeatherForDate } from './sources/open-meteo';
 
 /**
  * Get the initial/first selectable date based on current time
@@ -153,11 +31,10 @@ export function getInitialDate(): Date {
 }
 
 /**
- * Generate next 7 days starting from today (or tomorrow if past 7pm)
+ * Generate next 10 days starting from today (or tomorrow if past 7pm)
  * Uses user's local timezone to determine the appropriate starting date
- * Limited to 7 days because NOAA's forecastHourly API returns ~156 hours (~6.5 days)
  */
-export function getNext7Days(): Date[] {
+export function getNextDays(): Date[] {
   const days: Date[] = [];
   const now = new Date();
   const currentHour = now.getHours();
@@ -166,7 +43,7 @@ export function getNext7Days(): Date[] {
   // since there's no useful weather data left for today
   const startOffset = currentHour >= 19 ? 1 : 0;
 
-  for (let i = 0; i < 7; i++) {
+  for (let i = 0; i < 10; i++) {
     const date = new Date(now);
     date.setDate(now.getDate() + startOffset + i);
     // Set to start of day in user's timezone

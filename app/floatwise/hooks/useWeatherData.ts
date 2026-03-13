@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { Location, LocationWeather, WeatherLoadingState } from '../types';
-import { fetchNOAAWeather, parseWeatherForTimeRange } from '../utils';
+import { fetchWeatherForDate } from '../utils';
 
 export function useWeatherData() {
   const [weatherData, setWeatherData] = useState<LocationWeather[]>([]);
@@ -10,8 +10,7 @@ export function useWeatherData() {
 
   const fetchWeatherForLocation = useCallback(async (location: Location, date: Date) => {
     try {
-      const response = await fetchNOAAWeather(location.lat, location.lon);
-      const hours = parseWeatherForTimeRange(response, date);
+      const hours = await fetchWeatherForDate(location.lat, location.lon, date);
       
       return {
         location,

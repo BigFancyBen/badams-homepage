@@ -1,8 +1,8 @@
 import { CalendarProps } from "../types";
-import { getNext7Days, formatDate, isSameDay } from "../utils";
+import { getNextDays, formatDate, isSameDay } from "../utils";
 
 export function Calendar({ selectedDate, onDateSelect }: CalendarProps) {
-  const days = getNext7Days();
+  const days = getNextDays();
 
   return (
     <div className="w-full mb-2">
