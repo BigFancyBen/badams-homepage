@@ -7,6 +7,7 @@ import Image from "next/image";
 interface Screenshot {
   src: string;
   label: string;
+  bg?: string;
 }
 
 interface PhoneCarouselProps {
@@ -90,8 +91,7 @@ export function PhoneCarousel({ screenshots }: PhoneCarouselProps) {
               width: "92.5%",
               height: "96.4%",
               borderRadius: "7.5%",
-              paddingTop: "32px",
-              background: "#1a1a1a",
+              background: screenshots[current].bg ?? "#1a1a1a",
             }}
             onClick={handleScreenClick}
           >
@@ -99,6 +99,7 @@ export function PhoneCarousel({ screenshots }: PhoneCarouselProps) {
               <motion.div
                 key={current}
                 className="absolute inset-0"
+                style={{ top: 20, bottom: 20 }}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
@@ -108,7 +109,7 @@ export function PhoneCarousel({ screenshots }: PhoneCarouselProps) {
                   src={screenshots[current].src}
                   alt={screenshots[current].label}
                   fill
-                  className="object-cover"
+                  className="object-contain"
                   sizes="280px"
                 />
               </motion.div>
