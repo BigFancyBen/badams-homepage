@@ -1,6 +1,6 @@
 # Claude Code Instructions
 
-Personal homepage with Next.js 16, React 19, TypeScript, and Tailwind CSS. Contains three main apps: MTG Commander life tracker, Magic card tutor helper, and FloatWise weather tracker.
+Personal homepage with Next.js 16, React 19, TypeScript, and Tailwind CSS. Requires Node >= 22. Contains multiple apps: MTG Commander life tracker, Magic card tutor helper, FloatWise weather tracker, Dota hero randomizer, and token helper.
 
 ## Quick Commands
 
@@ -10,13 +10,17 @@ npm run dev          # Start dev server with Turbopack (http://localhost:3000)
 npm run build        # Production build
 npm run lint         # ESLint check
 npm run type-check   # TypeScript check
+npm test             # Playwright e2e tests
+npm run test:ui      # Playwright interactive UI mode
+npm run test:headed  # Run tests in headed browser
+npm run test:debug   # Debug tests with Playwright inspector
 ```
 
 ## Pre-commit Validation
 
-Always run before committing:
+Husky pre-commit hook automatically runs:
 ```bash
-npm run lint && npm run type-check && npm run build
+npm run lint && npm run type-check
 ```
 
 ## Project Structure
@@ -26,13 +30,21 @@ app/
   page.tsx                    # Homepage
   layout.tsx                  # Root layout (fonts, metadata)
   globals.css                 # Global styles
+  components/homepage/        # Shared homepage components
+  hooks/                      # Shared hooks (useGyroscope, useMobileDevice, useReducedMotion)
+  resume/                     # Resume page
   commander/                  # MTG life tracker app
     page.tsx, components/, hooks/, types.ts
   tutor-helper/               # Card filtering app
     page.tsx, components/, hooks/, types/, utils/
   floatwise/                  # Weather tracking app
     page.tsx, components/, hooks/, types.ts, utils.ts
+  dota-randomizer/            # Dota hero randomizer app
+    page.tsx, components/, hooks/, types.ts
+  token-helper/               # Token helper app
+    page.tsx, components/, hooks/, types.ts, utils/
   api/ably/                   # Ably realtime API route
+e2e/                          # Playwright e2e tests
 ```
 
 ## Key Architectural Decisions
@@ -40,6 +52,7 @@ app/
 - **State persistence**: All apps use localStorage via custom hooks
 - **Styling**: Tailwind CSS, dark theme, no rounded corners
 - **Fonts**: Local Geist fonts via `geist` package (not Google Fonts)
+- **Animation**: `motion` library (Framer Motion) for page transitions and UI animations
 - **External APIs**: Scryfall (cards), NOAA (weather), OpenStreetMap (geocoding), Ably (realtime)
 - **Mobile-first**: Responsive design with specific mobile layouts
 

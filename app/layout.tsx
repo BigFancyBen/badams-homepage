@@ -4,12 +4,31 @@ import { GeistMono } from "geist/font/mono";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "badams-homepage",
-  description: "Personal homepage and project showcase featuring web development tools and utilities",
+  title: "benadams.dev",
+  description:
+    "Personal homepage and project showcase featuring web development tools and utilities",
   keywords: "web development, portfolio, tools, utilities",
   openGraph: {
+    title: "benadams.dev",
+    description:
+      "Personal homepage and project showcase featuring web development tools and utilities",
     type: "website",
-    siteName: "badams-homepage",
+    siteName: "benadams.dev",
+    images: [
+      {
+        url: "/og-homepage.png",
+        width: 1200,
+        height: 630,
+        alt: "benadams.dev project showcase",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "benadams.dev",
+    description:
+      "Personal homepage and project showcase featuring web development tools and utilities",
+    images: ["/og-homepage.png"],
   },
 };
 
