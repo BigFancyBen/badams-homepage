@@ -3,6 +3,7 @@
 import { motion } from "motion/react";
 import { CompactCard } from "./CompactCard";
 import { GroupShowcase } from "./GroupShowcase";
+import { TabletCarousel } from "./TabletCarousel";
 
 interface Project {
   title: string;
@@ -17,6 +18,7 @@ export interface ProjectGroup {
   accentColor: string;
   icon: React.ReactNode;
   projects: Project[];
+  screenshots?: { src: string; label: string; bg?: string }[];
 }
 
 interface ProjectSectionProps {
@@ -55,11 +57,15 @@ export function ProjectSection({ group, index }: ProjectSectionProps) {
       >
         {/* Showcase panel — 40% on desktop */}
         <div className="w-full md:w-[40%]">
-          <GroupShowcase
-            groupTitle={group.title}
-            accentColor={group.accentColor}
-            icon={group.icon}
-          />
+          {group.screenshots ? (
+            <TabletCarousel screenshots={group.screenshots} />
+          ) : (
+            <GroupShowcase
+              groupTitle={group.title}
+              accentColor={group.accentColor}
+              icon={group.icon}
+            />
+          )}
         </div>
 
         {/* Project cards — 60% on desktop */}

@@ -34,6 +34,11 @@ const projectGroups: ProjectGroup[] = [
         href: "/token-helper",
       },
     ],
+    screenshots: [
+      { src: "/magic/tutor-helper.png", label: "Tutor Helper — 3-drop enchantments" },
+      { src: "/magic/commander.png", label: "Commander — 4-player life tracker" },
+      { src: "/magic/token-helper.png", label: "Token Helper — battlefield tokens" },
+    ],
   },
   {
     title: "Gaming",

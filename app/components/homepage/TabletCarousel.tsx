@@ -10,13 +10,13 @@ interface Screenshot {
   bg?: string;
 }
 
-interface PhoneCarouselProps {
+interface TabletCarouselProps {
   screenshots: Screenshot[];
 }
 
 const AUTO_PLAY_INTERVAL = 2000;
 
-export function PhoneCarousel({ screenshots }: PhoneCarouselProps) {
+export function TabletCarousel({ screenshots }: TabletCarouselProps) {
   const [current, setCurrent] = useState(0);
   const [userClicked, setUserClicked] = useState(false);
 
@@ -57,7 +57,7 @@ export function PhoneCarousel({ screenshots }: PhoneCarouselProps) {
 
   return (
     <div className="flex flex-col items-center">
-      {/* Phone + arrows row */}
+      {/* Tablet + arrows row */}
       <div className="flex items-center gap-3">
         {/* Left arrow */}
         <button
@@ -70,14 +70,14 @@ export function PhoneCarousel({ screenshots }: PhoneCarouselProps) {
           </svg>
         </button>
 
-        {/* Phone frame with screenshot */}
-        <div className="relative w-[240px] sm:w-[280px]">
-          {/* Phone frame image */}
+        {/* Tablet frame with screenshot */}
+        <div className="relative w-full max-w-[480px]">
+          {/* Tablet frame image */}
           <Image
-            src="/radiance/phone-frame.svg"
+            src="/magic/tablet-frame.svg"
             alt=""
-            width={320}
-            height={660}
+            width={660}
+            height={440}
             className="relative z-10 pointer-events-none w-full h-auto select-none"
             priority
           />
@@ -86,12 +86,12 @@ export function PhoneCarousel({ screenshots }: PhoneCarouselProps) {
           <div
             className="absolute z-20 overflow-hidden cursor-pointer"
             style={{
-              top: "1.8%",
-              left: "3.75%",
-              width: "92.5%",
-              height: "96.4%",
-              borderRadius: "7.5%",
-              background: screenshots[current].bg ?? "#161616",
+              top: "2.3%",
+              left: "1.5%",
+              width: "97%",
+              height: "95.5%",
+              borderRadius: "2.1%",
+              background: screenshots[current].bg ?? "#1a1a1a",
             }}
             onClick={handleScreenClick}
           >
@@ -109,7 +109,7 @@ export function PhoneCarousel({ screenshots }: PhoneCarouselProps) {
                   alt={screenshots[current].label}
                   fill
                   className="object-contain"
-                  sizes="280px"
+                  sizes="480px"
                 />
               </motion.div>
             </AnimatePresence>

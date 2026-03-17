@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 660 440" fill="none">
+  <!-- Outer shell -->
+  <rect x="0" y="0" width="660" height="440" rx="24" fill="#1a1a1a"/>
+  <!-- Edge highlight -->
+  <rect x="1" y="1" width="658" height="438" rx="23" stroke="#333" stroke-width="1" fill="none"/>
+  <!-- Inner bezel -->
+  <rect x="6" y="6" width="648" height="428" rx="18" fill="#111"/>
+  <!-- Screen cutout (transparent) -->
+  <rect x="10" y="10" width="640" height="420" rx="14" fill="#1a1a1a"/>
+  <!-- Camera dot -->
+  <circle cx="330" cy="6" r="3" fill="#1a1a1a" stroke="#333" stroke-width="0.5"/>
+  <circle cx="330" cy="6" r="1.5" fill="#111"/>
+</svg>
