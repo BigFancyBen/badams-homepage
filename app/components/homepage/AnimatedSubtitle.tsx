@@ -9,8 +9,6 @@ interface AnimatedSubtitleProps {
 }
 
 const GLYPHS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&*<>[]{}";
-const PAREN_START = "(";
-const PAREN_END = ")";
 
 export function AnimatedSubtitle({
   text,
@@ -25,9 +23,10 @@ export function AnimatedSubtitle({
   const rafRef = useRef<number | null>(null);
   const delayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Find parenthetical range for dimmer styling
-  const parenStart = text.indexOf(PAREN_START);
-  const parenEnd = text.lastIndexOf(PAREN_END);
+  // Split main text and parenthetical
+  const parenStart = text.indexOf("(");
+  const mainText = parenStart !== -1 ? text.slice(0, parenStart).trimEnd() : text;
+  const parenText = parenStart !== -1 ? text.slice(parenStart) : "";
 
   const getRandomGlyph = useCallback(() => {
     return GLYPHS[Math.floor(Math.random() * GLYPHS.length)];
@@ -101,34 +100,46 @@ export function AnimatedSubtitle({
 
   if (!started) return null;
 
+  const renderChars = (str: string, startIndex: number, className: string) =>
+    str.split("").map((char, j) => {
+      const i = startIndex + j;
+      const isRevealed = revealedIndices.has(i);
+      return (
+        <span
+          key={i}
+          className={`inline-block will-change-transform ${className} ${
+            isComplete ? "animate-glow" : ""
+          }`}
+          style={{
+            opacity: isRevealed ? 1 : 0.7,
+            filter: isRevealed ? "none" : "blur(1px)",
+            animationDelay: isComplete ? `${i * 0.15}s` : "0s",
+          }}
+        >
+          {char === " " ? "\u00A0" : char}
+        </span>
+      );
+    });
+
   return (
-    <motion.p
-      className="text-lg sm:text-xl md:text-2xl font-bold text-center font-mono tracking-tight"
+    <motion.div
+      className="text-center font-mono tracking-tight italic py-8"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
     >
-      {displayText.split("").map((char, i) => {
-        const isRevealed = revealedIndices.has(i);
-        const isInParen =
-          parenStart !== -1 && parenEnd !== -1 && i >= parenStart && i <= parenEnd;
-
-        return (
-          <span
-            key={i}
-            className={`inline-block will-change-transform ${
-              isInParen ? "text-purple-400/70" : "text-purple-400"
-            } ${isComplete ? "animate-glow" : ""}`}
-            style={{
-              opacity: isRevealed ? 1 : 0.7,
-              filter: isRevealed ? "none" : "blur(1px)",
-              animationDelay: isComplete ? `${i * 0.15}s` : "0s",
-            }}
-          >
-            {char === " " ? "\u00A0" : char}
-          </span>
-        );
-      })}
-    </motion.p>
+      <p className="text-lg sm:text-xl md:text-2xl font-bold text-white whitespace-nowrap">
+        {renderChars(displayText.slice(0, mainText.length), 0, "text-white")}
+      </p>
+      {parenText && (
+        <p className="text-sm sm:text-base md:text-lg font-medium text-white/60 mt-1">
+          {renderChars(
+            displayText.slice(mainText.length + 1),
+            mainText.length + 1,
+            "text-white/60"
+          )}
+        </p>
+      )}
+    </motion.div>
   );
 }
