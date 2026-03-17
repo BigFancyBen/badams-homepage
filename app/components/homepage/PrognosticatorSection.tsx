@@ -127,10 +127,32 @@ export function PrognosticatorSection() {
         />
       </div>
 
-      {/* Full-width tablet carousel */}
-      <div className="flex flex-col gap-6">
-        <div className="w-full">
-          <div className="flex items-center gap-3 w-full max-w-[480px] mx-auto md:max-w-none">
+      {/* Title/description above, tablet below, all within one screen */}
+      <div className="flex flex-col max-h-screen">
+        {/* Slide title & description */}
+        <div className="mb-4 min-h-[80px]">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={current}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.3 }}
+              className="max-w-[512px]"
+            >
+              <h3 className="text-lg md:text-xl font-bold text-white mb-2">
+                {SCREENSHOTS[current].title}
+              </h3>
+              <p className="text-sm text-gray-300 leading-relaxed">
+                {SCREENSHOTS[current].description}
+              </p>
+            </motion.div>
+          </AnimatePresence>
+        </div>
+
+        {/* Tablet carousel */}
+        <div className="flex-1 min-h-0">
+          <div className="flex items-center gap-3 w-full max-w-[480px] mx-auto md:max-w-none h-full">
             {/* Left arrow — hidden on mobile */}
             <button
               onClick={handlePrev}
@@ -151,13 +173,13 @@ export function PrognosticatorSection() {
             </button>
 
             {/* Tablet frame with screenshot */}
-            <div className="relative min-w-0 flex-1">
+            <div className="relative min-w-0 flex-1 h-full">
               <Image
                 src="/magic/tablet-frame.svg"
                 alt=""
                 width={660}
                 height={440}
-                className="relative z-10 pointer-events-none w-full h-auto select-none"
+                className="relative z-10 pointer-events-none w-full h-auto select-none max-h-full object-contain"
                 priority
               />
               <div
@@ -214,44 +236,22 @@ export function PrognosticatorSection() {
           </div>
         </div>
 
-        {/* Description + dot indicators below */}
-        <div className="flex flex-col md:flex-row gap-4 md:gap-8 items-start">
-          <div className="flex-1 min-h-[80px]">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={current}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -12 }}
-                transition={{ duration: 0.3 }}
-              >
-                <h3 className="text-lg md:text-xl font-bold text-white mb-2">
-                  {SCREENSHOTS[current].title}
-                </h3>
-                <p className="text-sm text-gray-300 leading-relaxed">
-                  {SCREENSHOTS[current].description}
-                </p>
-              </motion.div>
-            </AnimatePresence>
-          </div>
-
-          {/* Dot indicators */}
-          <div className="flex gap-2 md:pt-1 shrink-0">
-            {SCREENSHOTS.map((_, i) => (
-              <button
-                key={i}
-                onClick={() => {
-                  setUserClicked(true);
-                  setCurrent(i);
-                }}
-                className="w-2 h-2 transition-colors"
-                style={{
-                  background: i === current ? ACCENT_COLOR : "#374151",
-                }}
-                aria-label={`Go to screenshot ${i + 1}`}
-              />
-            ))}
-          </div>
+        {/* Dot indicators centered below tablet */}
+        <div className="flex gap-2 justify-center mt-4">
+          {SCREENSHOTS.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => {
+                setUserClicked(true);
+                setCurrent(i);
+              }}
+              className="w-2 h-2 transition-colors"
+              style={{
+                background: i === current ? ACCENT_COLOR : "#374151",
+              }}
+              aria-label={`Go to screenshot ${i + 1}`}
+            />
+          ))}
         </div>
       </div>
     </motion.section>

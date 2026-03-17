@@ -80,12 +80,6 @@ const projectGroups: ProjectGroup[] = [
           "NOAA weather tracker for multiple locations. View detailed hourly forecasts from 10am-7pm, track temperature and wind conditions, and manage your favorite float trip destinations.",
         href: "/floatwise",
       },
-      {
-        title: "Prognosticator",
-        description:
-          "Cross-platform desktop app for DJs and music curators. Import Spotify playlists, download songs, fetch DJ metadata (key, BPM), and integrate with VirtualDJ and OBS.",
-        tags: "Desktop App \u2022 VirtualDJ \u2022 OBS Integration",
-      },
     ],
   },
 ];
