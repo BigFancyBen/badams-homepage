@@ -93,7 +93,7 @@ export default function Home() {
       {/* Hero section */}
       <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-4 py-8">
         <AnimatedHeroTitle text="benadams.dev" />
-        <AnimatedSubtitle text="These are some of the things I've built (that weren't my job)" />
+        <AnimatedSubtitle text={<div>These are some of<br className="inline sm:hidden" /> the things I&apos;ve built<br />(that weren&apos;t my job)</div>} />
         <ScrollDownArrow />
       </div>
 

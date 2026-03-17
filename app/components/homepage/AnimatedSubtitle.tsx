@@ -1,19 +1,100 @@
 "use client";
 
+import { isValidElement } from "react";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { motion } from "motion/react";
 
 interface AnimatedSubtitleProps {
-  text: string;
+  text: React.ReactNode;
   startDelay?: number;
 }
 
+type SubtitleToken =
+  | { type: "char"; char: string }
+  | { type: "br"; className?: string };
+
 const GLYPHS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&*<>[]{}";
+
+function tokenizeSubtitleText(node: React.ReactNode): SubtitleToken[] {
+  const tokens: SubtitleToken[] = [];
+
+  const walk = (value: React.ReactNode) => {
+    if (value === null || value === undefined || typeof value === "boolean") {
+      return;
+    }
+
+    if (typeof value === "string" || typeof value === "number") {
+      const stringValue = String(value);
+      for (const char of stringValue) {
+        tokens.push({ type: "char", char });
+      }
+      return;
+    }
+
+    if (Array.isArray(value)) {
+      value.forEach(walk);
+      return;
+    }
+
+    if (isValidElement(value)) {
+      const element = value as React.ReactElement<{
+        className?: string;
+        children?: React.ReactNode;
+      }>;
+
+      if (element.type === "br") {
+        tokens.push({
+          type: "br",
+          className:
+            typeof element.props?.className === "string"
+              ? element.props.className
+              : undefined,
+        });
+        return;
+      }
+
+      walk(element.props?.children);
+    }
+  };
+
+  walk(node);
+  return tokens;
+}
+
+function countChars(tokens: SubtitleToken[]): number {
+  return tokens.reduce((count, token) => {
+    return token.type === "char" ? count + 1 : count;
+  }, 0);
+}
 
 export function AnimatedSubtitle({
   text,
   startDelay = 1200,
 }: AnimatedSubtitleProps) {
+  const tokens = tokenizeSubtitleText(text);
+  const plainText = tokens
+    .filter((token) => token.type === "char")
+    .map((token) => token.char)
+    .join("");
+
+  const mainTokens: SubtitleToken[] = [];
+  const parenTokens: SubtitleToken[] = [];
+  let hasFoundParen = false;
+
+  tokens.forEach((token) => {
+    if (!hasFoundParen && token.type === "char" && token.char === "(") {
+      hasFoundParen = true;
+    }
+
+    if (hasFoundParen) {
+      parenTokens.push(token);
+    } else {
+      mainTokens.push(token);
+    }
+  });
+
+  const mainCharCount = countChars(mainTokens);
+
   const [displayText, setDisplayText] = useState("");
   const [isComplete, setIsComplete] = useState(false);
   const [started, setStarted] = useState(false);
@@ -22,11 +103,6 @@ export function AnimatedSubtitle({
   );
   const rafRef = useRef<number | null>(null);
   const delayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Split main text and parenthetical
-  const parenStart = text.indexOf("(");
-  const mainText = parenStart !== -1 ? text.slice(0, parenStart).trimEnd() : text;
-  const parenText = parenStart !== -1 ? text.slice(parenStart) : "";
 
   const getRandomGlyph = useCallback(() => {
     return GLYPHS[Math.floor(Math.random() * GLYPHS.length)];
@@ -44,12 +120,16 @@ export function AnimatedSubtitle({
 
   useEffect(() => {
     if (!started) return;
+    if (plainText.length === 0) {
+      setIsComplete(true);
+      return;
+    }
 
     const totalDuration = 500;
     const frameRate = 60;
     const frameTime = 1000 / frameRate;
     const totalFrames = (totalDuration / 1000) * frameRate;
-    const revealInterval = totalFrames / text.length;
+    const revealInterval = totalFrames / plainText.length;
 
     let frame = 0;
     let currentRevealed = new Set<number>();
@@ -64,11 +144,11 @@ export function AnimatedSubtitle({
 
         const shouldRevealCount = Math.floor(frame / revealInterval);
 
-        for (let i = 0; i < shouldRevealCount && i < text.length; i++) {
+        for (let i = 0; i < shouldRevealCount && i < plainText.length; i++) {
           currentRevealed.add(i);
         }
 
-        const newText = text
+        const newText = plainText
           .split("")
           .map((char, i) => {
             if (char === " ") return " ";
@@ -80,10 +160,10 @@ export function AnimatedSubtitle({
         setDisplayText(newText);
         setRevealedIndices(new Set(currentRevealed));
 
-        if (currentRevealed.size >= text.length) {
-          setDisplayText(text);
+        if (currentRevealed.size >= plainText.length) {
+          setDisplayText(plainText);
           setIsComplete(true);
-          setRevealedIndices(new Set(text.split("").map((_, i) => i)));
+          setRevealedIndices(new Set(plainText.split("").map((_, i) => i)));
           return;
         }
       }
@@ -96,17 +176,35 @@ export function AnimatedSubtitle({
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [started, text, getRandomGlyph]);
+  }, [started, plainText, getRandomGlyph]);
 
   if (!started) return null;
 
-  const renderChars = (str: string, startIndex: number, className: string) =>
-    str.split("").map((char, j) => {
-      const i = startIndex + j;
+  const renderTokens = (
+    tokenList: SubtitleToken[],
+    startIndex: number,
+    className: string
+  ) => {
+    let charIndex = startIndex;
+
+    return tokenList.map((token, tokenIndex) => {
+      if (token.type === "br") {
+        return (
+          <br
+            key={`br-${startIndex}-${tokenIndex}`}
+            className={token.className}
+          />
+        );
+      }
+
+      const i = charIndex;
+      charIndex++;
       const isRevealed = revealedIndices.has(i);
+      const displayChar = displayText[i] ?? token.char;
+
       return (
         <span
-          key={i}
+          key={`char-${i}`}
           className={`inline-block will-change-transform ${className} ${
             isComplete ? "animate-glow" : ""
           }`}
@@ -116,10 +214,11 @@ export function AnimatedSubtitle({
             animationDelay: isComplete ? `${i * 0.15}s` : "0s",
           }}
         >
-          {char === " " ? "\u00A0" : char}
+          {displayChar === " " ? "\u00A0" : displayChar}
         </span>
       );
     });
+  };
 
   return (
     <motion.div
@@ -129,15 +228,11 @@ export function AnimatedSubtitle({
       transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
     >
       <p className="text-lg sm:text-xl md:text-2xl font-bold text-white text-balance sm:whitespace-nowrap">
-        {renderChars(displayText.slice(0, mainText.length), 0, "text-white")}
+        {renderTokens(mainTokens, 0, "text-white")}
       </p>
-      {parenText && (
+      {parenTokens.length > 0 && (
         <p className="text-sm sm:text-base md:text-lg font-medium text-white/60 mt-1">
-          {renderChars(
-            displayText.slice(mainText.length + 1),
-            mainText.length + 1,
-            "text-white/60"
-          )}
+          {renderTokens(parenTokens, mainCharCount, "text-white/60")}
         </p>
       )}
     </motion.div>
