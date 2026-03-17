@@ -35,9 +35,9 @@ const projectGroups: ProjectGroup[] = [
       },
     ],
     screenshots: [
-      { src: "/magic/tutor-helper.png", label: "Tutor Helper — 3-drop enchantments" },
-      { src: "/magic/commander.png", label: "Commander — 4-player life tracker" },
-      { src: "/magic/token-helper.png", label: "Token Helper — battlefield tokens" },
+      { src: "/magic/tutor-helper.png", label: "Tutor Helper" },
+      { src: "/magic/commander.png", label: "Commander" },
+      { src: "/magic/token-helper.png", label: "Token Helper" },
     ],
   },
   {

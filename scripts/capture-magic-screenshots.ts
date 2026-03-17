@@ -1,7 +1,7 @@
 import { chromium, type Page } from "playwright";
 
 const BASE_URL = "http://localhost:3000";
-const VIEWPORT = { width: 1280, height: 800 };
+const VIEWPORT = { width: 1024, height: 768 };
 const ARCHIDEKT_URL = "https://archidekt.com/decks/11819322/portland";
 
 async function clearAndNavigate(page: Page, path: string) {
@@ -15,30 +15,32 @@ async function captureTutorHelper(page: Page) {
   console.log("📸 Capturing Tutor Helper...");
   await clearAndNavigate(page, "/tutor-helper");
 
-  // Click "Add Your First Deck" button
+  // Click "Add Your First Deck" button to open the manage decks modal
   await page.click('button:has-text("Add Your First Deck")');
+  await page.waitForTimeout(500);
+
+  // In DeckManager, click "+ Add New Deck" to show the import form
+  await page.click('button:has-text("+ Add New Deck")');
   await page.waitForTimeout(500);
 
   // Fill Archidekt URL and import
   await page.fill(
-    'input[placeholder="https://archidekt.com/decks/..."]',
+    'input[placeholder="https://archidekt.com/decks/12345/deck-name"]',
     ARCHIDEKT_URL
   );
   await page.click(
-    'button:has-text("Import"):not(:has-text("Import Decklist"))'
+    'button:has-text("Import"):not(:has-text("Import Decklist")):not(:has-text("Importing"))'
   );
 
   // Wait for cards to load from Scryfall (can be slow)
   console.log("  Waiting for Scryfall card data...");
-  await page.waitForTimeout(3000);
+  await page.waitForTimeout(5000);
   await page.waitForLoadState("networkidle");
-  // Wait for card images to appear in the grid
-  await page.waitForSelector("img", { timeout: 30000 });
-  await page.waitForTimeout(2000);
+  await page.waitForTimeout(3000);
 
   // Close the manage decks modal
   await page.keyboard.press("Escape");
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(1000);
 
   // Click mana cost "3" filter button
   // Mana cost buttons are in the filter section; find the one with exact text "3"
@@ -82,8 +84,8 @@ async function captureCommander(page: Page) {
     await nameInputs.nth(i).fill(names[i]);
   }
 
-  // Close settings
-  await page.keyboard.press("Escape");
+  // Close settings via "Close" button
+  await page.click('button:has-text("Close")');
   await page.waitForTimeout(500);
 
   // Adjust life totals:
@@ -115,14 +117,10 @@ async function captureTokenHelper(page: Page) {
   await page.click('button:has-text("Import a Deck")');
   await page.waitForTimeout(500);
 
-  // Fill Archidekt URL and import
-  await page.fill(
-    'input[placeholder="https://archidekt.com/decks/..."]',
-    ARCHIDEKT_URL
-  );
-  await page.click(
-    'button:has-text("Import"):not(:has-text("Import Decklist"))'
-  );
+  // Fill Archidekt URL inside the modal and import
+  const modal = page.locator('.fixed.inset-0.z-50');
+  await modal.locator('input[placeholder="https://archidekt.com/decks/..."]').fill(ARCHIDEKT_URL);
+  await modal.locator('button:has-text("Import"):not(:has-text("Import Decklist"))').click();
 
   // Wait for token discovery (hits Scryfall for each card, can be very slow)
   console.log("  Waiting for token discovery (this may take a while)...");
