@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 660" fill="none">
+  <!-- Outer shell -->
+  <rect x="0" y="0" width="320" height="660" rx="36" fill="#1a1a1a"/>
+  <!-- Edge highlight -->
+  <rect x="1" y="1" width="318" height="658" rx="35" stroke="#333" stroke-width="1" fill="none"/>
+  <!-- Inner bezel -->
+  <rect x="6" y="6" width="308" height="648" rx="30" fill="#111"/>
+  <!-- Screen cutout (transparent) -->
+  <rect x="12" y="12" width="296" height="636" rx="24" fill="#161616"/>
+  <!-- Top speaker grille -->
+  <rect x="130" y="18" width="60" height="4" rx="2" fill="#222"/>
+  <!-- Camera dot -->
+  <circle cx="108" cy="20" r="5" fill="#1a1a1a" stroke="#333" stroke-width="0.5"/>
+  <circle cx="108" cy="20" r="2" fill="#111"/>
+</svg>

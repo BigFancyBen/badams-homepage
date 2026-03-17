@@ -1,86 +1,90 @@
 "use client";
 
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "motion/react";
 import { AnimatedHeroTitle } from "./components/homepage/AnimatedHeroTitle";
+import { AnimatedSubtitle } from "./components/homepage/AnimatedSubtitle";
+import { ScrollDownArrow } from "./components/homepage/ScrollDownArrow";
 import { ParticleField } from "./components/homepage/ParticleField";
-import { CardGrid } from "./components/homepage/CardGrid";
+import { BentoGrid } from "./components/homepage/BentoGrid";
+import { ResumeView } from "./components/homepage/ResumeView";
 
-const projects = [
-  {
-    title: "MTG Commander Scorekeeper",
-    description:
-      "Full-screen, touch-friendly scorekeeper for Magic: The Gathering Commander format. Features 4-player quadrant layout, life tracking, commander damage, and mobile-optimized interface.",
-    href: "/commander",
-  },
-  {
-    title: "Magic Tutor Helper",
-    description:
-      "Advanced card filtering tool for Magic: The Gathering decklists. Import decklists, filter by mana cost and card types, and analyze your cards with Scryfall integration.",
-    href: "/tutor-helper",
-  },
-  {
-    title: "MTG Token Helper",
-    description:
-      "Import a deck, discover all tokens it can produce via Scryfall, and track them on the battlefield with tap/untap, counters, splitting, and temporary buffs.",
-    href: "/token-helper",
-  },
-  {
-    title: "FloatWise",
-    description:
-      "NOAA weather tracker for multiple locations. View detailed hourly forecasts from 10am-7pm, track temperature and wind conditions, and manage your favorite float trip destinations.",
-    href: "/floatwise",
-  },
-  {
-    title: "Prognosticator",
-    description:
-      "Cross-platform desktop app for DJs and music curators. Import Spotify playlists, download songs, fetch DJ metadata (key, BPM), and integrate with VirtualDJ and OBS.",
-    tags: "Desktop App \u2022 VirtualDJ \u2022 OBS Integration",
-  },
-  {
-    title: "RuneScape Progress Image Generator",
-    description:
-      "API endpoint for generating progress report images for Old School RuneScape players. Features collection log items, OSRS Wiki integration, and comprehensive game database.",
-    tags: "API \u2022 OSRS Wiki \u2022 Image Generation",
-  },
-  {
-    title: "Dota 2 Randomizer",
-    description:
-      "Spin two wheels to get a random hero and item challenge for your next Dota 2 game. Features canvas-based animations and real-time data from the OpenDota API.",
-    href: "/dota-randomizer",
-  },
-  {
-    title: "IRLScape",
-    description:
-      "IRL streaming overlay system for Old School RuneScape. Overlays game UI elements like minimap, chat, inventory, and XP tracker onto real-world camera footage with Twitch chat integration and Joycon motion controls.",
-    href: "https://www.youtube.com/watch?v=gCofVhR5HUQ",
-  },
-];
+type View = "home" | "resume";
 
-export default function Home() {
+export default function Home({ initialView }: { initialView?: View }) {
+  const [view, setView] = useState<View>(() => {
+    if (initialView) return initialView;
+    if (typeof window !== "undefined" && window.location.pathname === "/resume") return "resume";
+    return "home";
+  });
+
+  const navigateTo = useCallback((target: View) => {
+    const path = target === "resume" ? "/resume" : "/";
+    window.history.pushState({ view: target }, "", path);
+    setView(target);
+  }, []);
+
+  useEffect(() => {
+    const onPopState = (e: PopStateEvent) => {
+      const target = e.state?.view ?? (window.location.pathname === "/resume" ? "resume" : "home");
+      setView(target);
+    };
+    window.addEventListener("popstate", onPopState);
+
+    // Replace current state so back button works from the start
+    window.history.replaceState({ view }, "", window.location.pathname);
+
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [view]);
+
+  if (view === "resume") {
+    return <ResumeView onNavigateHome={() => navigateTo("home")} />;
+  }
+
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8 relative overflow-hidden">
+    <div className="min-h-screen relative overflow-hidden">
       <ParticleField particleCount={45} />
 
-      <div className="relative z-10 flex flex-col items-center">
+      {/* Resume link — fixed top-right */}
+      <motion.button
+        onClick={() => navigateTo("resume")}
+        className="fixed top-4 right-4 z-50 text-sm text-gray-400 hover:text-white transition-colors"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.75, duration: 0.5 }}
+      >
+        Resume
+      </motion.button>
+
+      {/* Hero section */}
+      <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-4 py-8">
         <AnimatedHeroTitle text="benadams.dev" />
-
-        <div className="mt-16 w-full max-w-7xl">
-          <motion.h2
-            className="text-2xl md:text-3xl font-bold text-center mb-8"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{
-              delay: 1.2,
-              duration: 0.25,
-              ease: [0.25, 0.1, 0.25, 1],
-            }}
-          >
-            Projects
-          </motion.h2>
-
-          <CardGrid projects={projects} />
-        </div>
+        <AnimatedSubtitle startDelay={400} text={<div>These are some of<br className="inline sm:hidden" /> the things I&apos;ve built<br />(that weren&apos;t my job)</div>} />
+        <ScrollDownArrow />
       </div>
+
+      {/* Bento grid */}
+      <div className="relative z-10 max-w-7xl mx-auto px-4 pb-24">
+        <BentoGrid />
+      </div>
+
+      {/* Footer */}
+      <footer className="relative z-10 border-t border-white/5 py-6 px-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-between text-gray-600 text-xs">
+          <span>Ben Adams</span>
+          <a
+            href="https://github.com/BigFancyBen"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-gray-400 transition-colors inline-flex items-center gap-1.5"
+          >
+            <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path fillRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clipRule="evenodd" />
+            </svg>
+            GitHub
+          </a>
+        </div>
+      </footer>
     </div>
   );
 }
