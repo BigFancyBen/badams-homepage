@@ -13,11 +13,11 @@ interface PhoneCarouselProps {
   screenshots: Screenshot[];
 }
 
-const AUTO_PLAY_INTERVAL = 4000;
+const AUTO_PLAY_INTERVAL = 2000;
 
 export function PhoneCarousel({ screenshots }: PhoneCarouselProps) {
   const [current, setCurrent] = useState(0);
-  const [paused, setPaused] = useState(false);
+  const [userClicked, setUserClicked] = useState(false);
 
   const next = useCallback(() => {
     setCurrent((i) => (i + 1) % screenshots.length);
@@ -28,14 +28,25 @@ export function PhoneCarousel({ screenshots }: PhoneCarouselProps) {
   }, [screenshots.length]);
 
   useEffect(() => {
-    if (paused) return;
+    if (userClicked) return;
     const id = setInterval(next, AUTO_PLAY_INTERVAL);
     return () => clearInterval(id);
-  }, [paused, next]);
+  }, [userClicked, next]);
+
+  const handlePrev = () => {
+    setUserClicked(true);
+    prev();
+  };
+
+  const handleNext = () => {
+    setUserClicked(true);
+    next();
+  };
 
   const handleScreenClick = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
+    setUserClicked(true);
     if (x < rect.width / 2) {
       prev();
     } else {
@@ -44,18 +55,12 @@ export function PhoneCarousel({ screenshots }: PhoneCarouselProps) {
   };
 
   return (
-    <div
-      className="flex flex-col items-center"
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
-      onTouchStart={() => setPaused(true)}
-      onTouchEnd={() => setPaused(false)}
-    >
+    <div className="flex flex-col items-center">
       {/* Phone + arrows row */}
       <div className="flex items-center gap-3">
         {/* Left arrow */}
         <button
-          onClick={prev}
+          onClick={handlePrev}
           className="text-gray-500 hover:text-white transition-colors p-1"
           aria-label="Previous screenshot"
         >
@@ -72,19 +77,21 @@ export function PhoneCarousel({ screenshots }: PhoneCarouselProps) {
             alt=""
             width={320}
             height={660}
-            className="relative z-10 pointer-events-none w-full h-auto"
+            className="relative z-10 pointer-events-none w-full h-auto select-none"
             priority
           />
 
           {/* Screen area positioned inside the frame */}
           <div
-            className="absolute z-0 overflow-hidden cursor-pointer"
+            className="absolute z-20 overflow-hidden cursor-pointer"
             style={{
               top: "1.8%",
               left: "3.75%",
               width: "92.5%",
               height: "96.4%",
               borderRadius: "7.5%",
+              paddingTop: "32px",
+              background: "#1a1a1a",
             }}
             onClick={handleScreenClick}
           >
@@ -111,7 +118,7 @@ export function PhoneCarousel({ screenshots }: PhoneCarouselProps) {
 
         {/* Right arrow */}
         <button
-          onClick={next}
+          onClick={handleNext}
           className="text-gray-500 hover:text-white transition-colors p-1"
           aria-label="Next screenshot"
         >

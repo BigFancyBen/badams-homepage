@@ -14,6 +14,7 @@ const RADIANCE_SCREENSHOTS = [
   { src: "/radiance/settings-system.png", label: "System settings" },
   { src: "/radiance/settings-stats.png", label: "System stats" },
   { src: "/radiance/settings-camera.png", label: "Camera" },
+  { src: "/radiance/wifi.png", label: "Wi-Fi settings" },
 ];
 
 export function RadianceSection() {
@@ -37,7 +38,7 @@ export function RadianceSection() {
           {/* Section header */}
           <div>
             <h2 className="text-2xl md:text-3xl font-bold text-white">
-              Radiance
+              hobbit.house
             </h2>
             <p className="text-gray-400 mt-1 text-sm">
               MiniPC control center for your living room
