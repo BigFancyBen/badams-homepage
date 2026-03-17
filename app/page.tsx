@@ -1,6 +1,7 @@
 "use client";
 
 import { AnimatedHeroTitle } from "./components/homepage/AnimatedHeroTitle";
+import { AnimatedSubtitle } from "./components/homepage/AnimatedSubtitle";
 import { ParticleField } from "./components/homepage/ParticleField";
 import {
   ProjectSection,
@@ -96,6 +97,9 @@ export default function Home() {
       {/* Hero section */}
       <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-4 py-8">
         <AnimatedHeroTitle text="benadams.dev" />
+        <div className="mt-4">
+          <AnimatedSubtitle text="These are some of the things I've built (that weren't my job)" />
+        </div>
       </div>
 
       {/* Project sections */}
