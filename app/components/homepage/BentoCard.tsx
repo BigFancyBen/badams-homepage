@@ -2,9 +2,11 @@
 
 import { useRef, MouseEvent, useState } from "react";
 import { motion, useMotionValue, useSpring, useTransform, AnimatePresence } from "motion/react";
+import { useReducedMotion } from "../../hooks/useReducedMotion";
 
 interface BentoCardProps {
   title: string;
+  subtitle?: string;
   description: string;
   href?: string;
   accentColor: string;
@@ -13,10 +15,14 @@ interface BentoCardProps {
   children?: React.ReactNode;
   index?: number;
   fixedDescriptionHeight?: string;
+  dimmed?: boolean;
+  onHover?: () => void;
+  tags?: string[];
 }
 
 export function BentoCard({
   title,
+  subtitle,
   description,
   href,
   accentColor,
@@ -25,9 +31,13 @@ export function BentoCard({
   children,
   index = 0,
   fixedDescriptionHeight,
+  dimmed,
+  onHover,
+  tags,
 }: BentoCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [isHovered, setIsHovered] = useState(false);
+  const reducedMotion = useReducedMotion();
 
   const mouseX = useMotionValue(0.5);
   const mouseY = useMotionValue(0.5);
@@ -37,8 +47,8 @@ export function BentoCard({
   const smoothX = useSpring(mouseX, springConfig);
   const smoothY = useSpring(mouseY, springConfig);
 
-  // 3D tilt — disabled when card has embedded children (carousels)
-  const enableTilt = !children;
+  // 3D tilt — disabled when card has embedded children (carousels) or reduced motion
+  const enableTilt = !children && !reducedMotion;
   const rotateX = useTransform(smoothY, [0, 1], enableTilt ? [6, -6] : [0, 0]);
   const rotateY = useTransform(smoothX, [0, 1], enableTilt ? [-6, 6] : [0, 0]);
 
@@ -61,6 +71,12 @@ export function BentoCard({
     (v) => `0 0 ${v * 20}px ${accentColor}${Math.round(v * 0.4 * 255).toString(16).padStart(2, "0")}`
   );
 
+  // Typography sizing based on card dimensions
+  const isLarge = colSpan >= 3 && rowSpan >= 2;
+  const isMedium = colSpan >= 2 || rowSpan >= 2;
+  const titleClass = isLarge ? "text-lg" : isMedium ? "text-base" : "text-sm";
+  const descClass = isLarge ? "text-sm" : isMedium ? "text-sm" : "text-xs";
+
   const handleMouseMove = (e: MouseEvent<HTMLDivElement>) => {
     if (!cardRef.current) return;
     const rect = cardRef.current.getBoundingClientRect();
@@ -71,6 +87,7 @@ export function BentoCard({
   const handleMouseEnter = () => {
     setIsHovered(true);
     hoverValue.set(1);
+    onHover?.();
   };
 
   const handleMouseLeave = () => {
@@ -96,14 +113,19 @@ export function BentoCard({
       onMouseMove={handleMouseMove}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      initial={{ opacity: 0, y: 30 }}
+      initial={reducedMotion ? false : { opacity: 0, y: 30 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, amount: 0.1 }}
-      transition={{
-        delay: index * 0.08,
-        duration: 0.5,
-        ease: [0.25, 0.1, 0.25, 1],
-      }}
+      transition={
+        reducedMotion
+          ? { duration: 0 }
+          : {
+              delay: index * 0.08,
+              duration: 0.5,
+              ease: [0.25, 0.1, 0.25, 1],
+            }
+      }
+      animate={{ opacity: dimmed ? 0.55 : 1 }}
     >
       <motion.div
         className="relative h-full will-change-transform"
@@ -116,9 +138,22 @@ export function BentoCard({
           backdropFilter: "blur(12px)",
           WebkitBackdropFilter: "blur(12px)",
           transition: "border-color 0.3s ease, transform 0.3s ease",
-          transform: isHovered ? "translateY(-2px)" : "translateY(0)",
+          transform: reducedMotion
+            ? "none"
+            : isHovered
+              ? "translateY(-2px) scale(1.012)"
+              : "translateY(0) scale(1)",
         }}
       >
+        {/* Accent top line */}
+        <div
+          className="h-[2px] w-full transition-opacity duration-300"
+          style={{
+            background: `linear-gradient(90deg, transparent, ${accentColor}, transparent)`,
+            opacity: isHovered ? 0.9 : 0.3,
+          }}
+        />
+
         {/* Mouse-tracking glow */}
         <motion.div
           className="absolute inset-0 pointer-events-none will-change-opacity"
@@ -132,7 +167,21 @@ export function BentoCard({
         <div className="relative z-10 p-5 h-full flex flex-col">
           {/* Header */}
           <div className="mb-2">
-            <h3 className="text-sm font-bold text-white">{title}</h3>
+            <h3 className={`${titleClass} font-bold text-white`}>{title}</h3>
+            {subtitle && (
+              <AnimatePresence mode="wait">
+                <motion.p
+                  key={subtitle}
+                  className="text-gray-400 text-xs mt-0.5"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  {subtitle}
+                </motion.p>
+              </AnimatePresence>
+            )}
           </div>
 
           {/* Description */}
@@ -143,7 +192,7 @@ export function BentoCard({
             <AnimatePresence mode="wait">
               <motion.p
                 key={description}
-                className="text-gray-400 text-xs leading-relaxed"
+                className={`text-gray-400 ${descClass} leading-relaxed`}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
@@ -154,15 +203,35 @@ export function BentoCard({
             </AnimatePresence>
           </div>
 
+          {/* Tech stack tags */}
+          {tags && tags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="px-1.5 py-0.5 text-[10px]"
+                  style={{
+                    color: accentColor,
+                    borderWidth: 1,
+                    borderColor: `${accentColor}30`,
+                    backgroundColor: `${accentColor}12`,
+                  }}
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
+
           {/* Embedded content (carousels, etc.) */}
           {children && <div className="flex-1">{children}</div>}
 
           {/* Link CTA */}
           {href && (
-            <div className="mt-auto pt-2 text-center">
+            <div className={`mt-auto pt-2 ${href.startsWith("http") ? "text-center" : "text-left"}`}>
               <a
                 href={href}
-                className="text-xs font-medium text-white inline-flex items-center gap-1.5 hover:underline relative z-20"
+                className="group/link text-xs font-medium text-white inline-flex items-center gap-1.5 relative z-20"
                 {...(href.startsWith("http") ? { target: "_blank", rel: "noopener noreferrer" } : {})}
               >
                 {href.startsWith("http") ? (
@@ -175,6 +244,7 @@ export function BentoCard({
                 ) : (
                   <>View project &rarr;</>
                 )}
+                <span className="absolute bottom-0 left-0 h-px w-0 bg-white transition-all duration-300 ease-out group-hover/link:w-full" />
               </a>
             </div>
           )}

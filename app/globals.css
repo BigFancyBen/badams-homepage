@@ -233,6 +233,16 @@ body {
   opacity: 0;
 }
 
+/* Reduced-motion safety net */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* Homepage Hero Glow Animation - GPU accelerated */
 @keyframes hero-glow {
   0%, 100% {
@@ -256,5 +266,27 @@ body {
 .animate-glow {
   animation: hero-glow 2.5s ease-in-out infinite;
   will-change: text-shadow;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.06) 40%,
+    rgba(255, 255, 255, 0.12) 50%,
+    rgba(255, 255, 255, 0.06) 60%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
 }
 

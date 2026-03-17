@@ -20,7 +20,7 @@ export function AnimatedHeroTitle({ text }: AnimatedHeroTitleProps) {
   }, []);
 
   useEffect(() => {
-    const totalDuration = 1000;
+    const totalDuration = 400;
     // Full 60 FPS on all devices
     const frameRate = 60;
     const frameTime = 1000 / frameRate;

@@ -125,7 +125,7 @@ export function AnimatedSubtitle({
       return;
     }
 
-    const totalDuration = 500;
+    const totalDuration = 350;
     const frameRate = 60;
     const frameTime = 1000 / frameRate;
     const totalFrames = (totalDuration / 1000) * frameRate;
@@ -178,7 +178,12 @@ export function AnimatedSubtitle({
     };
   }, [started, plainText, getRandomGlyph]);
 
-  if (!started) return null;
+  if (!started)
+    return (
+      <div className="text-center py-8">
+        <div className="inline-block h-6 sm:h-7 md:h-8 w-64 sm:w-80 md:w-96 animate-shimmer" />
+      </div>
+    );
 
   const renderTokens = (
     tokenList: SubtitleToken[],

@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { motion } from "motion/react";
 import { BentoCard } from "./BentoCard";
 import { TabletCarousel } from "./TabletCarousel";
 import { PhoneCarousel } from "./PhoneCarousel";
+import { useReducedMotion } from "../../hooks/useReducedMotion";
 
 const PROGNOSTICATOR_SCREENSHOTS = [
   {
@@ -76,24 +78,34 @@ const MTG_SCREENSHOTS = [
 
 export function BentoGrid() {
   const [progSlide, setProgSlide] = useState(0);
+  const [hoveredIndex, setHoveredIndex] = useState<number | string | null>(null);
+  const reducedMotion = useReducedMotion();
+
   const handleProgSlideChange = useCallback((index: number) => {
     setProgSlide(index);
   }, []);
+
+  const handleGridMouseLeave = () => setHoveredIndex(null);
 
   return (
     <div
       className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"
       style={{ gridAutoRows: "minmax(180px, auto)" }}
+      onMouseLeave={handleGridMouseLeave}
     >
       {/* Prognosticator — 3 col, 2 row */}
       <BentoCard
-        title={PROGNOSTICATOR_SCREENSHOTS[progSlide].label}
+        title="Prognosticator"
+        subtitle={PROGNOSTICATOR_SCREENSHOTS[progSlide].label}
         description={PROGNOSTICATOR_SCREENSHOTS[progSlide].description}
-        accentColor="#10b981"
+        accentColor="#e07a5f"
         colSpan={3}
         rowSpan={2}
         index={0}
         fixedDescriptionHeight="7.5rem"
+        dimmed={hoveredIndex !== null && hoveredIndex !== 0}
+        onHover={() => setHoveredIndex(0)}
+        tags={["Electron", "React", "TypeScript", "Node", "C++", "DMX", "Tailwind", "VirtualDJ"]}
       >
         <TabletCarousel screenshots={PROGNOSTICATOR_SCREENSHOTS} autoPlayInterval={4500} autoPlayDelay={0} onSlideChange={handleProgSlideChange} />
       </BentoCard>
@@ -106,12 +118,15 @@ export function BentoGrid() {
         accentColor="#ef4444"
         rowSpan={2}
         index={1}
+        dimmed={hoveredIndex !== null && hoveredIndex !== 1}
+        onHover={() => setHoveredIndex(1)}
+        tags={["React", "Docker", "Linux"]}
       >
         <PhoneCarousel screenshots={RADIANCE_SCREENSHOTS} autoPlayInterval={4500} autoPlayDelay={1500} />
       </BentoCard>
 
       {/* MTG section — frosted glass group */}
-      <div
+      <motion.div
         className="col-span-1 md:col-span-2 lg:col-span-4 p-4 md:p-6"
         style={{
           background: "rgba(255,255,255,0.03)",
@@ -119,8 +134,36 @@ export function BentoGrid() {
           backdropFilter: "blur(12px)",
           WebkitBackdropFilter: "blur(12px)",
         }}
+        initial={reducedMotion ? false : { opacity: 0, y: 30 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, amount: 0.1 }}
+        transition={
+          reducedMotion
+            ? { duration: 0 }
+            : { delay: 0.15, duration: 0.5, ease: [0.25, 0.1, 0.25, 1] }
+        }
+        animate={{ opacity: hoveredIndex !== null && hoveredIndex !== "mtg" ? 0.55 : 1 }}
+        onMouseEnter={() => setHoveredIndex("mtg")}
       >
-        <h3 className="text-sm font-bold text-white mb-1">Magic: The Gathering</h3>
+        <div className="flex items-center gap-3 mb-1">
+          <h3 className="text-sm font-bold text-white">Magic: The Gathering</h3>
+          <div className="flex flex-wrap gap-1.5">
+            {["Next.js", "React", "Vercel"].map((tag) => (
+              <span
+                key={tag}
+                className="px-1.5 py-0.5 text-[10px]"
+                style={{
+                  color: "#81a1c1",
+                  borderWidth: 1,
+                  borderColor: "#81a1c130",
+                  backgroundColor: "#81a1c112",
+                }}
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
+        </div>
         <p className="text-gray-400 text-xs mb-4">Tools for Commander players and deck builders</p>
 
         <div className="flex flex-col md:flex-row gap-4">
@@ -130,21 +173,21 @@ export function BentoGrid() {
               title="MTG Commander Scorekeeper"
               description="Full-screen, touch-friendly scorekeeper for Commander format. 4-player quadrant layout, life tracking, and commander damage."
               href="/commander"
-              accentColor="#a855f7"
+              accentColor="#81a1c1"
               index={2}
             />
             <BentoCard
               title="Magic Tutor Helper"
               description="Advanced card filtering tool for decklists. Import decks, filter by mana cost and card types with Scryfall integration."
               href="/tutor-helper"
-              accentColor="#a855f7"
+              accentColor="#81a1c1"
               index={3}
             />
             <BentoCard
               title="MTG Token Helper"
               description="Import a deck, discover all tokens it produces, and track them on the battlefield with tap/untap, counters, and buffs."
               href="/token-helper"
-              accentColor="#a855f7"
+              accentColor="#81a1c1"
               index={4}
             />
           </div>
@@ -154,7 +197,7 @@ export function BentoGrid() {
             <TabletCarousel screenshots={MTG_SCREENSHOTS} autoPlayInterval={4500} autoPlayDelay={3000} />
           </div>
         </div>
-      </div>
+      </motion.div>
 
       {/* FloatWise + Dota row */}
       <BentoCard
@@ -164,6 +207,8 @@ export function BentoGrid() {
         accentColor="#06b6d4"
         colSpan={2}
         index={5}
+        dimmed={hoveredIndex !== null && hoveredIndex !== 5}
+        onHover={() => setHoveredIndex(5)}
       />
 
       <BentoCard
@@ -173,6 +218,8 @@ export function BentoGrid() {
         accentColor="#f59e0b"
         colSpan={2}
         index={6}
+        dimmed={hoveredIndex !== null && hoveredIndex !== 6}
+        onHover={() => setHoveredIndex(6)}
       />
 
       {/* IRLScape */}
@@ -182,6 +229,8 @@ export function BentoGrid() {
         href="https://www.youtube.com/watch?v=gCofVhR5HUQ"
         accentColor="#f59e0b"
         index={7}
+        dimmed={hoveredIndex !== null && hoveredIndex !== 7}
+        onHover={() => setHoveredIndex(7)}
       />
 
       {/* OSRS Progress */}
@@ -190,6 +239,8 @@ export function BentoGrid() {
         description="API for generating progress report images for Old School RuneScape players. Collection log items, OSRS Wiki integration."
         accentColor="#f59e0b"
         index={8}
+        dimmed={hoveredIndex !== null && hoveredIndex !== 8}
+        onHover={() => setHoveredIndex(8)}
       />
     </div>
   );

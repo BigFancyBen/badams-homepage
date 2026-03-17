@@ -8,7 +8,7 @@ export function ScrollDownArrow() {
       className="absolute bottom-8 left-1/2 -translate-x-1/2 cursor-pointer"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      transition={{ delay: 2, duration: 1 }}
+      transition={{ delay: 0.75, duration: 0.5 }}
       onClick={() => window.scrollBy({ top: window.innerHeight, behavior: "smooth" })}
     >
       <motion.svg
