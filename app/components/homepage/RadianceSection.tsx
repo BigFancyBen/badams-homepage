@@ -6,15 +6,15 @@ import { PhoneCarousel } from "./PhoneCarousel";
 const ACCENT_COLOR = "#ef4444";
 
 const RADIANCE_SCREENSHOTS = [
-  { src: "/radiance/lights.png", label: "Smart light controls", bg: "#161616" },
-  { src: "/radiance/games-idle.png", label: "Game launcher", bg: "#161616" },
-  { src: "/radiance/games-playing.png", label: "Game touchpad", bg: "#161616" },
-  { src: "/radiance/games-kodi.png", label: "Kodi remote", bg: "#161616" },
-  { src: "/radiance/tunes.png", label: "Music player", bg: "#161616" },
-  { src: "/radiance/settings-system.png", label: "System settings", bg: "#080808" },
-  { src: "/radiance/settings-stats.png", label: "System stats", bg: "#080808" },
-  { src: "/radiance/settings-camera.png", label: "Camera", bg: "#080808" },
-  { src: "/radiance/wifi.png", label: "Wi-Fi settings", bg: "#161616" },
+  { src: "/radiance/lights.webp", label: "Smart light controls", bg: "#161616" },
+  { src: "/radiance/games-idle.webp", label: "Game launcher", bg: "#161616" },
+  { src: "/radiance/games-playing.webp", label: "Game touchpad", bg: "#161616" },
+  { src: "/radiance/games-kodi.webp", label: "Kodi remote", bg: "#161616" },
+  { src: "/radiance/tunes.webp", label: "Music player", bg: "#161616" },
+  { src: "/radiance/settings-system.webp", label: "System settings", bg: "#080808" },
+  { src: "/radiance/settings-stats.webp", label: "System stats", bg: "#080808" },
+  { src: "/radiance/settings-camera.webp", label: "Camera", bg: "#080808" },
+  { src: "/radiance/wifi.webp", label: "Wi-Fi settings", bg: "#161616" },
 ];
 
 export function RadianceSection() {
