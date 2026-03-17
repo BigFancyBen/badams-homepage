@@ -52,12 +52,10 @@ export function ProjectSection({ group, index }: ProjectSectionProps) {
       </div>
 
       {group.screenshots ? (
-        /* Tablet screenshot layout — tablet on top, cards below */
-        <div className="flex flex-col gap-6">
-          <div className="w-full flex justify-center">
-            <TabletCarousel screenshots={group.screenshots} />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        /* Two-column layout — cards on left, tablet on right */
+        <div className="flex flex-col md:flex-row gap-6 items-center">
+          {/* Left — Project cards */}
+          <div className="w-full md:w-[40%] grid grid-cols-1 gap-5">
             {group.projects.map((project, i) => (
               <motion.div
                 key={project.title}
@@ -79,6 +77,11 @@ export function ProjectSection({ group, index }: ProjectSectionProps) {
                 />
               </motion.div>
             ))}
+          </div>
+
+          {/* Right — Tablet carousel */}
+          <div className="w-full md:w-[60%] flex justify-center">
+            <TabletCarousel screenshots={group.screenshots} />
           </div>
         </div>
       ) : (

@@ -127,10 +127,9 @@ export function PrognosticatorSection() {
         />
       </div>
 
-      {/* Two-column layout */}
-      <div className="flex flex-col md:flex-row gap-8 md:gap-10 items-center">
-        {/* Left — Tablet carousel */}
-        <div className="w-full md:w-[55%]">
+      {/* Full-width tablet carousel */}
+      <div className="flex flex-col gap-6">
+        <div className="w-full">
           <div className="flex items-center gap-3 w-full max-w-[480px] mx-auto md:max-w-none">
             {/* Left arrow — hidden on mobile */}
             <button
@@ -187,7 +186,7 @@ export function PrognosticatorSection() {
                       alt={SCREENSHOTS[current].title}
                       fill
                       className="object-contain"
-                      sizes="(max-width: 1024px) 100vw, 660px"
+                      sizes="(max-width: 1024px) 100vw, 1120px"
                     />
                   </motion.div>
                 </AnimatePresence>
@@ -215,9 +214,9 @@ export function PrognosticatorSection() {
           </div>
         </div>
 
-        {/* Right — Dynamic text panel */}
-        <div className="w-full md:w-[45%] flex flex-col gap-5">
-          <div className="min-h-[200px]">
+        {/* Description + dot indicators below */}
+        <div className="flex flex-col md:flex-row gap-4 md:gap-8 items-start">
+          <div className="flex-1 min-h-[80px]">
             <AnimatePresence mode="wait">
               <motion.div
                 key={current}
@@ -226,10 +225,10 @@ export function PrognosticatorSection() {
                 exit={{ opacity: 0, y: -12 }}
                 transition={{ duration: 0.3 }}
               >
-                <h3 className="text-lg md:text-xl font-bold text-white mb-3">
+                <h3 className="text-lg md:text-xl font-bold text-white mb-2">
                   {SCREENSHOTS[current].title}
                 </h3>
-                <p className="text-sm md:text-base text-gray-300 leading-relaxed">
+                <p className="text-sm text-gray-300 leading-relaxed">
                   {SCREENSHOTS[current].description}
                 </p>
               </motion.div>
@@ -237,7 +236,7 @@ export function PrognosticatorSection() {
           </div>
 
           {/* Dot indicators */}
-          <div className="flex gap-2">
+          <div className="flex gap-2 md:pt-1 shrink-0">
             {SCREENSHOTS.map((_, i) => (
               <button
                 key={i}
@@ -253,7 +252,6 @@ export function PrognosticatorSection() {
               />
             ))}
           </div>
-
         </div>
       </div>
     </motion.section>
