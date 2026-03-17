@@ -180,8 +180,18 @@ export function AnimatedSubtitle({
 
   if (!started)
     return (
-      <div className="text-center py-8">
-        <div className="inline-block h-6 sm:h-7 md:h-8 w-64 sm:w-80 md:w-96 animate-shimmer" />
+      <div className="text-center font-mono tracking-tight py-8 invisible" aria-hidden="true">
+        <p className="text-lg sm:text-xl md:text-2xl font-bold text-balance sm:whitespace-nowrap">
+          {tokens.map((token, i) =>
+            token.type === "br" ? (
+              <br key={`ph-br-${i}`} className={token.className} />
+            ) : (
+              <span key={`ph-${i}`} className="inline-block">
+                {token.char === " " ? "\u00A0" : token.char}
+              </span>
+            )
+          )}
+        </p>
       </div>
     );
 
@@ -227,9 +237,9 @@ export function AnimatedSubtitle({
 
   return (
     <motion.div
-      className="text-center font-mono tracking-tight italic py-8"
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
+      className="text-center font-mono tracking-tight py-8"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
       transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
     >
       <p className="text-lg sm:text-xl md:text-2xl font-bold text-white text-balance sm:whitespace-nowrap">
