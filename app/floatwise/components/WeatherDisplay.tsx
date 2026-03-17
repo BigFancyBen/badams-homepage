@@ -174,7 +174,7 @@ function getArrowColor(
   return "text-gray-900 dark:text-gray-100";
 }
 
-export function WeatherDisplay({ locationWeather, preferences, loadedCount, totalCount }: WeatherDisplayProps) {
+export function WeatherDisplay({ locationWeather, preferences }: WeatherDisplayProps) {
   if (locationWeather.length === 0) {
     return null;
   }
@@ -215,14 +215,6 @@ export function WeatherDisplay({ locationWeather, preferences, loadedCount, tota
 
   return (
     <div className="w-full ">
-      {loadingCount > 0 && (
-        <div className="flex items-center justify-center py-2">
-          <div className="animate-spin h-4 w-4 border-b-2 border-blue-500 mr-2"></div>
-          <span className="text-sm text-gray-500 dark:text-gray-400">
-            Loading weather data...{totalCount && totalCount > 1 ? ` (${loadedCount}/${totalCount} locations)` : ''}
-          </span>
-        </div>
-      )}
       <div className="">
         <div
           className="overflow-x-auto -mx-3 sm:mx-0"
