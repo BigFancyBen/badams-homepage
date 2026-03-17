@@ -130,7 +130,7 @@ export function PrognosticatorSection() {
       {/* Title/description above, tablet below, all within one screen */}
       <div className="flex flex-col max-h-screen">
         {/* Slide title & description */}
-        <div className="mb-4 h-[140px] md:h-[120px] flex items-start justify-center">
+        <div className="mb-4 pb-2 h-[140px] md:h-[120px] flex items-start justify-center">
           <AnimatePresence mode="wait">
             <motion.div
               key={current}
