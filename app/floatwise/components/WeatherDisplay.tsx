@@ -1,5 +1,5 @@
 import { WeatherDisplayProps, LocationWeather } from "../types";
-import { getPrecipEmoji, normalizeWindDirection } from "../utils";
+import { getWeatherEmoji, normalizeWindDirection, getWindDirectionProximity } from "../utils";
 
 // Helper function to get color based on precipitation chance
 function getPrecipChanceColor(precipChance: number, threshold: number): string {
@@ -121,7 +121,57 @@ function getDisplayNames(locationWeather: LocationWeather[]): {
     }
   });
 
+  // Add fallback entries for loading/errored locations so they have display names
+  locationWeather.forEach((locationData) => {
+    if (!displayNames[locationData.location.id]) {
+      displayNames[locationData.location.id] = formatLocationName(locationData.location.name);
+    }
+  });
+
   return displayNames;
+}
+
+// SVG wind direction arrow component
+function WindArrow({ degrees, className }: { degrees: number; className: string }) {
+  // Add 180° so arrow points in the direction wind is blowing TO
+  const rotation = degrees + 180;
+  return (
+    <svg
+      className={`w-5 h-5 sm:w-6 sm:h-6 ${className}`}
+      viewBox="0 0 24 24"
+      fill="none"
+      style={{ transform: `rotate(${rotation}deg)` }}
+    >
+      <path
+        d="M12 4L12 20M12 4L7 9M12 4L17 9"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+// Get arrow color based on preferred direction proximity or wind speed threshold
+function getArrowColor(
+  windDirectionDegrees: number,
+  windSpeed: string,
+  windSpeedThreshold: number,
+  preferredDirection?: string
+): string {
+  if (preferredDirection) {
+    const normalized = normalizeWindDirection(preferredDirection);
+    const proximity = getWindDirectionProximity(windDirectionDegrees, normalized);
+    if (proximity === 'exact') return "text-green-500";
+    if (proximity === 'adjacent') return "text-yellow-500";
+    return "text-red-500";
+  }
+  const speed = parseInt(windSpeed.replace(/[^\d]/g, "")) || 0;
+  if (speed > windSpeedThreshold) {
+    return "text-red-600 dark:text-red-500";
+  }
+  return "text-gray-900 dark:text-gray-100";
 }
 
 export function WeatherDisplay({ locationWeather, preferences }: WeatherDisplayProps) {
@@ -140,7 +190,9 @@ export function WeatherDisplay({ locationWeather, preferences }: WeatherDisplayP
     hourTimeMap.set(hour, ampm);
   });
 
-  // Check if any location has data
+  const loadingCount = locationWeather.filter((l) => l.isLoading).length;
+
+  // Check if all locations failed (none loading, none with data)
   const hasAnyData = locationWeather.some(
     (locationData) =>
       !locationData.isLoading &&
@@ -148,22 +200,7 @@ export function WeatherDisplay({ locationWeather, preferences }: WeatherDisplayP
       locationData.hours.length > 0
   );
 
-  if (!hasAnyData) {
-    const loadingCount = locationWeather.filter((l) => l.isLoading).length;
-
-    if (loadingCount > 0) {
-      return (
-        <div className="w-full">
-          <div className="flex items-center justify-center py-8">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500 mr-3"></div>
-            <span className="text-gray-600 dark:text-gray-300">
-              Loading weather data...
-            </span>
-          </div>
-        </div>
-      );
-    }
-
+  if (!hasAnyData && loadingCount === 0) {
     return (
       <div className="w-full">
         <div className="text-center py-8 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900 border border-red-200 dark:border-red-700">
@@ -216,7 +253,55 @@ export function WeatherDisplay({ locationWeather, preferences }: WeatherDisplayP
                   locationData.error ||
                   locationData.hours.length === 0
                 ) {
-                  return null; // Skip locations without data
+                  return (
+                    <tr key={`${locationData.location.id}-skeleton`} className="h-[40px]">
+                      <td
+                        className={`sticky left-0 z-30 py-1 px-1 sm:px-1.5 pl-2 font-medium text-gray-900 dark:text-gray-100 text-[10px] sm:text-[11px] whitespace-normal sticky-right-divider border-b border-gray-500/20 w-[50px] sm:w-[55px] ${
+                          locationIndex === 0
+                            ? "border-t-2 border-t-white dark:border-t-gray-900"
+                            : "border-t border-t-gray-500/20"
+                        } ${
+                          locationIndex % 2 === 0
+                            ? "bg-white dark:bg-gray-800"
+                            : "bg-gray-50 dark:bg-gray-700"
+                        }`}
+                      >
+                        <div
+                          className="font-semibold mx-1 text-[8px] sm:text-[9px] leading-tight line-clamp-3 wrap-break-word"
+                          title={displayNames[locationData.location.id] || locationData.location.name}
+                        >
+                          {displayNames[locationData.location.id] || locationData.location.name}
+                          {locationData.location.subtitle && (
+                            <div className="font-normal text-[7px] sm:text-[8px] text-gray-500 dark:text-gray-400 mt-0.5">
+                              {locationData.location.subtitle}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      {sortedHours.map((hour, idx) => {
+                        const isRowEven = locationIndex % 2 === 0;
+                        const isColEven = idx % 2 === 0;
+                        const cellBgClass = isRowEven
+                          ? isColEven
+                            ? "bg-white dark:bg-gray-800"
+                            : "bg-gray-50 dark:bg-gray-700"
+                          : isColEven
+                          ? "bg-gray-50 dark:bg-gray-800"
+                          : "bg-white dark:bg-gray-700";
+                        return (
+                          <td
+                            key={hour}
+                            className={`py-1 px-0 text-center border-b border-gray-500/20 ${cellBgClass}`}
+                          >
+                            <div className="animate-pulse space-y-1 py-1 px-0.5">
+                              <div className="h-2 bg-gray-200 dark:bg-gray-600 w-8 mx-auto"></div>
+                              <div className="h-2 bg-gray-200 dark:bg-gray-600 w-6 mx-auto"></div>
+                            </div>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
                 }
 
                 const hourDataMap = new Map();
@@ -263,7 +348,10 @@ export function WeatherDisplay({ locationWeather, preferences }: WeatherDisplayP
                         ? getWindSpeedColor(hourData.windSpeed, preferences.windSpeedThreshold)
                         : null;
                       const windDirColor = hourData
-                        ? getWindDirectionColor(hourData.windDirection, locationData.location.preferredWindDirection)
+                        ? getWindDirectionColor(hourData.windDirectionDegrees, locationData.location.preferredWindDirection)
+                        : "";
+                      const arrowColor = hourData
+                        ? getArrowColor(hourData.windDirectionDegrees, hourData.windSpeed, preferences.windSpeedThreshold, locationData.location.preferredWindDirection)
                         : "";
                       // Checkerboard cell background based on row and column parity
                       const isRowEven = locationIndex % 2 === 0;
@@ -281,14 +369,30 @@ export function WeatherDisplay({ locationWeather, preferences }: WeatherDisplayP
                           className={`py-1 px-0 text-center border-b border-gray-500/20  ${cellBgClass}`}
                         >
                           {hourData ? (
-                            <div className="ml-2 sm:mx-auto flex flex-row items-center justify-between sm:max-w-[65px] relative">
+                            <div className="mx-auto flex flex-row items-center justify-center gap-0.5 sm:max-w-[65px]">
+                              {/* Wind direction arrow */}
+                              <div className="shrink-0">
+                                <WindArrow
+                                  degrees={hourData.windDirectionDegrees}
+                                  className={arrowColor}
+                                />
+                              </div>
+                              {/* Right column: stacked data */}
                               <div className="flex flex-col items-start justify-center gap-px">
-                                {/* Temperature */}
-                                <span className={`text-[10px] sm:text-[11px] font-medium leading-none ${getTemperatureColor(hourData.temperature, preferences.temperatureThreshold)}`}>
-                                  {hourData.temperature}°
-                                </span>
-                                {/* Wind speed + direction with preferred direction coloring */}
-                                <div className="text-[9px] sm:text-[10px] whitespace-nowrap leading-none z-20">
+                                {/* Temperature + emoji */}
+                                <div className="flex items-center gap-0.5">
+                                  <span className={`text-[10px] sm:text-[11px] font-medium leading-none ${getTemperatureColor(hourData.temperature, preferences.temperatureThreshold)}`}>
+                                    {hourData.temperature}°
+                                  </span>
+                                  <span
+                                    className="text-[10px] sm:text-[11px] leading-none"
+                                    title={hourData.shortForecast}
+                                  >
+                                    {getWeatherEmoji(hourData.weatherCode)}
+                                  </span>
+                                </div>
+                                {/* Wind speed + compass direction */}
+                                <div className="text-[9px] sm:text-[10px] whitespace-nowrap leading-none">
                                   <span className={colors?.text}>
                                     {hourData.windSpeed.replace(/\s*mph/i, "")}
                                   </span>
@@ -297,8 +401,8 @@ export function WeatherDisplay({ locationWeather, preferences }: WeatherDisplayP
                                     {hourData.windDirection}
                                   </span>
                                 </div>
-                                {/* Precipitation % + Weather Emoji */}
-                                <div className="flex items-center gap-0.5 text-[9px] sm:text-[10px] leading-none z-20">
+                                {/* Precipitation % */}
+                                <div className="flex items-center gap-0.5 text-[9px] sm:text-[10px] leading-none">
                                   {hourData.precipChance !== null && (
                                     <span
                                       className={getPrecipChanceColor(
@@ -311,12 +415,6 @@ export function WeatherDisplay({ locationWeather, preferences }: WeatherDisplayP
                                   )}
                                 </div>
                               </div>
-                              <span
-                                className="text-base sm:text-lg shrink-0 absolute right-0 z-10"
-                                title={hourData.shortForecast}
-                              >
-                                {getPrecipEmoji(hourData.precipChance)}
-                              </span>
                             </div>
                           ) : (
                             <span className="text-xs text-gray-400 dark:text-gray-600">
@@ -355,16 +453,15 @@ function getWindSpeedColor(windSpeed: string, threshold: number): { text: string
   }
 }
 
-// Helper function to get wind direction arrow color based on preferred direction
+// Helper function to get wind direction text color based on preferred direction proximity
 function getWindDirectionColor(
-  actualDirection: string,
+  actualDegrees: number,
   preferredDirection?: string
 ): string {
   if (!preferredDirection) return "text-gray-900 dark:text-gray-100";
-  const actual = normalizeWindDirection(actualDirection);
-  const preferred = normalizeWindDirection(preferredDirection);
-  if (actual === preferred) {
-    return "text-green-600 dark:text-green-400 font-semibold";
-  }
+  const normalized = normalizeWindDirection(preferredDirection);
+  const proximity = getWindDirectionProximity(actualDegrees, normalized);
+  if (proximity === 'exact') return "text-green-600 dark:text-green-400 font-semibold";
+  if (proximity === 'adjacent') return "text-yellow-600 dark:text-yellow-400";
   return "text-red-500 dark:text-red-400";
 }

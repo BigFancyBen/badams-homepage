@@ -1,15 +1,16 @@
 import { useState, useCallback } from 'react';
 import { Location, LocationWeather, WeatherLoadingState } from '../types';
-import { fetchNOAAWeather, parseWeatherForTimeRange } from '../utils';
+import { fetchWeatherForDate } from '../utils';
 
 export function useWeatherData() {
   const [weatherData, setWeatherData] = useState<LocationWeather[]>([]);
   const [loadingState, setLoadingState] = useState<WeatherLoadingState>('idle');
+  const [loadedCount, setLoadedCount] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
 
   const fetchWeatherForLocation = useCallback(async (location: Location, date: Date) => {
     try {
-      const response = await fetchNOAAWeather(location.lat, location.lon);
-      const hours = parseWeatherForTimeRange(response, date);
+      const hours = await fetchWeatherForDate(location.lat, location.lon, date);
       
       return {
         location,
@@ -36,7 +37,9 @@ export function useWeatherData() {
     }
 
     setLoadingState('loading');
-    
+    setTotalCount(locations.length);
+    setLoadedCount(0);
+
     // Set initial loading state for all locations
     setWeatherData(locations.map(location => ({
       location,
@@ -46,11 +49,13 @@ export function useWeatherData() {
     })));
 
     try {
-      // Fetch weather data for all locations in parallel
-      const weatherPromises = locations.map(location => 
-        fetchWeatherForLocation(location, date)
-      );
-      
+      // Fetch weather data for all locations in parallel, tracking progress
+      const weatherPromises = locations.map(async (location) => {
+        const result = await fetchWeatherForLocation(location, date);
+        setLoadedCount(prev => prev + 1);
+        return result;
+      });
+
       const results = await Promise.all(weatherPromises);
       setWeatherData(results);
       setLoadingState('success');
@@ -93,6 +98,8 @@ export function useWeatherData() {
   return {
     weatherData,
     loadingState,
+    loadedCount,
+    totalCount,
     fetchWeatherForLocations,
     refreshWeatherForLocation
   };

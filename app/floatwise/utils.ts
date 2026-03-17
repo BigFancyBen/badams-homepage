@@ -1,4 +1,4 @@
-import { Location, NOAAResponse, UserPreferences, WeatherHour } from './types';
+import { Location, UserPreferences } from './types';
 
 // Default user preferences
 export const DEFAULT_PREFERENCES: UserPreferences = {
@@ -7,132 +7,10 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   windSpeedThreshold: 10,
 };
 
-// NOAA API base URL
-const NOAA_BASE_URL = 'https://api.weather.gov';
-
 /**
- * Validate if coordinates are within NOAA coverage area (roughly US and territories)
+ * Fetch weather data for a specific location and date using Open-Meteo
  */
-function isWithinNOAACoverage(lat: number, lon: number): boolean {
-  // Basic bounds for NOAA coverage (US and territories)
-  // Mainland US, Alaska, Hawaii, Puerto Rico, etc.
-  return (
-    (lat >= 24.0 && lat <= 71.5 && lon >= -179.0 && lon <= -66.0) || // Mainland US + Alaska
-    (lat >= 18.0 && lat <= 28.5 && lon >= -179.0 && lon <= -154.0) || // Hawaii
-    (lat >= 17.0 && lat <= 19.0 && lon >= -68.0 && lon <= -65.0)     // Puerto Rico/VI
-  );
-}
-
-/**
- * Get the NOAA grid point for a given lat/lon
- */
-export async function getNOAAGridPoint(lat: number, lon: number) {
-  // Check if coordinates are within NOAA coverage area
-  if (!isWithinNOAACoverage(lat, lon)) {
-    throw new Error(`Location is outside NOAA weather service coverage area. NOAA only provides weather data for US locations.`);
-  }
-
-  const response = await fetch(`${NOAA_BASE_URL}/points/${lat},${lon}`);
-  if (!response.ok) {
-    if (response.status === 404) {
-      throw new Error(`Weather data not available for this location. NOAA may not have coverage for this specific coordinate.`);
-    }
-    throw new Error(`Failed to get grid point: ${response.statusText}`);
-  }
-  return await response.json();
-}
-
-/**
- * Get the forecast URL from grid point data
- */
-export function getForecastUrl(gridPointData: { properties: { forecastHourly: string } }): string {
-  // Use hourly forecast instead of regular forecast for more detailed data
-  return gridPointData.properties.forecastHourly;
-}
-
-/**
- * Fetch weather forecast from NOAA API
- */
-export async function fetchNOAAWeather(lat: number, lon: number): Promise<NOAAResponse> {
-  try {
-    // First get the grid point
-    const gridPoint = await getNOAAGridPoint(lat, lon);
-    const forecastUrl = getForecastUrl(gridPoint);
-    
-    // Then get the forecast
-    const response = await fetch(forecastUrl);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch weather: ${response.statusText}`);
-    }
-    
-    return await response.json();
-  } catch (error) {
-    console.error('Error fetching NOAA weather:', error);
-    throw error;
-  }
-}
-
-/**
- * Parse NOAA forecast periods and extract hourly data for 10am-7pm
- * Converts NOAA times to user's local timezone for display
- */
-export function parseWeatherForTimeRange(
-  forecast: NOAAResponse, 
-  targetDate: Date
-): WeatherHour[] {
-  const hours: WeatherHour[] = [];
-  
-  // Format target date as YYYY-MM-DD in user's local timezone
-  const targetYear = targetDate.getFullYear();
-  const targetMonth = String(targetDate.getMonth() + 1).padStart(2, '0');
-  const targetDay = String(targetDate.getDate()).padStart(2, '0');
-  const targetDateStr = `${targetYear}-${targetMonth}-${targetDay}`;
-  
-  // Filter periods for the target date and time range (10am-7pm)
-  const relevantPeriods = forecast.properties.periods.filter(period => {
-    // Parse NOAA time to Date object (converts to user's local timezone)
-    const periodDate = new Date(period.startTime);
-    
-    // Get date components in user's local timezone
-    const periodYear = periodDate.getFullYear();
-    const periodMonth = String(periodDate.getMonth() + 1).padStart(2, '0');
-    const periodDay = String(periodDate.getDate()).padStart(2, '0');
-    const periodDateStr = `${periodYear}-${periodMonth}-${periodDay}`;
-    
-    // Get hour in user's local timezone
-    const periodHour = periodDate.getHours();
-    
-    // Check if same date and within time range (10am-7pm) in user's timezone
-    return periodDateStr === targetDateStr && periodHour >= 10 && periodHour <= 19;
-  });
-  
-  // Convert periods to our hourly format
-  relevantPeriods.forEach(period => {
-    // Parse to Date object to get time in user's local timezone
-    const periodDate = new Date(period.startTime);
-    const hour = periodDate.getHours();
-    
-    // Format time display
-    const hour12 = hour === 0 ? 12 : (hour > 12 ? hour - 12 : hour);
-    const ampm = hour >= 12 ? 'PM' : 'AM';
-    const time = `${hour12} ${ampm}`;
-    
-    hours.push({
-      time,
-      hour,
-      temperature: period.temperature,
-      windSpeed: period.windSpeed,
-      windDirection: period.windDirection,
-      precipChance: period.probabilityOfPrecipitation?.value ?? null,
-      shortForecast: period.shortForecast
-    });
-  });
-  
-  // Sort by hour
-  hours.sort((a, b) => a.hour - b.hour);
-  
-  return hours;
-}
+export { fetchOpenMeteoWeather as fetchWeatherForDate } from './sources/open-meteo';
 
 /**
  * Get the initial/first selectable date based on current time
@@ -156,15 +34,15 @@ export function getInitialDate(): Date {
  * Generate next 10 days starting from today (or tomorrow if past 7pm)
  * Uses user's local timezone to determine the appropriate starting date
  */
-export function getNext10Days(): Date[] {
+export function getNextDays(): Date[] {
   const days: Date[] = [];
   const now = new Date();
   const currentHour = now.getHours();
-  
+
   // If it's past 7pm (19:00), start with tomorrow as the first day
   // since there's no useful weather data left for today
   const startOffset = currentHour >= 19 ? 1 : 0;
-  
+
   for (let i = 0; i < 10; i++) {
     const date = new Date(now);
     date.setDate(now.getDate() + startOffset + i);
@@ -172,7 +50,7 @@ export function getNext10Days(): Date[] {
     date.setHours(0, 0, 0, 0);
     days.push(date);
   }
-  
+
   return days;
 }
 
@@ -467,20 +345,53 @@ export function debounce<T extends (...args: never[]) => Promise<void> | void>(f
 }
 
 /**
- * Get weather emoji based on precipitation chance percentage
- * 0-4%: ☀️ (full sun)
- * 5-20%: ⛅ (partly cloudy)
- * 21-40%: 🌦️ (cloud with rain drop)
- * 41-60%: 🌧️ (cloud with rain)
- * 61-100%: ⛈️ (cloud with lightning)
+ * Get weather emoji based on WMO weather code
  */
-export function getPrecipEmoji(precipChance: number | null): string {
-  if (precipChance === null || precipChance === undefined) return '☀️';
-  if (precipChance <= 4) return '☀️';
-  if (precipChance <= 20) return '⛅';
-  if (precipChance <= 40) return '🌦️';
-  if (precipChance <= 60) return '🌧️';
-  return '⛈️';
+export function getWeatherEmoji(weatherCode: number): string {
+  if (weatherCode === 0) return '☀️';
+  if (weatherCode === 1) return '🌤️';
+  if (weatherCode === 2) return '⛅';
+  if (weatherCode === 3) return '☁️';
+  if (weatherCode === 45 || weatherCode === 48) return '🌫️';
+  if (weatherCode >= 51 && weatherCode <= 57) return '🌦️';
+  if (weatherCode >= 61 && weatherCode <= 67) return '🌧️';
+  if (weatherCode >= 71 && weatherCode <= 77) return '🌨️';
+  if (weatherCode >= 80 && weatherCode <= 82) return '🌧️';
+  if (weatherCode >= 85 && weatherCode <= 86) return '🌨️';
+  if (weatherCode >= 95) return '⛈️';
+  return '☀️';
+}
+
+/**
+ * Convert 8-point compass direction to degrees
+ */
+export function compassToDegrees(compass: string): number {
+  const map: Record<string, number> = {
+    N: 0, NE: 45, E: 90, SE: 135, S: 180, SW: 225, W: 270, NW: 315,
+  };
+  return map[compass.toUpperCase()] ?? 0;
+}
+
+/**
+ * Calculate shortest angular difference between two degree values
+ */
+export function angularDifference(a: number, b: number): number {
+  const diff = Math.abs(((a - b + 540) % 360) - 180);
+  return diff;
+}
+
+/**
+ * Determine proximity of actual wind direction to a preferred compass direction
+ */
+export function getWindDirectionProximity(
+  actualDegrees: number,
+  preferredCompass: string
+): 'exact' | 'adjacent' | 'opposite' {
+  const preferredDegrees = compassToDegrees(preferredCompass);
+  const diff = angularDifference(actualDegrees, preferredDegrees);
+  if (diff <= 22.5) return 'exact';
+  if (diff <= 67.5) return 'adjacent';
+  return 'opposite';
 }
 
 /**

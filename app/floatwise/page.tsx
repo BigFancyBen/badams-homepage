@@ -34,7 +34,7 @@ export default function FloatWisePage() {
     renameLocation,
     isViewingSharedLink,
   } = useLocationStorage(urlLocations);
-  const { weatherData, fetchWeatherForLocations } = useWeatherData();
+  const { weatherData, loadedCount, totalCount, fetchWeatherForLocations } = useWeatherData();
   const { preferences, updatePreferences } = useUserPreferences();
 
   // Fetch weather data when locations or selected date changes
@@ -110,9 +110,35 @@ export default function FloatWisePage() {
         {/* Main Content */}
         <div className="bg-white dark:bg-gray-800 shadow-xs  p-1 sm:p-3">
           <div className="flex items-center justify-between mb-2 w-full px-2 sm:px-0">
-            <h1 className="text-2xl sm:text-4xl font-bold text-gray-900 dark:text-gray-100 mb-1 sm:mb-2">
-              FloatWise
-            </h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl sm:text-4xl font-bold text-gray-900 dark:text-gray-100 mb-1 sm:mb-2">
+                FloatWise
+              </h1>
+              {weatherData.some((l) => l.isLoading) && (
+                <div className="flex items-center gap-1.5 mb-1 sm:mb-2">
+                  <svg className="w-5 h-4 text-blue-500" viewBox="0 0 28 16">
+                    <path
+                      d="M0 10 Q3.5 4, 7 10 Q10.5 16, 14 10 Q17.5 4, 21 10 Q24.5 16, 28 10"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                    >
+                      <animateTransform
+                        attributeName="transform"
+                        type="translate"
+                        values="0,0; -14,0; 0,0"
+                        dur="1.5s"
+                        repeatCount="indefinite"
+                      />
+                    </path>
+                  </svg>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                    {totalCount && totalCount > 1 ? `${loadedCount}/${totalCount}` : 'Loading...'}
+                  </span>
+                </div>
+              )}
+            </div>
             <div className="flex items-center gap-1">
               <LocationManager
                 locations={locations}
@@ -148,6 +174,8 @@ export default function FloatWisePage() {
               <WeatherDisplay
                 locationWeather={weatherData}
                 preferences={preferences}
+                loadedCount={loadedCount}
+                totalCount={totalCount}
               />
             </>
           )}

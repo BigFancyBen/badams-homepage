@@ -19,31 +19,6 @@ export interface UserPreferences {
   windSpeedThreshold: number;     // Above this = red (default 10)
 }
 
-// Weather data from NOAA API
-export interface NOAAForecast {
-  number: number;
-  name: string;
-  startTime: string;
-  endTime: string;
-  isDaytime: boolean;
-  temperature: number;
-  temperatureUnit: string;
-  windSpeed: string;
-  windDirection: string;
-  shortForecast: string;
-  detailedForecast: string;
-  probabilityOfPrecipitation?: {
-    unitCode: string;
-    value: number | null;
-  };
-}
-
-export interface NOAAResponse {
-  properties: {
-    periods: NOAAForecast[];
-  };
-}
-
 // Processed weather data for display
 export interface WeatherHour {
   time: string;
@@ -53,6 +28,8 @@ export interface WeatherHour {
   windDirection: string;
   precipChance: number | null;
   shortForecast: string;
+  windDirectionDegrees: number;
+  weatherCode: number;
 }
 
 export interface LocationWeather {
@@ -87,6 +64,8 @@ export interface LocationManagerProps {
 export interface WeatherDisplayProps {
   locationWeather: LocationWeather[];
   preferences: UserPreferences;
+  loadedCount?: number;
+  totalCount?: number;
 }
 
 export interface AddLocationModalProps {
