@@ -11,12 +11,11 @@ interface Screenshot {
 
 interface PhoneCarouselProps {
   screenshots: Screenshot[];
-  accentColor: string;
 }
 
 const AUTO_PLAY_INTERVAL = 4000;
 
-export function PhoneCarousel({ screenshots, accentColor }: PhoneCarouselProps) {
+export function PhoneCarousel({ screenshots }: PhoneCarouselProps) {
   const [current, setCurrent] = useState(0);
   const [paused, setPaused] = useState(false);
 
@@ -24,11 +23,25 @@ export function PhoneCarousel({ screenshots, accentColor }: PhoneCarouselProps) 
     setCurrent((i) => (i + 1) % screenshots.length);
   }, [screenshots.length]);
 
+  const prev = useCallback(() => {
+    setCurrent((i) => (i - 1 + screenshots.length) % screenshots.length);
+  }, [screenshots.length]);
+
   useEffect(() => {
     if (paused) return;
     const id = setInterval(next, AUTO_PLAY_INTERVAL);
     return () => clearInterval(id);
   }, [paused, next]);
+
+  const handleScreenClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    if (x < rect.width / 2) {
+      prev();
+    } else {
+      next();
+    }
+  };
 
   return (
     <div
@@ -38,68 +51,74 @@ export function PhoneCarousel({ screenshots, accentColor }: PhoneCarouselProps) 
       onTouchStart={() => setPaused(true)}
       onTouchEnd={() => setPaused(false)}
     >
-      {/* Phone frame */}
-      <div
-        className="relative flex flex-col"
-        style={{
-          background: "#1a1a1a",
-          borderTop: "4px solid #404040",
-          borderLeft: "4px solid #404040",
-          borderRight: "4px solid #0a0a0a",
-          borderBottom: "4px solid #0a0a0a",
-          boxShadow: "inset 2px 2px 0 #2a2a2a, inset -2px -2px 0 #0a0a0a",
-        }}
-      >
-        {/* Inner bevel */}
-        <div
-          className="absolute inset-[4px] pointer-events-none z-10"
-          style={{
-            borderTop: "2px solid #0a0a0a",
-            borderLeft: "2px solid #0a0a0a",
-            borderRight: "2px solid #303030",
-            borderBottom: "2px solid #303030",
-          }}
-        />
-
-        {/* Screen area */}
-        <div
-          className="relative w-[240px] sm:w-[280px] overflow-hidden"
-          style={{ aspectRatio: "1236 / 2796" }}
+      {/* Phone + arrows row */}
+      <div className="flex items-center gap-3">
+        {/* Left arrow */}
+        <button
+          onClick={prev}
+          className="text-gray-500 hover:text-white transition-colors p-1"
+          aria-label="Previous screenshot"
         >
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={current}
-              className="absolute inset-0"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.3 }}
-            >
-              <Image
-                src={screenshots[current].src}
-                alt={screenshots[current].label}
-                fill
-                className="object-cover"
-                sizes="280px"
-              />
-            </motion.div>
-          </AnimatePresence>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square">
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
+        </button>
+
+        {/* Phone frame with screenshot */}
+        <div className="relative w-[240px] sm:w-[280px]">
+          {/* Phone frame image */}
+          <Image
+            src="/radiance/phone-frame.svg"
+            alt=""
+            width={320}
+            height={660}
+            className="relative z-10 pointer-events-none w-full h-auto"
+            priority
+          />
+
+          {/* Screen area positioned inside the frame */}
+          <div
+            className="absolute z-0 overflow-hidden cursor-pointer"
+            style={{
+              top: "1.8%",
+              left: "3.75%",
+              width: "92.5%",
+              height: "96.4%",
+              borderRadius: "7.5%",
+            }}
+            onClick={handleScreenClick}
+          >
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={current}
+                className="absolute inset-0"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <Image
+                  src={screenshots[current].src}
+                  alt={screenshots[current].label}
+                  fill
+                  className="object-cover"
+                  sizes="280px"
+                />
+              </motion.div>
+            </AnimatePresence>
+          </div>
         </div>
 
-        {/* Dot indicators inside bezel */}
-        <div className="flex justify-center gap-2 py-3 relative z-10">
-          {screenshots.map((_, i) => (
-            <button
-              key={i}
-              onClick={() => setCurrent(i)}
-              className="w-2.5 h-2.5 transition-colors"
-              style={{
-                background: i === current ? accentColor : "#404040",
-              }}
-              aria-label={`Go to slide ${i + 1}`}
-            />
-          ))}
-        </div>
+        {/* Right arrow */}
+        <button
+          onClick={next}
+          className="text-gray-500 hover:text-white transition-colors p-1"
+          aria-label="Next screenshot"
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square">
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </button>
       </div>
 
       {/* Label below frame */}

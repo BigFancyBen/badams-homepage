@@ -29,10 +29,7 @@ export function RadianceSection() {
       <div className="flex flex-col md:flex-row gap-10 items-center">
         {/* Left — Phone carousel */}
         <div className="w-full md:w-[45%] flex justify-center">
-          <PhoneCarousel
-            screenshots={RADIANCE_SCREENSHOTS}
-            accentColor={ACCENT_COLOR}
-          />
+          <PhoneCarousel screenshots={RADIANCE_SCREENSHOTS} />
         </div>
 
         {/* Right — Copy block */}
