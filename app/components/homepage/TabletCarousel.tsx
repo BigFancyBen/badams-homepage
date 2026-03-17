@@ -91,7 +91,7 @@ export function TabletCarousel({ screenshots }: TabletCarouselProps) {
               width: "97%",
               height: "95.5%",
               borderRadius: "2.1%",
-              background: screenshots[current].bg ?? "#1a1a1a",
+              background: screenshots[current].bg ?? "#161616",
             }}
             onClick={handleScreenClick}
           >

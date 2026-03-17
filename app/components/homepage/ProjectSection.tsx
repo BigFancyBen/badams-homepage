@@ -51,48 +51,76 @@ export function ProjectSection({ group, index }: ProjectSectionProps) {
         />
       </div>
 
-      {/* Two-column layout */}
-      <div
-        className={`flex flex-col md:flex-row gap-6 ${isReversed ? "md:flex-row-reverse" : ""}`}
-      >
-        {/* Showcase panel — 40% on desktop */}
-        <div className="w-full md:w-[40%]">
-          {group.screenshots ? (
+      {group.screenshots ? (
+        /* Tablet screenshot layout — tablet on top, cards below */
+        <div className="flex flex-col gap-6">
+          <div className="w-full flex justify-center">
             <TabletCarousel screenshots={group.screenshots} />
-          ) : (
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {group.projects.map((project, i) => (
+              <motion.div
+                key={project.title}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, amount: 0.1 }}
+                transition={{
+                  delay: i * CARD_STAGGER,
+                  duration: 0.4,
+                  ease: [0.25, 0.1, 0.25, 1],
+                }}
+              >
+                <CompactCard
+                  title={project.title}
+                  description={project.description}
+                  href={project.href}
+                  tags={project.tags}
+                  accentColor={group.accentColor}
+                />
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        /* Two-column layout */
+        <div
+          className={`flex flex-col md:flex-row gap-6 ${isReversed ? "md:flex-row-reverse" : ""}`}
+        >
+          {/* Showcase panel — 40% on desktop */}
+          <div className="w-full md:w-[40%]">
             <GroupShowcase
               groupTitle={group.title}
               accentColor={group.accentColor}
               icon={group.icon}
             />
-          )}
-        </div>
+          </div>
 
-        {/* Project cards — 60% on desktop */}
-        <div className="w-full md:w-[60%] grid grid-cols-1 lg:grid-cols-2 gap-5">
-          {group.projects.map((project, i) => (
-            <motion.div
-              key={project.title}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, amount: 0.1 }}
-              transition={{
-                delay: i * CARD_STAGGER,
-                duration: 0.4,
-                ease: [0.25, 0.1, 0.25, 1],
-              }}
-            >
-              <CompactCard
-                title={project.title}
-                description={project.description}
-                href={project.href}
-                tags={project.tags}
-                accentColor={group.accentColor}
-              />
-            </motion.div>
-          ))}
+          {/* Project cards — 60% on desktop */}
+          <div className="w-full md:w-[60%] grid grid-cols-1 lg:grid-cols-2 gap-5">
+            {group.projects.map((project, i) => (
+              <motion.div
+                key={project.title}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, amount: 0.1 }}
+                transition={{
+                  delay: i * CARD_STAGGER,
+                  duration: 0.4,
+                  ease: [0.25, 0.1, 0.25, 1],
+                }}
+              >
+                <CompactCard
+                  title={project.title}
+                  description={project.description}
+                  href={project.href}
+                  tags={project.tags}
+                  accentColor={group.accentColor}
+                />
+              </motion.div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </motion.section>
   );
 }
