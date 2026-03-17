@@ -130,7 +130,7 @@ export function PrognosticatorSection() {
       {/* Title/description above, tablet below, all within one screen */}
       <div className="flex flex-col max-h-screen">
         {/* Slide title & description */}
-        <div className="mb-4 min-h-[80px]">
+        <div className="mb-4 h-[140px] md:h-[120px] flex items-start justify-center">
           <AnimatePresence mode="wait">
             <motion.div
               key={current}
@@ -138,7 +138,7 @@ export function PrognosticatorSection() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -12 }}
               transition={{ duration: 0.3 }}
-              className="max-w-[512px]"
+              className="max-w-[512px] text-center"
             >
               <h3 className="text-lg md:text-xl font-bold text-white mb-2">
                 {SCREENSHOTS[current].title}
