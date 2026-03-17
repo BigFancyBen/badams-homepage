@@ -59,10 +59,10 @@ export function TabletCarousel({ screenshots }: TabletCarouselProps) {
     <div className="flex flex-col items-center w-full max-w-[1024px]">
       {/* Tablet + arrows row */}
       <div className="flex items-center gap-3 w-full">
-        {/* Left arrow */}
+        {/* Left arrow — hidden on mobile, tap screen halves to navigate */}
         <button
           onClick={handlePrev}
-          className="text-gray-500 hover:text-white transition-colors p-1 shrink-0"
+          className="hidden sm:block text-gray-500 hover:text-white transition-colors p-1 shrink-0"
           aria-label="Previous screenshot"
         >
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square">
@@ -116,10 +116,10 @@ export function TabletCarousel({ screenshots }: TabletCarouselProps) {
           </div>
         </div>
 
-        {/* Right arrow */}
+        {/* Right arrow — hidden on mobile */}
         <button
           onClick={handleNext}
-          className="text-gray-500 hover:text-white transition-colors p-1 shrink-0"
+          className="hidden sm:block text-gray-500 hover:text-white transition-colors p-1 shrink-0"
           aria-label="Next screenshot"
         >
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square">
