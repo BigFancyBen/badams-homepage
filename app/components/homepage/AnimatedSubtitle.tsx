@@ -128,7 +128,7 @@ export function AnimatedSubtitle({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
     >
-      <p className="text-lg sm:text-xl md:text-2xl font-bold text-white whitespace-nowrap">
+      <p className="text-lg sm:text-xl md:text-2xl font-bold text-white text-balance sm:whitespace-nowrap">
         {renderChars(displayText.slice(0, mainText.length), 0, "text-white")}
       </p>
       {parenText && (
