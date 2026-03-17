@@ -8,7 +8,10 @@
       "Bash(npm run test:*)",
       "Bash(findstr:*)",
       "Bash(npm run lint)",
-      "Bash(npm run type-check:*)"
+      "Bash(npm run type-check:*)",
+      "Bash(npm update:*)",
+      "WebSearch",
+      "Bash(git add:*)"
     ]
   }
 }
