@@ -12,11 +12,12 @@ interface Screenshot {
 
 interface TabletCarouselProps {
   screenshots: Screenshot[];
+  autoPlayInterval?: number;
+  autoPlayDelay?: number;
+  onSlideChange?: (index: number) => void;
 }
 
-const AUTO_PLAY_INTERVAL = 2000;
-
-export function TabletCarousel({ screenshots }: TabletCarouselProps) {
+export function TabletCarousel({ screenshots, autoPlayInterval = 2000, autoPlayDelay = 0, onSlideChange }: TabletCarouselProps) {
   const [current, setCurrent] = useState(0);
   const [userClicked, setUserClicked] = useState(false);
 
@@ -30,9 +31,17 @@ export function TabletCarousel({ screenshots }: TabletCarouselProps) {
 
   useEffect(() => {
     if (userClicked) return;
-    const id = setInterval(next, AUTO_PLAY_INTERVAL);
-    return () => clearInterval(id);
-  }, [userClicked, next]);
+    let intervalId: ReturnType<typeof setInterval>;
+    const delayId = setTimeout(() => {
+      next();
+      intervalId = setInterval(next, autoPlayInterval);
+    }, autoPlayDelay);
+    return () => { clearTimeout(delayId); clearInterval(intervalId); };
+  }, [userClicked, next, autoPlayInterval, autoPlayDelay]);
+
+  useEffect(() => {
+    onSlideChange?.(current);
+  }, [current, onSlideChange]);
 
   const handlePrev = () => {
     setUserClicked(true);
