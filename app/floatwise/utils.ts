@@ -345,20 +345,53 @@ export function debounce<T extends (...args: never[]) => Promise<void> | void>(f
 }
 
 /**
- * Get weather emoji based on precipitation chance percentage
- * 0-4%: ☀️ (full sun)
- * 5-20%: ⛅ (partly cloudy)
- * 21-40%: 🌦️ (cloud with rain drop)
- * 41-60%: 🌧️ (cloud with rain)
- * 61-100%: ⛈️ (cloud with lightning)
+ * Get weather emoji based on WMO weather code
  */
-export function getPrecipEmoji(precipChance: number | null): string {
-  if (precipChance === null || precipChance === undefined) return '☀️';
-  if (precipChance <= 4) return '☀️';
-  if (precipChance <= 20) return '⛅';
-  if (precipChance <= 40) return '🌦️';
-  if (precipChance <= 60) return '🌧️';
-  return '⛈️';
+export function getWeatherEmoji(weatherCode: number): string {
+  if (weatherCode === 0) return '☀️';
+  if (weatherCode === 1) return '🌤️';
+  if (weatherCode === 2) return '⛅';
+  if (weatherCode === 3) return '☁️';
+  if (weatherCode === 45 || weatherCode === 48) return '🌫️';
+  if (weatherCode >= 51 && weatherCode <= 57) return '🌦️';
+  if (weatherCode >= 61 && weatherCode <= 67) return '🌧️';
+  if (weatherCode >= 71 && weatherCode <= 77) return '🌨️';
+  if (weatherCode >= 80 && weatherCode <= 82) return '🌧️';
+  if (weatherCode >= 85 && weatherCode <= 86) return '🌨️';
+  if (weatherCode >= 95) return '⛈️';
+  return '☀️';
+}
+
+/**
+ * Convert 8-point compass direction to degrees
+ */
+export function compassToDegrees(compass: string): number {
+  const map: Record<string, number> = {
+    N: 0, NE: 45, E: 90, SE: 135, S: 180, SW: 225, W: 270, NW: 315,
+  };
+  return map[compass.toUpperCase()] ?? 0;
+}
+
+/**
+ * Calculate shortest angular difference between two degree values
+ */
+export function angularDifference(a: number, b: number): number {
+  const diff = Math.abs(((a - b + 540) % 360) - 180);
+  return diff;
+}
+
+/**
+ * Determine proximity of actual wind direction to a preferred compass direction
+ */
+export function getWindDirectionProximity(
+  actualDegrees: number,
+  preferredCompass: string
+): 'exact' | 'adjacent' | 'opposite' {
+  const preferredDegrees = compassToDegrees(preferredCompass);
+  const diff = angularDifference(actualDegrees, preferredDegrees);
+  if (diff <= 22.5) return 'exact';
+  if (diff <= 67.5) return 'adjacent';
+  return 'opposite';
 }
 
 /**

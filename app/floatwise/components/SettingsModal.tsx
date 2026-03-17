@@ -324,8 +324,15 @@ export function SettingsModal({
                   type="file"
                   accept=".csv,.txt"
                   onChange={handleCsvFileUpload}
-                  className="w-full text-sm text-gray-600 dark:text-gray-300 min-h-[44px]"
+                  className="hidden"
                 />
+                <button
+                  type="button"
+                  onClick={() => csvFileRef.current?.click()}
+                  className="w-full px-4 py-2 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors min-h-[44px] text-sm"
+                >
+                  Browse CSV File...
+                </button>
               </div>
 
               {/* Or paste text */}
@@ -410,8 +417,15 @@ export function SettingsModal({
                   type="file"
                   accept=".json"
                   onChange={handleJsonFileUpload}
-                  className="w-full text-sm text-gray-600 dark:text-gray-300 min-h-[44px]"
+                  className="hidden"
                 />
+                <button
+                  type="button"
+                  onClick={() => jsonFileRef.current?.click()}
+                  className="w-full px-4 py-2 bg-blue-500 dark:bg-blue-600 text-white hover:bg-blue-600 dark:hover:bg-blue-700 transition-colors min-h-[44px] text-sm"
+                >
+                  Import JSON Config...
+                </button>
               </div>
 
               {jsonImportError && (

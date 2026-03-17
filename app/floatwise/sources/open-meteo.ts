@@ -116,6 +116,8 @@ function parseHourlyData(hourly: OpenMeteoHourly): WeatherHour[] {
       windDirection: degreesToCompass(hourly.wind_direction_10m[i]),
       precipChance: hourly.precipitation_probability[i] ?? null,
       shortForecast: wmoCodeToForecast(hourly.weather_code[i]),
+      windDirectionDegrees: hourly.wind_direction_10m[i],
+      weatherCode: hourly.weather_code[i],
     });
   }
 

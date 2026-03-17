@@ -28,6 +28,8 @@ export interface WeatherHour {
   windDirection: string;
   precipChance: number | null;
   shortForecast: string;
+  windDirectionDegrees: number;
+  weatherCode: number;
 }
 
 export interface LocationWeather {
