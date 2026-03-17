@@ -6,6 +6,7 @@ import {
   ProjectSection,
   ProjectGroup,
 } from "./components/homepage/ProjectSection";
+import { RadianceSection } from "./components/homepage/RadianceSection";
 
 const projectGroups: ProjectGroup[] = [
   {
@@ -94,6 +95,7 @@ export default function Home() {
 
       {/* Project sections */}
       <div className="relative z-10 max-w-7xl mx-auto px-4 pb-24 space-y-24">
+        <RadianceSection />
         {projectGroups.map((group, index) => (
           <ProjectSection key={group.title} group={group} index={index} />
         ))}
