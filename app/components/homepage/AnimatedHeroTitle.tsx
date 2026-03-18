@@ -182,9 +182,10 @@ function AnimatedDot({
 
 interface AnimatedHeroTitleProps {
   text: string;
+  onComplete?: () => void;
 }
 
-export function AnimatedHeroTitle({ text }: AnimatedHeroTitleProps) {
+export function AnimatedHeroTitle({ text, onComplete }: AnimatedHeroTitleProps) {
   const [prefixDone, setPrefixDone] = useState(false);
   const [dotTimerFired, setDotTimerFired] = useState(false);
   const [dotLanded, setDotLanded] = useState(false);
@@ -216,7 +217,8 @@ export function AnimatedHeroTitle({ text }: AnimatedHeroTitleProps) {
 
   const handleSuffixComplete = useCallback(() => {
     setAllComplete(true);
-  }, []);
+    onComplete?.();
+  }, [onComplete]);
 
   return (
     <motion.h1

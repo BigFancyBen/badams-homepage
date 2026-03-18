@@ -37,6 +37,9 @@ export default function Home({ initialView }: { initialView?: View }) {
     return () => window.removeEventListener("popstate", onPopState);
   }, [view]);
 
+  const [heroComplete, setHeroComplete] = useState(false);
+  const handleHeroComplete = useCallback(() => setHeroComplete(true), []);
+
   if (view === "resume") {
     return <ResumeView onNavigateHome={() => navigateTo("home")} />;
   }
@@ -58,8 +61,8 @@ export default function Home({ initialView }: { initialView?: View }) {
 
       {/* Hero section */}
       <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-4 py-8">
-        <AnimatedHeroTitle text="benadams.dev" />
-        <AnimatedSubtitle startDelay={400} text={<div>These are some of<br className="inline sm:hidden" /> the things I&apos;ve built<br />(that weren&apos;t my job)</div>} />
+        <AnimatedHeroTitle text="benadams.dev" onComplete={handleHeroComplete} />
+        <AnimatedSubtitle startDelay={400} parenStarted={heroComplete} text={<div>These are some of<br className="inline sm:hidden" /> the things I&apos;ve built<br />(that weren&apos;t my job)</div>} />
         <ScrollDownArrow />
       </div>
 

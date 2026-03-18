@@ -7,6 +7,7 @@ import { motion } from "motion/react";
 interface AnimatedSubtitleProps {
   text: React.ReactNode;
   startDelay?: number;
+  parenStarted?: boolean;
 }
 
 type SubtitleToken =
@@ -61,62 +62,22 @@ function tokenizeSubtitleText(node: React.ReactNode): SubtitleToken[] {
   return tokens;
 }
 
-function countChars(tokens: SubtitleToken[]): number {
-  return tokens.reduce((count, token) => {
-    return token.type === "char" ? count + 1 : count;
-  }, 0);
-}
-
-export function AnimatedSubtitle({
-  text,
-  startDelay = 1200,
-}: AnimatedSubtitleProps) {
-  const tokens = tokenizeSubtitleText(text);
-  const plainText = tokens
+function tokensToPlainText(tokens: SubtitleToken[]): string {
+  return tokens
     .filter((token) => token.type === "char")
     .map((token) => token.char)
     .join("");
+}
 
-  const mainTokens: SubtitleToken[] = [];
-  const parenTokens: SubtitleToken[] = [];
-  let hasFoundParen = false;
-
-  tokens.forEach((token) => {
-    if (!hasFoundParen && token.type === "char" && token.char === "(") {
-      hasFoundParen = true;
-    }
-
-    if (hasFoundParen) {
-      parenTokens.push(token);
-    } else {
-      mainTokens.push(token);
-    }
-  });
-
-  const mainCharCount = countChars(mainTokens);
-
+function useGlitchReveal(plainText: string, started: boolean, duration: number) {
   const [displayText, setDisplayText] = useState("");
+  const [revealedIndices, setRevealedIndices] = useState<Set<number>>(new Set());
   const [isComplete, setIsComplete] = useState(false);
-  const [started, setStarted] = useState(false);
-  const [revealedIndices, setRevealedIndices] = useState<Set<number>>(
-    new Set()
-  );
   const rafRef = useRef<number | null>(null);
-  const delayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const getRandomGlyph = useCallback(() => {
     return GLYPHS[Math.floor(Math.random() * GLYPHS.length)];
   }, []);
-
-  useEffect(() => {
-    delayRef.current = setTimeout(() => {
-      setStarted(true);
-    }, startDelay);
-
-    return () => {
-      if (delayRef.current) clearTimeout(delayRef.current);
-    };
-  }, [startDelay]);
 
   useEffect(() => {
     if (!started) return;
@@ -125,10 +86,9 @@ export function AnimatedSubtitle({
       return;
     }
 
-    const totalDuration = 350;
     const frameRate = 60;
     const frameTime = 1000 / frameRate;
-    const totalFrames = (totalDuration / 1000) * frameRate;
+    const totalFrames = (duration / 1000) * frameRate;
     const revealInterval = totalFrames / plainText.length;
 
     let frame = 0;
@@ -176,13 +136,60 @@ export function AnimatedSubtitle({
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [started, plainText, getRandomGlyph]);
+  }, [started, plainText, duration, getRandomGlyph]);
 
-  if (!started)
+  return { displayText, revealedIndices, isComplete };
+}
+
+export function AnimatedSubtitle({
+  text,
+  startDelay = 1200,
+  parenStarted = false,
+}: AnimatedSubtitleProps) {
+  const tokens = tokenizeSubtitleText(text);
+
+  const mainTokens: SubtitleToken[] = [];
+  const parenTokens: SubtitleToken[] = [];
+  let hasFoundParen = false;
+
+  tokens.forEach((token) => {
+    if (!hasFoundParen && token.type === "char" && token.char === "(") {
+      hasFoundParen = true;
+    }
+
+    if (hasFoundParen) {
+      parenTokens.push(token);
+    } else {
+      mainTokens.push(token);
+    }
+  });
+
+  const mainPlainText = tokensToPlainText(mainTokens);
+  const parenPlainText = tokensToPlainText(parenTokens);
+
+  const [mainStarted, setMainStarted] = useState(false);
+  const delayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    delayRef.current = setTimeout(() => {
+      setMainStarted(true);
+    }, startDelay);
+
+    return () => {
+      if (delayRef.current) clearTimeout(delayRef.current);
+    };
+  }, [startDelay]);
+
+  const mainReveal = useGlitchReveal(mainPlainText, mainStarted, 350);
+  const parenReveal = useGlitchReveal(parenPlainText, parenStarted, 350);
+
+  const bothComplete = mainReveal.isComplete && parenReveal.isComplete;
+
+  if (!mainStarted)
     return (
       <div className="text-center font-mono tracking-tight py-8 invisible" aria-hidden="true">
         <p className="text-lg sm:text-xl md:text-2xl font-bold text-balance sm:whitespace-nowrap">
-          {tokens.map((token, i) =>
+          {mainTokens.map((token, i) =>
             token.type === "br" ? (
               <br key={`ph-br-${i}`} className={token.className} />
             ) : (
@@ -192,21 +199,37 @@ export function AnimatedSubtitle({
             )
           )}
         </p>
+        {parenTokens.length > 0 && (
+          <p className="text-sm sm:text-base md:text-lg font-medium text-white/60 mt-1">
+            {parenTokens.map((token, i) =>
+              token.type === "br" ? (
+                <br key={`ph-br-paren-${i}`} className={token.className} />
+              ) : (
+                <span key={`ph-paren-${i}`} className="inline-block">
+                  {token.char === " " ? "\u00A0" : token.char}
+                </span>
+              )
+            )}
+          </p>
+        )}
       </div>
     );
 
   const renderTokens = (
     tokenList: SubtitleToken[],
-    startIndex: number,
-    className: string
+    reveal: { displayText: string; revealedIndices: Set<number>; isComplete: boolean },
+    glowOffset: number,
+    className: string,
+    keyPrefix: string,
+    allComplete: boolean
   ) => {
-    let charIndex = startIndex;
+    let charIndex = 0;
 
     return tokenList.map((token, tokenIndex) => {
       if (token.type === "br") {
         return (
           <br
-            key={`br-${startIndex}-${tokenIndex}`}
+            key={`br-${keyPrefix}-${tokenIndex}`}
             className={token.className}
           />
         );
@@ -214,19 +237,19 @@ export function AnimatedSubtitle({
 
       const i = charIndex;
       charIndex++;
-      const isRevealed = revealedIndices.has(i);
-      const displayChar = displayText[i] ?? token.char;
+      const isRevealed = reveal.revealedIndices.has(i);
+      const displayChar = reveal.displayText[i] ?? token.char;
 
       return (
         <span
-          key={`char-${i}`}
+          key={`char-${keyPrefix}-${i}`}
           className={`inline-block will-change-transform ${className} ${
-            isComplete ? "animate-glow" : ""
+            allComplete ? "animate-glow" : ""
           }`}
           style={{
             opacity: isRevealed ? 1 : 0.7,
             filter: isRevealed ? "none" : "blur(1px)",
-            animationDelay: isComplete ? `${i * 0.15}s` : "0s",
+            animationDelay: allComplete ? `${(glowOffset + i) * 0.15}s` : "0s",
           }}
         >
           {displayChar === " " ? "\u00A0" : displayChar}
@@ -243,12 +266,17 @@ export function AnimatedSubtitle({
       transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
     >
       <p className="text-lg sm:text-xl md:text-2xl font-bold text-white text-balance sm:whitespace-nowrap">
-        {renderTokens(mainTokens, 0, "text-white")}
+        {renderTokens(mainTokens, mainReveal, 0, "text-white", "main", bothComplete)}
       </p>
       {parenTokens.length > 0 && (
-        <p className="text-sm sm:text-base md:text-lg font-medium text-white/60 mt-1">
-          {renderTokens(parenTokens, mainCharCount, "text-white/60")}
-        </p>
+        <motion.p
+          className="text-sm sm:text-base md:text-lg font-medium text-white/60 mt-1"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: parenStarted ? 1 : 0 }}
+          transition={{ duration: 0.15 }}
+        >
+          {renderTokens(parenTokens, parenReveal, mainPlainText.length, "text-white/60", "paren", bothComplete)}
+        </motion.p>
       )}
     </motion.div>
   );
