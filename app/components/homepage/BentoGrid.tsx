@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { motion } from "motion/react";
+import Image from "next/image";
 import { BentoCard } from "./BentoCard";
 import { TabletCarousel } from "./TabletCarousel";
 import { PhoneCarousel } from "./PhoneCarousel";
@@ -223,25 +224,72 @@ export function BentoGrid() {
       />
 
       {/* IRLScape */}
-      <BentoCard
-        title="IRLScape"
-        description="IRL streaming overlay for Old School RuneScape. Game UI elements overlaid on real-world footage with Twitch chat and Joycon controls."
-        href="https://www.youtube.com/watch?v=gCofVhR5HUQ"
-        accentColor="#f59e0b"
-        index={7}
-        dimmed={hoveredIndex !== null && hoveredIndex !== 7}
-        onHover={() => setHoveredIndex(7)}
-      />
+      <div className="md:col-span-2 self-start">
+        <BentoCard
+          title="IRLScape"
+          description="IRL streaming overlay for Old School RuneScape. Game UI elements overlaid on real-world footage with Twitch chat and Joycon controls."
+          href="https://www.youtube.com/watch?v=gCofVhR5HUQ"
+          accentColor="#f59e0b"
+          index={7}
+          dimmed={hoveredIndex !== null && hoveredIndex !== 7}
+          onHover={() => setHoveredIndex(7)}
+        >
+          <div className="relative aspect-video w-full overflow-hidden">
+            <Image
+              src="/irlscape/thumbnail.webp"
+              alt="IRLScape YouTube video thumbnail"
+              fill
+              className="object-cover"
+              sizes="(max-width: 768px) 100vw, 50vw"
+            />
+          </div>
+        </BentoCard>
+      </div>
 
       {/* OSRS Progress */}
       <BentoCard
         title="OSRS Progress Generator"
         description="API for generating progress report images for Old School RuneScape players. Collection log items, OSRS Wiki integration."
         accentColor="#f59e0b"
+        colSpan={2}
         index={8}
         dimmed={hoveredIndex !== null && hoveredIndex !== 8}
         onHover={() => setHoveredIndex(8)}
-      />
+      >
+        <div className="flex flex-col gap-0.5 flex-1" style={{ backgroundColor: "#313338", padding: "8px 0" }}>
+          {[
+            { src: "/osrsprogs/progresspic.webp", alt: "OSRS progress report", w: 330, h: 285 },
+            { src: "/osrsprogs/collectionlog.webp", alt: "OSRS collection log", w: 396, h: 221 },
+          ].map((img, i) => (
+            <div key={img.src} className="flex gap-2 px-3 py-1 hover:bg-[#2e3035]">
+              {/* Avatar */}
+              <div className="w-10 h-10 shrink-0 mt-0.5" style={{ backgroundColor: "#5865f2", borderRadius: "50%" }}>
+                <svg viewBox="0 0 127.14 96.36" className="w-5 h-5 m-2.5" fill="white">
+                  <path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,46,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,46,96.12,53,91.08,65.69,84.69,65.69Z" />
+                </svg>
+              </div>
+              {/* Message */}
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-medium" style={{ color: "#5865f2" }}>OSRS Progress</span>
+                  <span className="text-[9px] font-medium px-1 py-px" style={{ backgroundColor: "#5865f2", color: "white", borderRadius: "3px" }}>BOT</span>
+                  <span className="text-[10px] text-gray-500">{i === 0 ? "01/08/2025 9:14 PM" : "10/14/2025 11:11 PM"}</span>
+                </div>
+                <div className="mt-1">
+                  <Image
+                    src={img.src}
+                    alt={img.alt}
+                    width={img.w}
+                    height={img.h}
+                    unoptimized
+                    style={{ borderRadius: "8px" }}
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </BentoCard>
     </div>
   );
 }
