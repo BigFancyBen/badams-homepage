@@ -6,12 +6,12 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "benadams.dev",
   description:
-    "Personal homepage and project showcase featuring web development tools and utilities",
+    "I'm always tinkering with something",
   keywords: "web development, portfolio, tools, utilities",
   openGraph: {
     title: "benadams.dev",
     description:
-      "Personal homepage and project showcase featuring web development tools and utilities",
+      "I'm always tinkering with something",
     type: "website",
     siteName: "benadams.dev",
     images: [
@@ -27,7 +27,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "benadams.dev",
     description:
-      "Personal homepage and project showcase featuring web development tools and utilities",
+      "I'm always tinkering with something",
     images: ["/og-homepage.png"],
   },
 };
