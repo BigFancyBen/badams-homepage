@@ -1,7 +1,9 @@
 "use client";
 
-import { useRef, useEffect, MouseEvent, useState } from "react";
+import { useRef, useEffect, MouseEvent, useState, useCallback } from "react";
 import { motion, useMotionValue, useSpring, useTransform } from "motion/react";
+import { useAmbientGlow } from "@/app/hooks/useAmbientGlow";
+import { useReducedMotion } from "@/app/hooks/useReducedMotion";
 
 interface Technology {
   name: string;
@@ -48,7 +50,17 @@ const TECHNOLOGIES: Technology[] = [
   { name: "Flask", logo: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/flask/flask-original.svg", accentColor: "#ffffff", colSpan: 1, rowSpan: 1 },
 ];
 
-function TechCard({ tech, index }: { tech: Technology; index: number }) {
+function TechCard({
+  tech,
+  index,
+  isAmbientActive,
+  onHoverChange,
+}: {
+  tech: Technology;
+  index: number;
+  isAmbientActive: boolean;
+  onHoverChange: (index: number, hovered: boolean) => void;
+}) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [isHovered, setIsHovered] = useState(false);
 
@@ -77,6 +89,32 @@ function TechCard({ tech, index }: { tech: Technology; index: number }) {
       `radial-gradient(circle at ${x}% ${y}%, ${tech.accentColor}40, ${tech.accentColor}10 40%, transparent 70%)`
   );
 
+  // Ambient glow drift effect - slowly oscillate mouse position when ambient-active
+  useEffect(() => {
+    if (!isAmbientActive || isHovered) return;
+
+    hoverValue.set(0.5);
+    let frame: number;
+    const startTime = Date.now();
+
+    const drift = () => {
+      const t = (Date.now() - startTime) / 1000;
+      mouseX.set(0.5 + 0.3 * Math.sin(t * 0.7));
+      mouseY.set(0.5 + 0.3 * Math.cos(t * 0.5));
+      frame = requestAnimationFrame(drift);
+    };
+    frame = requestAnimationFrame(drift);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      if (!isHovered) {
+        hoverValue.set(0);
+        mouseX.set(0.5);
+        mouseY.set(0.5);
+      }
+    };
+  }, [isAmbientActive, isHovered, hoverValue, mouseX, mouseY]);
+
   const handleMouseMove = (e: MouseEvent<HTMLDivElement>) => {
     if (!cardRef.current) return;
     const rect = cardRef.current.getBoundingClientRect();
@@ -89,6 +127,9 @@ function TechCard({ tech, index }: { tech: Technology; index: number }) {
   const iconSize = isLarge ? "w-16 h-16" : isMedium ? "w-12 h-12" : "w-8 h-8";
   const textSize = isLarge ? "text-lg font-bold" : isMedium ? "text-sm font-semibold" : "text-xs font-medium";
 
+  const isActive = isHovered || isAmbientActive;
+  const intensity = isHovered ? 1 : isAmbientActive ? 0.5 : 0;
+
   return (
     <motion.div
       ref={cardRef}
@@ -99,8 +140,8 @@ function TechCard({ tech, index }: { tech: Technology; index: number }) {
         gridRow: `span ${tech.rowSpan}`,
       }}
       onMouseMove={handleMouseMove}
-      onMouseEnter={() => { setIsHovered(true); hoverValue.set(1); }}
-      onMouseLeave={() => { setIsHovered(false); hoverValue.set(0); mouseX.set(0.5); mouseY.set(0.5); }}
+      onMouseEnter={() => { setIsHovered(true); onHoverChange(index, true); hoverValue.set(1); }}
+      onMouseLeave={() => { setIsHovered(false); onHoverChange(index, false); hoverValue.set(isAmbientActive ? 0.5 : 0); mouseX.set(0.5); mouseY.set(0.5); }}
       initial={{ opacity: 0, y: 20 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, amount: 0.1 }}
@@ -110,12 +151,12 @@ function TechCard({ tech, index }: { tech: Technology; index: number }) {
         className="relative h-full overflow-hidden flex flex-col items-center justify-center gap-3 p-6"
         style={{
           background: "rgba(255,255,255,0.03)",
-          border: `1px solid ${isHovered ? `${tech.accentColor}80` : "rgba(255,255,255,0.06)"}`,
+          border: `1px solid ${isActive ? `${tech.accentColor}${isHovered ? "80" : "40"}` : "rgba(255,255,255,0.06)"}`,
           backdropFilter: "blur(12px)",
           WebkitBackdropFilter: "blur(12px)",
           transition: "border-color 0.3s ease, box-shadow 0.3s ease",
-          boxShadow: isHovered
-            ? `0 8px 32px ${tech.accentColor}20, 0 0 0 1px ${tech.accentColor}15, inset 0 1px 0 ${tech.accentColor}10`
+          boxShadow: isActive
+            ? `0 8px 32px ${tech.accentColor}${isHovered ? "20" : "10"}, 0 0 0 1px ${tech.accentColor}${isHovered ? "15" : "08"}, inset 0 1px 0 ${tech.accentColor}${isHovered ? "10" : "06"}`
             : "0 0 0 0 transparent",
           minHeight: isLarge ? "200px" : isMedium ? "140px" : "100px",
           rotateX: isHovered ? rotateX : 0,
@@ -132,7 +173,7 @@ function TechCard({ tech, index }: { tech: Technology; index: number }) {
         {/* Logo */}
         <motion.div
           className={`relative z-10 ${iconSize}`}
-          animate={{ scale: isHovered ? 1.15 : 1 }}
+          animate={{ scale: isHovered ? 1.15 : isAmbientActive ? 1.075 : 1 }}
           transition={{ type: "spring", stiffness: 300, damping: 20 }}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -141,7 +182,9 @@ function TechCard({ tech, index }: { tech: Technology; index: number }) {
             alt={tech.name}
             className="w-full h-full object-contain drop-shadow-none"
             style={{
-              filter: isHovered ? `drop-shadow(0 0 8px ${tech.accentColor}60)` : "none",
+              filter: isActive
+                ? `drop-shadow(0 0 ${isHovered ? "8px" : "5px"} ${tech.accentColor}${isHovered ? "60" : "30"})`
+                : "none",
               transition: "filter 0.3s ease",
             }}
             loading="lazy"
@@ -152,7 +195,9 @@ function TechCard({ tech, index }: { tech: Technology; index: number }) {
         <span
           className={`relative z-10 text-white ${textSize}`}
           style={{
-            textShadow: isHovered ? `0 0 12px ${tech.accentColor}50` : "none",
+            textShadow: isActive
+              ? `0 0 12px ${tech.accentColor}${intensity >= 1 ? "50" : "28"}`
+              : "none",
             transition: "text-shadow 0.3s ease",
           }}
         >
@@ -164,6 +209,21 @@ function TechCard({ tech, index }: { tech: Technology; index: number }) {
 }
 
 export function ResumeView({ onNavigateHome }: { onNavigateHome: () => void }) {
+  const reducedMotion = useReducedMotion();
+  const [anyHovered, setAnyHovered] = useState(false);
+  const hoverCountRef = useRef(0);
+
+  const ambientActiveIndices = useAmbientGlow(
+    TECHNOLOGIES.length,
+    reducedMotion,
+    anyHovered
+  );
+
+  const handleHoverChange = useCallback((_index: number, hovered: boolean) => {
+    hoverCountRef.current += hovered ? 1 : -1;
+    setAnyHovered(hoverCountRef.current > 0);
+  }, []);
+
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
@@ -189,7 +249,13 @@ export function ResumeView({ onNavigateHome }: { onNavigateHome: () => void }) {
           style={{ gridAutoRows: "minmax(80px, auto)" }}
         >
           {TECHNOLOGIES.map((tech, i) => (
-            <TechCard key={tech.name} tech={tech} index={i} />
+            <TechCard
+              key={tech.name}
+              tech={tech}
+              index={i}
+              isAmbientActive={ambientActiveIndices.has(i)}
+              onHoverChange={handleHoverChange}
+            />
           ))}
         </div>
       </div>

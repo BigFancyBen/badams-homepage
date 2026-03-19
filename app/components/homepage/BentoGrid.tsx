@@ -99,7 +99,7 @@ export function BentoGrid() {
         title="Prognosticator"
         subtitle={PROGNOSTICATOR_SCREENSHOTS[progSlide].label}
         description={PROGNOSTICATOR_SCREENSHOTS[progSlide].description}
-        accentColor="#e07a5f"
+        accentColor="#81a1c1"
         colSpan={3}
         rowSpan={2}
         index={0}
@@ -116,7 +116,7 @@ export function BentoGrid() {
         title="hobbit.house"
         description="Mobile control app for a living room mini PC — launch games, manage Kodi, adjust smart lights, and monitor system stats."
         href="https://github.com/BigFancyBen/hobbit-ccp"
-        accentColor="#ef4444"
+        accentColor="#81a1c1"
         rowSpan={2}
         index={1}
         dimmed={hoveredIndex !== null && hoveredIndex !== 1}
@@ -205,7 +205,7 @@ export function BentoGrid() {
         title="FloatWise"
         description="NOAA weather tracker for multiple locations. Detailed hourly forecasts, temperature and wind tracking for float trip planning."
         href="/floatwise"
-        accentColor="#06b6d4"
+        accentColor="#81a1c1"
         colSpan={2}
         index={5}
         dimmed={hoveredIndex !== null && hoveredIndex !== 5}
@@ -216,7 +216,7 @@ export function BentoGrid() {
         title="Dota 2 Randomizer"
         description="Spin two wheels for a random hero and item challenge. Canvas-based animations with real-time OpenDota API data."
         href="/dota-randomizer"
-        accentColor="#f59e0b"
+        accentColor="#81a1c1"
         colSpan={2}
         index={6}
         dimmed={hoveredIndex !== null && hoveredIndex !== 6}
@@ -229,7 +229,7 @@ export function BentoGrid() {
           title="IRLScape"
           description="IRL streaming overlay for Old School RuneScape. Game UI elements overlaid on real-world footage with Twitch chat and Joycon controls."
           href="https://www.youtube.com/watch?v=gCofVhR5HUQ"
-          accentColor="#f59e0b"
+          accentColor="#81a1c1"
           index={7}
           dimmed={hoveredIndex !== null && hoveredIndex !== 7}
           onHover={() => setHoveredIndex(7)}
@@ -250,7 +250,7 @@ export function BentoGrid() {
       <BentoCard
         title="OSRS Progress Generator"
         description="API for generating progress report images for Old School RuneScape players. Collection log items, OSRS Wiki integration."
-        accentColor="#f59e0b"
+        accentColor="#81a1c1"
         colSpan={2}
         index={8}
         dimmed={hoveredIndex !== null && hoveredIndex !== 8}
