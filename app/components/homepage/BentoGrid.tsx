@@ -13,49 +13,49 @@ const PROGNOSTICATOR_SCREENSHOTS = [
     src: "/prognosticator/01-dashboard.webp",
     label: "Command Center Dashboard",
     bg: "#1a1a2e",
-    description: "Your home base for everything. The dashboard gives you one-click access to all your Spotify playlists, custom tag collections, and live performance tools — Now Playing, Beat Visualizer, Scene Controls, and DMX lighting. Import playlists from Spotify, and Prognosticator automatically downloads each track from YouTube and fetches DJ metadata like BPM and musical key from VirtualDJ.",
+    description: "The dashboard links to your Spotify playlists, tag collections, and performance tools: Now Playing, Beat Visualizer, Scene Controls, DMX lighting. Import a playlist and Prognosticator downloads each track from YouTube, then pulls BPM and musical key from VirtualDJ.",
   },
   {
     src: "/prognosticator/02-tags-collections.webp",
     label: "Smart Tag Collections",
     bg: "#1a1a2e",
-    description: "Organize your library your way with custom tags. Tag songs by genre, mood, energy level, or any category you want, then browse filtered collections with album art, BPM, key, and duration at a glance. Filter and search within any tag to find the perfect track instantly. Tags work across playlists, so one song can live in multiple collections.",
+    description: "Tag songs by genre, mood, energy level, or custom categories, then browse filtered collections showing album art, BPM, key, and duration. Filter and search within tags to narrow results. Tags span playlists, so one song can belong to multiple collections.",
   },
   {
     src: "/prognosticator/03-playlist-view.webp",
     label: "Playlist Browser",
     bg: "#1a1a2e",
-    description: "Browse your imported Spotify playlists as a visual grid of album art. Every song displays its musical key, BPM, and duration — essential DJ metadata pulled automatically from VirtualDJ. Filter by key or BPM to find harmonically compatible tracks, or search by title and artist. Click any song to see full details, edit tags, or preview.",
+    description: "Browse imported Spotify playlists as a grid of album art. Each song shows its musical key, BPM, and duration, pulled from VirtualDJ. Filter by key or BPM for harmonically compatible tracks, or search by title and artist. Click a song to see details, edit tags, or preview.",
   },
   {
     src: "/prognosticator/05-all-songs.webp",
     label: "Full Library View",
     bg: "#1a1a2e",
-    description: "See every song across all your playlists in one searchable, filterable grid. Sort and filter by key, BPM, or search by name — perfect for building sets or finding that one track you know you have somewhere. Songs display rich metadata overlays including Camelot key notation and precise BPM values.",
+    description: "All songs across your playlists in one searchable grid. Sort by key or BPM, search by name. Songs show metadata overlays with Camelot key notation and BPM values.",
   },
   {
     src: "/prognosticator/06-now-playing.webp",
     label: "Live DJ Integration",
     bg: "#1a1a2e",
-    description: "Prognosticator connects to VirtualDJ in real-time, showing what's loaded on Deck 1 and Deck 2 with live BPM, key, and playback status. Below the decks, browse your library to plan your next track. The app reads directly from VirtualDJ's TCP beat-sync protocol, so deck info updates instantly as you mix.",
+    description: "Prognosticator connects to VirtualDJ in real-time, showing what's loaded on Deck 1 and Deck 2 with live BPM, key, and playback status. Below the decks, browse your library to plan your next track. It reads from VirtualDJ's TCP beat-sync protocol, so deck info updates as you mix.",
   },
   {
     src: "/prognosticator/07-smart-recommendations.webp",
     label: "Smart Track Recommendations",
     bg: "#1a1a2e",
-    description: "Click a deck to activate intelligent filtering — Prognosticator highlights tracks that are harmonically compatible and BPM-matched with what's currently playing. Compatible keys are determined using Camelot wheel logic, and BPM ranges ensure smooth transitions. Stop guessing what to play next — let the data guide your mixing.",
+    description: "Click a deck to filter your library. Prognosticator highlights tracks that are harmonically compatible and BPM-matched with what's playing. Compatible keys follow Camelot wheel logic, and BPM ranges keep transitions smooth.",
   },
   {
     src: "/prognosticator/08-scene-controls.webp",
     label: "Beat-Synced Scene Controls",
     bg: "#1a1a2e",
-    description: "Control your entire live stream production from one panel. Toggle OBS scenes, camera angles, and visual effects — all synced to the beat. Choose timing intervals (1 beat, 1 bar, 2 bars, 4 bars) for automatic scene switching. Includes Fourside 3D visualizer controls, webcam probability for dynamic camera cuts, and direct DMX beat-sync patterns.",
+    description: "Control your live stream production from one panel. Toggle OBS scenes, camera angles, and visual effects, all synced to the beat. Choose timing intervals (1 beat, 1 bar, 2 bars, 4 bars) for automatic scene switching. Includes Fourside 3D visualizer controls, webcam probability for camera cuts, and DMX beat-sync patterns.",
   },
   {
     src: "/prognosticator/09-dmx-lighting.webp",
     label: "DMX Lighting Control",
     bg: "#1a1a2e",
-    description: "Full DMX lighting control built right in. Send commands to any registered fixture or universe with the Quick Command Pad, or use the per-channel sliders for precise control. Supports Art-Net, ENTTEC USB, and virtual backends. The fixture library includes 2000+ OpenFixtureLibrary definitions with named channels so you work with readable names instead of raw channel numbers.",
+    description: "DMX lighting control with a Quick Command Pad for sending commands to any fixture or universe, plus per-channel sliders for fine adjustments. Supports Art-Net, ENTTEC USB, and virtual backends. The fixture library has 2000+ OpenFixtureLibrary definitions with named channels, so you use readable names instead of raw channel numbers.",
   },
 ];
 
@@ -114,7 +114,7 @@ export function BentoGrid() {
       {/* hobbit.house — 1 col, 2 row */}
       <BentoCard
         title="hobbit.house"
-        description="Mobile control app for a living room mini PC — launch games, manage Kodi, adjust smart lights, and monitor system stats."
+        description="Mobile control app for a living room mini PC. Launch games, manage Kodi, adjust smart lights, and monitor IoT devices (laundry, security cameras)."
         href="https://github.com/BigFancyBen/hobbit-ccp"
         accentColor="#81a1c1"
         rowSpan={2}
@@ -179,7 +179,7 @@ export function BentoGrid() {
             />
             <BentoCard
               title="Magic Tutor Helper"
-              description="Advanced card filtering tool for decklists. Import decks, filter by mana cost and card types with Scryfall integration."
+              description="Card filtering tool for decklists. Import decks, filter by mana cost and card types with Scryfall integration."
               href="/tutor-helper"
               accentColor="#81a1c1"
               index={3}
@@ -203,7 +203,7 @@ export function BentoGrid() {
       {/* FloatWise + Dota row */}
       <BentoCard
         title="FloatWise"
-        description="NOAA weather tracker for multiple locations. Detailed hourly forecasts, temperature and wind tracking for float trip planning."
+        description="NOAA weather tracker for multiple locations. Hourly forecasts, temperature and wind tracking for float trip planning."
         href="/floatwise"
         accentColor="#81a1c1"
         colSpan={2}
@@ -227,9 +227,10 @@ export function BentoGrid() {
       <div className="md:col-span-2 self-start">
         <BentoCard
           title="IRLScape"
-          description="IRL streaming overlay for Old School RuneScape. Game UI elements overlaid on real-world footage with Twitch chat and Joycon controls."
+          description="Old School RuneScape streaming overlay. Game UI on a live camera feed with Twitch chat integration and Joycon controls."
           href="https://www.youtube.com/watch?v=gCofVhR5HUQ"
           accentColor="#81a1c1"
+          colSpan={2}
           index={7}
           dimmed={hoveredIndex !== null && hoveredIndex !== 7}
           onHover={() => setHoveredIndex(7)}
