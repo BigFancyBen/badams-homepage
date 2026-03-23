@@ -40,3 +40,8 @@ next-env.d.ts
 # Prevent corrupted .next directory issues
 .next/trace
 .next/server/
+
+# project config
+.claude/
+.github/
+.husky/
