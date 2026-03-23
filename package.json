@@ -16,7 +16,8 @@
     "test": "playwright test",
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed",
-    "test:debug": "playwright test --debug"
+    "test:debug": "playwright test --debug",
+    "screenshots": "npx tsx scripts/take-readme-screenshots.ts"
   },
   "dependencies": {
     "@types/canvas-confetti": "^1.9.0",

@@ -1,36 +1,86 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# benadams.dev
 
-## Getting Started
+Personal homepage and collection of web tools built with Next.js 16, React 19, TypeScript, and Tailwind CSS.
 
-First, run the development server:
+![Homepage](public/readme/homepage.png)
+
+## Apps
+
+### MTG Commander Life Tracker
+
+> `/commander`
+
+Full-screen, touch-friendly scorekeeper for Commander format. 4-player quadrant layout with life tracking, commander damage, poison counters, and undo history. State persists in localStorage.
+
+![Commander](public/magic/commander.webp)
+
+### Magic Tutor Helper
+
+> `/tutor-helper`
+
+Card filtering tool for Commander decklists. Import decks from Archidekt, filter by mana cost and card type with Scryfall API integration. Save multiple decks with localStorage persistence.
+
+![Tutor Helper](public/magic/tutor-helper.webp)
+
+### MTG Token Helper
+
+> `/token-helper`
+
+Import a deck to discover all tokens it produces via Scryfall. Track tokens on the battlefield with tap/untap, +1/+1 counters, and power/toughness buffs.
+
+![Token Helper](public/magic/token-helper.webp)
+
+### FloatWise
+
+> `/floatwise`
+
+NOAA weather tracker for planning float trips. Add multiple locations, view hourly forecasts with temperature and wind data. Shareable via URL-encoded location parameters.
+
+![FloatWise](public/readme/floatwise.png)
+
+### Dota 2 Randomizer
+
+> `/dota-randomizer`
+
+Spin two canvas-based wheels for a random hero and item challenge. Pulls hero and item data from the OpenDota API with sound effects and confetti.
+
+![Dota 2 Randomizer](public/readme/dota-randomizer.png)
+
+### Resume
+
+> `/resume`
+
+Interactive resume with a technology bento grid featuring ambient glow effects and mouse-tracking interactions.
+
+![Resume](public/readme/resume.png)
+
+## Also Featured on the Homepage
+
+These are external projects showcased in the homepage bento grid:
+
+- **Prognosticator** -- Electron app for DJ set management with VirtualDJ integration, DMX lighting control, and beat-synced OBS scene switching
+- **hobbit.house** -- Mobile control app for a living room mini PC ([GitHub](https://github.com/BigFancyBen/hobbit-ccp))
+- **IRLScape** -- Old School RuneScape streaming overlay with Twitch chat integration ([YouTube](https://www.youtube.com/watch?v=gCofVhR5HUQ))
+- **OSRS Progress Generator** -- Discord bot API for generating OSRS progress report images
+
+## Tech Stack
+
+- **Framework:** Next.js 16 (App Router, Turbopack)
+- **UI:** React 19, Tailwind CSS 4
+- **Language:** TypeScript 5
+- **Animation:** Motion (Framer Motion)
+- **Testing:** Playwright e2e
+- **Realtime:** Ably (Commander multiplayer)
+- **APIs:** Scryfall, NOAA, OpenStreetMap Nominatim, OpenDota
+- **Hosting:** Vercel
+
+## Development
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install          # Install dependencies (Node >= 22 required)
+npm run dev          # Start dev server with Turbopack
+npm run build        # Production build
+npm run lint         # ESLint
+npm run type-check   # TypeScript check
+npm test             # Playwright e2e tests
 ```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
