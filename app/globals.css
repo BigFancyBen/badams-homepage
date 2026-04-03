@@ -246,20 +246,10 @@ body {
 /* Homepage Hero Glow Animation - GPU accelerated */
 @keyframes hero-glow {
   0%, 100% {
-    text-shadow: 0 0 0px rgba(139, 92, 246, 0);
+    text-shadow: 0 0 0px rgba(200, 200, 210, 0);
   }
   50% {
-    text-shadow: 0 0 20px rgba(139, 92, 246, 0.8);
-  }
-}
-
-/* Mobile-optimized glow using opacity instead of expensive text-shadow */
-@keyframes hero-glow-mobile {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.7;
+    text-shadow: 0 0 12px rgba(200, 200, 210, 0.2);
   }
 }
 

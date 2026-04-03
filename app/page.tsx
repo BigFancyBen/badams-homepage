@@ -46,7 +46,7 @@ export default function Home({ initialView }: { initialView?: View }) {
 
   return (
     <div className="min-h-screen relative overflow-hidden">
-      <ParticleField particleCount={45} />
+      <ParticleField />
 
       {/* Resume link — fixed top-right */}
       <motion.button

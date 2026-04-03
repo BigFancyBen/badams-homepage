@@ -68,7 +68,7 @@ export function BentoCard({
 
   const glowBoxShadow = useTransform(
     borderGlow,
-    (v) => `0 0 ${v * 20}px ${accentColor}${Math.round(v * 0.4 * 255).toString(16).padStart(2, "0")}`
+    (v) => `0 0 ${v * 12}px ${accentColor}${Math.round(v * 0.25 * 255).toString(16).padStart(2, "0")}`
   );
 
   // Typography sizing based on card dimensions

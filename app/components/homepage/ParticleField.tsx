@@ -1,96 +1,18 @@
-"use client";
-
-import { useState, useMemo } from "react";
-import { motion } from "motion/react";
-
-interface Particle {
-  id: number;
-  x: number;
-  y: number;
-  size: number;
-  opacity: number;
-  duration: number;
-  delay: number;
-  drift: number;
-}
-
-interface ParticleFieldProps {
-  particleCount?: number;
-}
-
-function generateParticles(count: number): Particle[] {
-  return Array.from({ length: count }, (_, i) => ({
-    id: i,
-    x: Math.random() * 100,
-    y: Math.random() * 100 + 100,
-    size: Math.random() * 2 + 1,
-    opacity: Math.random() * 0.4 + 0.1,
-    duration: Math.random() * 25 + 20,
-    delay: Math.random() * 15,
-    drift: (Math.random() - 0.5) * 150,
-  }));
-}
-
-export function ParticleField({ particleCount = 40 }: ParticleFieldProps) {
-  const [particles] = useState<Particle[]>(() => generateParticles(50)); // Generate max upfront
-
-  // Render full particle count on all devices
-  const visibleParticles = useMemo(
-    () => particles.slice(0, particleCount),
-    [particles, particleCount]
-  );
-
+export function ParticleField() {
   return (
-    <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
-      <div className="absolute inset-0 bg-linear-to-b from-purple-950/10 via-transparent to-amber-950/5" />
-
-      {visibleParticles.map((particle) => (
-        <motion.div
-          key={particle.id}
-          className="absolute bg-purple-400 will-change-transform"
-          style={{
-            width: particle.size,
-            height: particle.size,
-            transform: `translate3d(${particle.x}vw, ${particle.y}vh, 0)`,
-            opacity: particle.opacity,
-          }}
-          animate={{
-            y: [`0vh`, `-120vh`],
-            x: [`0px`, `${particle.drift}px`, `0px`],
-            opacity: [particle.opacity, particle.opacity * 1.5, particle.opacity, 0],
-          }}
-          transition={{
-            y: {
-              duration: particle.duration,
-              repeat: Infinity,
-              ease: "linear",
-              delay: particle.delay,
-            },
-            x: {
-              duration: particle.duration / 3,
-              repeat: Infinity,
-              repeatType: "mirror",
-              ease: "easeInOut",
-              delay: particle.delay,
-            },
-            opacity: {
-              duration: particle.duration,
-              repeat: Infinity,
-              ease: "linear",
-              delay: particle.delay,
-            },
-          }}
-        />
-      ))}
-
-      {/* Scanline overlay — rendered on all devices */}
-      <div
-        className="absolute inset-0 opacity-[0.02]"
-        style={{
-          backgroundImage:
-            "repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(139, 92, 246, 0.5) 2px, rgba(139, 92, 246, 0.5) 3px)",
-        }}
-      />
+    <div className="fixed inset-0 pointer-events-none z-0">
+      <svg className="absolute inset-0 w-full h-full opacity-[0.035]" style={{ mixBlendMode: "overlay" }}>
+        <filter id="grain">
+          <feTurbulence
+            type="fractalNoise"
+            baseFrequency="0.65"
+            numOctaves="3"
+            stitchTiles="stitch"
+          />
+          <feColorMatrix type="saturate" values="0" />
+        </filter>
+        <rect width="100%" height="100%" filter="url(#grain)" />
+      </svg>
     </div>
   );
 }
