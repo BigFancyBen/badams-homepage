@@ -1,7 +1,17 @@
-"use client";
+import type { Metadata } from "next";
+import { ResumeView } from "../components/homepage/ResumeView";
 
-import Home from "../page";
+export const metadata: Metadata = {
+  title: "Technologies | benadams.dev",
+  description: "Tools and frameworks I work with",
+  openGraph: {
+    title: "Technologies | benadams.dev",
+    description: "Tools and frameworks I work with",
+    type: "website",
+    siteName: "benadams.dev",
+  },
+};
 
 export default function ResumePage() {
-  return <Home initialView="resume" />;
+  return <ResumeView />;
 }

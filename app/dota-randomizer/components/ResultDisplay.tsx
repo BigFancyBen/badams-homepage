@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import Image from "next/image";
 import confetti from "canvas-confetti";
 import { WheelItem } from "../types";
 
@@ -84,10 +85,11 @@ export default function ResultDisplay({ hero, item, show, onFanfare }: ResultDis
                   Your Hero
                 </div>
                 <div className="animate-fade-in-delay">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
+                  <Image
                     src={hero.imageUrl}
                     alt={hero.displayName}
+                    width={128}
+                    height={80}
                     className="w-32 h-20 object-cover mx-auto mb-3"
                   />
                 </div>
@@ -121,10 +123,11 @@ export default function ResultDisplay({ hero, item, show, onFanfare }: ResultDis
                   Your Item
                 </div>
                 <div className="animate-fade-in-delay-long">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
+                  <Image
                     src={item.imageUrl}
                     alt={item.displayName}
+                    width={80}
+                    height={80}
                     className="w-20 h-20 object-contain mx-auto mb-3"
                   />
                 </div>

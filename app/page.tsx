@@ -1,70 +1,16 @@
-"use client";
-
-import { useState, useEffect, useCallback } from "react";
-import { motion } from "motion/react";
-import { AnimatedHeroTitle } from "./components/homepage/AnimatedHeroTitle";
-import { AnimatedSubtitle } from "./components/homepage/AnimatedSubtitle";
-import { ScrollDownArrow } from "./components/homepage/ScrollDownArrow";
 import { ParticleField } from "./components/homepage/ParticleField";
 import { BentoGrid } from "./components/homepage/BentoGrid";
-import { ResumeView } from "./components/homepage/ResumeView";
+import { AnimatedResumeLink } from "./components/homepage/AnimatedResumeLink";
+import { HeroSection } from "./components/homepage/HeroSection";
 
-type View = "home" | "resume";
-
-export default function Home({ initialView }: { initialView?: View }) {
-  const [view, setView] = useState<View>(() => {
-    if (initialView) return initialView;
-    if (typeof window !== "undefined" && window.location.pathname === "/resume") return "resume";
-    return "home";
-  });
-
-  const navigateTo = useCallback((target: View) => {
-    const path = target === "resume" ? "/resume" : "/";
-    window.history.pushState({ view: target }, "", path);
-    setView(target);
-  }, []);
-
-  useEffect(() => {
-    const onPopState = (e: PopStateEvent) => {
-      const target = e.state?.view ?? (window.location.pathname === "/resume" ? "resume" : "home");
-      setView(target);
-    };
-    window.addEventListener("popstate", onPopState);
-
-    // Replace current state so back button works from the start
-    window.history.replaceState({ view }, "", window.location.pathname);
-
-    return () => window.removeEventListener("popstate", onPopState);
-  }, [view]);
-
-  const [heroComplete, setHeroComplete] = useState(false);
-  const handleHeroComplete = useCallback(() => setHeroComplete(true), []);
-
-  if (view === "resume") {
-    return <ResumeView onNavigateHome={() => navigateTo("home")} />;
-  }
-
+export default function Home() {
   return (
     <div className="min-h-screen relative overflow-hidden">
       <ParticleField />
-
-      {/* Resume link — fixed top-right */}
-      <motion.button
-        onClick={() => navigateTo("resume")}
-        className="fixed top-4 right-4 z-50 text-sm text-gray-400 hover:text-white transition-colors"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.75, duration: 0.5 }}
-      >
-        Resume
-      </motion.button>
+      <AnimatedResumeLink />
 
       {/* Hero section */}
-      <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-4 py-8">
-        <AnimatedHeroTitle text="benadams.dev" onComplete={handleHeroComplete} />
-        <AnimatedSubtitle startDelay={400} parenStarted={heroComplete} text={<div>These are some of<br className="inline sm:hidden" /> the things I&apos;ve built<br />(that weren&apos;t my job)</div>} />
-        <ScrollDownArrow />
-      </div>
+      <HeroSection />
 
       {/* Bento grid */}
       <div className="relative z-10 max-w-7xl mx-auto px-4 pb-24">

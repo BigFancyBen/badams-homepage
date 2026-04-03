@@ -1,6 +1,8 @@
 "use client";
 
 import { useRef, useEffect, MouseEvent, useState, useCallback } from "react";
+import Image from "next/image";
+import Link from "next/link";
 import { motion, useMotionValue, useSpring, useTransform } from "motion/react";
 import { useAmbientGlow } from "@/app/hooks/useAmbientGlow";
 import { useReducedMotion } from "@/app/hooks/useReducedMotion";
@@ -176,10 +178,12 @@ function TechCard({
           animate={{ scale: isHovered ? 1.15 : isAmbientActive ? 1.075 : 1 }}
           transition={{ type: "spring", stiffness: 300, damping: 20 }}
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          <Image
             src={tech.logo}
             alt={tech.name}
+            width={64}
+            height={64}
+            unoptimized
             className="w-full h-full object-contain drop-shadow-none"
             style={{
               filter: isActive
@@ -187,7 +191,6 @@ function TechCard({
                 : "none",
               transition: "filter 0.3s ease",
             }}
-            loading="lazy"
           />
         </motion.div>
 
@@ -208,7 +211,7 @@ function TechCard({
   );
 }
 
-export function ResumeView({ onNavigateHome }: { onNavigateHome: () => void }) {
+export function ResumeView() {
   const reducedMotion = useReducedMotion();
   const [anyHovered, setAnyHovered] = useState(false);
   const hoverCountRef = useRef(0);
@@ -224,20 +227,16 @@ export function ResumeView({ onNavigateHome }: { onNavigateHome: () => void }) {
     setAnyHovered(hoverCountRef.current > 0);
   }, []);
 
-  useEffect(() => {
-    window.scrollTo(0, 0);
-  }, []);
-
   return (
     <div className="min-h-screen relative" style={{ background: "#0a0a0a" }}>
       {/* Back link */}
       <div className="fixed top-4 left-4 z-50">
-        <button
-          onClick={onNavigateHome}
+        <Link
+          href="/"
           className="text-sm text-gray-400 hover:text-white transition-colors"
         >
           ← Home
-        </button>
+        </Link>
       </div>
 
       <div className="max-w-6xl mx-auto px-4 pt-20 pb-24">
