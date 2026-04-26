@@ -15,11 +15,20 @@ interface TabletCarouselProps {
   autoPlayInterval?: number;
   autoPlayDelay?: number;
   onSlideChange?: (index: number) => void;
+  controlledIndex?: number | null;
 }
 
-export function TabletCarousel({ screenshots, autoPlayInterval = 2000, autoPlayDelay = 0, onSlideChange }: TabletCarouselProps) {
+export function TabletCarousel({ screenshots, autoPlayInterval = 2000, autoPlayDelay = 0, onSlideChange, controlledIndex = null }: TabletCarouselProps) {
   const [current, setCurrent] = useState(0);
   const [userClicked, setUserClicked] = useState(false);
+  const [prevControlled, setPrevControlled] = useState<number | null>(controlledIndex);
+
+  if (controlledIndex !== prevControlled) {
+    setPrevControlled(controlledIndex);
+    if (controlledIndex !== null) setCurrent(controlledIndex);
+  }
+
+  const effectiveCurrent = controlledIndex ?? current;
 
   const next = useCallback(() => {
     setCurrent((i) => (i + 1) % screenshots.length);
@@ -30,18 +39,18 @@ export function TabletCarousel({ screenshots, autoPlayInterval = 2000, autoPlayD
   }, [screenshots.length]);
 
   useEffect(() => {
-    if (userClicked) return;
+    if (userClicked || controlledIndex !== null) return;
     let intervalId: ReturnType<typeof setInterval>;
     const delayId = setTimeout(() => {
       next();
       intervalId = setInterval(next, autoPlayInterval);
     }, autoPlayDelay);
     return () => { clearTimeout(delayId); clearInterval(intervalId); };
-  }, [userClicked, next, autoPlayInterval, autoPlayDelay]);
+  }, [userClicked, controlledIndex, next, autoPlayInterval, autoPlayDelay]);
 
   useEffect(() => {
-    onSlideChange?.(current);
-  }, [current, onSlideChange]);
+    onSlideChange?.(effectiveCurrent);
+  }, [effectiveCurrent, onSlideChange]);
 
   const handlePrev = () => {
     setUserClicked(true);
@@ -100,13 +109,13 @@ export function TabletCarousel({ screenshots, autoPlayInterval = 2000, autoPlayD
               width: "97%",
               height: "95.5%",
               borderRadius: "2.1%",
-              background: screenshots[current].bg ?? "#161616",
+              background: screenshots[effectiveCurrent].bg ?? "#161616",
             }}
             onClick={handleScreenClick}
           >
             <AnimatePresence mode="wait">
               <motion.div
-                key={current}
+                key={effectiveCurrent}
                 className="absolute inset-0"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -114,8 +123,8 @@ export function TabletCarousel({ screenshots, autoPlayInterval = 2000, autoPlayD
                 transition={{ duration: 0.1 }}
               >
                 <Image
-                  src={screenshots[current].src}
-                  alt={screenshots[current].label}
+                  src={screenshots[effectiveCurrent].src}
+                  alt={screenshots[effectiveCurrent].label}
                   fill
                   className="object-contain"
                   sizes="(max-width: 1024px) 100vw, 1024px"
@@ -139,7 +148,7 @@ export function TabletCarousel({ screenshots, autoPlayInterval = 2000, autoPlayD
 
       {/* Label below frame */}
       <p className="text-xs text-gray-500 font-mono mt-3">
-        {screenshots[current].label}
+        {screenshots[effectiveCurrent].label}
       </p>
     </div>
   );

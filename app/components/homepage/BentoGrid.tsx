@@ -79,6 +79,8 @@ const MTG_SCREENSHOTS = [
 
 export function BentoGrid() {
   const [progSlide, setProgSlide] = useState(0);
+  const [progControlledIndex, setProgControlledIndex] = useState<number | null>(null);
+  const [mtgControlledIndex, setMtgControlledIndex] = useState<number | null>(null);
   const [hoveredIndex, setHoveredIndex] = useState<number | string | null>(null);
   const reducedMotion = useReducedMotion();
 
@@ -108,7 +110,41 @@ export function BentoGrid() {
         onHover={() => setHoveredIndex(0)}
         tags={["Electron", "React", "TypeScript", "Node", "C++", "DMX", "Tailwind", "VirtualDJ"]}
       >
-        <TabletCarousel screenshots={PROGNOSTICATOR_SCREENSHOTS} autoPlayInterval={4500} autoPlayDelay={0} onSlideChange={handleProgSlideChange} />
+        <div className="flex flex-col gap-3 flex-1">
+          <TabletCarousel
+            screenshots={PROGNOSTICATOR_SCREENSHOTS}
+            autoPlayInterval={4500}
+            autoPlayDelay={0}
+            onSlideChange={handleProgSlideChange}
+            controlledIndex={progControlledIndex}
+          />
+          <div
+            className="flex flex-wrap gap-1.5 justify-center"
+            onMouseLeave={() => setProgControlledIndex(null)}
+          >
+            {PROGNOSTICATOR_SCREENSHOTS.map((s, i) => {
+              const active = progSlide === i;
+              return (
+                <button
+                  key={s.src}
+                  type="button"
+                  onMouseEnter={() => setProgControlledIndex(i)}
+                  onFocus={() => setProgControlledIndex(i)}
+                  onBlur={() => setProgControlledIndex(null)}
+                  className="px-2 py-1 text-[10px] font-mono transition-colors"
+                  style={{
+                    borderWidth: 1,
+                    color: active ? "#81a1c1" : "#9ca3af",
+                    borderColor: active ? "#81a1c160" : "rgba(255,255,255,0.08)",
+                    backgroundColor: active ? "#81a1c118" : "rgba(255,255,255,0.02)",
+                  }}
+                >
+                  {s.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </BentoCard>
 
       {/* hobbit.house — 1 col, 2 row */}
@@ -145,6 +181,7 @@ export function BentoGrid() {
         }
         animate={{ opacity: hoveredIndex !== null && hoveredIndex !== "mtg" ? 0.55 : 1 }}
         onMouseEnter={() => setHoveredIndex("mtg")}
+        onMouseLeave={() => setMtgControlledIndex(null)}
       >
         <div className="flex items-center gap-3 mb-1">
           <h3 className="text-sm font-bold text-white">Magic: The Gathering</h3>
@@ -176,6 +213,7 @@ export function BentoGrid() {
               href="/commander"
               accentColor="#81a1c1"
               index={2}
+              onHover={() => setMtgControlledIndex(1)}
             />
             <BentoCard
               title="Magic Tutor Helper"
@@ -183,6 +221,7 @@ export function BentoGrid() {
               href="/tutor-helper"
               accentColor="#81a1c1"
               index={3}
+              onHover={() => setMtgControlledIndex(0)}
             />
             <BentoCard
               title="MTG Token Helper"
@@ -190,12 +229,18 @@ export function BentoGrid() {
               href="/token-helper"
               accentColor="#81a1c1"
               index={4}
+              onHover={() => setMtgControlledIndex(2)}
             />
           </div>
 
           {/* Right — Wider tablet carousel */}
           <div className="w-full md:w-[70%] flex items-center justify-center">
-            <TabletCarousel screenshots={MTG_SCREENSHOTS} autoPlayInterval={4500} autoPlayDelay={3000} />
+            <TabletCarousel
+              screenshots={MTG_SCREENSHOTS}
+              autoPlayInterval={4500}
+              autoPlayDelay={3000}
+              controlledIndex={mtgControlledIndex}
+            />
           </div>
         </div>
       </motion.div>
