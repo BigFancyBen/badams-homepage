@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Calendar } from "./components/Calendar";
 import { LocationManager } from "./components/LocationManager";
 import { WeatherDisplay } from "./components/WeatherDisplay";
+import { RiverFlow } from "./components/RiverFlow";
 import { useLocationStorage } from "./hooks/useLocationStorage";
 import { useWeatherData } from "./hooks/useWeatherData";
 import { useUserPreferences } from "./hooks/useUserPreferences";
@@ -114,6 +115,7 @@ export default function FloatWisePage() {
               <h1 className="text-2xl sm:text-4xl font-bold text-gray-900 dark:text-gray-100 mb-1 sm:mb-2">
                 FloatWise
               </h1>
+              <RiverFlow />
               {weatherData.some((l) => l.isLoading) && (
                 <div className="flex items-center gap-1.5 mb-1 sm:mb-2">
                   <svg className="w-5 h-4 text-blue-500" viewBox="0 0 28 16">
