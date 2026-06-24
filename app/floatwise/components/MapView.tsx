@@ -11,15 +11,14 @@ import {
 } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { Location, UserPreferences } from "../types";
-import { OpenMeteoStation } from "../sources/open-meteo";
+import { Location, UserPreferences, WeatherStation } from "../types";
 import { GeoBounds, getWeatherEmoji, isGoodWeatherHour } from "../utils";
 
 interface MapViewProps {
   /** The user's table input locations (shown as reference pins). */
   locations: Location[];
-  /** Actual Open-Meteo grid cells covering the area. */
-  stations: OpenMeteoStation[];
+  /** Real surface weather stations covering the area, with forecast attached. */
+  stations: WeatherStation[];
   isLoading: boolean;
   error?: string;
   /** Hour of day (0-23) whose data is shown on each station. */
@@ -39,7 +38,7 @@ function precipColor(precipChance: number, threshold: number): string {
   return precipChance > threshold ? "#f87171" : "#9ca3af";
 }
 
-/** Build the label-style marker for an actual weather station (grid cell). */
+/** Build the label-style marker for a real weather station. */
 function stationIcon(
   temperature: number,
   color: string,
@@ -201,15 +200,15 @@ function ZoomTracker({ onZoom }: { onZoom: (zoom: number) => void }) {
  * reveals more — all from the already-cached data, so it's instant.
  */
 function decimateByZoom(
-  stations: OpenMeteoStation[],
+  stations: WeatherStation[],
   zoom: number
-): OpenMeteoStation[] {
+): WeatherStation[] {
   // Target ~one marker per ~55px. 360°/(256·2^zoom) is degrees-per-pixel.
   const bucketDeg = (55 * 360) / (256 * Math.pow(2, zoom));
   if (!isFinite(bucketDeg) || bucketDeg <= 0) return stations;
 
   const seen = new Set<string>();
-  const out: OpenMeteoStation[] = [];
+  const out: WeatherStation[] = [];
   for (const s of stations) {
     const key = `${Math.round(s.lat / bucketDeg)},${Math.round(s.lon / bucketDeg)}`;
     if (seen.has(key)) continue;
@@ -270,7 +269,7 @@ export function MapView({
           <BoundsWatcher onViewportChange={onViewportChange} />
           <ZoomTracker onZoom={setZoom} />
 
-          {/* Actual Open-Meteo grid cells ("weather stations") */}
+          {/* Real surface weather stations, with Open-Meteo forecast attached */}
           {visibleStations.map((station) => {
             const hourData =
               station.hours.find((h) => h.hour === selectedHour) ?? null;
@@ -283,7 +282,7 @@ export function MapView({
               : tempColor(hourData.temperature, preferences.temperatureThreshold);
             return (
               <Marker
-                key={`station-${station.lat},${station.lon}`}
+                key={`station-${station.id}`}
                 position={[station.lat, station.lon]}
                 icon={stationIcon(
                   hourData.temperature,
@@ -305,7 +304,7 @@ export function MapView({
                 <Popup>
                   <div className="text-xs leading-snug">
                     <div className="font-semibold mb-1">
-                      Weather station {getWeatherEmoji(hourData.weatherCode)}
+                      {station.name} {getWeatherEmoji(hourData.weatherCode)}
                     </div>
                     <div className="text-gray-600">
                       {station.lat.toFixed(4)}, {station.lon.toFixed(4)}

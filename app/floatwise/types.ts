@@ -32,6 +32,24 @@ export interface WeatherHour {
   weatherCode: number;
 }
 
+// A real surface weather station (from Synoptic) with the Open-Meteo forecast
+// for the selected date attached. Markers are placed at the station's real
+// coordinates; the weather values are model forecast data for that point.
+export interface WeatherStation {
+  /** Synoptic station id (STID), e.g. "KLVM". */
+  id: string;
+  /** Human-readable station name. */
+  name: string;
+  /** Real station latitude. */
+  lat: number;
+  /** Real station longitude. */
+  lon: number;
+  /** Station elevation in metres, when known. */
+  elevation?: number;
+  /** Full-day hourly forecast (all 24 hours) for the station's location. */
+  hours: WeatherHour[];
+}
+
 export interface LocationWeather {
   location: Location;
   date: string;

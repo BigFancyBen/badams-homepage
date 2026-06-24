@@ -80,10 +80,6 @@ interface OpenMeteoHourly {
 
 interface OpenMeteoResponse {
   hourly: OpenMeteoHourly;
-  // When a coordinate is requested, Open-Meteo echoes back the ACTUAL grid-cell
-  // coordinates the data is served from (the nearest model grid point), which
-  // differ from the requested lat/lon. These are the real "weather station"
-  // locations behind the forecast.
   latitude: number;
   longitude: number;
   elevation?: number;
@@ -126,39 +122,42 @@ export async function fetchOpenMeteoWeather(
   return parseHourlyData(data.hourly);
 }
 
-/** A single Open-Meteo model grid cell ("weather station") and its actual data. */
-export interface OpenMeteoStation {
-  /** Actual latitude of the grid cell the data is served from. */
-  lat: number;
-  /** Actual longitude of the grid cell the data is served from. */
-  lon: number;
-  /** Grid-cell elevation in metres, when provided. */
-  elevation?: number;
-  /** Full-day hourly data for the cell (unfiltered, all 24 hours). */
-  hours: WeatherHour[];
-}
+/** Max coordinates per Open-Meteo request; we chunk larger point sets. */
+const FORECAST_CHUNK = 100;
 
 /**
- * Fetch the actual Open-Meteo grid cells ("weather stations") that serve a set
- * of sample points for a given date. Open-Meteo accepts multiple coordinates in
- * a single request (comma-separated), so all points are fetched at once.
- *
- * Each returned object echoes the real grid-cell coordinates the data is served
- * from. Several sample points often resolve to the SAME grid cell; callers
- * should dedupe by the returned lat/lon. Nothing is interpolated — these are the
- * raw source data points behind the forecast.
+ * Fetch the full-day forecast for a set of points (e.g. real station
+ * coordinates) for a given date. Open-Meteo accepts multiple coordinates per
+ * request, so points are batched. The result is index-aligned with `points`:
+ * `result[i]` is the forecast for `points[i]` (or null if Open-Meteo returned
+ * nothing for it), so callers can attach forecasts back to their own stations
+ * without relying on the echoed grid coordinates.
  */
-export async function fetchOpenMeteoStations(
+export async function fetchOpenMeteoForecasts(
   points: { lat: number; lon: number }[],
   targetDate: Date
-): Promise<OpenMeteoStation[]> {
+): Promise<(WeatherHour[] | null)[]> {
   if (points.length === 0) return [];
 
   const dateStr = formatDateParam(targetDate);
+  const chunks: { lat: number; lon: number }[][] = [];
+  for (let i = 0; i < points.length; i += FORECAST_CHUNK) {
+    chunks.push(points.slice(i, i + FORECAST_CHUNK));
+  }
 
+  const chunkResults = await Promise.all(
+    chunks.map((chunk) => fetchForecastChunk(chunk, dateStr))
+  );
+  return chunkResults.flat();
+}
+
+async function fetchForecastChunk(
+  chunk: { lat: number; lon: number }[],
+  dateStr: string
+): Promise<(WeatherHour[] | null)[]> {
   const params = new URLSearchParams({
-    latitude: points.map((p) => p.lat.toFixed(4)).join(','),
-    longitude: points.map((p) => p.lon.toFixed(4)).join(','),
+    latitude: chunk.map((p) => p.lat.toFixed(4)).join(','),
+    longitude: chunk.map((p) => p.lon.toFixed(4)).join(','),
     hourly: 'temperature_2m,wind_speed_10m,wind_direction_10m,precipitation_probability,weather_code,cloud_cover',
     temperature_unit: 'fahrenheit',
     wind_speed_unit: 'mph',
@@ -174,15 +173,15 @@ export async function fetchOpenMeteoStations(
   }
 
   const data = await response.json();
-  // A single coordinate returns an object; multiple coordinates return an array.
+  // A single coordinate returns an object; multiple coordinates return an array
+  // in the same order as requested.
   const entries: OpenMeteoResponse[] = Array.isArray(data) ? data : [data];
 
-  return entries.map((entry) => ({
-    lat: entry.latitude,
-    lon: entry.longitude,
-    elevation: entry.elevation,
-    hours: parseHourlyData(entry.hourly, true),
-  }));
+  return chunk.map((_, i) => {
+    const entry = entries[i];
+    if (!entry?.hourly) return null;
+    return parseHourlyData(entry.hourly, true);
+  });
 }
 
 function formatDateParam(date: Date): string {
