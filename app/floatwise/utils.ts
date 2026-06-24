@@ -87,53 +87,38 @@ export function isValidCoordinate(lat: number, lon: number): boolean {
 }
 
 /**
- * Compute the bounding box of a set of locations.
- * Returns null when there are no locations.
+ * A geographic bounding box.
  */
-export function getLocationsBounds(
-  locations: { lat: number; lon: number }[]
-): { minLat: number; maxLat: number; minLon: number; maxLon: number } | null {
-  if (locations.length === 0) return null;
-
-  let minLat = Infinity;
-  let maxLat = -Infinity;
-  let minLon = Infinity;
-  let maxLon = -Infinity;
-
-  for (const { lat, lon } of locations) {
-    minLat = Math.min(minLat, lat);
-    maxLat = Math.max(maxLat, lat);
-    minLon = Math.min(minLon, lon);
-    maxLon = Math.max(maxLon, lon);
-  }
-
-  return { minLat, maxLat, minLon, maxLon };
+export interface GeoBounds {
+  minLat: number;
+  maxLat: number;
+  minLon: number;
+  maxLon: number;
 }
 
 /**
- * Build a grid of sample points covering the (padded) bounding box of the given
- * locations. Each point is later sent to Open-Meteo to reveal which actual grid
- * cell ("weather station") serves it. Multiple sample points commonly resolve to
- * the same cell, so callers should dedupe the results by the returned coords.
+ * Build a grid of sample points covering a bounding box (typically the current
+ * map viewport). Each point is sent to Open-Meteo to reveal which actual grid
+ * cell ("weather station") serves it; several points commonly resolve to the
+ * same cell, so callers should dedupe the results by the returned coords.
  *
- * `steps` controls the resolution (steps x steps points). The box is padded so
- * cells just outside the input locations are also surfaced.
+ * `steps` controls the resolution (steps x steps points). A small pad is added
+ * so cells right at the viewport edges are still surfaced. Sampling the viewport
+ * (rather than a fixed box) means panning/zooming reveals stations wherever the
+ * user is looking, at a density that scales with the zoom level.
  */
-export function buildStationSampleGrid(
-  locations: { lat: number; lon: number }[],
-  steps = 7
+export function buildSampleGrid(
+  bounds: GeoBounds,
+  steps = 10
 ): { lat: number; lon: number }[] {
-  const bounds = getLocationsBounds(locations);
-  if (!bounds) return [];
+  const minLat = Math.min(bounds.minLat, bounds.maxLat);
+  const maxLat = Math.max(bounds.minLat, bounds.maxLat);
+  const minLon = Math.min(bounds.minLon, bounds.maxLon);
+  const maxLon = Math.max(bounds.minLon, bounds.maxLon);
 
-  const { minLat, maxLat, minLon, maxLon } = bounds;
-
-  // Pad the box by a fraction of its span (with a small floor so a single
-  // location still produces a usable area to sample around).
-  const latSpan = maxLat - minLat;
-  const lonSpan = maxLon - minLon;
-  const latPad = Math.max(latSpan * 0.2, 0.15);
-  const lonPad = Math.max(lonSpan * 0.2, 0.15);
+  // Small edge pad so stations just outside the visible box still appear.
+  const latPad = (maxLat - minLat) * 0.05;
+  const lonPad = (maxLon - minLon) * 0.05;
 
   const lo = {
     lat: Math.max(minLat - latPad, -90),

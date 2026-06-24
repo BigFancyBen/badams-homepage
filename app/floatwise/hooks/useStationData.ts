@@ -1,6 +1,5 @@
 import { useState, useCallback } from 'react';
-import { Location } from '../types';
-import { buildStationSampleGrid } from '../utils';
+import { GeoBounds, buildSampleGrid } from '../utils';
 import { fetchOpenMeteoStations, OpenMeteoStation } from '../sources/open-meteo';
 
 /** Dedupe key for a grid cell — same cell returns identical coordinates. */
@@ -9,19 +8,19 @@ function stationKey(lat: number, lon: number): string {
 }
 
 /**
- * Fetches the actual Open-Meteo grid cells ("weather stations") covering the
- * area spanned by the user's table locations. Sample points across the bounding
- * box are queried in a single request, then deduped by the real grid-cell
- * coordinates Open-Meteo returns. Nothing is interpolated — each station is a
- * raw source data point.
+ * Fetches the actual Open-Meteo grid cells ("weather stations") covering a
+ * bounding box (the current map viewport). Sample points across the box are
+ * queried in a single request, then deduped by the real grid-cell coordinates
+ * Open-Meteo returns. Nothing is interpolated — each station is a raw source
+ * data point.
  */
 export function useStationData() {
   const [stations, setStations] = useState<OpenMeteoStation[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
 
-  const fetchStations = useCallback(async (locations: Location[], date: Date) => {
-    const samplePoints = buildStationSampleGrid(locations);
+  const fetchStations = useCallback(async (bounds: GeoBounds, date: Date) => {
+    const samplePoints = buildSampleGrid(bounds);
     if (samplePoints.length === 0) {
       setStations([]);
       return;

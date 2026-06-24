@@ -1,12 +1,19 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
-import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import {
+  MapContainer,
+  TileLayer,
+  Marker,
+  Popup,
+  useMap,
+  useMapEvents,
+} from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Location, UserPreferences } from "../types";
 import { OpenMeteoStation } from "../sources/open-meteo";
-import { getWeatherEmoji } from "../utils";
+import { GeoBounds, getWeatherEmoji } from "../utils";
 
 interface MapViewProps {
   /** The user's table input locations (shown as reference pins). */
@@ -18,6 +25,8 @@ interface MapViewProps {
   /** Hour of day (0-23) whose data is shown on each station. */
   selectedHour: number;
   preferences: UserPreferences;
+  /** Reports the current map viewport (debounced) so stations can be refetched. */
+  onBoundsChange: (bounds: GeoBounds) => void;
 }
 
 /** Temperature text color (hex) mirroring the table: below threshold = red. */
@@ -25,21 +34,41 @@ function tempColor(temperature: number, threshold: number): string {
   return temperature >= threshold ? "#f3f4f6" : "#f87171";
 }
 
+/** Precip text color (hex): above the user's threshold reads red. */
+function precipColor(precipChance: number, threshold: number): string {
+  return precipChance > threshold ? "#f87171" : "#9ca3af";
+}
+
 /** Build the label-style marker for an actual weather station (grid cell). */
-function stationIcon(temperature: number, color: string, windDeg: number): L.DivIcon {
+function stationIcon(
+  temperature: number,
+  color: string,
+  windDeg: number,
+  precipChance: number | null,
+  precipTextColor: string
+): L.DivIcon {
   const rotation = windDeg + 180; // arrow points the way the wind blows TO
+  const precipHtml =
+    precipChance !== null
+      ? `<span style="display:inline-flex;align-items:center;gap:1px;color:${precipTextColor};font-size:9px;font-weight:600;">
+          <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C12 2 5 11 5 16a7 7 0 0 0 14 0c0-5-7-14-7-14z"/></svg>${precipChance}%
+        </span>`
+      : "";
   const html = `
-    <div style="display:inline-flex;align-items:center;gap:2px;background:rgba(17,24,39,0.92);border:1px solid #4b5563;padding:1px 4px;white-space:nowrap;font-size:11px;font-weight:600;line-height:1;color:${color};box-shadow:0 1px 3px rgba(0,0,0,0.5);">
-      <span>${temperature}&deg;</span>
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" style="transform:rotate(${rotation}deg);">
-        <path d="M12 4L12 20M12 4L7 9M12 4L17 9" stroke="#93c5fd" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
+    <div style="display:inline-flex;flex-direction:column;align-items:center;line-height:1;background:rgba(17,24,39,0.92);border:1px solid #4b5563;padding:1px 4px;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,0.5);">
+      <span style="display:inline-flex;align-items:center;gap:2px;font-size:11px;font-weight:600;color:${color};">
+        <span>${temperature}&deg;</span>
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" style="transform:rotate(${rotation}deg);">
+          <path d="M12 4L12 20M12 4L7 9M12 4L17 9" stroke="#93c5fd" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </span>
+      ${precipHtml}
     </div>`;
   return L.divIcon({
     html,
     className: "fw-station-icon",
-    iconSize: [44, 16],
-    iconAnchor: [22, 8],
+    iconSize: [44, 28],
+    iconAnchor: [22, 14],
   });
 }
 
@@ -81,6 +110,50 @@ function FitToLocations({ locations }: { locations: Location[] }) {
   return null;
 }
 
+/**
+ * Reports the current viewport (debounced) on pan/zoom so the parent can
+ * refetch the actual stations for wherever the user is now looking.
+ */
+function BoundsWatcher({
+  onBoundsChange,
+}: {
+  onBoundsChange: (bounds: GeoBounds) => void;
+}) {
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const report = useCallback(
+    (m: L.Map) => {
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = setTimeout(() => {
+        const b = m.getBounds();
+        onBoundsChange({
+          minLat: b.getSouth(),
+          maxLat: b.getNorth(),
+          minLon: b.getWest(),
+          maxLon: b.getEast(),
+        });
+      }, 350);
+    },
+    [onBoundsChange]
+  );
+
+  const map = useMapEvents({
+    moveend: () => report(map),
+    zoomend: () => report(map),
+  });
+
+  // Report the initial viewport once the map is ready.
+  useEffect(() => {
+    report(map);
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return null;
+}
+
 export function MapView({
   locations,
   stations,
@@ -88,6 +161,7 @@ export function MapView({
   error,
   selectedHour,
   preferences,
+  onBoundsChange,
 }: MapViewProps) {
   const center = useMemo<[number, number]>(() => {
     if (locations.length > 0) {
@@ -138,6 +212,7 @@ export function MapView({
           />
 
           <FitToLocations locations={locations} />
+          <BoundsWatcher onBoundsChange={onBoundsChange} />
 
           {/* Actual Open-Meteo grid cells ("weather stations") */}
           {stations.map((station) => {
@@ -155,7 +230,14 @@ export function MapView({
                 icon={stationIcon(
                   hourData.temperature,
                   color,
-                  hourData.windDirectionDegrees
+                  hourData.windDirectionDegrees,
+                  hourData.precipChance,
+                  hourData.precipChance !== null
+                    ? precipColor(
+                        hourData.precipChance,
+                        preferences.precipThreshold
+                      )
+                    : "#9ca3af"
                 )}
                 zIndexOffset={100}
               >

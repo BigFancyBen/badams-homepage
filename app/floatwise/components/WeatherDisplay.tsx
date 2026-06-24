@@ -25,6 +25,20 @@ function isGoodHour(
   return tempOk && windOk && precipOk && dirOk;
 }
 
+// A location is a "good weather day" when every hour in its float window is a
+// good hour. Used to wash the location's row label green so favorable days pop
+// at a glance.
+function isGoodDay(
+  hours: WeatherHour[],
+  preferences: UserPreferences,
+  preferredDirection?: string
+): boolean {
+  return (
+    hours.length > 0 &&
+    hours.every((hour) => isGoodHour(hour, preferences, preferredDirection))
+  );
+}
+
 // Helper function to get color based on precipitation chance
 function getPrecipChanceColor(precipChance: number, threshold: number): string {
   if (precipChance > threshold) {
@@ -333,6 +347,14 @@ export function WeatherDisplay({ locationWeather, preferences }: WeatherDisplayP
                   hourDataMap.set(hour.hour, hour);
                 });
 
+                // Whole-day verdict: when every hour is favorable, the row
+                // label gets a green wash (data cells already wash green).
+                const goodDay = isGoodDay(
+                  locationData.hours,
+                  preferences,
+                  locationData.location.preferredWindDirection
+                );
+
                 return (
                   // Combined temperature and wind row for this location
                   <tr
@@ -345,7 +367,9 @@ export function WeatherDisplay({ locationWeather, preferences }: WeatherDisplayP
                           ? "border-t-2 border-t-white dark:border-t-gray-900"
                           : "border-t border-t-gray-500/20"
                       } ${
-                        locationIndex % 2 === 0
+                        goodDay
+                          ? "bg-green-100 dark:bg-green-900/40"
+                          : locationIndex % 2 === 0
                           ? "bg-white dark:bg-gray-800"
                           : "bg-gray-50 dark:bg-gray-700"
                       }`}
