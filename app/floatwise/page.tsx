@@ -1,13 +1,16 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import { Calendar } from "./components/Calendar";
+import { HourSelector } from "./components/HourSelector";
 import { LocationManager } from "./components/LocationManager";
 import { WeatherDisplay } from "./components/WeatherDisplay";
 import { RiverFlow } from "./components/RiverFlow";
 import { useLocationStorage } from "./hooks/useLocationStorage";
 import { useWeatherData } from "./hooks/useWeatherData";
+import { useStationData } from "./hooks/useStationData";
 import { useUserPreferences } from "./hooks/useUserPreferences";
 import { Location } from "./types";
 import {
@@ -16,8 +19,28 @@ import {
   getInitialDate,
 } from "./utils";
 
+// Leaflet touches `window`, so the map view is client-only (no SSR).
+const MapView = dynamic(
+  () => import("./components/MapView").then((m) => m.MapView),
+  {
+    ssr: false,
+    loading: () => (
+      <div
+        className="w-full border border-gray-300 dark:border-gray-600 flex items-center justify-center bg-gray-100 dark:bg-gray-900"
+        style={{ height: "70vh" }}
+      >
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500" />
+      </div>
+    ),
+  }
+);
+
+type FloatWiseTab = "table" | "map";
+
 export default function FloatWisePage() {
   const [selectedDate, setSelectedDate] = useState(getInitialDate());
+  const [activeTab, setActiveTab] = useState<FloatWiseTab>("table");
+  const [selectedHour, setSelectedHour] = useState(12);
   const searchParams = useSearchParams();
 
   // Decode locations from URL parameter if present
@@ -36,6 +59,12 @@ export default function FloatWisePage() {
     isViewingSharedLink,
   } = useLocationStorage(urlLocations);
   const { weatherData, loadedCount, totalCount, fetchWeatherForLocations } = useWeatherData();
+  const {
+    stations,
+    isLoading: stationsLoading,
+    error: stationsError,
+    fetchStations,
+  } = useStationData();
   const { preferences, updatePreferences } = useUserPreferences();
 
   // Fetch weather data when locations or selected date changes
@@ -44,6 +73,14 @@ export default function FloatWisePage() {
       fetchWeatherForLocations(locations, selectedDate);
     }
   }, [locations, selectedDate, isLoaded, fetchWeatherForLocations]);
+
+  // Fetch the actual weather stations covering the area when the map tab is
+  // active. Only refetches on date/location changes, not when toggling tabs.
+  useEffect(() => {
+    if (isLoaded && activeTab === "map" && locations.length > 0) {
+      fetchStations(locations, selectedDate);
+    }
+  }, [activeTab, locations, selectedDate, isLoaded, fetchStations]);
 
   const handleDateSelect = (date: Date) => {
     setSelectedDate(date);
@@ -167,18 +204,54 @@ export default function FloatWisePage() {
             </div>
           ) : (
             <>
-              {/* Calendar */}
+              {/* Tabs */}
+              <div className="flex gap-1 border-b border-gray-300 dark:border-gray-600 mb-2 px-1 sm:px-0">
+                {(["table", "map"] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    className={`px-4 py-1.5 text-sm font-medium border-b-2 -mb-px transition-colors capitalize ${
+                      activeTab === tab
+                        ? "border-blue-500 text-blue-600 dark:text-blue-400"
+                        : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                    }`}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+
+              {/* Calendar (shared date selection) */}
               <Calendar
                 selectedDate={selectedDate}
                 onDateSelect={handleDateSelect}
               />
-              {/* Weather Display */}
-              <WeatherDisplay
-                locationWeather={weatherData}
-                preferences={preferences}
-                loadedCount={loadedCount}
-                totalCount={totalCount}
-              />
+
+              {activeTab === "table" ? (
+                /* Weather Display */
+                <WeatherDisplay
+                  locationWeather={weatherData}
+                  preferences={preferences}
+                  loadedCount={loadedCount}
+                  totalCount={totalCount}
+                />
+              ) : (
+                <>
+                  {/* Time selection (map only) */}
+                  <HourSelector
+                    selectedHour={selectedHour}
+                    onHourSelect={setSelectedHour}
+                  />
+                  <MapView
+                    locations={locations}
+                    stations={stations}
+                    isLoading={stationsLoading}
+                    error={stationsError}
+                    selectedHour={selectedHour}
+                    preferences={preferences}
+                  />
+                </>
+              )}
             </>
           )}
         </div>
