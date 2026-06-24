@@ -181,27 +181,12 @@ export function MapView({
 
   return (
     <div className="w-full">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-2 px-1 text-[11px] text-gray-600 dark:text-gray-300">
-        <div className="flex items-center gap-1.5">
-          <span className="inline-block w-3 h-3 bg-blue-600 border-2 border-white" />
-          <span>Your locations</span>
+      {(isLoading || error) && (
+        <div className="mb-2 px-1 text-[11px]">
+          {isLoading && <span className="text-blue-500">Loading stations…</span>}
+          {error && <span className="text-red-500">{error}</span>}
         </div>
-        <div className="flex items-center gap-1.5">
-          <span className="inline-flex items-center px-1 border border-gray-500 bg-gray-900 text-gray-100 text-[9px] font-semibold leading-none">
-            72&deg;
-          </span>
-          <span>Weather stations (actual source data)</span>
-        </div>
-        {isLoading && (
-          <span className="text-blue-500">Loading stations…</span>
-        )}
-        {error && <span className="text-red-500">{error}</span>}
-        {!isLoading && !error && (
-          <span className="text-gray-400 dark:text-gray-500">
-            {stations.length} station{stations.length === 1 ? "" : "s"}
-          </span>
-        )}
-      </div>
+      )}
 
       <div
         className="w-full border border-gray-300 dark:border-gray-600"
