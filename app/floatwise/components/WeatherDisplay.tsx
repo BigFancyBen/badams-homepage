@@ -1,28 +1,18 @@
 import { WeatherDisplayProps, LocationWeather, UserPreferences, WeatherHour } from "../types";
-import { getWeatherEmoji, normalizeWindDirection, getWindDirectionProximity } from "../utils";
+import { getWeatherEmoji, normalizeWindDirection, getWindDirectionProximity, isGoodWeatherHour } from "../utils";
 
-// Determine whether an hour's conditions are all within the user's "good"
-// thresholds: warm enough, calm enough, dry enough, and (when a preferred wind
-// direction is set) not blowing the wrong way. Mirrors the per-metric red-text
-// logic so a "good" cell is simply one with no red metrics.
-function isGoodHour(
-  hourData: WeatherHour,
+// A location is a "good weather day" when every hour in its float window is a
+// good hour. Used to wash the location's row label green so favorable days pop
+// at a glance.
+function isGoodDay(
+  hours: WeatherHour[],
   preferences: UserPreferences,
   preferredDirection?: string
 ): boolean {
-  const tempOk = hourData.temperature >= preferences.temperatureThreshold;
-  const windSpeed = parseInt(hourData.windSpeed.replace(/[^\d]/g, "")) || 0;
-  const windOk = windSpeed <= preferences.windSpeedThreshold;
-  const precipOk =
-    hourData.precipChance === null ||
-    hourData.precipChance <= preferences.precipThreshold;
-  const dirOk = preferredDirection
-    ? getWindDirectionProximity(
-        hourData.windDirectionDegrees,
-        normalizeWindDirection(preferredDirection)
-      ) !== "opposite"
-    : true;
-  return tempOk && windOk && precipOk && dirOk;
+  return (
+    hours.length > 0 &&
+    hours.every((hour) => isGoodWeatherHour(hour, preferences, preferredDirection))
+  );
 }
 
 // Helper function to get color based on precipitation chance
@@ -333,6 +323,14 @@ export function WeatherDisplay({ locationWeather, preferences }: WeatherDisplayP
                   hourDataMap.set(hour.hour, hour);
                 });
 
+                // Whole-day verdict: when every hour is favorable, the row
+                // label gets a green wash (data cells already wash green).
+                const goodDay = isGoodDay(
+                  locationData.hours,
+                  preferences,
+                  locationData.location.preferredWindDirection
+                );
+
                 return (
                   // Combined temperature and wind row for this location
                   <tr
@@ -345,7 +343,9 @@ export function WeatherDisplay({ locationWeather, preferences }: WeatherDisplayP
                           ? "border-t-2 border-t-white dark:border-t-gray-900"
                           : "border-t border-t-gray-500/20"
                       } ${
-                        locationIndex % 2 === 0
+                        goodDay
+                          ? "bg-green-100 dark:bg-green-900/40"
+                          : locationIndex % 2 === 0
                           ? "bg-white dark:bg-gray-800"
                           : "bg-gray-50 dark:bg-gray-700"
                       }`}
@@ -383,7 +383,7 @@ export function WeatherDisplay({ locationWeather, preferences }: WeatherDisplayP
                       // "Good" hours get a light green wash so favorable slots
                       // pop at a glance; keep a subtle checkerboard within green.
                       const isGood = hourData
-                        ? isGoodHour(
+                        ? isGoodWeatherHour(
                             hourData,
                             preferences,
                             locationData.location.preferredWindDirection

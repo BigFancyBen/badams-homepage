@@ -17,6 +17,7 @@ import {
   encodeLocationsToURL,
   decodeLocationsFromURL,
   getInitialDate,
+  GeoBounds,
 } from "./utils";
 
 // Leaflet touches `window`, so the map view is client-only (no SSR).
@@ -41,6 +42,10 @@ export default function FloatWisePage() {
   const [selectedDate, setSelectedDate] = useState(getInitialDate());
   const [activeTab, setActiveTab] = useState<FloatWiseTab>("table");
   const [selectedHour, setSelectedHour] = useState(12);
+  const [mapViewport, setMapViewport] = useState<{
+    bounds: GeoBounds;
+    zoom: number;
+  } | null>(null);
   const searchParams = useSearchParams();
 
   // Decode locations from URL parameter if present
@@ -74,13 +79,14 @@ export default function FloatWisePage() {
     }
   }, [locations, selectedDate, isLoaded, fetchWeatherForLocations]);
 
-  // Fetch the actual weather stations covering the area when the map tab is
-  // active. Only refetches on date/location changes, not when toggling tabs.
+  // Fetch the actual weather stations for the current map viewport. Driven by
+  // the map viewport (updated on pan/zoom) and the selected date. The hook
+  // caches per day and skips redundant fetches, so this can fire freely.
   useEffect(() => {
-    if (isLoaded && activeTab === "map" && locations.length > 0) {
-      fetchStations(locations, selectedDate);
+    if (isLoaded && activeTab === "map" && mapViewport) {
+      fetchStations(mapViewport, selectedDate);
     }
-  }, [activeTab, locations, selectedDate, isLoaded, fetchStations]);
+  }, [activeTab, mapViewport, selectedDate, isLoaded, fetchStations]);
 
   const handleDateSelect = (date: Date) => {
     setSelectedDate(date);
@@ -249,6 +255,7 @@ export default function FloatWisePage() {
                     error={stationsError}
                     selectedHour={selectedHour}
                     preferences={preferences}
+                    onViewportChange={setMapViewport}
                   />
                 </>
               )}
