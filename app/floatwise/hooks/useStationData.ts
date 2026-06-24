@@ -1,6 +1,13 @@
 import { useState, useCallback, useRef } from 'react';
-import { GeoBounds, buildSampleGrid } from '../utils';
+import { GeoBounds } from '../utils';
 import { fetchOpenMeteoStations, OpenMeteoStation } from '../sources/open-meteo';
+
+/** How long a fetched station stays "fresh" before we'll query it again. */
+const STATION_TTL_MS = 60 * 60 * 1000; // 1 hour
+/** Approximate spacing between sample points, in screen pixels. */
+const FETCH_STEP_PX = 80;
+/** Safety cap on how many points one request may sample. */
+const MAX_FETCH_POINTS = 400;
 
 /** Dedupe key for a grid cell — same cell returns identical coordinates. */
 function stationKey(lat: number, lon: number): string {
@@ -15,14 +22,9 @@ function dateKey(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-/** Is `inner` fully contained within `outer`? */
-function boundsContains(outer: GeoBounds, inner: GeoBounds): boolean {
-  return (
-    inner.minLat >= outer.minLat &&
-    inner.maxLat <= outer.maxLat &&
-    inner.minLon >= outer.minLon &&
-    inner.maxLon <= outer.maxLon
-  );
+/** Leaflet web-mercator degrees-per-pixel at a given zoom. */
+function degPerPixel(zoom: number): number {
+  return 360 / (256 * Math.pow(2, zoom));
 }
 
 /** Expand a box by a fraction of its span on every side. */
@@ -46,18 +48,22 @@ interface Viewport {
   zoom: number;
 }
 
+interface CachedStation {
+  station: OpenMeteoStation;
+  ts: number;
+}
+
 /**
- * Fetches the actual Open-Meteo grid cells ("weather stations") covering the
- * current map viewport, with caching so the map stays responsive while panning.
+ * Fetches the actual Open-Meteo grid cells ("weather stations") for the current
+ * map viewport, with a cell-based cache so we never re-query data we already
+ * have.
  *
- * Behavior:
- * - Results are cached per day, keyed by the real grid-cell coordinates, and
- *   accumulate as the user explores — revisiting an area is instant (no fetch).
- * - A network request only fires when the viewport actually needs new data:
- *   the day changed, the zoom changed, or the new viewport is not already
- *   contained in the box we last sampled (i.e. a pan into fresh territory).
- *   Small pans within an already-sampled area reuse the cache.
- * - The displayed stations are the cached cells within the current viewport.
+ * Sampling snaps to a stable per-zoom grid. Before fetching, every candidate
+ * grid bucket is skipped if we already hold a fresh station for it, or if we
+ * queried that bucket recently — so panning across, and zooming back into,
+ * already-explored areas costs no network requests. Only genuinely new buckets
+ * (e.g. gaps revealed by zooming in) are fetched, and cached cells refresh once
+ * they pass the TTL.
  *
  * Nothing is interpolated — each station is a raw source data point.
  */
@@ -66,40 +72,71 @@ export function useStationData() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
 
-  // Per-day cache of stations keyed by grid-cell coordinate.
-  const cacheRef = useRef<Map<string, Map<string, OpenMeteoStation>>>(new Map());
-  // The (day, bounds, zoom) of the most recent actual network fetch.
-  const lastFetchRef = useRef<{ day: string; bounds: GeoBounds; zoom: number } | null>(null);
+  // Per-day cache of stations keyed by grid-cell coordinate, with timestamps.
+  const cacheRef = useRef<Map<string, Map<string, CachedStation>>>(new Map());
+  // Per-day record of which sample buckets we've already queried (key includes
+  // zoom), with timestamps, so empty buckets aren't re-queried every move.
+  const coveredRef = useRef<Map<string, Map<string, number>>>(new Map());
   // Guards against out-of-order responses toggling loading state incorrectly.
   const reqIdRef = useRef(0);
 
   const fetchStations = useCallback(async (viewport: Viewport, date: Date) => {
     const { bounds, zoom } = viewport;
     const day = dateKey(date);
+    const now = Date.now();
 
-    const cache = cacheRef.current.get(day) ?? new Map<string, OpenMeteoStation>();
+    const cache = cacheRef.current.get(day) ?? new Map<string, CachedStation>();
     cacheRef.current.set(day, cache);
+    const covered = coveredRef.current.get(day) ?? new Map<string, number>();
+    coveredRef.current.set(day, covered);
 
-    // Show whatever we already have for this viewport immediately.
-    const viewportWithMargin = expandBounds(bounds, 0.25);
+    // Stations to show: everything cached for this day within the viewport.
+    const displayBounds = expandBounds(bounds, 0.25);
     const visibleFromCache = () =>
-      Array.from(cache.values()).filter((s) => inBounds(s.lat, s.lon, viewportWithMargin));
+      Array.from(cache.values())
+        .map((e) => e.station)
+        .filter((s) => inBounds(s.lat, s.lon, displayBounds));
 
-    const last = lastFetchRef.current;
-    const alreadyCovered =
-      last !== null &&
-      last.day === day &&
-      last.zoom === zoom &&
-      boundsContains(last.bounds, bounds);
-
-    if (alreadyCovered) {
-      // Pure pan within an already-sampled area — reuse the cache, no network.
+    const step = FETCH_STEP_PX * degPerPixel(zoom);
+    if (!isFinite(step) || step <= 0) {
       setStations(visibleFromCache());
       return;
     }
 
-    const samplePoints = buildSampleGrid(bounds);
-    if (samplePoints.length === 0) {
+    // Buckets we already have a fresh station for — no need to re-query them.
+    const cachedBuckets = new Set<string>();
+    for (const { station, ts } of cache.values()) {
+      if (now - ts > STATION_TTL_MS) continue;
+      cachedBuckets.add(
+        `${Math.round(station.lat / step)},${Math.round(station.lon / step)}`
+      );
+    }
+
+    // Walk the snapped grid over the (slightly padded) viewport and collect only
+    // the buckets we neither hold nor queried recently.
+    const fetchArea = expandBounds(bounds, 0.1);
+    const iLatMin = Math.floor(fetchArea.minLat / step);
+    const iLatMax = Math.ceil(fetchArea.maxLat / step);
+    const iLonMin = Math.floor(fetchArea.minLon / step);
+    const iLonMax = Math.ceil(fetchArea.maxLon / step);
+
+    const toFetch: { lat: number; lon: number }[] = [];
+    const fetchedBucketKeys: string[] = [];
+    outer: for (let i = iLatMin; i <= iLatMax; i++) {
+      for (let j = iLonMin; j <= iLonMax; j++) {
+        const bucket = `${i},${j}`;
+        if (cachedBuckets.has(bucket)) continue;
+        const coveredKey = `${zoom}|${bucket}`;
+        const cts = covered.get(coveredKey);
+        if (cts !== undefined && now - cts < STATION_TTL_MS) continue;
+        toFetch.push({ lat: i * step, lon: j * step });
+        fetchedBucketKeys.push(coveredKey);
+        if (toFetch.length >= MAX_FETCH_POINTS) break outer;
+      }
+    }
+
+    if (toFetch.length === 0) {
+      // Everything in view is already cached / recently queried — no network.
       setStations(visibleFromCache());
       return;
     }
@@ -109,9 +146,9 @@ export function useStationData() {
     setError(undefined);
 
     try {
-      const results = await fetchOpenMeteoStations(samplePoints, date);
+      const results = await fetchOpenMeteoStations(toFetch, date);
 
-      // Merge newly discovered cells into the day's cache (dedupe by real coords).
+      const fetchedAt = Date.now();
       for (const station of results) {
         if (
           typeof station.lat !== 'number' ||
@@ -120,10 +157,11 @@ export function useStationData() {
         ) {
           continue;
         }
-        cache.set(stationKey(station.lat, station.lon), station);
+        cache.set(stationKey(station.lat, station.lon), { station, ts: fetchedAt });
       }
+      // Mark the queried buckets covered (even empty ones) to avoid re-querying.
+      for (const key of fetchedBucketKeys) covered.set(key, fetchedAt);
 
-      lastFetchRef.current = { day, bounds, zoom };
       setStations(visibleFromCache());
     } catch (err) {
       console.error('Error fetching weather stations:', err);

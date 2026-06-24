@@ -96,53 +96,6 @@ export interface GeoBounds {
   maxLon: number;
 }
 
-/**
- * Build a grid of sample points covering a bounding box (typically the current
- * map viewport). Each point is sent to Open-Meteo to reveal which actual grid
- * cell ("weather station") serves it; several points commonly resolve to the
- * same cell, so callers should dedupe the results by the returned coords.
- *
- * `steps` controls the resolution (steps x steps points). A small pad is added
- * so cells right at the viewport edges are still surfaced. Sampling the viewport
- * (rather than a fixed box) means panning/zooming reveals stations wherever the
- * user is looking, at a density that scales with the zoom level.
- */
-export function buildSampleGrid(
-  bounds: GeoBounds,
-  steps = 10
-): { lat: number; lon: number }[] {
-  const minLat = Math.min(bounds.minLat, bounds.maxLat);
-  const maxLat = Math.max(bounds.minLat, bounds.maxLat);
-  const minLon = Math.min(bounds.minLon, bounds.maxLon);
-  const maxLon = Math.max(bounds.minLon, bounds.maxLon);
-
-  // Small edge pad so stations just outside the visible box still appear.
-  const latPad = (maxLat - minLat) * 0.05;
-  const lonPad = (maxLon - minLon) * 0.05;
-
-  const lo = {
-    lat: Math.max(minLat - latPad, -90),
-    lon: Math.max(minLon - lonPad, -180),
-  };
-  const hi = {
-    lat: Math.min(maxLat + latPad, 90),
-    lon: Math.min(maxLon + lonPad, 180),
-  };
-
-  const divisions = Math.max(steps - 1, 1);
-  const points: { lat: number; lon: number }[] = [];
-
-  for (let i = 0; i < steps; i++) {
-    const lat = lo.lat + ((hi.lat - lo.lat) * i) / divisions;
-    for (let j = 0; j < steps; j++) {
-      const lon = lo.lon + ((hi.lon - lo.lon) * j) / divisions;
-      points.push({ lat, lon });
-    }
-  }
-
-  return points;
-}
-
 // Geocoding types
 export interface GeocodingResult {
   lat: string;
