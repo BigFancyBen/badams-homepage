@@ -1,29 +1,5 @@
 import { WeatherDisplayProps, LocationWeather, UserPreferences, WeatherHour } from "../types";
-import { getWeatherEmoji, normalizeWindDirection, getWindDirectionProximity } from "../utils";
-
-// Determine whether an hour's conditions are all within the user's "good"
-// thresholds: warm enough, calm enough, dry enough, and (when a preferred wind
-// direction is set) not blowing the wrong way. Mirrors the per-metric red-text
-// logic so a "good" cell is simply one with no red metrics.
-function isGoodHour(
-  hourData: WeatherHour,
-  preferences: UserPreferences,
-  preferredDirection?: string
-): boolean {
-  const tempOk = hourData.temperature >= preferences.temperatureThreshold;
-  const windSpeed = parseInt(hourData.windSpeed.replace(/[^\d]/g, "")) || 0;
-  const windOk = windSpeed <= preferences.windSpeedThreshold;
-  const precipOk =
-    hourData.precipChance === null ||
-    hourData.precipChance <= preferences.precipThreshold;
-  const dirOk = preferredDirection
-    ? getWindDirectionProximity(
-        hourData.windDirectionDegrees,
-        normalizeWindDirection(preferredDirection)
-      ) !== "opposite"
-    : true;
-  return tempOk && windOk && precipOk && dirOk;
-}
+import { getWeatherEmoji, normalizeWindDirection, getWindDirectionProximity, isGoodWeatherHour } from "../utils";
 
 // A location is a "good weather day" when every hour in its float window is a
 // good hour. Used to wash the location's row label green so favorable days pop
@@ -35,7 +11,7 @@ function isGoodDay(
 ): boolean {
   return (
     hours.length > 0 &&
-    hours.every((hour) => isGoodHour(hour, preferences, preferredDirection))
+    hours.every((hour) => isGoodWeatherHour(hour, preferences, preferredDirection))
   );
 }
 
@@ -407,7 +383,7 @@ export function WeatherDisplay({ locationWeather, preferences }: WeatherDisplayP
                       // "Good" hours get a light green wash so favorable slots
                       // pop at a glance; keep a subtle checkerboard within green.
                       const isGood = hourData
-                        ? isGoodHour(
+                        ? isGoodWeatherHour(
                             hourData,
                             preferences,
                             locationData.location.preferredWindDirection

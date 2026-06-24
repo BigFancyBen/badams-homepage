@@ -1,4 +1,4 @@
-import { Location, UserPreferences } from './types';
+import { Location, UserPreferences, WeatherHour } from './types';
 
 // Default user preferences
 export const DEFAULT_PREFERENCES: UserPreferences = {
@@ -435,6 +435,32 @@ export function compassToDegrees(compass: string): number {
 export function angularDifference(a: number, b: number): number {
   const diff = Math.abs(((a - b + 540) % 360) - 180);
   return diff;
+}
+
+/**
+ * Whether an hour's conditions are all within the user's "good" thresholds:
+ * warm enough, calm enough, dry enough, and (when a preferred wind direction is
+ * set) not blowing the wrong way. Shared by the table cells and the map markers
+ * so "good" means the same thing in both views.
+ */
+export function isGoodWeatherHour(
+  hourData: WeatherHour,
+  preferences: UserPreferences,
+  preferredDirection?: string
+): boolean {
+  const tempOk = hourData.temperature >= preferences.temperatureThreshold;
+  const windSpeed = parseInt(hourData.windSpeed.replace(/[^\d]/g, '')) || 0;
+  const windOk = windSpeed <= preferences.windSpeedThreshold;
+  const precipOk =
+    hourData.precipChance === null ||
+    hourData.precipChance <= preferences.precipThreshold;
+  const dirOk = preferredDirection
+    ? getWindDirectionProximity(
+        hourData.windDirectionDegrees,
+        normalizeWindDirection(preferredDirection)
+      ) !== 'opposite'
+    : true;
+  return tempOk && windOk && precipOk && dirOk;
 }
 
 /**

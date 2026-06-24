@@ -13,7 +13,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Location, UserPreferences } from "../types";
 import { OpenMeteoStation } from "../sources/open-meteo";
-import { GeoBounds, getWeatherEmoji } from "../utils";
+import { GeoBounds, getWeatherEmoji, isGoodWeatherHour } from "../utils";
 
 interface MapViewProps {
   /** The user's table input locations (shown as reference pins). */
@@ -45,9 +45,13 @@ function stationIcon(
   color: string,
   windDeg: number,
   precipChance: number | null,
-  precipTextColor: string
+  precipTextColor: string,
+  good: boolean
 ): L.DivIcon {
   const rotation = windDeg + 180; // arrow points the way the wind blows TO
+  // Good conditions wash the marker green, mirroring the table's green cells.
+  const background = good ? "rgba(21,128,61,0.95)" : "rgba(17,24,39,0.92)";
+  const borderColor = good ? "#22c55e" : "#4b5563";
   const precipHtml =
     precipChance !== null
       ? `<span style="display:inline-flex;align-items:center;gap:1px;color:${precipTextColor};font-size:9px;font-weight:600;">
@@ -55,7 +59,7 @@ function stationIcon(
         </span>`
       : "";
   const html = `
-    <div style="display:inline-flex;flex-direction:column;align-items:center;line-height:1;background:rgba(17,24,39,0.92);border:1px solid #4b5563;padding:1px 4px;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,0.5);">
+    <div style="display:inline-flex;flex-direction:column;align-items:center;line-height:1;background:${background};border:1px solid ${borderColor};padding:1px 4px;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,0.5);">
       <span style="display:inline-flex;align-items:center;gap:2px;font-size:11px;font-weight:600;color:${color};">
         <span>${temperature}&deg;</span>
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" style="transform:rotate(${rotation}deg);">
@@ -222,10 +226,12 @@ export function MapView({
             const hourData =
               station.hours.find((h) => h.hour === selectedHour) ?? null;
             if (!hourData) return null;
-            const color = tempColor(
-              hourData.temperature,
-              preferences.temperatureThreshold
-            );
+            // Stations have no preferred wind direction, so "good" here means
+            // warm/calm/dry enough — same thresholds as the table.
+            const good = isGoodWeatherHour(hourData, preferences);
+            const color = good
+              ? "#f0fdf4"
+              : tempColor(hourData.temperature, preferences.temperatureThreshold);
             return (
               <Marker
                 key={`station-${station.lat},${station.lon}`}
@@ -235,14 +241,17 @@ export function MapView({
                   color,
                   hourData.windDirectionDegrees,
                   hourData.precipChance,
-                  hourData.precipChance !== null
+                  good
+                    ? "#dcfce7"
+                    : hourData.precipChance !== null
                     ? precipColor(
                         hourData.precipChance,
                         preferences.precipThreshold
                       )
-                    : "#9ca3af"
+                    : "#9ca3af",
+                  good
                 )}
-                zIndexOffset={100}
+                zIndexOffset={good ? 200 : 100}
               >
                 <Popup>
                   <div className="text-xs leading-snug">
