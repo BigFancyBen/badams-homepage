@@ -42,7 +42,10 @@ export default function FloatWisePage() {
   const [selectedDate, setSelectedDate] = useState(getInitialDate());
   const [activeTab, setActiveTab] = useState<FloatWiseTab>("table");
   const [selectedHour, setSelectedHour] = useState(12);
-  const [mapBounds, setMapBounds] = useState<GeoBounds | null>(null);
+  const [mapViewport, setMapViewport] = useState<{
+    bounds: GeoBounds;
+    zoom: number;
+  } | null>(null);
   const searchParams = useSearchParams();
 
   // Decode locations from URL parameter if present
@@ -77,13 +80,13 @@ export default function FloatWisePage() {
   }, [locations, selectedDate, isLoaded, fetchWeatherForLocations]);
 
   // Fetch the actual weather stations for the current map viewport. Driven by
-  // the map bounds (updated on pan/zoom) and the selected date, so panning or
-  // zooming reveals the stations wherever the user is looking.
+  // the map viewport (updated on pan/zoom) and the selected date. The hook
+  // caches per day and skips redundant fetches, so this can fire freely.
   useEffect(() => {
-    if (isLoaded && activeTab === "map" && mapBounds) {
-      fetchStations(mapBounds, selectedDate);
+    if (isLoaded && activeTab === "map" && mapViewport) {
+      fetchStations(mapViewport, selectedDate);
     }
-  }, [activeTab, mapBounds, selectedDate, isLoaded, fetchStations]);
+  }, [activeTab, mapViewport, selectedDate, isLoaded, fetchStations]);
 
   const handleDateSelect = (date: Date) => {
     setSelectedDate(date);
@@ -252,7 +255,7 @@ export default function FloatWisePage() {
                     error={stationsError}
                     selectedHour={selectedHour}
                     preferences={preferences}
-                    onBoundsChange={setMapBounds}
+                    onViewportChange={setMapViewport}
                   />
                 </>
               )}

@@ -26,7 +26,7 @@ interface MapViewProps {
   selectedHour: number;
   preferences: UserPreferences;
   /** Reports the current map viewport (debounced) so stations can be refetched. */
-  onBoundsChange: (bounds: GeoBounds) => void;
+  onViewportChange: (viewport: { bounds: GeoBounds; zoom: number }) => void;
 }
 
 /** Temperature text color (hex) mirroring the table: below threshold = red. */
@@ -115,9 +115,9 @@ function FitToLocations({ locations }: { locations: Location[] }) {
  * refetch the actual stations for wherever the user is now looking.
  */
 function BoundsWatcher({
-  onBoundsChange,
+  onViewportChange,
 }: {
-  onBoundsChange: (bounds: GeoBounds) => void;
+  onViewportChange: (viewport: { bounds: GeoBounds; zoom: number }) => void;
 }) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -126,15 +126,18 @@ function BoundsWatcher({
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => {
         const b = m.getBounds();
-        onBoundsChange({
-          minLat: b.getSouth(),
-          maxLat: b.getNorth(),
-          minLon: b.getWest(),
-          maxLon: b.getEast(),
+        onViewportChange({
+          bounds: {
+            minLat: b.getSouth(),
+            maxLat: b.getNorth(),
+            minLon: b.getWest(),
+            maxLon: b.getEast(),
+          },
+          zoom: m.getZoom(),
         });
-      }, 350);
+      }, 500);
     },
-    [onBoundsChange]
+    [onViewportChange]
   );
 
   const map = useMapEvents({
@@ -161,7 +164,7 @@ export function MapView({
   error,
   selectedHour,
   preferences,
-  onBoundsChange,
+  onViewportChange,
 }: MapViewProps) {
   const center = useMemo<[number, number]>(() => {
     if (locations.length > 0) {
@@ -212,7 +215,7 @@ export function MapView({
           />
 
           <FitToLocations locations={locations} />
-          <BoundsWatcher onBoundsChange={onBoundsChange} />
+          <BoundsWatcher onViewportChange={onViewportChange} />
 
           {/* Actual Open-Meteo grid cells ("weather stations") */}
           {stations.map((station) => {
