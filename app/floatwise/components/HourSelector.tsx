@@ -10,11 +10,12 @@ function formatHour(hour: number): string {
 }
 
 /**
- * Horizontal scroller for picking the hour of day (0-23) shown on the map.
+ * Horizontal scroller for picking the hour of day shown on the map.
+ * Limited to the same 10am-7pm float window the table view uses.
  * Mirrors the Calendar's button styling.
  */
 export function HourSelector({ selectedHour, onHourSelect }: HourSelectorProps) {
-  const hours = Array.from({ length: 24 }, (_, i) => i);
+  const hours = Array.from({ length: 10 }, (_, i) => i + 10); // 10 (10am) to 19 (7pm)
 
   return (
     <div className="w-full mb-2">
