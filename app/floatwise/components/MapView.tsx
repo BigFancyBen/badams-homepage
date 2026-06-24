@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -161,6 +161,46 @@ function BoundsWatcher({
   return null;
 }
 
+/** Tracks the current zoom level so marker density can scale with it. */
+function ZoomTracker({ onZoom }: { onZoom: (zoom: number) => void }) {
+  const map = useMapEvents({
+    zoomend: () => onZoom(map.getZoom()),
+  });
+
+  useEffect(() => {
+    onZoom(map.getZoom());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return null;
+}
+
+/**
+ * Thin out stations so the on-screen density stays roughly constant at any zoom.
+ * Stations are snapped to a global lat/lon grid whose cell size grows as you
+ * zoom out (Leaflet's degrees-per-pixel doubles per zoom level out), and only
+ * one station is kept per grid cell. Zooming back in shrinks the cells and
+ * reveals more — all from the already-cached data, so it's instant.
+ */
+function decimateByZoom(
+  stations: OpenMeteoStation[],
+  zoom: number
+): OpenMeteoStation[] {
+  // Target ~one marker per ~55px. 360°/(256·2^zoom) is degrees-per-pixel.
+  const bucketDeg = (55 * 360) / (256 * Math.pow(2, zoom));
+  if (!isFinite(bucketDeg) || bucketDeg <= 0) return stations;
+
+  const seen = new Set<string>();
+  const out: OpenMeteoStation[] = [];
+  for (const s of stations) {
+    const key = `${Math.round(s.lat / bucketDeg)},${Math.round(s.lon / bucketDeg)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(s);
+  }
+  return out;
+}
+
 export function MapView({
   locations,
   stations,
@@ -178,6 +218,13 @@ export function MapView({
   }, [locations]);
 
   const locIcon = useMemo(() => locationIcon(), []);
+
+  // Initial zoom matches the MapContainer's zoom prop below.
+  const [zoom, setZoom] = useState(9);
+  const visibleStations = useMemo(
+    () => decimateByZoom(stations, zoom),
+    [stations, zoom]
+  );
 
   return (
     <div className="w-full">
@@ -205,9 +252,10 @@ export function MapView({
 
           <FitToLocations locations={locations} />
           <BoundsWatcher onViewportChange={onViewportChange} />
+          <ZoomTracker onZoom={setZoom} />
 
           {/* Actual Open-Meteo grid cells ("weather stations") */}
-          {stations.map((station) => {
+          {visibleStations.map((station) => {
             const hourData =
               station.hours.find((h) => h.hour === selectedHour) ?? null;
             if (!hourData) return null;
