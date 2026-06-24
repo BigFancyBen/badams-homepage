@@ -1,5 +1,29 @@
-import { WeatherDisplayProps, LocationWeather } from "../types";
+import { WeatherDisplayProps, LocationWeather, UserPreferences, WeatherHour } from "../types";
 import { getWeatherEmoji, normalizeWindDirection, getWindDirectionProximity } from "../utils";
+
+// Determine whether an hour's conditions are all within the user's "good"
+// thresholds: warm enough, calm enough, dry enough, and (when a preferred wind
+// direction is set) not blowing the wrong way. Mirrors the per-metric red-text
+// logic so a "good" cell is simply one with no red metrics.
+function isGoodHour(
+  hourData: WeatherHour,
+  preferences: UserPreferences,
+  preferredDirection?: string
+): boolean {
+  const tempOk = hourData.temperature >= preferences.temperatureThreshold;
+  const windSpeed = parseInt(hourData.windSpeed.replace(/[^\d]/g, "")) || 0;
+  const windOk = windSpeed <= preferences.windSpeedThreshold;
+  const precipOk =
+    hourData.precipChance === null ||
+    hourData.precipChance <= preferences.precipThreshold;
+  const dirOk = preferredDirection
+    ? getWindDirectionProximity(
+        hourData.windDirectionDegrees,
+        normalizeWindDirection(preferredDirection)
+      ) !== "opposite"
+    : true;
+  return tempOk && windOk && precipOk && dirOk;
+}
 
 // Helper function to get color based on precipitation chance
 function getPrecipChanceColor(precipChance: number, threshold: number): string {
@@ -356,7 +380,20 @@ export function WeatherDisplay({ locationWeather, preferences }: WeatherDisplayP
                       // Checkerboard cell background based on row and column parity
                       const isRowEven = locationIndex % 2 === 0;
                       const isColEven = idx % 2 === 0;
-                      const cellBgClass = isRowEven
+                      // "Good" hours get a light green wash so favorable slots
+                      // pop at a glance; keep a subtle checkerboard within green.
+                      const isGood = hourData
+                        ? isGoodHour(
+                            hourData,
+                            preferences,
+                            locationData.location.preferredWindDirection
+                          )
+                        : false;
+                      const cellBgClass = isGood
+                        ? isColEven
+                          ? "bg-green-50 dark:bg-green-900/20"
+                          : "bg-green-100/70 dark:bg-green-900/30"
+                        : isRowEven
                         ? isColEven
                           ? "bg-white dark:bg-gray-800"
                           : "bg-gray-50 dark:bg-gray-700"
