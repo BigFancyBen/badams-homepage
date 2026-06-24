@@ -100,10 +100,12 @@ export async function fetchOpenMeteoWeather(
     temperature_unit: 'fahrenheit',
     wind_speed_unit: 'mph',
     timezone: 'auto',
-    // Pin a single high-resolution US model rather than the default
-    // "best_match" blend, which can swing between models and read as more
-    // dramatic. Falls back to global coverage outside the US automatically.
-    models: 'gfs_seamless',
+    // Use Open-Meteo's default "best_match", which automatically selects the
+    // best-performing, highest-resolution model for each location and lead
+    // time (e.g. high-res HRRR short-range over the US, stronger global models
+    // further out). This is the most accurate general setting; pinning a single
+    // model degrades multi-day forecasts in complex terrain.
+    models: 'best_match',
     start_date: dateStr,
     end_date: dateStr,
   });
