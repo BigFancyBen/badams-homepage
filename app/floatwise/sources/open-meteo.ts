@@ -9,11 +9,35 @@ function degreesToCompass(degrees: number): string {
   return WIND_DIRECTIONS[Math.round(degrees / 45) % 8];
 }
 
-/** Map WMO weather codes to short forecast strings */
-function wmoCodeToForecast(code: number): string {
+/**
+ * Map a cloud-cover percentage to a friendly sky label.
+ * The raw WMO codes only offer four coarse buckets (Clear / Mainly Clear /
+ * Partly Cloudy / Overcast), which tends to read more dramatically than
+ * services like Google. Using the actual cloud-cover percentage lets us
+ * surface intermediate states like "Mostly Sunny".
+ */
+function cloudCoverToLabel(cloudCover: number): string {
+  if (cloudCover < 10) return 'Sunny';
+  if (cloudCover < 40) return 'Mostly Sunny';
+  if (cloudCover < 70) return 'Partly Cloudy';
+  if (cloudCover < 90) return 'Mostly Cloudy';
+  return 'Overcast';
+}
+
+/**
+ * Map WMO weather codes to short forecast strings.
+ * For the clear/cloudy codes (0-3) we defer to the actual cloud-cover
+ * percentage when available for a less dramatic, more granular label.
+ */
+function wmoCodeToForecast(code: number, cloudCover?: number): string {
+  // Clear-to-overcast range: prefer cloud-cover-based label when present
+  if (code >= 0 && code <= 3 && typeof cloudCover === 'number') {
+    return cloudCoverToLabel(cloudCover);
+  }
+
   const map: Record<number, string> = {
-    0: 'Clear',
-    1: 'Mainly Clear',
+    0: 'Sunny',
+    1: 'Mostly Sunny',
     2: 'Partly Cloudy',
     3: 'Overcast',
     45: 'Fog',
@@ -51,6 +75,7 @@ interface OpenMeteoHourly {
   wind_direction_10m: number[];
   precipitation_probability: number[];
   weather_code: number[];
+  cloud_cover: number[];
 }
 
 interface OpenMeteoResponse {
@@ -71,10 +96,16 @@ export async function fetchOpenMeteoWeather(
   const params = new URLSearchParams({
     latitude: lat.toString(),
     longitude: lon.toString(),
-    hourly: 'temperature_2m,wind_speed_10m,wind_direction_10m,precipitation_probability,weather_code',
+    hourly: 'temperature_2m,wind_speed_10m,wind_direction_10m,precipitation_probability,weather_code,cloud_cover',
     temperature_unit: 'fahrenheit',
     wind_speed_unit: 'mph',
     timezone: 'auto',
+    // Use Open-Meteo's default "best_match", which automatically selects the
+    // best-performing, highest-resolution model for each location and lead
+    // time (e.g. high-res HRRR short-range over the US, stronger global models
+    // further out). This is the most accurate general setting; pinning a single
+    // model degrades multi-day forecasts in complex terrain.
+    models: 'best_match',
     start_date: dateStr,
     end_date: dateStr,
   });
@@ -115,7 +146,7 @@ function parseHourlyData(hourly: OpenMeteoHourly): WeatherHour[] {
       windSpeed: `${Math.round(hourly.wind_speed_10m[i])} mph`,
       windDirection: degreesToCompass(hourly.wind_direction_10m[i]),
       precipChance: hourly.precipitation_probability[i] ?? null,
-      shortForecast: wmoCodeToForecast(hourly.weather_code[i]),
+      shortForecast: wmoCodeToForecast(hourly.weather_code[i], hourly.cloud_cover?.[i]),
       windDirectionDegrees: hourly.wind_direction_10m[i],
       weatherCode: hourly.weather_code[i],
     });
