@@ -76,13 +76,31 @@ function stationIcon(
   });
 }
 
-/** Build the pin for a user's table location (reference point). */
-function locationIcon(): L.DivIcon {
-  const html = `<div style="width:14px;height:14px;background:#2563eb;border:2px solid #ffffff;box-shadow:0 0 0 1px #1e3a8a, 0 1px 3px rgba(0,0,0,0.5);"></div>`;
+/** Escape user-provided text before inlining it into marker HTML. */
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/**
+ * Build the pin for a user's table location (reference point), with a
+ * permanent name label so each location is identifiable on the map without
+ * having to click it.
+ */
+function locationIcon(name: string): L.DivIcon {
+  const html = `
+    <div style="display:flex;align-items:center;white-space:nowrap;">
+      <div style="width:14px;height:14px;background:#2563eb;border:2px solid #ffffff;box-shadow:0 0 0 1px #1e3a8a, 0 1px 3px rgba(0,0,0,0.5);flex:0 0 auto;"></div>
+      <span style="margin-left:4px;background:rgba(17,24,39,0.92);border:1px solid #2563eb;color:#f3f4f6;font-size:11px;font-weight:600;line-height:1.2;padding:1px 5px;box-shadow:0 1px 3px rgba(0,0,0,0.5);">${escapeHtml(name)}</span>
+    </div>`;
+  // No iconSize so the pill auto-sizes to the name; anchor stays on the pin
+  // center (7,7) so the dot — not the label — marks the coordinate.
   return L.divIcon({
     html,
     className: "fw-location-icon",
-    iconSize: [14, 14],
     iconAnchor: [7, 7],
   });
 }
@@ -217,8 +235,6 @@ export function MapView({
     return [39.5, -98.35]; // Geographic center of the contiguous US.
   }, [locations]);
 
-  const locIcon = useMemo(() => locationIcon(), []);
-
   // Initial zoom matches the MapContainer's zoom prop below.
   const [zoom, setZoom] = useState(9);
   const visibleStations = useMemo(
@@ -320,7 +336,7 @@ export function MapView({
             <Marker
               key={`loc-${location.id}`}
               position={[location.lat, location.lon]}
-              icon={locIcon}
+              icon={locationIcon(location.name)}
               zIndexOffset={500}
             >
               <Popup>
