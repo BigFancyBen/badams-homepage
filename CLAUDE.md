@@ -53,7 +53,7 @@ e2e/                          # Playwright e2e tests
 - **Styling**: Tailwind CSS, dark theme, no rounded corners
 - **Fonts**: Local Geist fonts via `geist` package (not Google Fonts)
 - **Animation**: `motion` library (Framer Motion) for page transitions and UI animations
-- **External APIs**: Scryfall (cards), NOAA (weather), OpenStreetMap (geocoding), Ably (realtime)
+- **External APIs**: Scryfall (cards), Open-Meteo (weather), OpenStreetMap (geocoding), Ably (realtime)
 - **Mobile-first**: Responsive design with specific mobile layouts
 
 ## Type Definitions
@@ -66,7 +66,7 @@ e2e/                          # Playwright e2e tests
 
 ### Custom Hooks
 - `useLocalStorage` - Persistent state with localStorage
-- `useWeatherData` - NOAA API fetching with caching
+- `useWeatherData` - Open-Meteo API fetching with caching
 - `useAutocomplete` - Debounced search with OpenStreetMap
 
 ### Component Organization
@@ -88,6 +88,6 @@ After changes, verify:
 
 These external services may be unavailable in sandboxed environments:
 - Scryfall API (tutor-helper card data)
-- NOAA API (floatwise weather)
+- Open-Meteo API (floatwise weather)
 - OpenStreetMap Nominatim (floatwise geocoding)
 - Ably (commander multiplayer)
