@@ -6,6 +6,7 @@ import {
   TileLayer,
   Marker,
   Popup,
+  Circle,
   useMap,
   useMapEvents,
 } from "react-leaflet";
@@ -102,6 +103,21 @@ function locationIcon(name: string): L.DivIcon {
     html,
     className: "fw-location-icon",
     iconAnchor: [7, 7],
+  });
+}
+
+/**
+ * The "you are here" blue dot for the device's current location, styled like
+ * the familiar maps marker: a solid blue dot with a white ring and a soft glow.
+ */
+function userLocationIcon(): L.DivIcon {
+  const html = `
+    <div style="width:16px;height:16px;border-radius:9999px;background:#3b82f6;border:3px solid #ffffff;box-shadow:0 0 0 1.5px rgba(59,130,246,0.7), 0 0 10px 2px rgba(59,130,246,0.6);"></div>`;
+  return L.divIcon({
+    html,
+    className: "fw-user-location-icon",
+    iconSize: [16, 16],
+    iconAnchor: [8, 8],
   });
 }
 
@@ -242,6 +258,89 @@ export function MapView({
     [stations, zoom]
   );
 
+  // The device's current location (via the browser Geolocation API), shown as
+  // a blue "you are here" dot. Because the user may be floating down a river,
+  // we *track* the position continuously (watchPosition) rather than taking a
+  // single fix, so the dot keeps following them as they drift.
+  const mapRef = useRef<L.Map | null>(null);
+  const watchId = useRef<number | null>(null);
+  // After the first fix we recenter once; further updates move only the dot so
+  // the user can still pan/zoom freely without the map yanking back each tick.
+  const hasCenteredOnUser = useRef(false);
+  const [userLocation, setUserLocation] = useState<{
+    lat: number;
+    lon: number;
+    accuracy: number;
+  } | null>(null);
+  const [tracking, setTracking] = useState(false);
+  const [acquiring, setAcquiring] = useState(false);
+  const [locateError, setLocateError] = useState<string | null>(null);
+
+  const stopTracking = useCallback(() => {
+    if (watchId.current !== null && typeof navigator !== "undefined") {
+      navigator.geolocation.clearWatch(watchId.current);
+      watchId.current = null;
+    }
+    setTracking(false);
+    setAcquiring(false);
+  }, []);
+
+  const startTracking = useCallback(() => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setLocateError("Location isn't supported by this browser.");
+      return;
+    }
+    setLocateError(null);
+    setAcquiring(true);
+    setTracking(true);
+    hasCenteredOnUser.current = false;
+    // watchPosition triggers the browser's own permission prompt on first use,
+    // then fires repeatedly as the device moves.
+    watchId.current = navigator.geolocation.watchPosition(
+      (position) => {
+        const { latitude, longitude, accuracy } = position.coords;
+        setUserLocation({ lat: latitude, lon: longitude, accuracy });
+        setAcquiring(false);
+        // Recenter only on the very first fix; afterwards keep tracking the
+        // moving dot without fighting the user's own panning.
+        const map = mapRef.current;
+        if (map && !hasCenteredOnUser.current) {
+          map.setView([latitude, longitude], Math.max(map.getZoom(), 13));
+          hasCenteredOnUser.current = true;
+        }
+      },
+      (err) => {
+        setAcquiring(false);
+        // A transient timeout shouldn't kill an active track; watchPosition
+        // will keep retrying. Only hard-stop on permission denial / no support.
+        if (err.code === err.PERMISSION_DENIED) {
+          setLocateError("Location permission denied.");
+          stopTracking();
+        } else if (err.code === err.POSITION_UNAVAILABLE) {
+          setLocateError("Location unavailable — searching…");
+        }
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
+    );
+  }, [stopTracking]);
+
+  const handleLocate = useCallback(() => {
+    if (tracking) {
+      stopTracking();
+    } else {
+      startTracking();
+    }
+  }, [tracking, startTracking, stopTracking]);
+
+  // Clean up the geolocation watch when the map unmounts (e.g. tab switch).
+  useEffect(() => {
+    return () => {
+      if (watchId.current !== null && typeof navigator !== "undefined") {
+        navigator.geolocation.clearWatch(watchId.current);
+      }
+    };
+  }, []);
+
   return (
     <div className="w-full">
       {(isLoading || error) && (
@@ -252,10 +351,72 @@ export function MapView({
       )}
 
       <div
-        className="w-full border border-gray-300 dark:border-gray-600"
+        className="relative w-full border border-gray-300 dark:border-gray-600"
         style={{ height: "70vh" }}
       >
+        <div className="absolute right-2 top-2 z-[1000] flex flex-col items-end gap-1">
+          <button
+            type="button"
+            onClick={handleLocate}
+            title={tracking ? "Stop tracking my location" : "Track my location"}
+            aria-label={
+              tracking ? "Stop tracking my location" : "Track my location"
+            }
+            aria-pressed={tracking}
+            className={`flex h-9 w-9 items-center justify-center border shadow ${
+              tracking
+                ? "border-blue-400 bg-blue-600 text-white hover:bg-blue-500"
+                : "border-gray-600 bg-gray-900/90 text-gray-100 hover:bg-gray-800"
+            }`}
+          >
+            {acquiring ? (
+              <svg
+                className="h-4 w-4 animate-spin"
+                viewBox="0 0 24 24"
+                fill="none"
+              >
+                <circle
+                  cx="12"
+                  cy="12"
+                  r="9"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeOpacity="0.3"
+                />
+                <path
+                  d="M21 12a9 9 0 0 0-9-9"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
+              </svg>
+            ) : (
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none">
+                <circle
+                  cx="12"
+                  cy="12"
+                  r="4"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                />
+                <path
+                  d="M12 2v3M12 19v3M2 12h3M19 12h3"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
+              </svg>
+            )}
+          </button>
+          {locateError && (
+            <span className="max-w-[180px] bg-gray-900/90 px-2 py-1 text-right text-[10px] text-red-400 shadow">
+              {locateError}
+            </span>
+          )}
+        </div>
+
         <MapContainer
+          ref={mapRef}
           center={center}
           zoom={9}
           scrollWheelZoom
@@ -269,6 +430,42 @@ export function MapView({
           <FitToLocations locations={locations} />
           <BoundsWatcher onViewportChange={onViewportChange} />
           <ZoomTracker onZoom={setZoom} />
+
+          {/* Device's current location: blue dot + accuracy radius */}
+          {userLocation && (
+            <>
+              <Circle
+                center={[userLocation.lat, userLocation.lon]}
+                radius={userLocation.accuracy}
+                pathOptions={{
+                  color: "#3b82f6",
+                  fillColor: "#3b82f6",
+                  fillOpacity: 0.12,
+                  weight: 1,
+                }}
+              />
+              <Marker
+                position={[userLocation.lat, userLocation.lon]}
+                icon={userLocationIcon()}
+                zIndexOffset={1000}
+              >
+                <Popup>
+                  <div className="text-xs leading-snug">
+                    <div className="font-semibold">
+                      Your location{tracking ? " (live)" : ""}
+                    </div>
+                    <div className="text-gray-600 mt-0.5">
+                      {userLocation.lat.toFixed(4)},{" "}
+                      {userLocation.lon.toFixed(4)}
+                    </div>
+                    <div className="text-gray-600">
+                      Accuracy ±{Math.round(userLocation.accuracy)} m
+                    </div>
+                  </div>
+                </Popup>
+              </Marker>
+            </>
+          )}
 
           {/* Actual Open-Meteo grid cells ("weather stations") */}
           {visibleStations.map((station) => {
