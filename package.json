@@ -17,9 +17,16 @@
     "test:ui": "playwright test --ui",
     "test:headed": "playwright test --headed",
     "test:debug": "playwright test --debug",
-    "screenshots": "npx tsx scripts/take-readme-screenshots.ts"
+    "screenshots": "npx tsx scripts/take-readme-screenshots.ts",
+    "build:mobile": "node scripts/build-mobile.mjs",
+    "cap:add:android": "npx cap add android",
+    "cap:sync": "npx cap sync",
+    "cap:open:android": "npx cap open android"
   },
   "dependencies": {
+    "@capacitor-community/background-geolocation": "^1.2.26",
+    "@capacitor/android": "^8.4.1",
+    "@capacitor/core": "^8.4.1",
     "@types/canvas-confetti": "^1.9.0",
     "ably": "^2.15.0",
     "canvas-confetti": "^1.9.4",
@@ -33,6 +40,7 @@
     "react-leaflet": "^5.0.0"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.4.1",
     "@eslint/eslintrc": "^3",
     "@next/eslint-plugin-next": "^16.1.0",
     "@playwright/test": "^1.57.0",

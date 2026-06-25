@@ -15,6 +15,9 @@
 /.next/
 /out/
 
+# capacitor mobile build (temp app swap from scripts/build-mobile.mjs)
+/.mobile-app-stash/
+
 # production
 /build
 

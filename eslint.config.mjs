@@ -6,7 +6,9 @@ import tsParser from "@typescript-eslint/parser";
 
 export default [
   {
-    ignores: [".next/**", "node_modules/**"],
+    // Generated output: the static export (out/) and the Capacitor Android
+    // project (which embeds a copy of the web bundle under assets/).
+    ignores: [".next/**", "node_modules/**", "out/**", "android/**"],
   },
   {
     files: ["**/*.{js,jsx,ts,tsx}"],

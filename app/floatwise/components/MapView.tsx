@@ -6,15 +6,17 @@ import {
   TileLayer,
   Marker,
   Popup,
+  Polyline,
   Circle,
   useMap,
   useMapEvents,
 } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { Location, UserPreferences } from "../types";
+import { FloatTrip, Location, UserPreferences } from "../types";
 import { OpenMeteoStation } from "../sources/open-meteo";
 import { GeoBounds, getWeatherEmoji, isGoodWeatherHour } from "../utils";
+import { useFloatRecorder } from "../hooks/useFloatRecorder";
 
 interface MapViewProps {
   /** The user's table input locations (shown as reference pins). */
@@ -108,16 +110,81 @@ function locationIcon(name: string): L.DivIcon {
 
 /**
  * The "you are here" blue dot for the device's current location, styled like
- * the familiar maps marker: a solid blue dot with a white ring and a soft glow.
+ * the familiar maps marker. When a heading is known we overlay a rotating arrow
+ * showing the direction of travel; otherwise it's a plain dot.
  */
-function userLocationIcon(): L.DivIcon {
+function userLocationIcon(heading: number | null): L.DivIcon {
+  const arrow =
+    heading != null
+      ? `<svg width="34" height="34" viewBox="0 0 34 34" style="position:absolute;left:-9px;top:-9px;transform:rotate(${heading}deg);">
+           <path d="M17 2 L21 11 L17 8.5 L13 11 Z" fill="#3b82f6" stroke="#ffffff" stroke-width="1" stroke-linejoin="round"/>
+         </svg>`
+      : "";
   const html = `
-    <div style="width:16px;height:16px;border-radius:9999px;background:#3b82f6;border:3px solid #ffffff;box-shadow:0 0 0 1.5px rgba(59,130,246,0.7), 0 0 10px 2px rgba(59,130,246,0.6);"></div>`;
+    <div style="position:relative;width:16px;height:16px;">
+      ${arrow}
+      <div style="width:16px;height:16px;border-radius:9999px;background:#3b82f6;border:3px solid #ffffff;box-shadow:0 0 0 1.5px rgba(59,130,246,0.7), 0 0 10px 2px rgba(59,130,246,0.6);"></div>
+    </div>`;
   return L.divIcon({
     html,
     className: "fw-user-location-icon",
     iconSize: [16, 16],
     iconAnchor: [8, 8],
+  });
+}
+
+/** Green flag marking where a float was put in (its start). */
+function putInIcon(): L.DivIcon {
+  const html = `
+    <div style="display:flex;align-items:center;white-space:nowrap;">
+      <div style="width:12px;height:12px;border-radius:9999px;background:#22c55e;border:2px solid #ffffff;box-shadow:0 1px 3px rgba(0,0,0,0.5);"></div>
+      <span style="margin-left:4px;background:rgba(21,128,61,0.92);border:1px solid #22c55e;color:#f0fdf4;font-size:10px;font-weight:600;padding:0 4px;box-shadow:0 1px 3px rgba(0,0,0,0.5);">Put-in</span>
+    </div>`;
+  return L.divIcon({ html, className: "fw-putin-icon", iconAnchor: [6, 6] });
+}
+
+/** Checkered marker for where a float was taken out (its end). */
+function takeOutIcon(): L.DivIcon {
+  const html = `
+    <div style="display:flex;align-items:center;white-space:nowrap;">
+      <div style="width:12px;height:12px;background:#f59e0b;border:2px solid #ffffff;box-shadow:0 1px 3px rgba(0,0,0,0.5);"></div>
+      <span style="margin-left:4px;background:rgba(180,83,9,0.92);border:1px solid #f59e0b;color:#fffbeb;font-size:10px;font-weight:600;padding:0 4px;box-shadow:0 1px 3px rgba(0,0,0,0.5);">Take-out</span>
+    </div>`;
+  return L.divIcon({ html, className: "fw-takeout-icon", iconAnchor: [6, 6] });
+}
+
+/** Pause marker for a detected stop (pull-over / lunch break). */
+function stopIcon(durationLabel: string): L.DivIcon {
+  const html = `
+    <div style="display:flex;align-items:center;white-space:nowrap;">
+      <div style="display:flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:9999px;background:rgba(17,24,39,0.92);border:1px solid #f59e0b;box-shadow:0 1px 3px rgba(0,0,0,0.5);">
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="#f59e0b"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>
+      </div>
+      <span style="margin-left:4px;background:rgba(17,24,39,0.92);border:1px solid #f59e0b;color:#fde68a;font-size:10px;font-weight:600;padding:0 4px;box-shadow:0 1px 3px rgba(0,0,0,0.5);">${durationLabel}</span>
+    </div>`;
+  return L.divIcon({ html, className: "fw-stop-icon", iconAnchor: [9, 9] });
+}
+
+const METERS_PER_MILE = 1609.344;
+
+/** Distance in miles, 2 sig figs-ish. */
+function formatMiles(meters: number): string {
+  return `${(meters / METERS_PER_MILE).toFixed(1)} mi`;
+}
+
+/** Duration as "1h 24m" / "47m" / "8m". */
+function formatDuration(ms: number): string {
+  const totalMin = Math.round(ms / 60000);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+/** "1:24 PM" style local clock time. */
+function formatClock(t: number): string {
+  return new Date(t).toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
   });
 }
 
@@ -235,6 +302,67 @@ function decimateByZoom(
   return out;
 }
 
+/** Renders a saved float on the map: solid trail + put-in/take-out + stops. */
+function SavedTripOverlay({ trip }: { trip: FloatTrip }) {
+  const positions = trip.track.map(
+    (p) => [p.lat, p.lon] as [number, number]
+  );
+  return (
+    <>
+      {positions.length >= 2 && (
+        <Polyline
+          positions={positions}
+          pathOptions={{ color: "#a855f7", weight: 3, opacity: 0.9 }}
+        />
+      )}
+      <Marker position={[trip.putIn.lat, trip.putIn.lon]} icon={putInIcon()}>
+        <Popup>
+          <div className="text-xs leading-snug">
+            <div className="font-semibold">Put-in</div>
+            <div className="text-gray-600 mt-0.5">
+              {formatClock(trip.startedAt)}
+            </div>
+          </div>
+        </Popup>
+      </Marker>
+      {trip.takeOut && (
+        <Marker
+          position={[trip.takeOut.lat, trip.takeOut.lon]}
+          icon={takeOutIcon()}
+        >
+          <Popup>
+            <div className="text-xs leading-snug">
+              <div className="font-semibold">Take-out</div>
+              {trip.endedAt && (
+                <div className="text-gray-600 mt-0.5">
+                  {formatClock(trip.endedAt)}
+                </div>
+              )}
+            </div>
+          </Popup>
+        </Marker>
+      )}
+      {trip.stops.map((s) => (
+        <Marker
+          key={`trip-stop-${s.startT}`}
+          position={[s.lat, s.lon]}
+          icon={stopIcon(formatDuration(s.durationMs))}
+        >
+          <Popup>
+            <div className="text-xs leading-snug">
+              <div className="font-semibold">Stopped here</div>
+              <div className="text-gray-600 mt-0.5">
+                {formatClock(s.startT)}–{formatClock(s.endT)} ·{" "}
+                {formatDuration(s.durationMs)}
+              </div>
+            </div>
+          </Popup>
+        </Marker>
+      ))}
+    </>
+  );
+}
+
 export function MapView({
   locations,
   stations,
@@ -258,88 +386,54 @@ export function MapView({
     [stations, zoom]
   );
 
-  // The device's current location (via the browser Geolocation API), shown as
-  // a blue "you are here" dot. Because the user may be floating down a river,
-  // we *track* the position continuously (watchPosition) rather than taking a
-  // single fix, so the dot keeps following them as they drift.
+  // Float recording: a continuous position stream (native background service on
+  // the Capacitor build, foreground watchPosition + wake lock on the web) that
+  // accumulates a breadcrumb track and persists finished floats. The live blue
+  // dot follows the user as they drift; the dotted trail shows where they've
+  // been, back to the put-in.
   const mapRef = useRef<L.Map | null>(null);
-  const watchId = useRef<number | null>(null);
   // After the first fix we recenter once; further updates move only the dot so
   // the user can still pan/zoom freely without the map yanking back each tick.
   const hasCenteredOnUser = useRef(false);
-  const [userLocation, setUserLocation] = useState<{
-    lat: number;
-    lon: number;
-    accuracy: number;
-  } | null>(null);
-  const [tracking, setTracking] = useState(false);
-  const [acquiring, setAcquiring] = useState(false);
-  const [locateError, setLocateError] = useState<string | null>(null);
+  const {
+    trips,
+    isRecording,
+    acquiring,
+    track,
+    latest,
+    heading,
+    liveSummary,
+    error: trackError,
+    isNative,
+    toggle,
+    deleteTrip,
+  } = useFloatRecorder();
 
-  const stopTracking = useCallback(() => {
-    if (watchId.current !== null && typeof navigator !== "undefined") {
-      navigator.geolocation.clearWatch(watchId.current);
-      watchId.current = null;
-    }
-    setTracking(false);
-    setAcquiring(false);
-  }, []);
+  // Which saved trip (if any) is overlaid on the map.
+  const [shownTripId, setShownTripId] = useState<string | null>(null);
+  const shownTrip = useMemo(
+    () => trips.find((t) => t.id === shownTripId) ?? null,
+    [trips, shownTripId]
+  );
 
-  const startTracking = useCallback(() => {
-    if (typeof navigator === "undefined" || !navigator.geolocation) {
-      setLocateError("Location isn't supported by this browser.");
-      return;
-    }
-    setLocateError(null);
-    setAcquiring(true);
-    setTracking(true);
-    hasCenteredOnUser.current = false;
-    // watchPosition triggers the browser's own permission prompt on first use,
-    // then fires repeatedly as the device moves.
-    watchId.current = navigator.geolocation.watchPosition(
-      (position) => {
-        const { latitude, longitude, accuracy } = position.coords;
-        setUserLocation({ lat: latitude, lon: longitude, accuracy });
-        setAcquiring(false);
-        // Recenter only on the very first fix; afterwards keep tracking the
-        // moving dot without fighting the user's own panning.
-        const map = mapRef.current;
-        if (map && !hasCenteredOnUser.current) {
-          map.setView([latitude, longitude], Math.max(map.getZoom(), 13));
-          hasCenteredOnUser.current = true;
-        }
-      },
-      (err) => {
-        setAcquiring(false);
-        // A transient timeout shouldn't kill an active track; watchPosition
-        // will keep retrying. Only hard-stop on permission denial / no support.
-        if (err.code === err.PERMISSION_DENIED) {
-          setLocateError("Location permission denied.");
-          stopTracking();
-        } else if (err.code === err.POSITION_UNAVAILABLE) {
-          setLocateError("Location unavailable — searching…");
-        }
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
-    );
-  }, [stopTracking]);
-
-  const handleLocate = useCallback(() => {
-    if (tracking) {
-      stopTracking();
-    } else {
-      startTracking();
-    }
-  }, [tracking, startTracking, stopTracking]);
-
-  // Clean up the geolocation watch when the map unmounts (e.g. tab switch).
+  // Reset the "recenter once" latch each time a new recording begins.
   useEffect(() => {
-    return () => {
-      if (watchId.current !== null && typeof navigator !== "undefined") {
-        navigator.geolocation.clearWatch(watchId.current);
-      }
-    };
-  }, []);
+    if (isRecording) hasCenteredOnUser.current = false;
+  }, [isRecording]);
+
+  // Recenter on the first fix of a recording; afterwards just let the dot move.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (map && latest && !hasCenteredOnUser.current) {
+      map.setView([latest.lat, latest.lon], Math.max(map.getZoom(), 13));
+      hasCenteredOnUser.current = true;
+    }
+  }, [latest]);
+
+  const trailPositions = useMemo(
+    () => track.map((p) => [p.lat, p.lon] as [number, number]),
+    [track]
+  );
 
   return (
     <div className="w-full">
@@ -357,63 +451,78 @@ export function MapView({
         <div className="absolute right-2 top-2 z-[1000] flex flex-col items-end gap-1">
           <button
             type="button"
-            onClick={handleLocate}
-            title={tracking ? "Stop tracking my location" : "Track my location"}
+            onClick={toggle}
+            title={isRecording ? "Stop recording float" : "Start recording float"}
             aria-label={
-              tracking ? "Stop tracking my location" : "Track my location"
+              isRecording ? "Stop recording float" : "Start recording float"
             }
-            aria-pressed={tracking}
-            className={`flex h-9 w-9 items-center justify-center border shadow ${
-              tracking
-                ? "border-blue-400 bg-blue-600 text-white hover:bg-blue-500"
+            aria-pressed={isRecording}
+            className={`flex h-9 items-center justify-center gap-1.5 border px-2.5 text-xs font-semibold shadow ${
+              isRecording
+                ? "border-red-400 bg-red-600 text-white hover:bg-red-500"
                 : "border-gray-600 bg-gray-900/90 text-gray-100 hover:bg-gray-800"
             }`}
           >
             {acquiring ? (
-              <svg
-                className="h-4 w-4 animate-spin"
-                viewBox="0 0 24 24"
-                fill="none"
-              >
-                <circle
-                  cx="12"
-                  cy="12"
-                  r="9"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeOpacity="0.3"
-                />
-                <path
-                  d="M21 12a9 9 0 0 0-9-9"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                />
+              <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" strokeOpacity="0.3" />
+                <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+            ) : isRecording ? (
+              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="5" y="5" width="14" height="14" rx="1" />
               </svg>
             ) : (
-              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none">
-                <circle
-                  cx="12"
-                  cy="12"
-                  r="4"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                />
-                <path
-                  d="M12 2v3M12 19v3M2 12h3M19 12h3"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                />
-              </svg>
+              <span className="h-3 w-3 rounded-full bg-red-500" />
             )}
+            <span>{isRecording ? "Stop float" : "Start float"}</span>
           </button>
-          {locateError && (
-            <span className="max-w-[180px] bg-gray-900/90 px-2 py-1 text-right text-[10px] text-red-400 shadow">
-              {locateError}
+          {!isNative && (
+            <span className="max-w-[190px] bg-gray-900/90 px-2 py-1 text-right text-[10px] text-amber-300/90 shadow">
+              Web mode: keep this screen on. Install the app for hands-off
+              background tracking.
+            </span>
+          )}
+          {trackError && (
+            <span className="max-w-[190px] bg-gray-900/90 px-2 py-1 text-right text-[10px] text-red-400 shadow">
+              {trackError}
             </span>
           )}
         </div>
+
+        {/* Live float stats while recording (or just after a fix lands). */}
+        {(isRecording || track.length > 0) && (
+          <div className="absolute left-2 top-2 z-[1000] bg-gray-900/90 px-2.5 py-1.5 text-[11px] leading-tight text-gray-100 shadow">
+            <div className="flex items-center gap-1.5 font-semibold">
+              {isRecording && (
+                <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
+              )}
+              <span>{acquiring ? "Acquiring GPS…" : "Recording float"}</span>
+            </div>
+            <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5 text-gray-300">
+              <span>Dist</span>
+              <span className="text-right text-gray-100">
+                {formatMiles(liveSummary.distanceMeters)}
+              </span>
+              <span>Elapsed</span>
+              <span className="text-right text-gray-100">
+                {formatDuration(liveSummary.totalMs)}
+              </span>
+              <span>Moving</span>
+              <span className="text-right text-gray-100">
+                {formatDuration(liveSummary.movingMs)}
+              </span>
+              {liveSummary.stoppedMs > 0 && (
+                <>
+                  <span>Stopped</span>
+                  <span className="text-right text-amber-300">
+                    {formatDuration(liveSummary.stoppedMs)}
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         <MapContainer
           ref={mapRef}
@@ -431,36 +540,94 @@ export function MapView({
           <BoundsWatcher onViewportChange={onViewportChange} />
           <ZoomTracker onZoom={setZoom} />
 
-          {/* Device's current location: blue dot + accuracy radius */}
-          {userLocation && (
+          {/* A previously saved float, overlaid for review. */}
+          {shownTrip && <SavedTripOverlay trip={shownTrip} />}
+
+          {/* Live float: dotted breadcrumb back to the put-in. */}
+          {trailPositions.length >= 2 && (
+            <Polyline
+              positions={trailPositions}
+              pathOptions={{
+                color: "#3b82f6",
+                weight: 3,
+                opacity: 0.85,
+                dashArray: "1 7",
+                lineCap: "round",
+              }}
+            />
+          )}
+
+          {/* Put-in marker (where this recording started). */}
+          {track.length > 0 && (
+            <Marker
+              position={[track[0].lat, track[0].lon]}
+              icon={putInIcon()}
+              zIndexOffset={800}
+            >
+              <Popup>
+                <div className="text-xs leading-snug">
+                  <div className="font-semibold">Put-in</div>
+                  <div className="text-gray-600 mt-0.5">
+                    Started {formatClock(track[0].t)}
+                  </div>
+                </div>
+              </Popup>
+            </Marker>
+          )}
+
+          {/* Detected stops on the live track (pull-overs / breaks). */}
+          {liveSummary.stops.map((s) => (
+            <Marker
+              key={`live-stop-${s.startT}`}
+              position={[s.lat, s.lon]}
+              icon={stopIcon(formatDuration(s.durationMs))}
+              zIndexOffset={700}
+            >
+              <Popup>
+                <div className="text-xs leading-snug">
+                  <div className="font-semibold">Stopped here</div>
+                  <div className="text-gray-600 mt-0.5">
+                    {formatClock(s.startT)}–{formatClock(s.endT)} ·{" "}
+                    {formatDuration(s.durationMs)}
+                  </div>
+                </div>
+              </Popup>
+            </Marker>
+          ))}
+
+          {/* Device's current location: blue dot (+ heading) + accuracy radius */}
+          {latest && (
             <>
-              <Circle
-                center={[userLocation.lat, userLocation.lon]}
-                radius={userLocation.accuracy}
-                pathOptions={{
-                  color: "#3b82f6",
-                  fillColor: "#3b82f6",
-                  fillOpacity: 0.12,
-                  weight: 1,
-                }}
-              />
+              {latest.accuracy != null && (
+                <Circle
+                  center={[latest.lat, latest.lon]}
+                  radius={latest.accuracy}
+                  pathOptions={{
+                    color: "#3b82f6",
+                    fillColor: "#3b82f6",
+                    fillOpacity: 0.12,
+                    weight: 1,
+                  }}
+                />
+              )}
               <Marker
-                position={[userLocation.lat, userLocation.lon]}
-                icon={userLocationIcon()}
+                position={[latest.lat, latest.lon]}
+                icon={userLocationIcon(heading)}
                 zIndexOffset={1000}
               >
                 <Popup>
                   <div className="text-xs leading-snug">
                     <div className="font-semibold">
-                      Your location{tracking ? " (live)" : ""}
+                      Your location{isRecording ? " (live)" : ""}
                     </div>
                     <div className="text-gray-600 mt-0.5">
-                      {userLocation.lat.toFixed(4)},{" "}
-                      {userLocation.lon.toFixed(4)}
+                      {latest.lat.toFixed(4)}, {latest.lon.toFixed(4)}
                     </div>
-                    <div className="text-gray-600">
-                      Accuracy ±{Math.round(userLocation.accuracy)} m
-                    </div>
+                    {latest.accuracy != null && (
+                      <div className="text-gray-600">
+                        Accuracy ±{Math.round(latest.accuracy)} m
+                      </div>
+                    )}
                   </div>
                 </Popup>
               </Marker>
@@ -551,6 +718,80 @@ export function MapView({
           ))}
         </MapContainer>
       </div>
+
+      {/* Past floats */}
+      {trips.length > 0 && (
+        <div className="mt-3">
+          <h3 className="mb-1.5 px-1 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+            Past floats ({trips.length})
+          </h3>
+          <ul className="divide-y divide-gray-200 border border-gray-200 dark:divide-gray-700 dark:border-gray-700">
+            {trips.map((trip) => {
+              const isShown = trip.id === shownTripId;
+              return (
+                <li
+                  key={trip.id}
+                  className="flex items-center justify-between gap-2 px-2 py-2 text-xs"
+                >
+                  <div className="min-w-0">
+                    <div className="font-medium text-gray-900 dark:text-gray-100">
+                      {trip.name ??
+                        new Date(trip.startedAt).toLocaleDateString([], {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
+                    </div>
+                    <div className="mt-0.5 text-gray-500 dark:text-gray-400">
+                      {formatMiles(trip.distanceMeters)} ·{" "}
+                      {formatDuration(trip.totalMs)} total
+                      {trip.stoppedMs > 0 && (
+                        <>
+                          {" "}
+                          · {formatDuration(trip.movingMs)} moving ·{" "}
+                          {trip.stops.length} stop
+                          {trip.stops.length === 1 ? "" : "s"} (
+                          {formatDuration(trip.stoppedMs)})
+                        </>
+                      )}
+                    </div>
+                    <div className="mt-0.5 text-gray-400 dark:text-gray-500">
+                      {formatClock(trip.startedAt)}
+                      {trip.endedAt && <> → {formatClock(trip.endedAt)}</>}
+                    </div>
+                  </div>
+                  <div className="flex flex-shrink-0 items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setShownTripId(isShown ? null : trip.id)
+                      }
+                      className={`border px-2 py-1 font-medium ${
+                        isShown
+                          ? "border-purple-400 bg-purple-600 text-white"
+                          : "border-gray-300 text-gray-600 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+                      }`}
+                    >
+                      {isShown ? "Hide" : "Show"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (isShown) setShownTripId(null);
+                        deleteTrip(trip.id);
+                      }}
+                      aria-label="Delete float"
+                      className="border border-gray-300 px-2 py-1 text-gray-500 hover:bg-red-50 hover:text-red-600 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-red-950/40"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

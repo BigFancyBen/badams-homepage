@@ -1,7 +1,18 @@
 import type { NextConfig } from "next";
 
+// When CAPACITOR=1 we produce a static export (`out/`) for the Capacitor
+// Android shell instead of the normal server build. The web deployment
+// (with its API routes) is unaffected — this branch only runs for the
+// `build:mobile` pipeline, which bundles FloatWise as an offline app.
+const isCapacitor = process.env.CAPACITOR === "1";
+
 const nextConfig: NextConfig = {
+  ...(isCapacitor
+    ? { output: "export" as const, distDir: "out", trailingSlash: true }
+    : {}),
   images: {
+    // Static export can't use the optimizing loader.
+    unoptimized: isCapacitor,
     remotePatterns: [
       {
         protocol: 'https',
