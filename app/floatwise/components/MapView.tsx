@@ -290,6 +290,16 @@ export function MapView({
       setLocateError("Location isn't supported by this browser.");
       return;
     }
+    // Browsers only expose geolocation in a "secure context" (HTTPS, or
+    // localhost). When the page is opened over plain HTTP — e.g. visiting the
+    // dev server from a phone via a LAN IP like http://192.168.x.x:3000 — the
+    // Geolocation API rejects immediately with PERMISSION_DENIED and shows no
+    // prompt, which looks exactly like the user denied access. Detect that up
+    // front so we can explain the real cause instead of blaming the user.
+    if (typeof window !== "undefined" && window.isSecureContext === false) {
+      setLocateError("Location needs a secure (HTTPS) connection.");
+      return;
+    }
     setLocateError(null);
     setAcquiring(true);
     setTracking(true);
@@ -314,8 +324,28 @@ export function MapView({
         // A transient timeout shouldn't kill an active track; watchPosition
         // will keep retrying. Only hard-stop on permission denial / no support.
         if (err.code === err.PERMISSION_DENIED) {
-          setLocateError("Location permission denied.");
           stopTracking();
+          // Firefox quirk: dismissing the door-hanger prompt (clicking away,
+          // switching tabs, or it auto-closing) reports PERMISSION_DENIED even
+          // though the permission is still in the "prompt" state — i.e. not
+          // actually blocked. Chrome's prompt is persistent and has no such
+          // indeterminate state, which is why this only bites Firefox. Use the
+          // Permissions API to tell a real block apart from a dismissal so we
+          // show guidance the user can act on instead of a dead-end "denied".
+          if (navigator.permissions?.query) {
+            navigator.permissions
+              .query({ name: "geolocation" })
+              .then((status) => {
+                setLocateError(
+                  status.state === "denied"
+                    ? "Location is blocked. Allow it via the address-bar icon, then try again."
+                    : "Location request dismissed — tap the button and choose Allow."
+                );
+              })
+              .catch(() => setLocateError("Location permission denied."));
+          } else {
+            setLocateError("Location permission denied.");
+          }
         } else if (err.code === err.POSITION_UNAVAILABLE) {
           setLocateError("Location unavailable — searching…");
         }
