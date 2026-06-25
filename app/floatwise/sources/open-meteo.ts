@@ -107,12 +107,13 @@ export async function fetchOpenMeteoWeather(
     temperature_unit: 'fahrenheit',
     wind_speed_unit: 'mph',
     timezone: 'auto',
-    // Use Open-Meteo's default "best_match", which automatically selects the
-    // best-performing, highest-resolution model for each location and lead
-    // time (e.g. high-res HRRR short-range over the US, stronger global models
-    // further out). This is the most accurate general setting; pinning a single
-    // model degrades multi-day forecasts in complex terrain.
-    models: 'best_match',
+    // Pin the National Blend of Models (CONUS). This is the post-processed
+    // blend the U.S. National Weather Service publishes as its public forecast,
+    // and it's what mainstream consumer apps (Google, weather.com) effectively
+    // show. The default "best_match" instead surfaces raw NWP models (GFS/HRRR/
+    // ICON), which can read 15-20F hotter than the public forecast in summer.
+    // NBM tracks the "what people actually see" forecast far more closely.
+    models: 'ncep_nbm_conus',
     start_date: dateStr,
     end_date: dateStr,
   });
@@ -163,7 +164,10 @@ export async function fetchOpenMeteoStations(
     temperature_unit: 'fahrenheit',
     wind_speed_unit: 'mph',
     timezone: 'auto',
-    models: 'best_match',
+    // Match the main forecast: NBM (CONUS) is the NWS public-forecast blend, so
+    // map stations and the table agree on temps rather than the map showing
+    // hotter raw-model values from "best_match".
+    models: 'ncep_nbm_conus',
     start_date: dateStr,
     end_date: dateStr,
   });
