@@ -6,6 +6,7 @@ import {
   WaypointCategory,
   WAYPOINT_CATEGORIES,
 } from "../types";
+import { CategoryGlyph } from "./CategoryGlyph";
 
 interface WaypointEditorProps {
   /** The waypoint being created or edited. */
@@ -113,7 +114,11 @@ export function WaypointEditor({
                   }`}
                   style={active ? { backgroundColor: cat.color } : undefined}
                 >
-                  <span className="text-base leading-none">{cat.emoji}</span>
+                  <CategoryGlyph
+                    meta={cat}
+                    size={18}
+                    color={active ? "#ffffff" : cat.color}
+                  />
                   <span className="leading-tight">{cat.label}</span>
                 </button>
               );

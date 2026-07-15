@@ -18,6 +18,7 @@ import {
 } from "../types";
 import { generateWaypointId } from "../utils";
 import { WaypointEditor } from "./WaypointEditor";
+import { CategoryGlyph } from "./CategoryGlyph";
 
 interface MapViewProps {
   waypoints: Waypoint[];
@@ -39,11 +40,16 @@ function escapeHtml(text: string): string {
     .replace(/"/g, "&quot;");
 }
 
+/** Wrap a category's stored lucide paths in a full <svg> string. */
+function glyphSvg(iconPaths: string, size: number, stroke: string): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${stroke}" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round">${iconPaths}</svg>`;
+}
+
 /**
  * Build the marker for a waypoint. A single-category waypoint gets a square pin
- * bordered in that category's color with its emoji; a multi-category waypoint
- * gets a distinct wider pill — bordered in white and showing every category's
- * emoji in a row — so "belongs to several groups" reads at a glance.
+ * filled with that category's color and a white icon; a multi-category waypoint
+ * gets a distinct strip of per-category color chips (each with its own white
+ * icon) so "belongs to several groups" reads at a glance.
  */
 function waypointIcon(waypoint: Waypoint): L.DivIcon {
   const cats = waypoint.categories
@@ -57,39 +63,53 @@ function waypointIcon(waypoint: Waypoint): L.DivIcon {
     : "";
 
   if (multi) {
-    const emojis = cats
+    // Chip strip geometry (must match the inline styles below) so the map point
+    // sits at the visual center of the strip.
+    const chip = 20;
+    const gap = 2;
+    const pad = 2;
+    const border = 2;
+    const stripInner = cats.length * chip + (cats.length - 1) * gap;
+    const totalW = 2 * border + 2 * pad + stripInner;
+    const totalH = 2 * border + 2 * pad + chip;
+
+    const chips = cats
       .map(
         (c) =>
-          `<span style="font-size:13px;line-height:1;">${c.emoji}</span>`
+          `<span style="display:inline-flex;align-items:center;justify-content:center;width:${chip}px;height:${chip}px;background:${c.color};">${glyphSvg(
+            c.iconPaths,
+            14,
+            "#ffffff"
+          )}</span>`
       )
       .join("");
     const html = `
       <div style="display:flex;align-items:center;white-space:nowrap;">
-        <div style="display:inline-flex;align-items:center;gap:2px;background:rgba(17,24,39,0.95);border:2px solid #ffffff;box-shadow:0 0 0 1px #111827, 0 1px 4px rgba(0,0,0,0.6);padding:2px 4px;">
-          ${emojis}
+        <div style="display:inline-flex;align-items:center;gap:${gap}px;padding:${pad}px;background:rgba(17,24,39,0.95);border:${border}px solid #ffffff;box-shadow:0 0 0 1px rgba(0,0,0,0.5), 0 1px 4px rgba(0,0,0,0.6);">
+          ${chips}
         </div>
         ${label}
       </div>`;
     return L.divIcon({
       html,
       className: "fw-waypoint-icon",
-      iconAnchor: [0, 0],
+      iconAnchor: [totalW / 2, totalH / 2],
     });
   }
 
   const color = cats[0]?.color ?? "#9ca3af";
-  const emoji = cats[0]?.emoji ?? "📍";
+  const paths = cats[0]?.iconPaths ?? "";
   const html = `
     <div style="display:flex;align-items:center;white-space:nowrap;">
-      <div style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;background:rgba(17,24,39,0.95);border:2px solid ${color};box-shadow:0 1px 4px rgba(0,0,0,0.6);font-size:15px;line-height:1;">
-        ${emoji}
+      <div style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;background:${color};border:2px solid rgba(255,255,255,0.92);box-shadow:0 0 0 1px rgba(0,0,0,0.5), 0 1px 4px rgba(0,0,0,0.6);">
+        ${glyphSvg(paths, 17, "#ffffff")}
       </div>
       ${label}
     </div>`;
   return L.divIcon({
     html,
     className: "fw-waypoint-icon",
-    iconAnchor: [14, 14],
+    iconAnchor: [16, 16],
   });
 }
 
@@ -196,6 +216,9 @@ export function MapView({
   // ── Live location + heading tracking ──────────────────────────────────────
   const watchId = useRef<number | null>(null);
   const hasCenteredOnUser = useRef(false);
+  // Whether the next fix should recenter the map on the user. False when we're
+  // deliberately framing the waypoints instead (see the auto-locate effect).
+  const recenterOnFix = useRef(false);
   const [userLocation, setUserLocation] = useState<{
     lat: number;
     lon: number;
@@ -215,76 +238,111 @@ export function MapView({
     setAcquiring(false);
   }, []);
 
-  const startTracking = useCallback(() => {
-    if (typeof navigator === "undefined" || !navigator.geolocation) {
-      setLocateError("Location isn't supported by this browser.");
-      return;
-    }
-    if (typeof window !== "undefined" && window.isSecureContext === false) {
-      setLocateError("Location needs a secure (HTTPS) connection.");
-      return;
-    }
-    setLocateError(null);
-    setAcquiring(true);
-    setTracking(true);
-    hasCenteredOnUser.current = false;
-    watchId.current = navigator.geolocation.watchPosition(
-      (position) => {
-        const { latitude, longitude, accuracy, heading } = position.coords;
-        setUserLocation({
-          lat: latitude,
-          lon: longitude,
-          accuracy,
-          // heading is NaN/null when stationary or unsupported.
-          heading:
-            heading !== null && heading !== undefined && !Number.isNaN(heading)
-              ? heading
-              : null,
-        });
-        setAcquiring(false);
-        const map = mapRef.current;
-        if (map && !hasCenteredOnUser.current) {
-          map.setView([latitude, longitude], Math.max(map.getZoom(), 14));
-          hasCenteredOnUser.current = true;
-        }
-      },
-      (err) => {
-        setAcquiring(false);
-        if (err.code === err.PERMISSION_DENIED) {
-          stopTracking();
-          if (navigator.permissions?.query) {
-            navigator.permissions
-              .query({ name: "geolocation" })
-              .then((status) => {
-                setLocateError(
-                  status.state === "denied"
-                    ? "Location is blocked. Allow it via the address-bar icon, then try again."
-                    : "Location request dismissed — tap the button and choose Allow."
-                );
-              })
-              .catch(() => setLocateError("Location permission denied."));
-          } else {
-            setLocateError("Location permission denied.");
+  // Start watching the device location. `autoCenter` decides whether the very
+  // first fix should recenter the map (true when there's nothing else to frame;
+  // false when we're keeping the waypoints in view). Safe to call repeatedly —
+  // an existing watch is cleared first.
+  const startTracking = useCallback(
+    (autoCenter: boolean) => {
+      if (typeof navigator === "undefined" || !navigator.geolocation) {
+        setLocateError("Location isn't supported by this browser.");
+        return;
+      }
+      if (typeof window !== "undefined" && window.isSecureContext === false) {
+        setLocateError("Location needs a secure (HTTPS) connection.");
+        return;
+      }
+      if (watchId.current !== null) {
+        navigator.geolocation.clearWatch(watchId.current);
+      }
+      setLocateError(null);
+      setAcquiring(true);
+      setTracking(true);
+      hasCenteredOnUser.current = false;
+      recenterOnFix.current = autoCenter;
+      watchId.current = navigator.geolocation.watchPosition(
+        (position) => {
+          const { latitude, longitude, accuracy, heading } = position.coords;
+          setUserLocation({
+            lat: latitude,
+            lon: longitude,
+            accuracy,
+            // heading is NaN/null when stationary or unsupported.
+            heading:
+              heading !== null &&
+              heading !== undefined &&
+              !Number.isNaN(heading)
+                ? heading
+                : null,
+          });
+          setAcquiring(false);
+          const map = mapRef.current;
+          if (map && recenterOnFix.current && !hasCenteredOnUser.current) {
+            map.setView([latitude, longitude], Math.max(map.getZoom(), 14));
+            hasCenteredOnUser.current = true;
           }
-        } else if (err.code === err.POSITION_UNAVAILABLE) {
-          setLocateError("Location unavailable — searching…");
-        }
-      },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
-    );
-  }, [stopTracking]);
+        },
+        (err) => {
+          setAcquiring(false);
+          if (err.code === err.PERMISSION_DENIED) {
+            stopTracking();
+            if (navigator.permissions?.query) {
+              navigator.permissions
+                .query({ name: "geolocation" })
+                .then((status) => {
+                  setLocateError(
+                    status.state === "denied"
+                      ? "Location is blocked. Allow it via the address-bar icon, then try again."
+                      : "Location request dismissed — tap the button and choose Allow."
+                  );
+                })
+                .catch(() => setLocateError("Location permission denied."));
+            } else {
+              setLocateError("Location permission denied.");
+            }
+          } else if (err.code === err.POSITION_UNAVAILABLE) {
+            setLocateError("Location unavailable — searching…");
+          }
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
+      );
+    },
+    [stopTracking]
+  );
 
+  // The locate button: recenter on the user if we're already tracking (with a
+  // fix), otherwise (re)start tracking and center once a fix comes in.
   const handleLocate = useCallback(() => {
-    if (tracking) stopTracking();
-    else startTracking();
-  }, [tracking, startTracking, stopTracking]);
+    const map = mapRef.current;
+    if (tracking && userLocation && map) {
+      map.setView(
+        [userLocation.lat, userLocation.lon],
+        Math.max(map.getZoom(), 15)
+      );
+      return;
+    }
+    if (tracking) {
+      // Tracking but no fix yet — center as soon as one arrives.
+      recenterOnFix.current = true;
+      return;
+    }
+    startTracking(true);
+  }, [tracking, userLocation, startTracking]);
 
+  // Request the device location as soon as the map opens, so the user's dot
+  // shows without any interaction. When there are no waypoints to frame we also
+  // recenter on the user; when waypoints exist we keep them in view (InitialFit)
+  // and just drop the dot in place.
   useEffect(() => {
+    startTracking(waypoints.length === 0);
     return () => {
       if (watchId.current !== null && typeof navigator !== "undefined") {
         navigator.geolocation.clearWatch(watchId.current);
+        watchId.current = null;
       }
     };
+    // Run once on mount; startTracking/waypoints are intentionally not deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Add / edit waypoint state ─────────────────────────────────────────────
@@ -354,9 +412,9 @@ export function MapView({
           <button
             type="button"
             onClick={handleLocate}
-            title={tracking ? "Stop tracking my location" : "Track my location"}
+            title={tracking ? "Center on my location" : "Find my location"}
             aria-label={
-              tracking ? "Stop tracking my location" : "Track my location"
+              tracking ? "Center on my location" : "Find my location"
             }
             aria-pressed={tracking}
             className={`flex h-9 w-9 items-center justify-center border shadow ${
@@ -446,10 +504,15 @@ export function MapView({
 
         {/* Legend (bottom-right) */}
         <div className="absolute bottom-4 right-2 z-[1000] max-w-[46%] border border-gray-700 bg-gray-900/85 p-1.5 shadow">
-          <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
+          <div className="grid grid-cols-2 gap-x-2 gap-y-1">
             {WAYPOINT_CATEGORIES.map((c) => (
               <div key={c.id} className="flex items-center gap-1 text-[10px] text-gray-200">
-                <span className="text-xs leading-none">{c.emoji}</span>
+                <span
+                  className="flex h-4 w-4 shrink-0 items-center justify-center"
+                  style={{ backgroundColor: c.color }}
+                >
+                  <CategoryGlyph meta={c} size={11} color="#ffffff" />
+                </span>
                 <span className="truncate">{c.label}</span>
               </div>
             ))}
