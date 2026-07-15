@@ -4,20 +4,20 @@ import { useState, useEffect, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { useSearchParams } from "next/navigation";
 import { Calendar } from "./components/Calendar";
-import { HourSelector } from "./components/HourSelector";
 import { LocationManager } from "./components/LocationManager";
 import { WeatherDisplay } from "./components/WeatherDisplay";
 import { RiverFlow } from "./components/RiverFlow";
 import { useLocationStorage } from "./hooks/useLocationStorage";
 import { useWeatherData } from "./hooks/useWeatherData";
-import { useStationData } from "./hooks/useStationData";
 import { useUserPreferences } from "./hooks/useUserPreferences";
-import { Location } from "./types";
+import { useWaypointStorage } from "./hooks/useWaypointStorage";
+import { Location, Waypoint } from "./types";
 import {
   encodeLocationsToURL,
   decodeLocationsFromURL,
+  encodeWaypointsToURL,
+  decodeWaypointsFromURL,
   getInitialDate,
-  GeoBounds,
 } from "./utils";
 
 // Leaflet touches `window`, so the map view is client-only (no SSR).
@@ -40,17 +40,17 @@ type FloatWiseTab = "table" | "map";
 
 export default function FloatWisePage() {
   const [selectedDate, setSelectedDate] = useState(getInitialDate());
-  const [activeTab, setActiveTab] = useState<FloatWiseTab>("table");
-  const [selectedHour, setSelectedHour] = useState(12);
-  const [mapViewport, setMapViewport] = useState<{
-    bounds: GeoBounds;
-    zoom: number;
-  } | null>(null);
   const searchParams = useSearchParams();
 
-  // Decode locations from URL parameter if present
+  // Decode shared payloads from the URL, if present.
   const urlLocations = decodeLocationsFromURL(
     searchParams.get("locations") || ""
+  );
+  const urlWaypoints = decodeWaypointsFromURL(searchParams.get("waypoints") || "");
+
+  // A shared-waypoints link opens straight into the map.
+  const [activeTab, setActiveTab] = useState<FloatWiseTab>(
+    urlWaypoints && urlWaypoints.length > 0 ? "map" : "table"
   );
 
   const {
@@ -63,14 +63,18 @@ export default function FloatWisePage() {
     renameLocation,
     isViewingSharedLink,
   } = useLocationStorage(urlLocations);
-  const { weatherData, loadedCount, totalCount, fetchWeatherForLocations } = useWeatherData();
-  const {
-    stations,
-    isLoading: stationsLoading,
-    error: stationsError,
-    fetchStations,
-  } = useStationData();
+  const { weatherData, loadedCount, totalCount, fetchWeatherForLocations } =
+    useWeatherData();
   const { preferences, updatePreferences } = useUserPreferences();
+
+  const {
+    waypoints,
+    isLoaded: waypointsLoaded,
+    addWaypoint,
+    updateWaypoint,
+    removeWaypoint,
+    isViewingSharedLink: isViewingSharedWaypoints,
+  } = useWaypointStorage(urlWaypoints);
 
   // Fetch weather data when locations or selected date changes
   useEffect(() => {
@@ -78,15 +82,6 @@ export default function FloatWisePage() {
       fetchWeatherForLocations(locations, selectedDate);
     }
   }, [locations, selectedDate, isLoaded, fetchWeatherForLocations]);
-
-  // Fetch the actual weather stations for the current map viewport. Driven by
-  // the map viewport (updated on pan/zoom) and the selected date. The hook
-  // caches per day and skips redundant fetches, so this can fire freely.
-  useEffect(() => {
-    if (isLoaded && activeTab === "map" && mapViewport) {
-      fetchStations(mapViewport, selectedDate);
-    }
-  }, [activeTab, mapViewport, selectedDate, isLoaded, fetchStations]);
 
   const handleDateSelect = (date: Date) => {
     setSelectedDate(date);
@@ -108,16 +103,22 @@ export default function FloatWisePage() {
     renameLocation(locationId, newName);
   };
 
-  const handleUpdateLocation = (locationId: string, updates: Partial<Location>) => {
+  const handleUpdateLocation = (
+    locationId: string,
+    updates: Partial<Location>
+  ) => {
     updateLocation(locationId, updates);
   };
 
-  const handleImportLocations = useCallback((newLocations: Location[]) => {
-    // Add each location (deduplicates by id)
-    newLocations.forEach((loc) => {
-      addLocation(loc);
-    });
-  }, [addLocation]);
+  const handleImportLocations = useCallback(
+    (newLocations: Location[]) => {
+      // Add each location (deduplicates by id)
+      newLocations.forEach((loc) => {
+        addLocation(loc);
+      });
+    },
+    [addLocation]
+  );
 
   const handleShareClick = async () => {
     if (locations.length === 0) {
@@ -134,8 +135,28 @@ export default function FloatWisePage() {
     }
   };
 
+  const handleShareWaypoints = useCallback(async () => {
+    if (waypoints.length === 0) return;
+
+    const encoded = encodeWaypointsToURL(waypoints);
+    const shareUrl = `${window.location.origin}${window.location.pathname}?waypoints=${encoded}`;
+
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+    } catch (error) {
+      console.error("Failed to copy waypoints link:", error);
+    }
+  }, [waypoints]);
+
+  const handleAddWaypoint = useCallback(
+    (waypoint: Waypoint) => {
+      addWaypoint(waypoint);
+    },
+    [addWaypoint]
+  );
+
   // Show loading state until localStorage is loaded
-  if (!isLoaded) {
+  if (!isLoaded || !waypointsLoaded) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col items-center justify-center px-4 py-8">
         <div className="text-center">
@@ -179,7 +200,9 @@ export default function FloatWisePage() {
                     </path>
                   </svg>
                   <span className="text-xs text-gray-500 dark:text-gray-400">
-                    {totalCount && totalCount > 1 ? `${loadedCount}/${totalCount}` : 'Loading...'}
+                    {totalCount && totalCount > 1
+                      ? `${loadedCount}/${totalCount}`
+                      : "Loading..."}
                   </span>
                 </div>
               )}
@@ -201,64 +224,80 @@ export default function FloatWisePage() {
               />
             </div>
           </div>
-          {locations.length === 0 ? (
-            <div className="text-center py-12 sm:py-16 text-gray-500 dark:text-gray-400 border-2 border-dashed border-gray-300 dark:border-gray-600 mt-2">
-              <p className="mb-2 text-sm sm:text-base">No locations added yet</p>
-              <p className="text-xs sm:text-sm">
-                Click the <span className="inline-flex items-center justify-center w-5 h-5 border border-current align-text-bottom">+</span> button to add locations
-              </p>
-            </div>
-          ) : (
-            <>
-              {/* Tabs */}
-              <div className="flex gap-1 border-b border-gray-300 dark:border-gray-600 mb-2 px-1 sm:px-0">
-                {(["table", "map"] as const).map((tab) => (
-                  <button
-                    key={tab}
-                    onClick={() => setActiveTab(tab)}
-                    className={`px-4 py-1.5 text-sm font-medium border-b-2 -mb-px transition-colors capitalize ${
-                      activeTab === tab
-                        ? "border-blue-500 text-blue-600 dark:text-blue-400"
-                        : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
-                    }`}
-                  >
-                    {tab}
-                  </button>
-                ))}
+
+          {/* Tabs — always available so the waypoint map is reachable even with
+              no weather locations added yet. */}
+          <div className="flex gap-1 border-b border-gray-300 dark:border-gray-600 mb-2 px-1 sm:px-0">
+            {(["table", "map"] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-4 py-1.5 text-sm font-medium border-b-2 -mb-px transition-colors capitalize ${
+                  activeTab === tab
+                    ? "border-blue-500 text-blue-600 dark:text-blue-400"
+                    : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                }`}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+
+          {activeTab === "table" ? (
+            locations.length === 0 ? (
+              <div className="text-center py-12 sm:py-16 text-gray-500 dark:text-gray-400 border-2 border-dashed border-gray-300 dark:border-gray-600 mt-2">
+                <p className="mb-2 text-sm sm:text-base">
+                  No locations added yet
+                </p>
+                <p className="text-xs sm:text-sm">
+                  Click the{" "}
+                  <span className="inline-flex items-center justify-center w-5 h-5 border border-current align-text-bottom">
+                    +
+                  </span>{" "}
+                  button to add locations
+                </p>
               </div>
-
-              {/* Calendar (shared date selection) */}
-              <Calendar
-                selectedDate={selectedDate}
-                onDateSelect={handleDateSelect}
-              />
-
-              {activeTab === "table" ? (
-                /* Weather Display */
+            ) : (
+              <>
+                {/* Calendar (date selection for the forecast table) */}
+                <Calendar
+                  selectedDate={selectedDate}
+                  onDateSelect={handleDateSelect}
+                />
                 <WeatherDisplay
                   locationWeather={weatherData}
                   preferences={preferences}
                   loadedCount={loadedCount}
                   totalCount={totalCount}
                 />
-              ) : (
-                <>
-                  {/* Time selection (map only) */}
-                  <HourSelector
-                    selectedHour={selectedHour}
-                    onHourSelect={setSelectedHour}
-                  />
-                  <MapView
-                    locations={locations}
-                    stations={stations}
-                    isLoading={stationsLoading}
-                    error={stationsError}
-                    selectedHour={selectedHour}
-                    preferences={preferences}
-                    onViewportChange={setMapViewport}
-                  />
-                </>
+              </>
+            )
+          ) : (
+            <>
+              {isViewingSharedWaypoints && (
+                <div className="mb-2 flex items-center justify-between gap-2 px-1 sm:px-0">
+                  <span className="text-[11px] italic text-gray-500 dark:text-gray-400">
+                    viewing shared waypoints
+                  </span>
+                  <button
+                    onClick={() => {
+                      window.location.href = window.location.pathname;
+                    }}
+                    className="border border-gray-300 px-2 py-1 text-xs font-medium text-gray-600 transition-colors hover:text-blue-600 dark:border-gray-600 dark:text-gray-300 dark:hover:text-blue-400"
+                    title="Load my waypoints"
+                  >
+                    Load My Waypoints
+                  </button>
+                </div>
               )}
+              <MapView
+                waypoints={waypoints}
+                onAddWaypoint={handleAddWaypoint}
+                onUpdateWaypoint={updateWaypoint}
+                onRemoveWaypoint={removeWaypoint}
+                isViewingSharedLink={isViewingSharedWaypoints}
+                onShare={handleShareWaypoints}
+              />
             </>
           )}
         </div>

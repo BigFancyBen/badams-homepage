@@ -5,76 +5,29 @@ import {
   MapContainer,
   TileLayer,
   Marker,
-  Popup,
   Circle,
   useMap,
   useMapEvents,
 } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { Location, UserPreferences } from "../types";
-import { OpenMeteoStation } from "../sources/open-meteo";
-import { GeoBounds, getWeatherEmoji, isGoodWeatherHour } from "../utils";
+import {
+  Waypoint,
+  WAYPOINT_CATEGORIES,
+  WAYPOINT_CATEGORY_MAP,
+} from "../types";
+import { generateWaypointId } from "../utils";
+import { WaypointEditor } from "./WaypointEditor";
 
 interface MapViewProps {
-  /** The user's table input locations (shown as reference pins). */
-  locations: Location[];
-  /** Actual Open-Meteo grid cells covering the area. */
-  stations: OpenMeteoStation[];
-  isLoading: boolean;
-  error?: string;
-  /** Hour of day (0-23) whose data is shown on each station. */
-  selectedHour: number;
-  preferences: UserPreferences;
-  /** Reports the current map viewport (debounced) so stations can be refetched. */
-  onViewportChange: (viewport: { bounds: GeoBounds; zoom: number }) => void;
-}
-
-/** Temperature text color (hex) mirroring the table: below threshold = red. */
-function tempColor(temperature: number, threshold: number): string {
-  return temperature >= threshold ? "#f3f4f6" : "#f87171";
-}
-
-/** Precip text color (hex): above the user's threshold reads red. */
-function precipColor(precipChance: number, threshold: number): string {
-  return precipChance > threshold ? "#f87171" : "#9ca3af";
-}
-
-/** Build the label-style marker for an actual weather station (grid cell). */
-function stationIcon(
-  temperature: number,
-  color: string,
-  windDeg: number,
-  precipChance: number | null,
-  precipTextColor: string,
-  good: boolean
-): L.DivIcon {
-  const rotation = windDeg + 180; // arrow points the way the wind blows TO
-  // Good conditions wash the marker green, mirroring the table's green cells.
-  const background = good ? "rgba(21,128,61,0.95)" : "rgba(17,24,39,0.92)";
-  const borderColor = good ? "#22c55e" : "#4b5563";
-  const precipHtml =
-    precipChance !== null
-      ? `<span style="display:inline-flex;align-items:center;gap:1px;color:${precipTextColor};font-size:9px;font-weight:600;">
-          <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C12 2 5 11 5 16a7 7 0 0 0 14 0c0-5-7-14-7-14z"/></svg>${precipChance}%
-        </span>`
-      : "";
-  const html = `
-    <div style="display:inline-flex;flex-direction:column;align-items:center;line-height:1;background:${background};border:1px solid ${borderColor};padding:1px 4px;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,0.5);">
-      <span style="display:inline-flex;align-items:center;gap:2px;font-size:11px;font-weight:600;color:${color};">
-        <span>${temperature}&deg;</span>
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" style="transform:rotate(${rotation}deg);">
-          <path d="M12 4L12 20M12 4L7 9M12 4L17 9" stroke="#93c5fd" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </span>
-      ${precipHtml}
-    </div>`;
-  return L.divIcon({
-    html,
-    className: "fw-station-icon",
-    iconSize: [44, 28],
-    iconAnchor: [22, 14],
-  });
+  waypoints: Waypoint[];
+  onAddWaypoint: (waypoint: Waypoint) => void;
+  onUpdateWaypoint: (id: string, updates: Partial<Waypoint>) => void;
+  onRemoveWaypoint: (id: string) => void;
+  /** True when the shown waypoints came from a shared link (read-only view). */
+  isViewingSharedLink?: boolean;
+  /** Copies a share link for the current waypoints to the clipboard. */
+  onShare?: () => Promise<void>;
 }
 
 /** Escape user-provided text before inlining it into marker HTML. */
@@ -87,32 +40,76 @@ function escapeHtml(text: string): string {
 }
 
 /**
- * Build the pin for a user's table location (reference point), with a
- * permanent name label so each location is identifiable on the map without
- * having to click it.
+ * Build the marker for a waypoint. A single-category waypoint gets a square pin
+ * bordered in that category's color with its emoji; a multi-category waypoint
+ * gets a distinct wider pill — bordered in white and showing every category's
+ * emoji in a row — so "belongs to several groups" reads at a glance.
  */
-function locationIcon(name: string): L.DivIcon {
+function waypointIcon(waypoint: Waypoint): L.DivIcon {
+  const cats = waypoint.categories
+    .map((id) => WAYPOINT_CATEGORY_MAP[id])
+    .filter(Boolean);
+  const multi = cats.length > 1;
+  const label = waypoint.name
+    ? `<span style="margin-left:4px;background:rgba(17,24,39,0.92);border:1px solid #4b5563;color:#f3f4f6;font-size:10px;font-weight:600;line-height:1.2;padding:1px 4px;box-shadow:0 1px 3px rgba(0,0,0,0.5);">${escapeHtml(
+        waypoint.name
+      )}</span>`
+    : "";
+
+  if (multi) {
+    const emojis = cats
+      .map(
+        (c) =>
+          `<span style="font-size:13px;line-height:1;">${c.emoji}</span>`
+      )
+      .join("");
+    const html = `
+      <div style="display:flex;align-items:center;white-space:nowrap;">
+        <div style="display:inline-flex;align-items:center;gap:2px;background:rgba(17,24,39,0.95);border:2px solid #ffffff;box-shadow:0 0 0 1px #111827, 0 1px 4px rgba(0,0,0,0.6);padding:2px 4px;">
+          ${emojis}
+        </div>
+        ${label}
+      </div>`;
+    return L.divIcon({
+      html,
+      className: "fw-waypoint-icon",
+      iconAnchor: [0, 0],
+    });
+  }
+
+  const color = cats[0]?.color ?? "#9ca3af";
+  const emoji = cats[0]?.emoji ?? "📍";
   const html = `
     <div style="display:flex;align-items:center;white-space:nowrap;">
-      <div style="width:14px;height:14px;background:#2563eb;border:2px solid #ffffff;box-shadow:0 0 0 1px #1e3a8a, 0 1px 3px rgba(0,0,0,0.5);flex:0 0 auto;"></div>
-      <span style="margin-left:4px;background:rgba(17,24,39,0.92);border:1px solid #2563eb;color:#f3f4f6;font-size:11px;font-weight:600;line-height:1.2;padding:1px 5px;box-shadow:0 1px 3px rgba(0,0,0,0.5);">${escapeHtml(name)}</span>
+      <div style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;background:rgba(17,24,39,0.95);border:2px solid ${color};box-shadow:0 1px 4px rgba(0,0,0,0.6);font-size:15px;line-height:1;">
+        ${emoji}
+      </div>
+      ${label}
     </div>`;
-  // No iconSize so the pill auto-sizes to the name; anchor stays on the pin
-  // center (7,7) so the dot — not the label — marks the coordinate.
   return L.divIcon({
     html,
-    className: "fw-location-icon",
-    iconAnchor: [7, 7],
+    className: "fw-waypoint-icon",
+    iconAnchor: [14, 14],
   });
 }
 
 /**
- * The "you are here" blue dot for the device's current location, styled like
- * the familiar maps marker: a solid blue dot with a white ring and a soft glow.
+ * The "you are here" marker. When a heading is known (from the GPS course over
+ * ground while drifting), a translucent beam fans out in the direction of
+ * travel — like the familiar maps compass cone — otherwise it's just the dot.
  */
-function userLocationIcon(): L.DivIcon {
+function userLocationIcon(heading: number | null): L.DivIcon {
+  const beam =
+    heading !== null && !Number.isNaN(heading)
+      ? `<div style="position:absolute;left:50%;top:50%;width:44px;height:44px;margin-left:-22px;margin-top:-22px;transform:rotate(${heading}deg);">
+           <div style="position:absolute;left:50%;top:-2px;margin-left:-13px;width:26px;height:24px;background:conic-gradient(from 165deg at 50% 100%, rgba(59,130,246,0) 0deg, rgba(59,130,246,0.55) 15deg, rgba(59,130,246,0) 30deg);clip-path:polygon(50% 100%, 0 0, 100% 0);"></div>
+         </div>`
+      : "";
   const html = `
-    <div style="width:16px;height:16px;border-radius:9999px;background:#3b82f6;border:3px solid #ffffff;box-shadow:0 0 0 1.5px rgba(59,130,246,0.7), 0 0 10px 2px rgba(59,130,246,0.6);"></div>`;
+    <div style="position:relative;width:16px;height:16px;">
+      ${beam}
+      <div style="position:absolute;left:0;top:0;width:16px;height:16px;border-radius:9999px;background:#3b82f6;border:3px solid #ffffff;box-shadow:0 0 0 1.5px rgba(59,130,246,0.7), 0 0 10px 2px rgba(59,130,246,0.6);"></div>
+    </div>`;
   return L.divIcon({
     html,
     className: "fw-user-location-icon",
@@ -122,155 +119,88 @@ function userLocationIcon(): L.DivIcon {
 }
 
 /**
- * Pans/zooms the map to contain the user's table locations whenever they change.
+ * On first data availability, frame the map to contain the user's waypoints. If
+ * there are none, center on the current location (once known) at a reasonable
+ * zoom. Runs once so it never fights the user's own panning afterwards.
  */
-function FitToLocations({ locations }: { locations: Location[] }) {
+function InitialFit({
+  waypoints,
+  userLocation,
+}: {
+  waypoints: Waypoint[];
+  userLocation: { lat: number; lon: number } | null;
+}) {
   const map = useMap();
-
-  // Stable dependency so the effect only re-runs when the coordinates change.
-  const key = locations.map((l) => `${l.lat},${l.lon}`).join("|");
+  const fitted = useRef(false);
 
   useEffect(() => {
-    if (locations.length === 0) return;
+    if (fitted.current) return;
 
-    if (locations.length === 1) {
-      map.setView([locations[0].lat, locations[0].lon], 10);
+    if (waypoints.length > 0) {
+      if (waypoints.length === 1) {
+        map.setView([waypoints[0].lat, waypoints[0].lon], 14);
+      } else {
+        const bounds = L.latLngBounds(
+          waypoints.map((w) => [w.lat, w.lon] as [number, number])
+        );
+        map.fitBounds(bounds, { padding: [56, 56], maxZoom: 15 });
+      }
+      fitted.current = true;
       return;
     }
 
-    const bounds = L.latLngBounds(
-      locations.map((l) => [l.lat, l.lon] as [number, number])
-    );
-    map.fitBounds(bounds, { padding: [48, 48], maxZoom: 12 });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, map]);
+    // No waypoints: wait for a location fix, then zoom in on the user.
+    if (userLocation) {
+      map.setView([userLocation.lat, userLocation.lon], 14);
+      fitted.current = true;
+    }
+  }, [map, waypoints, userLocation]);
 
   return null;
 }
 
-/**
- * Reports the current viewport (debounced) on pan/zoom so the parent can
- * refetch the actual stations for wherever the user is now looking.
- */
-function BoundsWatcher({
-  onViewportChange,
+/** Fires when the map is clicked while "add waypoint" mode is active. */
+function MapClickHandler({
+  active,
+  onPick,
 }: {
-  onViewportChange: (viewport: { bounds: GeoBounds; zoom: number }) => void;
+  active: boolean;
+  onPick: (lat: number, lon: number) => void;
 }) {
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const report = useCallback(
-    (m: L.Map) => {
-      if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(() => {
-        const b = m.getBounds();
-        onViewportChange({
-          bounds: {
-            minLat: b.getSouth(),
-            maxLat: b.getNorth(),
-            minLon: b.getWest(),
-            maxLon: b.getEast(),
-          },
-          zoom: m.getZoom(),
-        });
-      }, 500);
+  useMapEvents({
+    click: (e) => {
+      if (active) onPick(e.latlng.lat, e.latlng.lng);
     },
-    [onViewportChange]
-  );
-
-  const map = useMapEvents({
-    moveend: () => report(map),
-    zoomend: () => report(map),
   });
-
-  // Report the initial viewport once the map is ready.
-  useEffect(() => {
-    report(map);
-    return () => {
-      if (timer.current) clearTimeout(timer.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   return null;
-}
-
-/** Tracks the current zoom level so marker density can scale with it. */
-function ZoomTracker({ onZoom }: { onZoom: (zoom: number) => void }) {
-  const map = useMapEvents({
-    zoomend: () => onZoom(map.getZoom()),
-  });
-
-  useEffect(() => {
-    onZoom(map.getZoom());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  return null;
-}
-
-/**
- * Thin out stations so the on-screen density stays roughly constant at any zoom.
- * Stations are snapped to a global lat/lon grid whose cell size grows as you
- * zoom out (Leaflet's degrees-per-pixel doubles per zoom level out), and only
- * one station is kept per grid cell. Zooming back in shrinks the cells and
- * reveals more — all from the already-cached data, so it's instant.
- */
-function decimateByZoom(
-  stations: OpenMeteoStation[],
-  zoom: number
-): OpenMeteoStation[] {
-  // Target ~one marker per ~55px. 360°/(256·2^zoom) is degrees-per-pixel.
-  const bucketDeg = (55 * 360) / (256 * Math.pow(2, zoom));
-  if (!isFinite(bucketDeg) || bucketDeg <= 0) return stations;
-
-  const seen = new Set<string>();
-  const out: OpenMeteoStation[] = [];
-  for (const s of stations) {
-    const key = `${Math.round(s.lat / bucketDeg)},${Math.round(s.lon / bucketDeg)}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(s);
-  }
-  return out;
 }
 
 export function MapView({
-  locations,
-  stations,
-  isLoading,
-  error,
-  selectedHour,
-  preferences,
-  onViewportChange,
+  waypoints,
+  onAddWaypoint,
+  onUpdateWaypoint,
+  onRemoveWaypoint,
+  isViewingSharedLink,
+  onShare,
 }: MapViewProps) {
+  const readOnly = !!isViewingSharedLink;
+
+  // Default center: geographic center of the contiguous US until we know better.
   const center = useMemo<[number, number]>(() => {
-    if (locations.length > 0) {
-      return [locations[0].lat, locations[0].lon];
-    }
-    return [39.5, -98.35]; // Geographic center of the contiguous US.
-  }, [locations]);
+    if (waypoints.length > 0) return [waypoints[0].lat, waypoints[0].lon];
+    return [39.5, -98.35];
+  }, [waypoints]);
 
-  // Initial zoom matches the MapContainer's zoom prop below.
-  const [zoom, setZoom] = useState(9);
-  const visibleStations = useMemo(
-    () => decimateByZoom(stations, zoom),
-    [stations, zoom]
-  );
-
-  // The device's current location (via the browser Geolocation API), shown as
-  // a blue "you are here" dot. Because the user may be floating down a river,
-  // we *track* the position continuously (watchPosition) rather than taking a
-  // single fix, so the dot keeps following them as they drift.
   const mapRef = useRef<L.Map | null>(null);
+
+  // ── Live location + heading tracking ──────────────────────────────────────
   const watchId = useRef<number | null>(null);
-  // After the first fix we recenter once; further updates move only the dot so
-  // the user can still pan/zoom freely without the map yanking back each tick.
   const hasCenteredOnUser = useRef(false);
   const [userLocation, setUserLocation] = useState<{
     lat: number;
     lon: number;
     accuracy: number;
+    heading: number | null;
   } | null>(null);
   const [tracking, setTracking] = useState(false);
   const [acquiring, setAcquiring] = useState(false);
@@ -290,12 +220,6 @@ export function MapView({
       setLocateError("Location isn't supported by this browser.");
       return;
     }
-    // Browsers only expose geolocation in a "secure context" (HTTPS, or
-    // localhost). When the page is opened over plain HTTP — e.g. visiting the
-    // dev server from a phone via a LAN IP like http://192.168.x.x:3000 — the
-    // Geolocation API rejects immediately with PERMISSION_DENIED and shows no
-    // prompt, which looks exactly like the user denied access. Detect that up
-    // front so we can explain the real cause instead of blaming the user.
     if (typeof window !== "undefined" && window.isSecureContext === false) {
       setLocateError("Location needs a secure (HTTPS) connection.");
       return;
@@ -304,34 +228,30 @@ export function MapView({
     setAcquiring(true);
     setTracking(true);
     hasCenteredOnUser.current = false;
-    // watchPosition triggers the browser's own permission prompt on first use,
-    // then fires repeatedly as the device moves.
     watchId.current = navigator.geolocation.watchPosition(
       (position) => {
-        const { latitude, longitude, accuracy } = position.coords;
-        setUserLocation({ lat: latitude, lon: longitude, accuracy });
+        const { latitude, longitude, accuracy, heading } = position.coords;
+        setUserLocation({
+          lat: latitude,
+          lon: longitude,
+          accuracy,
+          // heading is NaN/null when stationary or unsupported.
+          heading:
+            heading !== null && heading !== undefined && !Number.isNaN(heading)
+              ? heading
+              : null,
+        });
         setAcquiring(false);
-        // Recenter only on the very first fix; afterwards keep tracking the
-        // moving dot without fighting the user's own panning.
         const map = mapRef.current;
         if (map && !hasCenteredOnUser.current) {
-          map.setView([latitude, longitude], Math.max(map.getZoom(), 13));
+          map.setView([latitude, longitude], Math.max(map.getZoom(), 14));
           hasCenteredOnUser.current = true;
         }
       },
       (err) => {
         setAcquiring(false);
-        // A transient timeout shouldn't kill an active track; watchPosition
-        // will keep retrying. Only hard-stop on permission denial / no support.
         if (err.code === err.PERMISSION_DENIED) {
           stopTracking();
-          // Firefox quirk: dismissing the door-hanger prompt (clicking away,
-          // switching tabs, or it auto-closing) reports PERMISSION_DENIED even
-          // though the permission is still in the "prompt" state — i.e. not
-          // actually blocked. Chrome's prompt is persistent and has no such
-          // indeterminate state, which is why this only bites Firefox. Use the
-          // Permissions API to tell a real block apart from a dismissal so we
-          // show guidance the user can act on instead of a dead-end "denied".
           if (navigator.permissions?.query) {
             navigator.permissions
               .query({ name: "geolocation" })
@@ -355,14 +275,10 @@ export function MapView({
   }, [stopTracking]);
 
   const handleLocate = useCallback(() => {
-    if (tracking) {
-      stopTracking();
-    } else {
-      startTracking();
-    }
+    if (tracking) stopTracking();
+    else startTracking();
   }, [tracking, startTracking, stopTracking]);
 
-  // Clean up the geolocation watch when the map unmounts (e.g. tab switch).
   useEffect(() => {
     return () => {
       if (watchId.current !== null && typeof navigator !== "undefined") {
@@ -371,20 +287,70 @@ export function MapView({
     };
   }, []);
 
+  // ── Add / edit waypoint state ─────────────────────────────────────────────
+  const [addMode, setAddMode] = useState(false);
+  // The waypoint currently open in the editor, plus whether it's brand new.
+  const [editing, setEditing] = useState<{
+    waypoint: Waypoint;
+    isNew: boolean;
+  } | null>(null);
+
+  const handlePickLocation = useCallback((lat: number, lon: number) => {
+    setAddMode(false);
+    setEditing({
+      waypoint: {
+        id: generateWaypointId(lat, lon),
+        lat,
+        lon,
+        // Start with nothing selected; the editor's Save stays disabled until
+        // the user picks at least one category.
+        categories: [],
+      },
+      isNew: true,
+    });
+  }, []);
+
+  const handleSaveWaypoint = useCallback(
+    (wp: Waypoint) => {
+      if (editing?.isNew) {
+        onAddWaypoint(wp);
+      } else {
+        onUpdateWaypoint(wp.id, {
+          name: wp.name,
+          note: wp.note,
+          categories: wp.categories,
+        });
+      }
+      setEditing(null);
+    },
+    [editing, onAddWaypoint, onUpdateWaypoint]
+  );
+
+  const handleDeleteWaypoint = useCallback(
+    (id: string) => {
+      onRemoveWaypoint(id);
+      setEditing(null);
+    },
+    [onRemoveWaypoint]
+  );
+
+  const [shareCopied, setShareCopied] = useState(false);
+  const handleShare = useCallback(async () => {
+    if (!onShare) return;
+    await onShare();
+    setShareCopied(true);
+    setTimeout(() => setShareCopied(false), 2000);
+  }, [onShare]);
+
   return (
     <div className="w-full">
-      {(isLoading || error) && (
-        <div className="mb-2 px-1 text-[11px]">
-          {isLoading && <span className="text-blue-500">Loading stations…</span>}
-          {error && <span className="text-red-500">{error}</span>}
-        </div>
-      )}
-
       <div
         className="relative w-full border border-gray-300 dark:border-gray-600"
         style={{ height: "70vh" }}
       >
+        {/* Top-right controls */}
         <div className="absolute right-2 top-2 z-[1000] flex flex-col items-end gap-1">
+          {/* Locate / track */}
           <button
             type="button"
             onClick={handleLocate}
@@ -400,44 +366,45 @@ export function MapView({
             }`}
           >
             {acquiring ? (
-              <svg
-                className="h-4 w-4 animate-spin"
-                viewBox="0 0 24 24"
-                fill="none"
-              >
-                <circle
-                  cx="12"
-                  cy="12"
-                  r="9"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeOpacity="0.3"
-                />
-                <path
-                  d="M21 12a9 9 0 0 0-9-9"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                />
+              <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" strokeOpacity="0.3" />
+                <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
               </svg>
             ) : (
               <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none">
-                <circle
-                  cx="12"
-                  cy="12"
-                  r="4"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                />
-                <path
-                  d="M12 2v3M12 19v3M2 12h3M19 12h3"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                />
+                <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="2" />
+                <path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
               </svg>
             )}
           </button>
+
+          {/* Share waypoints */}
+          {onShare && waypoints.length > 0 && (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={handleShare}
+                title="Share these waypoints"
+                aria-label="Share these waypoints"
+                className="flex h-9 w-9 items-center justify-center border border-gray-600 bg-gray-900/90 text-gray-100 shadow hover:bg-gray-800"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z"
+                  />
+                </svg>
+              </button>
+              {shareCopied && (
+                <div className="absolute right-full top-1/2 mr-2 -translate-y-1/2 whitespace-nowrap bg-gray-800 px-2 py-1 text-xs text-white shadow dark:bg-gray-700">
+                  Link copied!
+                </div>
+              )}
+            </div>
+          )}
+
           {locateError && (
             <span className="max-w-[180px] bg-gray-900/90 px-2 py-1 text-right text-[10px] text-red-400 shadow">
               {locateError}
@@ -445,23 +412,78 @@ export function MapView({
           )}
         </div>
 
+        {/* Add-waypoint control (bottom-left) */}
+        {!readOnly && (
+          <div className="absolute bottom-4 left-2 z-[1000] flex flex-col items-start gap-1">
+            {addMode && (
+              <span className="bg-gray-900/90 px-2 py-1 text-[11px] text-gray-100 shadow">
+                Tap the map to drop a waypoint
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => setAddMode((v) => !v)}
+              aria-pressed={addMode}
+              className={`flex h-11 items-center gap-1.5 border px-3 text-sm font-medium shadow ${
+                addMode
+                  ? "border-blue-400 bg-blue-600 text-white hover:bg-blue-500"
+                  : "border-gray-600 bg-gray-900/90 text-gray-100 hover:bg-gray-800"
+              }`}
+            >
+              {addMode ? (
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              ) : (
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+              )}
+              {addMode ? "Cancel" : "Add waypoint"}
+            </button>
+          </div>
+        )}
+
+        {/* Legend (bottom-right) */}
+        <div className="absolute bottom-4 right-2 z-[1000] max-w-[46%] border border-gray-700 bg-gray-900/85 p-1.5 shadow">
+          <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
+            {WAYPOINT_CATEGORIES.map((c) => (
+              <div key={c.id} className="flex items-center gap-1 text-[10px] text-gray-200">
+                <span className="text-xs leading-none">{c.emoji}</span>
+                <span className="truncate">{c.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
         <MapContainer
           ref={mapRef}
           center={center}
-          zoom={9}
+          zoom={waypoints.length > 0 ? 12 : 5}
           scrollWheelZoom
-          style={{ height: "100%", width: "100%", background: "#1f2937" }}
+          style={{
+            height: "100%",
+            width: "100%",
+            background: "#1f2937",
+            cursor: addMode ? "crosshair" : "",
+          }}
         >
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
             url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
           />
 
-          <FitToLocations locations={locations} />
-          <BoundsWatcher onViewportChange={onViewportChange} />
-          <ZoomTracker onZoom={setZoom} />
+          <InitialFit
+            waypoints={waypoints}
+            userLocation={
+              userLocation
+                ? { lat: userLocation.lat, lon: userLocation.lon }
+                : null
+            }
+          />
+          <MapClickHandler active={addMode} onPick={handlePickLocation} />
 
-          {/* Device's current location: blue dot + accuracy radius */}
+          {/* Device location: accuracy ring + heading dot */}
           {userLocation && (
             <>
               <Circle
@@ -476,111 +498,41 @@ export function MapView({
               />
               <Marker
                 position={[userLocation.lat, userLocation.lon]}
-                icon={userLocationIcon()}
+                icon={userLocationIcon(userLocation.heading)}
                 zIndexOffset={1000}
-              >
-                <Popup>
-                  <div className="text-xs leading-snug">
-                    <div className="font-semibold">
-                      Your location{tracking ? " (live)" : ""}
-                    </div>
-                    <div className="text-gray-600 mt-0.5">
-                      {userLocation.lat.toFixed(4)},{" "}
-                      {userLocation.lon.toFixed(4)}
-                    </div>
-                    <div className="text-gray-600">
-                      Accuracy ±{Math.round(userLocation.accuracy)} m
-                    </div>
-                  </div>
-                </Popup>
-              </Marker>
+              />
             </>
           )}
 
-          {/* Actual Open-Meteo grid cells ("weather stations") */}
-          {visibleStations.map((station) => {
-            const hourData =
-              station.hours.find((h) => h.hour === selectedHour) ?? null;
-            if (!hourData) return null;
-            // Stations have no preferred wind direction, so "good" here means
-            // warm/calm/dry enough — same thresholds as the table.
-            const good = isGoodWeatherHour(hourData, preferences);
-            const color = good
-              ? "#f0fdf4"
-              : tempColor(hourData.temperature, preferences.temperatureThreshold);
-            return (
-              <Marker
-                key={`station-${station.lat},${station.lon}`}
-                position={[station.lat, station.lon]}
-                icon={stationIcon(
-                  hourData.temperature,
-                  color,
-                  hourData.windDirectionDegrees,
-                  hourData.precipChance,
-                  good
-                    ? "#dcfce7"
-                    : hourData.precipChance !== null
-                    ? precipColor(
-                        hourData.precipChance,
-                        preferences.precipThreshold
-                      )
-                    : "#9ca3af",
-                  good
-                )}
-                zIndexOffset={good ? 200 : 100}
-              >
-                <Popup>
-                  <div className="text-xs leading-snug">
-                    <div className="font-semibold mb-1">
-                      Weather station {getWeatherEmoji(hourData.weatherCode)}
-                    </div>
-                    <div className="text-gray-600">
-                      {station.lat.toFixed(4)}, {station.lon.toFixed(4)}
-                      {typeof station.elevation === "number" && (
-                        <> · {Math.round(station.elevation)} m</>
-                      )}
-                    </div>
-                    <div className="mt-1 space-y-0.5">
-                      <div>{hourData.time}</div>
-                      <div>
-                        {hourData.temperature}° · {hourData.shortForecast}
-                      </div>
-                      <div>
-                        Wind {hourData.windSpeed} {hourData.windDirection}
-                      </div>
-                      {hourData.precipChance !== null && (
-                        <div>Precip {hourData.precipChance}%</div>
-                      )}
-                    </div>
-                  </div>
-                </Popup>
-              </Marker>
-            );
-          })}
-
-          {/* User's table input locations (reference) */}
-          {locations.map((location) => (
+          {/* Waypoints */}
+          {waypoints.map((wp) => (
             <Marker
-              key={`loc-${location.id}`}
-              position={[location.lat, location.lon]}
-              icon={locationIcon(location.name)}
+              key={wp.id}
+              position={[wp.lat, wp.lon]}
+              icon={waypointIcon(wp)}
               zIndexOffset={500}
-            >
-              <Popup>
-                <div className="text-xs leading-snug">
-                  <div className="font-semibold">{location.name}</div>
-                  {location.subtitle && (
-                    <div className="text-gray-600">{location.subtitle}</div>
-                  )}
-                  <div className="text-gray-600 mt-0.5">
-                    {location.lat.toFixed(4)}, {location.lon.toFixed(4)}
-                  </div>
-                </div>
-              </Popup>
-            </Marker>
+              eventHandlers={{
+                click: () => {
+                  if (addMode) return;
+                  if (readOnly) return;
+                  setEditing({ waypoint: wp, isNew: false });
+                },
+              }}
+            />
           ))}
         </MapContainer>
       </div>
+
+      {editing && (
+        <WaypointEditor
+          key={editing.waypoint.id}
+          waypoint={editing.waypoint}
+          isNew={editing.isNew}
+          onSave={handleSaveWaypoint}
+          onDelete={editing.isNew ? undefined : handleDeleteWaypoint}
+          onClose={() => setEditing(null)}
+        />
+      )}
     </div>
   );
 }
