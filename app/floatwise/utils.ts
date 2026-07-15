@@ -1,4 +1,11 @@
-import { Location, UserPreferences, WeatherHour } from './types';
+import {
+  Location,
+  UserPreferences,
+  WeatherHour,
+  Waypoint,
+  WaypointCategory,
+  WAYPOINT_CATEGORIES,
+} from './types';
 
 // Default user preferences
 export const DEFAULT_PREFERENCES: UserPreferences = {
@@ -84,16 +91,6 @@ export function generateLocationId(name: string, lat: number, lon: number): stri
  */
 export function isValidCoordinate(lat: number, lon: number): boolean {
   return lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
-}
-
-/**
- * A geographic bounding box.
- */
-export interface GeoBounds {
-  minLat: number;
-  maxLat: number;
-  minLon: number;
-  maxLon: number;
 }
 
 // Geocoding types
@@ -291,6 +288,110 @@ export function decodeLocationsFromURL(encodedString: string): { id: string; nam
     }
   } catch (error) {
     console.error('Error decoding locations from URL:', error);
+    return null;
+  }
+}
+
+// ── Waypoints ────────────────────────────────────────────────────────────────
+
+/**
+ * Generate a stable-ish unique id for a waypoint. Coordinates keep it
+ * deterministic enough to dedupe imports of the same point, while a short random
+ * suffix avoids collisions between distinct points that round to the same spot.
+ */
+export function generateWaypointId(lat: number, lon: number): string {
+  const rand = Math.random().toString(36).slice(2, 8);
+  return `wp-${lat.toFixed(4)}-${lon.toFixed(4)}-${rand}`;
+}
+
+/** All valid category ids, for validating decoded/imported data. */
+const VALID_CATEGORY_IDS = new Set(WAYPOINT_CATEGORIES.map((c) => c.id));
+
+/**
+ * Encode waypoints into a URL-safe base64 string for sharing. Mirrors
+ * encodeLocationsToURL: short keys and reduced coordinate precision keep the
+ * link compact. Categories are stored as their index in WAYPOINT_CATEGORIES.
+ */
+export function encodeWaypointsToURL(waypoints: Waypoint[]): string {
+  if (waypoints.length === 0) return '';
+
+  const data = waypoints.map((wp) => {
+    const compact: {
+      x: number;
+      y: number;
+      c: number[];
+      n?: string;
+      t?: string;
+    } = {
+      x: parseFloat(wp.lat.toFixed(5)),
+      y: parseFloat(wp.lon.toFixed(5)),
+      c: wp.categories
+        .map((cat) => WAYPOINT_CATEGORIES.findIndex((m) => m.id === cat))
+        .filter((i) => i >= 0),
+    };
+    if (wp.name) compact.n = wp.name;
+    if (wp.note) compact.t = wp.note;
+    return compact;
+  });
+
+  const base64 = btoa(JSON.stringify(data));
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+/**
+ * Decode waypoints from a share URL parameter produced by encodeWaypointsToURL.
+ * Returns null when the payload is missing or malformed.
+ */
+export function decodeWaypointsFromURL(encodedString: string): Waypoint[] | null {
+  if (!encodedString) return null;
+
+  try {
+    const base64 = encodedString.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64 + '=='.slice(0, (4 - (base64.length % 4)) % 4);
+    const parsed = JSON.parse(atob(padded));
+
+    if (!Array.isArray(parsed)) return null;
+
+    const waypoints: Waypoint[] = [];
+    for (const item of parsed) {
+      if (
+        !item ||
+        typeof item.x !== 'number' ||
+        typeof item.y !== 'number' ||
+        !isValidCoordinate(item.x, item.y)
+      ) {
+        continue;
+      }
+
+      const categories: WaypointCategory[] = Array.isArray(item.c)
+        ? item.c
+            .map((idx: unknown) =>
+              typeof idx === 'number' ? WAYPOINT_CATEGORIES[idx]?.id : undefined
+            )
+            .filter(
+              (id: WaypointCategory | undefined): id is WaypointCategory =>
+                !!id && VALID_CATEGORY_IDS.has(id)
+            )
+        : [];
+
+      // A waypoint with no recognisable category defaults to "landmark" so it
+      // still shows up rather than being silently dropped.
+      const finalCategories =
+        categories.length > 0 ? categories : (['landmark'] as WaypointCategory[]);
+
+      waypoints.push({
+        id: generateWaypointId(item.x, item.y),
+        name: typeof item.n === 'string' ? item.n : undefined,
+        lat: item.x,
+        lon: item.y,
+        categories: finalCategories,
+        note: typeof item.t === 'string' ? item.t : undefined,
+      });
+    }
+
+    return waypoints;
+  } catch (error) {
+    console.error('Error decoding waypoints from URL:', error);
     return null;
   }
 }

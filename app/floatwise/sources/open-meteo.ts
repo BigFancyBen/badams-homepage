@@ -127,68 +127,6 @@ export async function fetchOpenMeteoWeather(
   return parseHourlyData(data.hourly);
 }
 
-/** A single Open-Meteo model grid cell ("weather station") and its actual data. */
-export interface OpenMeteoStation {
-  /** Actual latitude of the grid cell the data is served from. */
-  lat: number;
-  /** Actual longitude of the grid cell the data is served from. */
-  lon: number;
-  /** Grid-cell elevation in metres, when provided. */
-  elevation?: number;
-  /** Full-day hourly data for the cell (unfiltered, all 24 hours). */
-  hours: WeatherHour[];
-}
-
-/**
- * Fetch the actual Open-Meteo grid cells ("weather stations") that serve a set
- * of sample points for a given date. Open-Meteo accepts multiple coordinates in
- * a single request (comma-separated), so all points are fetched at once.
- *
- * Each returned object echoes the real grid-cell coordinates the data is served
- * from. Several sample points often resolve to the SAME grid cell; callers
- * should dedupe by the returned lat/lon. Nothing is interpolated — these are the
- * raw source data points behind the forecast.
- */
-export async function fetchOpenMeteoStations(
-  points: { lat: number; lon: number }[],
-  targetDate: Date
-): Promise<OpenMeteoStation[]> {
-  if (points.length === 0) return [];
-
-  const dateStr = formatDateParam(targetDate);
-
-  const params = new URLSearchParams({
-    latitude: points.map((p) => p.lat.toFixed(4)).join(','),
-    longitude: points.map((p) => p.lon.toFixed(4)).join(','),
-    hourly: 'temperature_2m,wind_speed_10m,wind_direction_10m,precipitation_probability,weather_code,cloud_cover',
-    temperature_unit: 'fahrenheit',
-    wind_speed_unit: 'mph',
-    timezone: 'auto',
-    // Match the main forecast: NBM (CONUS) is the NWS public-forecast blend, so
-    // map stations and the table agree on temps rather than the map showing
-    // hotter raw-model values from "best_match".
-    models: 'ncep_nbm_conus',
-    start_date: dateStr,
-    end_date: dateStr,
-  });
-
-  const response = await fetch(`${OPEN_METEO_BASE_URL}?${params}`);
-  if (!response.ok) {
-    throw new Error(`Open-Meteo API error: ${response.statusText}`);
-  }
-
-  const data = await response.json();
-  // A single coordinate returns an object; multiple coordinates return an array.
-  const entries: OpenMeteoResponse[] = Array.isArray(data) ? data : [data];
-
-  return entries.map((entry) => ({
-    lat: entry.latitude,
-    lon: entry.longitude,
-    elevation: entry.elevation,
-    hours: parseHourlyData(entry.hourly, true),
-  }));
-}
-
 function formatDateParam(date: Date): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -203,7 +141,7 @@ function parseHourlyData(hourly: OpenMeteoHourly, allHours = false): WeatherHour
     const dt = new Date(hourly.time[i]);
     const hour = dt.getHours();
 
-    // Table view filters to 10am-7pm; the map view passes allHours to keep all 24.
+    // Table view filters to 10am-7pm; pass allHours to keep the full 24 hours.
     if (!allHours && (hour < 10 || hour > 19)) continue;
 
     const hour12 = hour > 12 ? hour - 12 : hour;
