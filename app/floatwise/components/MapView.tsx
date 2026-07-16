@@ -243,22 +243,6 @@ export function MapView({
   // Whether the current watch has already fallen back to coarse accuracy after
   // a high-accuracy request failed. Prevents an infinite retry loop.
   const triedLowAccuracy = useRef(false);
-  // Whether we've already retried once after a PERMISSION_DENIED that turned
-  // out to be spurious (permission actually granted). Android Firefox reports
-  // PERMISSION_DENIED on the first geolocation request even when the user
-  // allows it; retrying once recovers. Reset on each user-initiated request.
-  const permissionRetried = useRef(false);
-  // Holds the latest startTracking/stopTracking so the error handler and the
-  // permission-change listener can (re)start tracking without making the
-  // callbacks depend on themselves.
-  const startTrackingRef = useRef<
-    ((autoCenter: boolean, highAccuracy?: boolean) => void) | null
-  >(null);
-  const stopTrackingRef = useRef<(() => void) | null>(null);
-  // Latest waypoints, so the permission-change listener can decide whether to
-  // auto-center without re-subscribing whenever waypoints change.
-  const waypointsRef = useRef(waypoints);
-  waypointsRef.current = waypoints;
   const [userLocation, setUserLocation] = useState<{
     lat: number;
     lon: number;
@@ -277,13 +261,17 @@ export function MapView({
     setTracking(false);
     setAcquiring(false);
   }, []);
-  stopTrackingRef.current = stopTracking;
 
-  // Start watching the device location. `autoCenter` decides whether the very
-  // first fix should recenter the map (true when there's nothing else to frame;
-  // false when we're keeping the waypoints in view). `highAccuracy` starts true;
-  // if a GPS fix fails we retry once with coarse (network) accuracy. Safe to
-  // call repeatedly — an existing watch is cleared first.
+  // Start locating the device. `autoCenter` decides whether fixes recenter the
+  // map (true when the user asked to be located). `highAccuracy` starts true; if
+  // a GPS fix fails we retry once with coarse (network) accuracy.
+  //
+  // Each attempt gets the first fix with getCurrentPosition, then switches to
+  // watchPosition for live updates. getCurrentPosition is far more reliable than
+  // watchPosition for triggering the permission prompt on Firefox for Android
+  // (where watchPosition can immediately return PERMISSION_DENIED even as the
+  // user is allowing it). Safe to call repeatedly — any existing watch is
+  // cleared first.
   const startTracking = useCallback(
     (autoCenter: boolean, highAccuracy = true) => {
       if (typeof navigator === "undefined" || !navigator.geolocation) {
@@ -296,6 +284,7 @@ export function MapView({
       }
       if (watchId.current !== null) {
         navigator.geolocation.clearWatch(watchId.current);
+        watchId.current = null;
       }
       setLocateError(null);
       setAcquiring(true);
@@ -304,93 +293,62 @@ export function MapView({
       userMovedMap.current = false;
       recenterOnFix.current = autoCenter;
       hasFix.current = false;
-      triedLowAccuracy.current = !highAccuracy;
-      watchId.current = navigator.geolocation.watchPosition(
-        (position) => {
-          const { latitude, longitude, accuracy, heading } = position.coords;
-          hasFix.current = true;
-          setUserLocation({
-            lat: latitude,
-            lon: longitude,
-            accuracy,
-            // heading is NaN/null when stationary or unsupported.
-            heading:
-              heading !== null &&
-              heading !== undefined &&
-              !Number.isNaN(heading)
-                ? heading
-                : null,
-          });
+
+      // Apply a fix: drop the dot and recenter when appropriate.
+      const applyPosition = (position: GeolocationPosition) => {
+        const { latitude, longitude, accuracy, heading } = position.coords;
+        hasFix.current = true;
+        setUserLocation({
+          lat: latitude,
+          lon: longitude,
+          accuracy,
+          // heading is NaN/null when stationary or unsupported.
+          heading:
+            heading !== null && heading !== undefined && !Number.isNaN(heading)
+              ? heading
+              : null,
+        });
+        setAcquiring(false);
+        setLocateError(null);
+        const map = mapRef.current;
+        // Auto-center until the user pans the map themselves. Re-center when a
+        // noticeably better (smaller-radius) fix arrives, so an initial coarse
+        // network fix — common on Firefox — is corrected once GPS locks on,
+        // rather than leaving the map parked on the first, rough estimate.
+        const betterFix =
+          centeredAccuracy.current === null ||
+          accuracy <= centeredAccuracy.current * 0.6;
+        if (map && recenterOnFix.current && !userMovedMap.current && betterFix) {
+          map.setView([latitude, longitude], Math.max(map.getZoom(), 14));
+          centeredAccuracy.current = accuracy;
+        }
+      };
+
+      // One locate attempt at the given accuracy. Recurses once to coarse
+      // accuracy if a high-accuracy fix times out or is unavailable.
+      const attempt = (high: boolean) => {
+        triedLowAccuracy.current = !high;
+        const options: PositionOptions = {
+          // Give a GPS (high-accuracy) fix time to arrive on a cold start —
+          // mobile Firefox can take 20s+ — so we don't prematurely abandon it
+          // for a coarse network fix. Coarse fixes can also be slow, so the
+          // fallback keeps a generous timeout too.
+          enableHighAccuracy: high,
+          timeout: high ? 27000 : 30000,
+          maximumAge: 5000,
+        };
+        const handleInitialError = (err: GeolocationPositionError) => {
           setAcquiring(false);
-          setLocateError(null);
-          const map = mapRef.current;
-          // Auto-center on the user until they pan the map themselves. Re-center
-          // when a noticeably better (smaller-radius) fix arrives, so an initial
-          // coarse network fix — common on Firefox — is corrected once GPS locks
-          // on, rather than leaving the map parked on the first, rough estimate.
-          const betterFix =
-            centeredAccuracy.current === null ||
-            accuracy <= centeredAccuracy.current * 0.6;
-          if (
-            map &&
-            recenterOnFix.current &&
-            !userMovedMap.current &&
-            betterFix
-          ) {
-            map.setView([latitude, longitude], Math.max(map.getZoom(), 14));
-            centeredAccuracy.current = accuracy;
-          }
-        },
-        (err) => {
-          setAcquiring(false);
-          // Once we have a live fix, ignore later transient errors (e.g. a
-          // momentary timeout) rather than tearing down a working location.
-          if (hasFix.current && err.code !== err.PERMISSION_DENIED) {
-            return;
-          }
           if (err.code === err.PERMISSION_DENIED) {
             stopTracking();
-            // A PERMISSION_DENIED here doesn't always mean the user said no.
-            // Android Firefox fires it on the first request even when the user
-            // then taps Allow. Consult the actual permission state before
-            // giving up: only "denied" is a real refusal; when it's "granted"
-            // the error was spurious, so retry once; when it's still "prompt"
-            // the permission-change listener will start tracking on Allow.
-            if (navigator.permissions?.query) {
-              navigator.permissions
-                .query({ name: "geolocation" })
-                .then((status) => {
-                  if (status.state === "denied") {
-                    setLocateError(
-                      "Location is blocked. Allow it via the address-bar icon, then try again."
-                    );
-                  } else if (
-                    status.state === "granted" &&
-                    !permissionRetried.current
-                  ) {
-                    permissionRetried.current = true;
-                    startTrackingRef.current?.(autoCenter, highAccuracy);
-                  } else {
-                    setLocateError(
-                      "Location request dismissed — tap the button and choose Allow."
-                    );
-                  }
-                })
-                .catch(() =>
-                  setLocateError(
-                    "Location permission denied — tap the button and choose Allow."
-                  )
-                );
-            } else {
-              setLocateError(
-                "Location permission denied — tap the button and choose Allow."
-              );
-            }
-          } else if (!triedLowAccuracy.current) {
-            // A high-accuracy (GPS) request timed out or came back unavailable.
-            // This is common on desktop Firefox and other GPS-less devices, so
-            // fall back once to a coarse, network-based fix before giving up.
-            startTrackingRef.current?.(autoCenter, false);
+            setLocateError(
+              "Location permission denied — tap the button and choose Allow."
+            );
+          } else if (high) {
+            // High-accuracy (GPS) timed out or was unavailable — common on
+            // desktop Firefox and other GPS-less devices. Fall back once to a
+            // coarse, network-based fix before giving up.
+            attempt(false);
           } else if (err.code === err.TIMEOUT) {
             stopTracking();
             setLocateError("Location timed out — tap the button to try again.");
@@ -400,30 +358,47 @@ export function MapView({
               "Location unavailable — tap the button to try again."
             );
           }
-        },
-        {
-          // Give a GPS (high-accuracy) fix time to arrive on a cold start —
-          // mobile Firefox in particular can take 20s+ — so we don't prematurely
-          // abandon it for a coarse network fix. Coarse fixes can also be slow,
-          // so the fallback keeps a generous timeout too.
-          enableHighAccuracy: highAccuracy,
-          timeout: highAccuracy ? 27000 : 30000,
-          maximumAge: 5000,
-        }
-      );
+        };
+        // Prompt + first fix via getCurrentPosition, then keep tracking live.
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            applyPosition(position);
+            if (watchId.current !== null) {
+              navigator.geolocation.clearWatch(watchId.current);
+            }
+            watchId.current = navigator.geolocation.watchPosition(
+              applyPosition,
+              (err) => {
+                // We already have a fix, so ignore transient watch errors
+                // rather than tearing down a working location. Only a hard
+                // permission loss (revoked mid-session) stops tracking.
+                if (err.code === err.PERMISSION_DENIED) {
+                  stopTracking();
+                  setLocateError(
+                    "Location permission was turned off — tap the button and choose Allow."
+                  );
+                }
+              },
+              options
+            );
+          },
+          handleInitialError,
+          options
+        );
+      };
+
+      attempt(highAccuracy);
     },
     [stopTracking]
   );
-  // Keep the ref pointed at the latest startTracking for the retry above.
-  startTrackingRef.current = startTracking;
 
-  // The locate button: recenter on the user if we're already tracking (with a
-  // fix), otherwise (re)start tracking and center once a fix comes in.
   // Records that the user has taken over navigation; auto-centering stands down.
   const handleUserPan = useCallback(() => {
     userMovedMap.current = true;
   }, []);
 
+  // The locate button: recenter on the user if we're already tracking (with a
+  // fix), otherwise (re)start tracking and center once a fix comes in.
   const handleLocate = useCallback(() => {
     const map = mapRef.current;
     if (tracking && userLocation && map) {
@@ -443,64 +418,20 @@ export function MapView({
       recenterOnFix.current = true;
       return;
     }
-    // Fresh user-initiated request: allow the spurious-denial retry to run again.
-    permissionRetried.current = false;
     startTracking(true);
   }, [tracking, userLocation, startTracking]);
 
-  // Request the device location as soon as the map opens, so the user's dot
-  // shows without any interaction. When there are no waypoints to frame we also
-  // recenter on the user; when waypoints exist we keep them in view (InitialFit)
-  // and just drop the dot in place.
+  // Clean up any active location watch when the map unmounts. We deliberately
+  // do NOT request location automatically on load: a non-gesture geolocation
+  // request is unreliable (and on Firefox can leave the prompt in a confused
+  // state that breaks the later button-driven request). The user starts
+  // locating by tapping the locate button.
   useEffect(() => {
-    startTracking(waypoints.length === 0);
     return () => {
       if (watchId.current !== null && typeof navigator !== "undefined") {
         navigator.geolocation.clearWatch(watchId.current);
         watchId.current = null;
       }
-    };
-    // Run once on mount; startTracking/waypoints are intentionally not deps.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // React to the geolocation permission being granted or revoked. This is what
-  // recovers the Android Firefox case: the initial request can error with a
-  // spurious PERMISSION_DENIED, but once the user actually taps Allow the
-  // permission state flips to "granted" and we (re)start tracking — which then
-  // centers the map. Where the Permissions API doesn't expose geolocation, this
-  // simply does nothing and the button-tap path still works.
-  useEffect(() => {
-    if (typeof navigator === "undefined" || !navigator.permissions?.query) {
-      return;
-    }
-    let status: PermissionStatus | null = null;
-    let cancelled = false;
-    const handleChange = () => {
-      if (!status) return;
-      if (status.state === "granted") {
-        permissionRetried.current = false;
-        startTrackingRef.current?.(waypointsRef.current.length === 0);
-      } else if (status.state === "denied") {
-        stopTrackingRef.current?.();
-        setLocateError(
-          "Location is blocked. Allow it via the address-bar icon, then try again."
-        );
-      }
-    };
-    navigator.permissions
-      .query({ name: "geolocation" })
-      .then((s) => {
-        if (cancelled) return;
-        status = s;
-        s.addEventListener("change", handleChange);
-      })
-      .catch(() => {
-        /* Permissions API doesn't support geolocation here; ignore. */
-      });
-    return () => {
-      cancelled = true;
-      status?.removeEventListener("change", handleChange);
     };
   }, []);
 
