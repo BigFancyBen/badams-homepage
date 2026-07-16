@@ -179,6 +179,16 @@ function InitialFit({
   return null;
 }
 
+/**
+ * Reports when the user pans the map themselves (drag), so auto-centering on
+ * new location fixes can stand down and stop fighting their navigation. Only
+ * user drags count — programmatic setView doesn't fire `dragstart`.
+ */
+function UserPanTracker({ onUserPan }: { onUserPan: () => void }) {
+  useMapEvents({ dragstart: onUserPan });
+  return null;
+}
+
 /** Fires when the map is clicked while "add waypoint" mode is active. */
 function MapClickHandler({
   active,
@@ -215,7 +225,14 @@ export function MapView({
 
   // ── Live location + heading tracking ──────────────────────────────────────
   const watchId = useRef<number | null>(null);
-  const hasCenteredOnUser = useRef(false);
+  // Accuracy (metres) of the fix we last auto-centered on, or null if we haven't
+  // centered yet. Lets us re-center when a noticeably better fix arrives — e.g.
+  // a coarse network fix on Firefox refined once GPS locks on — instead of
+  // locking onto the first, possibly-inaccurate, fix.
+  const centeredAccuracy = useRef<number | null>(null);
+  // Set once the user pans the map themselves, after which we stop auto-
+  // centering so we never fight their navigation.
+  const userMovedMap = useRef(false);
   // Whether the next fix should recenter the map on the user. False when we're
   // deliberately framing the waypoints instead (see the auto-locate effect).
   const recenterOnFix = useRef(false);
@@ -283,7 +300,8 @@ export function MapView({
       setLocateError(null);
       setAcquiring(true);
       setTracking(true);
-      hasCenteredOnUser.current = false;
+      centeredAccuracy.current = null;
+      userMovedMap.current = false;
       recenterOnFix.current = autoCenter;
       hasFix.current = false;
       triedLowAccuracy.current = !highAccuracy;
@@ -306,9 +324,21 @@ export function MapView({
           setAcquiring(false);
           setLocateError(null);
           const map = mapRef.current;
-          if (map && recenterOnFix.current && !hasCenteredOnUser.current) {
+          // Auto-center on the user until they pan the map themselves. Re-center
+          // when a noticeably better (smaller-radius) fix arrives, so an initial
+          // coarse network fix — common on Firefox — is corrected once GPS locks
+          // on, rather than leaving the map parked on the first, rough estimate.
+          const betterFix =
+            centeredAccuracy.current === null ||
+            accuracy <= centeredAccuracy.current * 0.6;
+          if (
+            map &&
+            recenterOnFix.current &&
+            !userMovedMap.current &&
+            betterFix
+          ) {
             map.setView([latitude, longitude], Math.max(map.getZoom(), 14));
-            hasCenteredOnUser.current = true;
+            centeredAccuracy.current = accuracy;
           }
         },
         (err) => {
@@ -372,10 +402,12 @@ export function MapView({
           }
         },
         {
+          // Give a GPS (high-accuracy) fix time to arrive on a cold start —
+          // mobile Firefox in particular can take 20s+ — so we don't prematurely
+          // abandon it for a coarse network fix. Coarse fixes can also be slow,
+          // so the fallback keeps a generous timeout too.
           enableHighAccuracy: highAccuracy,
-          // Coarse fixes come from the network and can take longer, so give the
-          // fallback attempt a more generous timeout.
-          timeout: highAccuracy ? 15000 : 30000,
+          timeout: highAccuracy ? 27000 : 30000,
           maximumAge: 5000,
         }
       );
@@ -387,9 +419,18 @@ export function MapView({
 
   // The locate button: recenter on the user if we're already tracking (with a
   // fix), otherwise (re)start tracking and center once a fix comes in.
+  // Records that the user has taken over navigation; auto-centering stands down.
+  const handleUserPan = useCallback(() => {
+    userMovedMap.current = true;
+  }, []);
+
   const handleLocate = useCallback(() => {
     const map = mapRef.current;
     if (tracking && userLocation && map) {
+      // User asked to recenter — resume following better fixes until they pan
+      // away again.
+      userMovedMap.current = false;
+      centeredAccuracy.current = userLocation.accuracy;
       map.setView(
         [userLocation.lat, userLocation.lon],
         Math.max(map.getZoom(), 15)
@@ -398,6 +439,7 @@ export function MapView({
     }
     if (tracking) {
       // Tracking but no fix yet — center as soon as one arrives.
+      userMovedMap.current = false;
       recenterOnFix.current = true;
       return;
     }
@@ -662,6 +704,7 @@ export function MapView({
             }
           />
           <MapClickHandler active={addMode} onPick={handlePickLocation} />
+          <UserPanTracker onUserPan={handleUserPan} />
 
           {/* Device location: accuracy ring + heading dot */}
           {userLocation && (
