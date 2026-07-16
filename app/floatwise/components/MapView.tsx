@@ -226,11 +226,22 @@ export function MapView({
   // Whether the current watch has already fallen back to coarse accuracy after
   // a high-accuracy request failed. Prevents an infinite retry loop.
   const triedLowAccuracy = useRef(false);
-  // Holds the latest startTracking so the error handler can retry (with coarse
-  // accuracy) without making startTracking depend on itself.
+  // Whether we've already retried once after a PERMISSION_DENIED that turned
+  // out to be spurious (permission actually granted). Android Firefox reports
+  // PERMISSION_DENIED on the first geolocation request even when the user
+  // allows it; retrying once recovers. Reset on each user-initiated request.
+  const permissionRetried = useRef(false);
+  // Holds the latest startTracking/stopTracking so the error handler and the
+  // permission-change listener can (re)start tracking without making the
+  // callbacks depend on themselves.
   const startTrackingRef = useRef<
     ((autoCenter: boolean, highAccuracy?: boolean) => void) | null
   >(null);
+  const stopTrackingRef = useRef<(() => void) | null>(null);
+  // Latest waypoints, so the permission-change listener can decide whether to
+  // auto-center without re-subscribing whenever waypoints change.
+  const waypointsRef = useRef(waypoints);
+  waypointsRef.current = waypoints;
   const [userLocation, setUserLocation] = useState<{
     lat: number;
     lon: number;
@@ -249,6 +260,7 @@ export function MapView({
     setTracking(false);
     setAcquiring(false);
   }, []);
+  stopTrackingRef.current = stopTracking;
 
   // Start watching the device location. `autoCenter` decides whether the very
   // first fix should recenter the map (true when there's nothing else to frame;
@@ -308,17 +320,31 @@ export function MapView({
           }
           if (err.code === err.PERMISSION_DENIED) {
             stopTracking();
-            // Firefox doesn't implement permissions.query({name:"geolocation"})
-            // and rejects it, so this only refines the message where supported.
+            // A PERMISSION_DENIED here doesn't always mean the user said no.
+            // Android Firefox fires it on the first request even when the user
+            // then taps Allow. Consult the actual permission state before
+            // giving up: only "denied" is a real refusal; when it's "granted"
+            // the error was spurious, so retry once; when it's still "prompt"
+            // the permission-change listener will start tracking on Allow.
             if (navigator.permissions?.query) {
               navigator.permissions
                 .query({ name: "geolocation" })
                 .then((status) => {
-                  setLocateError(
-                    status.state === "denied"
-                      ? "Location is blocked. Allow it via the address-bar icon, then try again."
-                      : "Location request dismissed — tap the button and choose Allow."
-                  );
+                  if (status.state === "denied") {
+                    setLocateError(
+                      "Location is blocked. Allow it via the address-bar icon, then try again."
+                    );
+                  } else if (
+                    status.state === "granted" &&
+                    !permissionRetried.current
+                  ) {
+                    permissionRetried.current = true;
+                    startTrackingRef.current?.(autoCenter, highAccuracy);
+                  } else {
+                    setLocateError(
+                      "Location request dismissed — tap the button and choose Allow."
+                    );
+                  }
                 })
                 .catch(() =>
                   setLocateError(
@@ -375,6 +401,8 @@ export function MapView({
       recenterOnFix.current = true;
       return;
     }
+    // Fresh user-initiated request: allow the spurious-denial retry to run again.
+    permissionRetried.current = false;
     startTracking(true);
   }, [tracking, userLocation, startTracking]);
 
@@ -392,6 +420,46 @@ export function MapView({
     };
     // Run once on mount; startTracking/waypoints are intentionally not deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // React to the geolocation permission being granted or revoked. This is what
+  // recovers the Android Firefox case: the initial request can error with a
+  // spurious PERMISSION_DENIED, but once the user actually taps Allow the
+  // permission state flips to "granted" and we (re)start tracking — which then
+  // centers the map. Where the Permissions API doesn't expose geolocation, this
+  // simply does nothing and the button-tap path still works.
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !navigator.permissions?.query) {
+      return;
+    }
+    let status: PermissionStatus | null = null;
+    let cancelled = false;
+    const handleChange = () => {
+      if (!status) return;
+      if (status.state === "granted") {
+        permissionRetried.current = false;
+        startTrackingRef.current?.(waypointsRef.current.length === 0);
+      } else if (status.state === "denied") {
+        stopTrackingRef.current?.();
+        setLocateError(
+          "Location is blocked. Allow it via the address-bar icon, then try again."
+        );
+      }
+    };
+    navigator.permissions
+      .query({ name: "geolocation" })
+      .then((s) => {
+        if (cancelled) return;
+        status = s;
+        s.addEventListener("change", handleChange);
+      })
+      .catch(() => {
+        /* Permissions API doesn't support geolocation here; ignore. */
+      });
+    return () => {
+      cancelled = true;
+      status?.removeEventListener("change", handleChange);
+    };
   }, []);
 
   // ── Add / edit waypoint state ─────────────────────────────────────────────
