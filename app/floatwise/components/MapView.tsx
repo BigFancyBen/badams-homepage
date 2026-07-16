@@ -240,9 +240,6 @@ export function MapView({
   // true, later transient errors (a momentary timeout while watching) are
   // ignored so a good, live location isn't torn down.
   const hasFix = useRef(false);
-  // Whether the current watch has already fallen back to coarse accuracy after
-  // a high-accuracy request failed. Prevents an infinite retry loop.
-  const triedLowAccuracy = useRef(false);
   // Watchdog: some browsers (notably Firefox) can leave a geolocation request
   // hanging with neither a fix nor an error/timeout callback. If no fix arrives
   // in time we stop and surface a message so the button never spins forever.
@@ -338,10 +335,17 @@ export function MapView({
         }
       };
 
-      // One locate attempt at the given accuracy. Recurses once to coarse
-      // accuracy if a high-accuracy fix times out or is unavailable.
+      // One locate attempt at the given accuracy. The first attempt asks for
+      // high accuracy; if it fails for ANY reason we retry once at coarse
+      // accuracy before giving up. The coarse retry matters on Firefox for
+      // Android: when the user has granted only "approximate" (not "precise")
+      // location, a high-accuracy request is rejected with PERMISSION_DENIED
+      // even though location is allowed — the coarse request then succeeds.
       const attempt = (high: boolean) => {
-        triedLowAccuracy.current = !high;
+        if (watchId.current !== null) {
+          navigator.geolocation.clearWatch(watchId.current);
+          watchId.current = null;
+        }
         const options: PositionOptions = {
           // A GPS (high-accuracy) fix can take a while on a cold start, but
           // watchPosition delivers a quicker coarse fix in the meantime, so a
@@ -356,22 +360,23 @@ export function MapView({
           if (hasFix.current && err.code !== err.PERMISSION_DENIED) {
             return;
           }
-          setAcquiring(false);
-          if (err.code === err.PERMISSION_DENIED) {
-            stopTracking();
-            setLocateError(
-              "Location permission denied. Tap the button and choose Allow — if there's no prompt, clear this site's blocked permission in your browser settings."
-            );
-          } else if (high) {
-            // High-accuracy (GPS) timed out or was unavailable — common on
-            // desktop Firefox and other GPS-less devices. Fall back once to a
-            // coarse, network-based fix before giving up.
+          if (high) {
+            // First attempt failed — including a PERMISSION_DENIED that Firefox
+            // raises when only approximate location is granted. Retry once at
+            // coarse accuracy before concluding anything.
             attempt(false);
+            return;
+          }
+          // The coarse retry failed too — report the real reason.
+          setAcquiring(false);
+          stopTracking();
+          if (err.code === err.PERMISSION_DENIED) {
+            setLocateError(
+              "Location is blocked for this page. Allow location for this site (and set it to Precise), make sure your phone's location is on, then tap to try again."
+            );
           } else if (err.code === err.TIMEOUT) {
-            stopTracking();
             setLocateError("Location timed out — tap the button to try again.");
           } else {
-            stopTracking();
             setLocateError(
               "Couldn't get your location. Make sure location is enabled, then tap the button to try again."
             );
