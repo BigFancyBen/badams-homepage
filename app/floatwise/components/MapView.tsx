@@ -219,6 +219,18 @@ export function MapView({
   // Whether the next fix should recenter the map on the user. False when we're
   // deliberately framing the waypoints instead (see the auto-locate effect).
   const recenterOnFix = useRef(false);
+  // Whether we've received at least one position fix on the current watch. Once
+  // true, later transient errors (a momentary timeout while watching) are
+  // ignored so a good, live location isn't torn down.
+  const hasFix = useRef(false);
+  // Whether the current watch has already fallen back to coarse accuracy after
+  // a high-accuracy request failed. Prevents an infinite retry loop.
+  const triedLowAccuracy = useRef(false);
+  // Holds the latest startTracking so the error handler can retry (with coarse
+  // accuracy) without making startTracking depend on itself.
+  const startTrackingRef = useRef<
+    ((autoCenter: boolean, highAccuracy?: boolean) => void) | null
+  >(null);
   const [userLocation, setUserLocation] = useState<{
     lat: number;
     lon: number;
@@ -240,10 +252,11 @@ export function MapView({
 
   // Start watching the device location. `autoCenter` decides whether the very
   // first fix should recenter the map (true when there's nothing else to frame;
-  // false when we're keeping the waypoints in view). Safe to call repeatedly —
-  // an existing watch is cleared first.
+  // false when we're keeping the waypoints in view). `highAccuracy` starts true;
+  // if a GPS fix fails we retry once with coarse (network) accuracy. Safe to
+  // call repeatedly — an existing watch is cleared first.
   const startTracking = useCallback(
-    (autoCenter: boolean) => {
+    (autoCenter: boolean, highAccuracy = true) => {
       if (typeof navigator === "undefined" || !navigator.geolocation) {
         setLocateError("Location isn't supported by this browser.");
         return;
@@ -260,9 +273,12 @@ export function MapView({
       setTracking(true);
       hasCenteredOnUser.current = false;
       recenterOnFix.current = autoCenter;
+      hasFix.current = false;
+      triedLowAccuracy.current = !highAccuracy;
       watchId.current = navigator.geolocation.watchPosition(
         (position) => {
           const { latitude, longitude, accuracy, heading } = position.coords;
+          hasFix.current = true;
           setUserLocation({
             lat: latitude,
             lon: longitude,
@@ -276,6 +292,7 @@ export function MapView({
                 : null,
           });
           setAcquiring(false);
+          setLocateError(null);
           const map = mapRef.current;
           if (map && recenterOnFix.current && !hasCenteredOnUser.current) {
             map.setView([latitude, longitude], Math.max(map.getZoom(), 14));
@@ -284,8 +301,15 @@ export function MapView({
         },
         (err) => {
           setAcquiring(false);
+          // Once we have a live fix, ignore later transient errors (e.g. a
+          // momentary timeout) rather than tearing down a working location.
+          if (hasFix.current && err.code !== err.PERMISSION_DENIED) {
+            return;
+          }
           if (err.code === err.PERMISSION_DENIED) {
             stopTracking();
+            // Firefox doesn't implement permissions.query({name:"geolocation"})
+            // and rejects it, so this only refines the message where supported.
             if (navigator.permissions?.query) {
               navigator.permissions
                 .query({ name: "geolocation" })
@@ -296,19 +320,44 @@ export function MapView({
                       : "Location request dismissed — tap the button and choose Allow."
                   );
                 })
-                .catch(() => setLocateError("Location permission denied."));
+                .catch(() =>
+                  setLocateError(
+                    "Location permission denied — tap the button and choose Allow."
+                  )
+                );
             } else {
-              setLocateError("Location permission denied.");
+              setLocateError(
+                "Location permission denied — tap the button and choose Allow."
+              );
             }
-          } else if (err.code === err.POSITION_UNAVAILABLE) {
-            setLocateError("Location unavailable — searching…");
+          } else if (!triedLowAccuracy.current) {
+            // A high-accuracy (GPS) request timed out or came back unavailable.
+            // This is common on desktop Firefox and other GPS-less devices, so
+            // fall back once to a coarse, network-based fix before giving up.
+            startTrackingRef.current?.(autoCenter, false);
+          } else if (err.code === err.TIMEOUT) {
+            stopTracking();
+            setLocateError("Location timed out — tap the button to try again.");
+          } else {
+            stopTracking();
+            setLocateError(
+              "Location unavailable — tap the button to try again."
+            );
           }
         },
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
+        {
+          enableHighAccuracy: highAccuracy,
+          // Coarse fixes come from the network and can take longer, so give the
+          // fallback attempt a more generous timeout.
+          timeout: highAccuracy ? 15000 : 30000,
+          maximumAge: 5000,
+        }
       );
     },
     [stopTracking]
   );
+  // Keep the ref pointed at the latest startTracking for the retry above.
+  startTrackingRef.current = startTracking;
 
   // The locate button: recenter on the user if we're already tracking (with a
   // fix), otherwise (re)start tracking and center once a fix comes in.
