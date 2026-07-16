@@ -243,6 +243,10 @@ export function MapView({
   // Whether the current watch has already fallen back to coarse accuracy after
   // a high-accuracy request failed. Prevents an infinite retry loop.
   const triedLowAccuracy = useRef(false);
+  // Watchdog: some browsers (notably Firefox) can leave a geolocation request
+  // hanging with neither a fix nor an error/timeout callback. If no fix arrives
+  // in time we stop and surface a message so the button never spins forever.
+  const watchdog = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [userLocation, setUserLocation] = useState<{
     lat: number;
     lon: number;
@@ -258,6 +262,10 @@ export function MapView({
       navigator.geolocation.clearWatch(watchId.current);
       watchId.current = null;
     }
+    if (watchdog.current !== null) {
+      clearTimeout(watchdog.current);
+      watchdog.current = null;
+    }
     setTracking(false);
     setAcquiring(false);
   }, []);
@@ -266,12 +274,10 @@ export function MapView({
   // map (true when the user asked to be located). `highAccuracy` starts true; if
   // a GPS fix fails we retry once with coarse (network) accuracy.
   //
-  // Each attempt gets the first fix with getCurrentPosition, then switches to
-  // watchPosition for live updates. getCurrentPosition is far more reliable than
-  // watchPosition for triggering the permission prompt on Firefox for Android
-  // (where watchPosition can immediately return PERMISSION_DENIED even as the
-  // user is allowing it). Safe to call repeatedly — any existing watch is
-  // cleared first.
+  // Uses watchPosition, which delivers the first (often coarse network) fix
+  // quickly and then refines — this is what reliably produces a location on
+  // Firefox. A watchdog guards against the request hanging with no callback at
+  // all. Safe to call repeatedly — any existing watch/watchdog is cleared first.
   const startTracking = useCallback(
     (autoCenter: boolean, highAccuracy = true) => {
       if (typeof navigator === "undefined" || !navigator.geolocation) {
@@ -286,6 +292,10 @@ export function MapView({
         navigator.geolocation.clearWatch(watchId.current);
         watchId.current = null;
       }
+      if (watchdog.current !== null) {
+        clearTimeout(watchdog.current);
+        watchdog.current = null;
+      }
       setLocateError(null);
       setAcquiring(true);
       setTracking(true);
@@ -296,6 +306,10 @@ export function MapView({
 
       // Apply a fix: drop the dot and recenter when appropriate.
       const applyPosition = (position: GeolocationPosition) => {
+        if (watchdog.current !== null) {
+          clearTimeout(watchdog.current);
+          watchdog.current = null;
+        }
         const { latitude, longitude, accuracy, heading } = position.coords;
         hasFix.current = true;
         setUserLocation({
@@ -329,20 +343,24 @@ export function MapView({
       const attempt = (high: boolean) => {
         triedLowAccuracy.current = !high;
         const options: PositionOptions = {
-          // Give a GPS (high-accuracy) fix time to arrive on a cold start —
-          // mobile Firefox can take 20s+ — so we don't prematurely abandon it
-          // for a coarse network fix. Coarse fixes can also be slow, so the
-          // fallback keeps a generous timeout too.
+          // A GPS (high-accuracy) fix can take a while on a cold start, but
+          // watchPosition delivers a quicker coarse fix in the meantime, so a
+          // moderate timeout is fine. Coarse fixes come from the network.
           enableHighAccuracy: high,
-          timeout: high ? 27000 : 30000,
-          maximumAge: 5000,
+          timeout: high ? 20000 : 25000,
+          maximumAge: 10000,
         };
-        const handleInitialError = (err: GeolocationPositionError) => {
+        const handleError = (err: GeolocationPositionError) => {
+          // Once we have a fix, ignore transient errors (a momentary timeout
+          // while watching) unless the permission itself was revoked.
+          if (hasFix.current && err.code !== err.PERMISSION_DENIED) {
+            return;
+          }
           setAcquiring(false);
           if (err.code === err.PERMISSION_DENIED) {
             stopTracking();
             setLocateError(
-              "Location permission denied — tap the button and choose Allow."
+              "Location permission denied. Tap the button and choose Allow — if there's no prompt, clear this site's blocked permission in your browser settings."
             );
           } else if (high) {
             // High-accuracy (GPS) timed out or was unavailable — common on
@@ -355,37 +373,29 @@ export function MapView({
           } else {
             stopTracking();
             setLocateError(
-              "Location unavailable — tap the button to try again."
+              "Couldn't get your location. Make sure location is enabled, then tap the button to try again."
             );
           }
         };
-        // Prompt + first fix via getCurrentPosition, then keep tracking live.
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            applyPosition(position);
-            if (watchId.current !== null) {
-              navigator.geolocation.clearWatch(watchId.current);
-            }
-            watchId.current = navigator.geolocation.watchPosition(
-              applyPosition,
-              (err) => {
-                // We already have a fix, so ignore transient watch errors
-                // rather than tearing down a working location. Only a hard
-                // permission loss (revoked mid-session) stops tracking.
-                if (err.code === err.PERMISSION_DENIED) {
-                  stopTracking();
-                  setLocateError(
-                    "Location permission was turned off — tap the button and choose Allow."
-                  );
-                }
-              },
-              options
-            );
-          },
-          handleInitialError,
+        watchId.current = navigator.geolocation.watchPosition(
+          applyPosition,
+          handleError,
           options
         );
       };
+
+      // Belt-and-suspenders: if neither a fix nor an error arrives (some Firefox
+      // builds silently stall a granted request), give up after a while with a
+      // clear message so the button doesn't spin forever.
+      watchdog.current = setTimeout(() => {
+        watchdog.current = null;
+        if (!hasFix.current) {
+          stopTracking();
+          setLocateError(
+            "Couldn't get your location. Make sure location is on for your browser, then tap the button to try again."
+          );
+        }
+      }, 35000);
 
       attempt(highAccuracy);
     },
@@ -397,14 +407,16 @@ export function MapView({
     userMovedMap.current = true;
   }, []);
 
-  // The locate button: recenter on the user if we're already tracking (with a
-  // fix), otherwise (re)start tracking and center once a fix comes in.
+  // The locate button. If we already have a fix, just recenter on it. Otherwise
+  // (re)start a fresh request — always, even if a previous attempt is still
+  // "acquiring", so a stalled request can never leave the button doing nothing.
   const handleLocate = useCallback(() => {
     const map = mapRef.current;
-    if (tracking && userLocation && map) {
-      // User asked to recenter — resume following better fixes until they pan
-      // away again.
+    if (userLocation && map) {
+      // We have a location — recenter and resume following better fixes until
+      // the user pans away again.
       userMovedMap.current = false;
+      recenterOnFix.current = true;
       centeredAccuracy.current = userLocation.accuracy;
       map.setView(
         [userLocation.lat, userLocation.lon],
@@ -412,14 +424,8 @@ export function MapView({
       );
       return;
     }
-    if (tracking) {
-      // Tracking but no fix yet — center as soon as one arrives.
-      userMovedMap.current = false;
-      recenterOnFix.current = true;
-      return;
-    }
     startTracking(true);
-  }, [tracking, userLocation, startTracking]);
+  }, [userLocation, startTracking]);
 
   // Clean up any active location watch when the map unmounts. We deliberately
   // do NOT request location automatically on load: a non-gesture geolocation
@@ -431,6 +437,10 @@ export function MapView({
       if (watchId.current !== null && typeof navigator !== "undefined") {
         navigator.geolocation.clearWatch(watchId.current);
         watchId.current = null;
+      }
+      if (watchdog.current !== null) {
+        clearTimeout(watchdog.current);
+        watchdog.current = null;
       }
     };
   }, []);
