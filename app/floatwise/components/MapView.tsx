@@ -407,7 +407,7 @@ export function MapView({
         style={{ height: "70vh" }}
       >
         {/* Top-right controls */}
-        <div className="absolute right-2 top-2 z-[1000] flex flex-col items-end gap-1">
+        <div className="absolute right-2 top-2 z-[1000] isolate flex flex-col items-end gap-1 transform-gpu">
           {/* Locate / track */}
           <button
             type="button"
@@ -472,7 +472,7 @@ export function MapView({
 
         {/* Add-waypoint control (bottom-left) */}
         {!readOnly && (
-          <div className="absolute bottom-4 left-2 z-[1000] flex flex-col items-start gap-1">
+          <div className="absolute bottom-4 left-2 z-[1000] isolate flex flex-col items-start gap-1 transform-gpu">
             {addMode && (
               <span className="bg-gray-900/90 px-2 py-1 text-[11px] text-gray-100 shadow">
                 Tap the map to drop a waypoint
@@ -503,7 +503,7 @@ export function MapView({
         )}
 
         {/* Legend (bottom-right) */}
-        <div className="absolute bottom-4 right-2 z-[1000] max-w-[46%] border border-gray-700 bg-gray-900/85 p-1.5 shadow">
+        <div className="absolute bottom-4 right-2 z-[1000] isolate max-w-[46%] transform-gpu border border-gray-700 bg-gray-900/85 p-1.5 shadow">
           <div className="grid grid-cols-2 gap-x-2 gap-y-1">
             {WAYPOINT_CATEGORIES.map((c) => (
               <div key={c.id} className="flex items-center gap-1 text-[10px] text-gray-200">
@@ -527,13 +527,13 @@ export function MapView({
           style={{
             height: "100%",
             width: "100%",
-            background: "#1f2937",
+            background: "#e9e6df",
             cursor: addMode ? "crosshair" : "",
           }}
         >
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-            url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+            url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
           />
 
           <InitialFit
