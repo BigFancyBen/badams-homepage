@@ -155,6 +155,20 @@ turned away, and an unknown `custom_id` is ignored.
 Discord calls fail locally without a real bot token, which is useful in its own
 right — it is how the failed-post cleanup path gets tested.
 
+**If you put a real bot token in `.dev.vars`, local is no longer a sandbox.**
+`GET /__scheduled` will post a genuine matchup to the real channel, because
+`last_matchup_at` starts empty and the gap check passes immediately. To verify
+the bot's access without posting anything, hit the backfill route instead — it
+only reads and stores:
+
+```bash
+curl "http://localhost:8787/backfill?secret=dev-only-backfill-secret&pages=1"
+```
+
+That returns a JSON report of what it scanned and stored. If the bot cannot see
+the channel you get a Discord error instead, which is the thing you wanted to
+find out.
+
 ## Behaviour notes
 
 - **Only JPEG and PNG are ingested.** satori rasterizes those two; a WebP or
