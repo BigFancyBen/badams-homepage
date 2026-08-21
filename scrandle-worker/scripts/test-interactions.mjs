@@ -66,7 +66,8 @@ check("bad signature → 401", bad.status === 401, bad);
 const ping = await post({ type: 1 });
 check("PING → PONG", ping.status === 200 && ping.body?.type === 1, ping);
 
-// 3. A vote from the configured guild is recorded.
+// 3. A vote from the public matchup message opens the voter's own ballot.
+//    Type 4 = a new message, ephemeral, so only they see it.
 const vote = await post({
   type: 3,
   id: "i1",
@@ -75,22 +76,36 @@ const vote = await post({
   data: { custom_id: `v:${matchupId}:a` },
   member: { user: { id: "user_tester", username: "tester" } },
 });
+const buttons = (r) => r.body?.data?.components?.[0]?.components ?? [];
+const ticked = (r) => buttons(r).filter((b) => b.label?.startsWith("✓"));
+
+check("vote → new ephemeral message", vote.body?.type === 4, vote);
+check("ephemeral flag set", (vote.body?.data?.flags & 64) === 64, vote.body?.data?.flags);
+check("ballot carries both buttons", buttons(vote).length === 2, buttons(vote));
+check("exactly one button ticked", ticked(vote).length === 1, buttons(vote));
+check("the tick is on the side voted", ticked(vote)[0]?.label === "✓ 1", buttons(vote));
+check("picked button is green (style 3)", buttons(vote)[0]?.style === 3, buttons(vote));
+check("other button stays grey (style 2)", buttons(vote)[1]?.style === 2, buttons(vote));
 check(
-  "vote accepted",
-  vote.status === 200 && /Locked in/.test(vote.body?.data?.content ?? ""),
-  vote
+  "ballot buttons route back to the ballot",
+  buttons(vote).every((b) => b.custom_id?.startsWith("e:")),
+  buttons(vote)
 );
 
-// 4. Changing a pick is the same upsert, not a duplicate row.
+// 4. Switching from inside the ballot edits that same card (type 7) rather
+//    than sending another one, and moves the tick.
 const change = await post({
   type: 3,
   id: "i2",
   guild_id: GUILD,
   channel_id: CHANNEL,
-  data: { custom_id: `v:${matchupId}:b` },
+  data: { custom_id: `e:${matchupId}:b` },
   member: { user: { id: "user_tester", username: "tester" } },
 });
-check("vote changed", change.status === 200, change);
+check("switch → edits the ballot in place", change.body?.type === 7, change);
+check("tick moved to the other side", ticked(change)[0]?.label === "✓ 2", buttons(change));
+check("still exactly one ticked", ticked(change).length === 1, buttons(change));
+check("green moved too", buttons(change)[1]?.style === 3 && buttons(change)[0]?.style === 2, buttons(change));
 
 // 5. Another server must not be able to vote, even with a valid signature.
 //    The signature proves the request came from Discord, not from here.

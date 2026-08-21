@@ -62,24 +62,33 @@ export async function getMatchup(
 }
 
 /**
- * Upsert so people can change their pick until close. The UNIQUE constraint on
- * (matchup_id, voter_discord_id) is what actually enforces one vote each.
+ * Records the voter and their vote in one round trip.
+ *
+ * Both upsert, so people can change their pick until close — the UNIQUE
+ * constraint on (matchup_id, voter_discord_id) is what actually enforces one
+ * vote each. Batched rather than sequential because Discord abandons an
+ * interaction that takes longer than three seconds to answer, and a button
+ * that silently does nothing is worse than a slow one.
  */
-export async function recordVote(
+export async function castVote(
   env: Env,
   matchupId: number,
-  voterId: string,
+  voter: { id: string; username: string },
   pickedDishId: number,
   now: number
 ): Promise<void> {
-  await env.DB.prepare(
-    "INSERT INTO votes (matchup_id, voter_discord_id, picked_dish_id, voted_at) " +
-      "VALUES (?, ?, ?, ?) " +
-      "ON CONFLICT (matchup_id, voter_discord_id) " +
-      "DO UPDATE SET picked_dish_id = excluded.picked_dish_id, voted_at = excluded.voted_at"
-  )
-    .bind(matchupId, voterId, pickedDishId, now)
-    .run();
+  await env.DB.batch([
+    env.DB.prepare(
+      "INSERT INTO players (discord_id, username, first_seen) VALUES (?, ?, ?) " +
+        "ON CONFLICT (discord_id) DO UPDATE SET username = excluded.username"
+    ).bind(voter.id, voter.username, now),
+    env.DB.prepare(
+      "INSERT INTO votes (matchup_id, voter_discord_id, picked_dish_id, voted_at) " +
+        "VALUES (?, ?, ?, ?) " +
+        "ON CONFLICT (matchup_id, voter_discord_id) " +
+        "DO UPDATE SET picked_dish_id = excluded.picked_dish_id, voted_at = excluded.voted_at"
+    ).bind(matchupId, voter.id, pickedDishId, now),
+  ]);
 }
 
 export async function tallyVotes(
@@ -95,20 +104,6 @@ export async function tallyVotes(
     .bind(matchup.dish_a_id, matchup.dish_b_id, matchup.id)
     .first<{ a: number | null; b: number | null }>();
   return { a: row?.a ?? 0, b: row?.b ?? 0 };
-}
-
-export async function upsertPlayer(
-  env: Env,
-  discordId: string,
-  username: string,
-  now: number
-): Promise<void> {
-  await env.DB.prepare(
-    "INSERT INTO players (discord_id, username, first_seen) VALUES (?, ?, ?) " +
-      "ON CONFLICT (discord_id) DO UPDATE SET username = excluded.username"
-  )
-    .bind(discordId, username, now)
-    .run();
 }
 
 export async function playerName(env: Env, discordId: string): Promise<string> {

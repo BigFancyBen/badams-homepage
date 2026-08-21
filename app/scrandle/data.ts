@@ -215,7 +215,7 @@ export const CONSTRAINTS: Constraint[] = [
   {
     limit: "Interaction response",
     value: "3 seconds",
-    meaning: "A vote is one D1 upsert and an ephemeral reply. Nowhere near it.",
+    meaning: "A vote is one batched D1 write, one tally read, and an ephemeral reply. Nowhere near it — but Discord abandons an interaction after three seconds, so the writes go in a single batch.",
   },
   { limit: "D1 writes", value: "100,000 rows/day", meaning: "Not a factor." },
   { limit: "R2", value: "10 GB, 1M writes/mo", meaning: "Years of photos." },
@@ -374,7 +374,7 @@ export const PHASES: Phase[] = [
       },
       {
         kind: "note",
-        text: "Every response is ephemeral. That is the entire reason this uses buttons instead of a native poll — nobody sees who voted, and there is no running tally to bandwagon onto.",
+        text: "Every response is ephemeral. That is the entire reason this uses buttons instead of a native poll — nobody sees who voted, and there is no running tally to bandwagon onto. A click returns the voter their own private ballot, showing the pick as a green ticked button; switching edits that card in place.",
       },
     ],
   },

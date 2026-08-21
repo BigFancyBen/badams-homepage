@@ -90,6 +90,8 @@ export const InteractionResponseType = {
   PONG: 1,
   CHANNEL_MESSAGE_WITH_SOURCE: 4,
   DEFERRED_UPDATE_MESSAGE: 6,
+  /** Edits the message the button lives on, ephemeral ones included. */
+  UPDATE_MESSAGE: 7,
 } as const;
 
 /** Message flag 64 = ephemeral: only the person who clicked sees it. */

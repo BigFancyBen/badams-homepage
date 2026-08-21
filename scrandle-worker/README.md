@@ -174,8 +174,10 @@ npm run test:interactions -- 1
 ```
 
 It checks that a bad signature is rejected with 401, PING answers PONG, a vote
-records, changing a pick upserts rather than duplicates, another guild is
-turned away, and an unknown `custom_id` is ignored.
+returns an ephemeral ballot with the picked side ticked and green, switching
+from that ballot edits it in place rather than sending another, the pick
+upserts rather than duplicating, another guild is turned away, and an unknown
+`custom_id` is ignored.
 
 ### Testing matchmaking
 
@@ -220,6 +222,13 @@ digits, and a deliberate mismatch on every fifth matchup.
   newer dish.
 - **Votes are ephemeral.** Nobody sees who voted or the running tally until
   close, which is why this uses buttons rather than a native Discord poll.
+- **Voting opens a private ballot.** A button on the shared message looks the
+  same to everyone — Discord has no per-viewer component state — so clicking it
+  cannot leave a mark, and the vote registers with no visible sign. Instead the
+  click returns an ephemeral card of the voter's own carrying their pick: the
+  chosen side green and ticked, the other still live. Its buttons use an `e:`
+  prefix, so switching edits that card in place rather than stacking up a new
+  one per change.
 - **The cursor advances only after a batch commits**, so a failed tick replays
   cleanly on the next hour. Cron does not retry.
 - **A matchup closes when the next one is due**, not a fixed span after it went
