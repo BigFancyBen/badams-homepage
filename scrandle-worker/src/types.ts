@@ -90,6 +90,8 @@ export const EPHEMERAL = 64;
 export interface Interaction {
   type: number;
   id: string;
+  guild_id?: string;
+  channel_id?: string;
   data?: { custom_id?: string };
   member?: { user: { id: string; username: string } };
   user?: { id: string; username: string };

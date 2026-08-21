@@ -31,6 +31,16 @@ export async function handleInteraction(
     return reply("Unsupported interaction.");
   }
 
+  // This bot serves exactly one channel in one server. The signature check
+  // proves a request came from Discord; it does not prove it came from here.
+  if (
+    interaction.guild_id !== env.DISCORD_GUILD_ID ||
+    (interaction.channel_id !== undefined &&
+      interaction.channel_id !== env.DISCORD_CHANNEL_ID)
+  ) {
+    return reply("This game only runs in its own channel.");
+  }
+
   const customId = interaction.data?.custom_id ?? "";
   const [prefix, rawMatchupId, side] = customId.split(":");
   if (prefix !== "v" || (side !== "a" && side !== "b")) {
