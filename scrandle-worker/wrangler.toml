@@ -7,8 +7,8 @@ compatibility_date = "2025-01-15"
 crons = ["0 * * * *"]
 
 [vars]
-DISCORD_CHANNEL_ID = ""          # the food channel
-DISCORD_GUILD_ID = ""            # the server
+DISCORD_CHANNEL_ID = "1290910290086592563"   # the food channel
+DISCORD_GUILD_ID = "108689961535934464"      # the server
 TASTER_ROLE_ID = ""              # optional; leave empty to skip pings
 IMAGE_BASE_URL = "https://benadams.dev"
 R2_PUBLIC_BASE = ""              # e.g. https://pub-xxxx.r2.dev
