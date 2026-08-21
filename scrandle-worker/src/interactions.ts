@@ -1,4 +1,4 @@
-import { getMatchup, recordVote, upsertPlayer } from "./db";
+import { getMatchup, recordVote, tallyVotes, upsertPlayer } from "./db";
 import {
   EPHEMERAL,
   InteractionResponseType,
@@ -64,7 +64,16 @@ export async function handleInteraction(
   await upsertPlayer(env, user.id, user.username, now);
   await recordVote(env, matchupId, user.id, pickedDishId, now);
 
+  // Shown only after the vote is recorded, and only to the person who cast it.
+  // The channel still sees nothing until close.
+  const votes = await tallyVotes(env, matchup);
+  const total = votes.a + votes.b;
+  const yours = side === "a" ? votes.a : votes.b;
+  const share = total === 0 ? 0 : Math.round((yours / total) * 100);
+  const picked = side === "a" ? "1" : "2";
+
   return reply(
-    `Locked in: **${side === "a" ? "1" : "2"}**. Change it any time before close.`
+    `Locked in: **${picked}** — ${share}% of ${total} ${total === 1 ? "vote" : "votes"} so far. ` +
+      `Change it any time before close.`
   );
 }

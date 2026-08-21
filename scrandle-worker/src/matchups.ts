@@ -71,16 +71,14 @@ export async function postMatchupIfDue(
   const matchupId = inserted.id;
 
   const image = await matchupImageUrl(env, matchupId, pair.a, pair.b);
-  const closesAtSeconds = Math.floor((now + windowMs) / 1000);
 
   // The row has to exist before the post so its id can go in the image URL,
   // which means a failed post would otherwise strand an open matchup that
   // nobody can vote on and that blocks every future one until it expires.
   try {
+    // No message text. The card already carries the question and the matchup
+    // number, so a preamble above every post is noise in the channel.
     const message = await postMessage(env, {
-      content:
-        `**Matchup #${matchupId}** — which would you rather eat?\n` +
-        `Closes <t:${closesAtSeconds}:R>. Your vote is private; you can change it until close.`,
       embeds: [{ color: ACCENT, image: { url: image } }],
       components: voteButtons(matchupId),
       allowed_mentions: allowedMentions(env),

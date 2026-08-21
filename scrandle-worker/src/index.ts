@@ -1,4 +1,5 @@
 import { logToDiscord } from "./discord";
+import { classify } from "./classify";
 import { backfill, ingest } from "./ingest";
 import { handleInteraction } from "./interactions";
 import {
@@ -71,6 +72,20 @@ export default {
       }
     }
 
+    if (url.pathname === "/admin/classify") {
+      if (url.searchParams.get("secret") !== env.BACKFILL_SECRET) {
+        return new Response("Nope", { status: 403 });
+      }
+      try {
+        const limit = Number(url.searchParams.get("limit") ?? "20");
+        return Response.json(await classify(env, limit));
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        await logToDiscord(env, `Classify failed: ${reason}`);
+        return Response.json({ ok: false, error: reason }, { status: 502 });
+      }
+    }
+
     if (url.pathname === "/health") {
       return new Response("ok");
     }
@@ -97,6 +112,20 @@ export default {
       }
     } catch (error) {
       await logToDiscord(env, `Ingest failed: ${String(error)}`);
+    }
+
+    // Classify before anything else touches the catalog — matchmaking skips
+    // unlabelled dishes, so an unclassified photo is invisible to the game.
+    try {
+      const labelled = await classify(env);
+      if (labelled.labelled > 0 || labelled.failed > 0) {
+        await logToDiscord(
+          env,
+          `Classified ${labelled.labelled}, ${labelled.failed} failed, ${labelled.remaining} left.`
+        );
+      }
+    } catch (error) {
+      await logToDiscord(env, `Classify failed: ${String(error)}`);
     }
 
     try {
