@@ -1,0 +1,97 @@
+import type { Dish, Env } from "./types";
+
+/** Close matchups are tense matchups. */
+const ELO_BAND = 150;
+/** Do not repeat a pair seen within this many recent matchups. The pool is small. */
+const RECENT_PAIR_WINDOW = 20;
+/** Every Nth matchup is a deliberate mismatch — upsets make the best results. */
+const WIDE_GAP_EVERY = 5;
+
+async function pickPrimary(env: Env): Promise<Dish | null> {
+  // Anything never played jumps the queue, oldest first, so new dishes are
+  // guaranteed a slot rather than waiting on the Elo band to line up.
+  const unplayed = await env.DB.prepare(
+    "SELECT * FROM dishes WHERE first_matchup_id IS NULL ORDER BY posted_at ASC LIMIT 1"
+  ).first<Dish>();
+  if (unplayed) return unplayed;
+
+  return env.DB.prepare(
+    "SELECT * FROM dishes ORDER BY matches_played ASC, RANDOM() LIMIT 1"
+  ).first<Dish>();
+}
+
+async function pickOpponent(
+  env: Env,
+  primary: Dish,
+  recentCutoff: number,
+  wideGap: boolean
+): Promise<Dish | null> {
+  const notRecentlyPaired =
+    "SELECT * FROM dishes d WHERE d.id != ?1 AND NOT EXISTS (" +
+    "  SELECT 1 FROM matchups m WHERE m.id > ?2 AND (" +
+    "    (m.dish_a_id = ?1 AND m.dish_b_id = d.id) OR" +
+    "    (m.dish_a_id = d.id AND m.dish_b_id = ?1)" +
+    "  )" +
+    ")";
+
+  if (wideGap) {
+    const stretched = await env.DB.prepare(
+      `${notRecentlyPaired} ORDER BY ABS(d.elo - ?3) DESC, d.matches_played ASC LIMIT 1`
+    )
+      .bind(primary.id, recentCutoff, primary.elo)
+      .first<Dish>();
+    if (stretched) return stretched;
+  }
+
+  const banded = await env.DB.prepare(
+    `${notRecentlyPaired} AND ABS(d.elo - ?3) <= ?4 ` +
+      "ORDER BY d.matches_played ASC, ABS(d.elo - ?3) ASC, RANDOM() LIMIT 1"
+  )
+    .bind(primary.id, recentCutoff, primary.elo, ELO_BAND)
+    .first<Dish>();
+  if (banded) return banded;
+
+  // Band too tight for the current catalog — take the nearest rating instead
+  // of skipping the matchup entirely.
+  const nearest = await env.DB.prepare(
+    `${notRecentlyPaired} ORDER BY ABS(d.elo - ?3) ASC, d.matches_played ASC LIMIT 1`
+  )
+    .bind(primary.id, recentCutoff, primary.elo)
+    .first<Dish>();
+  if (nearest) return nearest;
+
+  // Everything has been paired with this dish recently. Allow a repeat.
+  return env.DB.prepare(
+    "SELECT * FROM dishes WHERE id != ? ORDER BY matches_played ASC, RANDOM() LIMIT 1"
+  )
+    .bind(primary.id)
+    .first<Dish>();
+}
+
+export async function pickPair(
+  env: Env
+): Promise<{ a: Dish; b: Dish } | null> {
+  const count = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM dishes"
+  ).first<{ n: number }>();
+  if (!count || count.n < 2) return null;
+
+  const primary = await pickPrimary(env);
+  if (!primary) return null;
+
+  const latest = await env.DB.prepare(
+    "SELECT COALESCE(MAX(id), 0) AS id FROM matchups"
+  ).first<{ id: number }>();
+  const latestId = latest?.id ?? 0;
+  const recentCutoff = Math.max(0, latestId - RECENT_PAIR_WINDOW);
+  const wideGap = (latestId + 1) % WIDE_GAP_EVERY === 0;
+
+  const opponent = await pickOpponent(env, primary, recentCutoff, wideGap);
+  if (!opponent) return null;
+
+  // Randomize sides. Otherwise position 1 is always the newer dish and people
+  // would learn to read the slot instead of the food.
+  return Math.random() < 0.5
+    ? { a: primary, b: opponent }
+    : { a: opponent, b: primary };
+}
