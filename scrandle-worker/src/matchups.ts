@@ -65,18 +65,27 @@ export async function postMatchupIfDue(env: Env, now: number): Promise<boolean> 
   const image = await matchupImageUrl(env, matchupId, pair.a, pair.b);
   const closesAtSeconds = Math.floor((now + windowMs) / 1000);
 
-  const message = await postMessage(env, {
-    content:
-      `**Matchup #${matchupId}** — which would you rather eat?\n` +
-      `Closes <t:${closesAtSeconds}:R>. Your vote is private; you can change it until close.`,
-    embeds: [{ color: ACCENT, image: { url: image } }],
-    components: voteButtons(matchupId),
-    allowed_mentions: allowedMentions(env),
-  });
+  // The row has to exist before the post so its id can go in the image URL,
+  // which means a failed post would otherwise strand an open matchup that
+  // nobody can vote on and that blocks every future one until it expires.
+  try {
+    const message = await postMessage(env, {
+      content:
+        `**Matchup #${matchupId}** — which would you rather eat?\n` +
+        `Closes <t:${closesAtSeconds}:R>. Your vote is private; you can change it until close.`,
+      embeds: [{ color: ACCENT, image: { url: image } }],
+      components: voteButtons(matchupId),
+      allowed_mentions: allowedMentions(env),
+    });
 
-  await env.DB.prepare("UPDATE matchups SET message_id = ? WHERE id = ?")
-    .bind(message.id, matchupId)
-    .run();
+    await env.DB.prepare("UPDATE matchups SET message_id = ? WHERE id = ?")
+      .bind(message.id, matchupId)
+      .run();
+  } catch (error) {
+    await env.DB.prepare("DELETE FROM matchups WHERE id = ?").bind(matchupId).run();
+    throw error;
+  }
+
   await setState(env, "last_matchup_at", String(now));
 
   return true;
@@ -92,20 +101,21 @@ async function closeOne(env: Env, matchup: Matchup, now: number): Promise<void> 
   const votes = await tallyVotes(env, matchup);
   const next = updateElo(dishA.elo, dishB.elo, votes.a, votes.b);
 
+  const closeMatchup = env.DB.prepare(
+    "UPDATE matchups SET status = 'closed', closed_at = ?, votes_a = ?, votes_b = ?, " +
+      "elo_a_before = ?, elo_b_before = ?, elo_a_after = ?, elo_b_after = ? WHERE id = ?"
+  ).bind(now, votes.a, votes.b, dishA.elo, dishB.elo, next.a, next.b, matchup.id);
+
+  // A matchup nobody voted on is not a match played. Counting it would burn
+  // both dishes' unplayed status and skew the low-matches_played preference
+  // without any rating information to show for it.
+  if (votes.a + votes.b === 0) {
+    await closeMatchup.run();
+    return;
+  }
+
   await env.DB.batch([
-    env.DB.prepare(
-      "UPDATE matchups SET status = 'closed', closed_at = ?, votes_a = ?, votes_b = ?, " +
-        "elo_a_before = ?, elo_b_before = ?, elo_a_after = ?, elo_b_after = ? WHERE id = ?"
-    ).bind(
-      now,
-      votes.a,
-      votes.b,
-      dishA.elo,
-      dishB.elo,
-      next.a,
-      next.b,
-      matchup.id
-    ),
+    closeMatchup,
     env.DB.prepare(
       "UPDATE dishes SET elo = ?, matches_played = matches_played + 1, " +
         "first_matchup_id = COALESCE(first_matchup_id, ?) WHERE id = ?"

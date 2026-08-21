@@ -93,6 +93,46 @@ Run once by hand to pull in the channel's history:
 curl "https://<your-worker>.workers.dev/backfill?secret=<BACKFILL_SECRET>&pages=5"
 ```
 
+## Running it locally
+
+No Cloudflare account needed — `--local` runs against a local D1 and a local
+R2. You need a throwaway config with a placeholder `database_id`, since
+wrangler will not resolve an empty one:
+
+```bash
+sed 's|database_id = ""|database_id = "00000000-0000-0000-0000-000000000000"|' wrangler.toml > wrangler.test.toml
+```
+```bash
+npx wrangler d1 migrations apply scrandle --local --config wrangler.test.toml
+```
+```bash
+npx wrangler dev --local --config wrangler.test.toml --port 8787 --test-scheduled
+```
+
+`--test-scheduled` exposes the cron tick at `GET /__scheduled`, which runs
+ingest, close, and post in one go exactly as the hourly trigger would.
+
+To exercise `POST /interactions` you need a real Ed25519 keypair, because
+every interaction is signed and the Worker rejects anything that fails
+verification:
+
+```bash
+node -e "const{generateKeyPairSync}=require('node:crypto');const{publicKey,privateKey}=generateKeyPairSync('ed25519');require('node:fs').writeFileSync('.test-key.pem',privateKey.export({type:'pkcs8',format:'pem'}));console.log(publicKey.export({type:'spki',format:'der'}).subarray(-32).toString('hex'))"
+```
+
+Put that hex string in `.dev.vars` as `DISCORD_PUBLIC_KEY`, then:
+
+```bash
+npm run test:interactions -- <matchupId>
+```
+
+It checks that a bad signature is rejected with 401, PING answers PONG, a vote
+records, changing a pick upserts rather than duplicates, another guild is
+turned away, and an unknown `custom_id` is ignored.
+
+Discord calls fail locally without a real bot token, which is useful in its own
+right — it is how the failed-post cleanup path gets tested.
+
 ## Behaviour notes
 
 - **Only JPEG and PNG are ingested.** satori rasterizes those two; a WebP or

@@ -8,11 +8,12 @@
     "tail": "wrangler tail",
     "type-check": "tsc --noEmit",
     "migrate": "wrangler d1 migrations apply scrandle --remote",
-    "migrate:local": "wrangler d1 migrations apply scrandle --local"
+    "migrate:local": "wrangler d1 migrations apply scrandle --local",
+    "test:interactions": "node scripts/test-interactions.mjs"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20250109.0",
+    "@cloudflare/workers-types": "^5.20260821.1",
     "typescript": "^5.9.3",
-    "wrangler": "^3.99.0"
+    "wrangler": "^4.125.0"
   }
 }
