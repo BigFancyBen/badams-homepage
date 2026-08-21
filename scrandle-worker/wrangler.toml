@@ -14,8 +14,11 @@ IMAGE_BASE_URL = "https://www.benadams.dev"   # apex 308-redirects to www; avoid
 R2_PUBLIC_BASE = "https://pub-b7525558c8974aa0aa1f10bf9856eb18.r2.dev"
 
 # How long a matchup stays open, and the floor between postings.
-VOTE_WINDOW_HOURS = "24"
-MIN_HOURS_BETWEEN_MATCHUPS = "9999"   # throttled until the backfill has run
+VOTE_WINDOW_HOURS = "12"
+MIN_HOURS_BETWEEN_MATCHUPS = "11"     # floor only; POST_HOURS_UTC decides when
+# 15:00 and 03:00 UTC = 9am and 9pm Mountain *while MDT is in effect*.
+# Cloudflare crons do not follow DST — shift both to 16 and 04 in November.
+POST_HOURS_UTC = "15,3"
 # Weekly standings post: 0 = Sunday. Set to -1 to disable.
 STANDINGS_WEEKDAY = "0"
 STANDINGS_HOUR_UTC = "17"

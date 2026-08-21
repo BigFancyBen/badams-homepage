@@ -10,6 +10,8 @@ export interface Env {
   R2_PUBLIC_BASE: string;
   VOTE_WINDOW_HOURS: string;
   MIN_HOURS_BETWEEN_MATCHUPS: string;
+  /** Comma-separated UTC hours to post on. Empty means any hour. */
+  POST_HOURS_UTC: string;
   STANDINGS_WEEKDAY: string;
   STANDINGS_HOUR_UTC: string;
 

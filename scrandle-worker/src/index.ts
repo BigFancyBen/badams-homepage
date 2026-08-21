@@ -72,6 +72,23 @@ export default {
       }
     }
 
+    // Closes whatever is open right now, ignoring closes_at. Same reason as
+    // the manual post: a cron cannot be fired by hand, and the close path is
+    // the one most worth being able to exercise on demand.
+    if (url.pathname === "/admin/close-matchup") {
+      if (url.searchParams.get("secret") !== env.BACKFILL_SECRET) {
+        return new Response("Nope", { status: 403 });
+      }
+      try {
+        const closed = await closeDueMatchups(env, Date.now(), { force: true });
+        return Response.json({ closed });
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        await logToDiscord(env, `Manual close failed: ${reason}`);
+        return Response.json({ ok: false, error: reason }, { status: 502 });
+      }
+    }
+
     if (url.pathname === "/admin/classify") {
       if (url.searchParams.get("secret") !== env.BACKFILL_SECRET) {
         return new Response("Nope", { status: 403 });

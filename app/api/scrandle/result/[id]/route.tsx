@@ -11,6 +11,8 @@ interface ResultPayload {
   ca: string;
   cb: string;
   n: number;
+  na?: string;
+  nb?: string;
 }
 
 function ResultPlate({
@@ -20,6 +22,7 @@ function ResultPlate({
   votes,
   share,
   won,
+  name,
 }: {
   src: string;
   label: string;
@@ -27,6 +30,7 @@ function ResultPlate({
   votes: number;
   share: number;
   won: boolean;
+  name?: string;
 }) {
   return (
     <div
@@ -119,7 +123,20 @@ function ResultPlate({
             {votes} {votes === 1 ? "vote" : "votes"}
           </div>
         </div>
-        <div style={{ display: "flex", color: THEME.accent, fontSize: 26, marginTop: 6 }}>
+        {name ? (
+          <div
+            style={{
+              display: "flex",
+              color: THEME.text,
+              fontSize: 26,
+              marginTop: 8,
+              lineHeight: 1.2,
+            }}
+          >
+            {name}
+          </div>
+        ) : null}
+        <div style={{ display: "flex", color: THEME.accent, fontSize: 24, marginTop: 6 }}>
           {chef}
         </div>
       </div>
@@ -133,7 +150,7 @@ export async function GET(request: Request) {
     return new Response(result.error, { status: result.status });
   }
 
-  const { a, b, va, vb, ca, cb, n } = result.payload;
+  const { a, b, va, vb, ca, cb, n, na, nb } = result.payload;
   const total = va + vb;
   const shareA = total === 0 ? 0 : Math.round((va / total) * 100);
   const shareB = total === 0 ? 0 : 100 - shareA;
@@ -175,6 +192,7 @@ export async function GET(request: Request) {
             votes={va}
             share={shareA}
             won={va >= vb}
+            name={na}
           />
           <ResultPlate
             src={b}
@@ -183,6 +201,7 @@ export async function GET(request: Request) {
             votes={vb}
             share={shareB}
             won={vb >= va}
+            name={nb}
           />
         </div>
       </div>
