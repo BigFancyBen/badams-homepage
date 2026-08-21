@@ -176,6 +176,37 @@ It checks that a bad signature is rejected with 401, PING answers PONG, a vote
 records, changing a pick upserts rather than duplicates, another guild is
 turned away, and an unknown `custom_id` is ignored.
 
+### Testing matchmaking
+
+Pair selection is the hardest part to reason about, and a single round tells
+you almost nothing. `simulate-matchups.mjs` drives many rounds through the
+real worker code and asserts the invariants that only show up over time.
+
+It needs Discord calls to succeed, so point the worker at the bundled mock by
+adding `DISCORD_API_BASE=http://127.0.0.1:9911` to `.dev.vars`. That variable
+exists only for this — leave it unset everywhere else and the client talks to
+the real Discord.
+
+In three terminals:
+
+```bash
+npm run mock:discord
+```
+```bash
+npm run dev:local -- --test-scheduled
+```
+```bash
+npm run test:matchups 25
+```
+
+It wipes and reseeds the local catalog with 12 dishes, plays the given number
+of rounds, and checks that no pair repeats inside the 20-matchup recency
+window, that play stays spread rather than favouring a few dishes, that Elo
+stays zero-sum across the catalog, and that the wide-gap rule actually fires.
+
+A 25-round run should show every dish played 4–5 times, gaps mostly in single
+digits, and a deliberate mismatch on every fifth matchup.
+
 ## Behaviour notes
 
 - **Only JPEG and PNG are ingested.** satori rasterizes those two; a WebP or
