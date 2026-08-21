@@ -14,7 +14,7 @@ export const SUMMARY =
 
 export const STAT_LINE = [
   { label: "Players", value: "~15" },
-  { label: "Cadence", value: "1 pair/day" },
+  { label: "Catalog", value: "1,001 dishes" },
   { label: "Frontend", value: "None" },
   { label: "Hosting cost", value: "$0" },
 ];
@@ -204,7 +204,8 @@ export const CONSTRAINTS: Constraint[] = [
   {
     limit: "Subrequests",
     value: "50 per invocation",
-    meaning: "The real ceiling. Ingest caps at 15 images per tick.",
+    meaning:
+      "The real ceiling, and D1 and R2 binding calls count towards it — confirmed by a backfill dying on it. Storing one image costs three, so ingest caps at 10 per run.",
   },
   {
     limit: "Simultaneous outgoing connections",
@@ -480,5 +481,4 @@ export const OPEN_QUESTIONS = [
   "Vote window: 24 hours or 48? A day keeps it a ritual, two catches people who only check in on weekends.",
   "Should a dish ever retire from the catalog, or does everything stay eligible forever?",
   "Reaction-count threshold for qualifying a backfilled photo, so the channel's existing reactions do the curation.",
-  "Do D1 and R2 binding calls count against the 50-subrequest limit? It sets the real ceiling on images per tick.",
 ];
