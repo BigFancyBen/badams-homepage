@@ -9,6 +9,7 @@ import {
   getDish,
   getDueMatchups,
   getOpenMatchup,
+  getOpenMatchups,
   getState,
   playerName,
   setState,
@@ -191,8 +192,17 @@ async function closeOne(env: Env, matchup: Matchup, now: number): Promise<void> 
   }
 }
 
-export async function closeDueMatchups(env: Env, now: number): Promise<number> {
-  const due = await getDueMatchups(env, now);
+export async function closeDueMatchups(
+  env: Env,
+  now: number,
+  { force = false }: { force?: boolean } = {}
+): Promise<number> {
+  // Forcing ignores closes_at and shuts whatever is open — used to exercise
+  // the reveal on demand rather than waiting out a vote window.
+  const due = force
+    ? await getOpenMatchups(env)
+    : await getDueMatchups(env, now);
+
   for (const matchup of due) {
     await closeOne(env, matchup, now);
   }

@@ -32,6 +32,14 @@ export async function getOpenMatchup(env: Env): Promise<Matchup | null> {
   ).first<Matchup>();
 }
 
+/** Every open matchup, regardless of closes_at. */
+export async function getOpenMatchups(env: Env): Promise<Matchup[]> {
+  const result = await env.DB.prepare(
+    "SELECT * FROM matchups WHERE status = 'open' ORDER BY created_at ASC"
+  ).all<Matchup>();
+  return result.results ?? [];
+}
+
 export async function getDueMatchups(
   env: Env,
   now: number
