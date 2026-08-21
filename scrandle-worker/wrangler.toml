@@ -11,11 +11,11 @@ DISCORD_CHANNEL_ID = "1290910290086592563"   # the food channel
 DISCORD_GUILD_ID = "108689961535934464"      # the server
 TASTER_ROLE_ID = ""              # optional; leave empty to skip pings
 IMAGE_BASE_URL = "https://www.benadams.dev"   # apex 308-redirects to www; avoid the hop
-R2_PUBLIC_BASE = ""              # e.g. https://pub-xxxx.r2.dev
+R2_PUBLIC_BASE = "https://pub-b7525558c8974aa0aa1f10bf9856eb18.r2.dev"
 
 # How long a matchup stays open, and the floor between postings.
 VOTE_WINDOW_HOURS = "24"
-MIN_HOURS_BETWEEN_MATCHUPS = "24"
+MIN_HOURS_BETWEEN_MATCHUPS = "9999"   # throttled until the backfill has run
 # Weekly standings post: 0 = Sunday. Set to -1 to disable.
 STANDINGS_WEEKDAY = "0"
 STANDINGS_HOUR_UTC = "17"
