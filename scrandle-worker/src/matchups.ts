@@ -61,6 +61,19 @@ export async function postMatchupIfDue(
   if (open) return false;
 
   if (!force) {
+    // Post on named hours rather than "N hours since the last one". Elapsed
+    // time drifts: one late post pushes every post after it, and within days
+    // the matchup is landing at an arbitrary hour. Fixed hours stay put.
+    const hours = (env.POST_HOURS_UTC || "")
+      .split(",")
+      .map((h) => Number(h.trim()))
+      .filter((h) => Number.isInteger(h) && h >= 0 && h <= 23);
+
+    if (hours.length > 0 && !hours.includes(new Date(now).getUTCHours())) {
+      return false;
+    }
+
+    // Still a floor, so a retry inside the same hour cannot double-post.
     const lastAt = Number(await getState(env, "last_matchup_at")) || 0;
     const minGap = Number(env.MIN_HOURS_BETWEEN_MATCHUPS || "24") * HOUR;
     if (now - lastAt < minGap) return false;
