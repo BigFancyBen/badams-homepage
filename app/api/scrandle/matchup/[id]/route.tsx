@@ -2,20 +2,74 @@ import { ImageResponse } from "next/og";
 import { readSignedPayload } from "../../_lib/signing";
 import { CARD_HEIGHT, CARD_WIDTH, THEME } from "../../_lib/theme";
 
-/** `{ a, b }` are public image URLs, `n` is the matchup number shown in the header. */
+/**
+ * `{ a, b }` are public image URLs, `n` is the matchup number, and `na`/`nb`
+ * are the classifier's names for each dish. Names are optional so URLs signed
+ * before they existed still render.
+ */
 interface MatchupPayload {
   a: string;
   b: string;
   n: number;
+  na?: string;
+  nb?: string;
 }
 
-function Plate({ src, label }: { src: string; label: string }) {
+const HEADER_HEIGHT = 78;
+const GAP = 4;
+const PLATE_WIDTH = (CARD_WIDTH - GAP) / 2;
+const PLATE_HEIGHT = CARD_HEIGHT - HEADER_HEIGHT;
+/** Tall enough for two wrapped lines, so both strips match. */
+const NAME_STRIP_HEIGHT = 104;
+
+/**
+ * The numbers live in the header rather than on top of the food. They sit
+ * directly above their own image, so the mapping stays obvious without
+ * covering a corner of the photograph.
+ */
+function HeaderCell({
+  label,
+  trailing,
+}: {
+  label: string;
+  trailing?: string;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        width: `${PLATE_WIDTH}px`,
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "0 24px",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          color: THEME.accent,
+          fontSize: 38,
+          fontWeight: 700,
+        }}
+      >
+        {label}
+      </div>
+      {trailing ? (
+        <div style={{ display: "flex", color: THEME.muted, fontSize: 24 }}>
+          {trailing}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function Plate({ src, name }: { src: string; name?: string }) {
   return (
     <div
       style={{
         display: "flex",
         position: "relative",
-        width: `${(CARD_WIDTH - 4) / 2}px`,
+        width: `${PLATE_WIDTH}px`,
         height: "100%",
       }}
     >
@@ -23,29 +77,33 @@ function Plate({ src, label }: { src: string; label: string }) {
       <img
         src={src}
         alt=""
-        width={(CARD_WIDTH - 4) / 2}
-        height={CARD_HEIGHT - 96}
+        width={PLATE_WIDTH}
+        height={PLATE_HEIGHT}
         style={{ width: "100%", height: "100%", objectFit: "cover" }}
       />
-      <div
-        style={{
-          display: "flex",
-          position: "absolute",
-          top: 20,
-          left: 20,
-          width: 56,
-          height: 56,
-          alignItems: "center",
-          justifyContent: "center",
-          backgroundColor: "rgba(10,10,10,0.85)",
-          border: `2px solid ${THEME.accent}`,
-          color: THEME.accent,
-          fontSize: 32,
-          fontWeight: 700,
-        }}
-      >
-        {label}
-      </div>
+
+      {name ? (
+        // Fixed height so a name that wraps to two lines still lines up with a
+        // one-line name beside it.
+        <div
+          style={{
+            display: "flex",
+            position: "absolute",
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: NAME_STRIP_HEIGHT,
+            alignItems: "center",
+            padding: "0 24px",
+            backgroundColor: "rgba(10,10,10,0.82)",
+            color: THEME.text,
+            fontSize: 29,
+            lineHeight: 1.25,
+          }}
+        >
+          {name}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -56,7 +114,7 @@ export async function GET(request: Request) {
     return new Response(result.error, { status: result.status });
   }
 
-  const { a, b, n } = result.payload;
+  const { a, b, n, na, nb } = result.payload;
 
   return new ImageResponse(
     (
@@ -72,24 +130,25 @@ export async function GET(request: Request) {
         <div
           style={{
             display: "flex",
-            height: 96,
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "0 32px",
+            height: HEADER_HEIGHT,
+            gap: GAP,
             borderBottom: `1px solid ${THEME.hairline}`,
           }}
         >
-          <div style={{ display: "flex", color: THEME.text, fontSize: 34, fontWeight: 700 }}>
-            Which would you rather eat?
-          </div>
-          <div style={{ display: "flex", color: THEME.muted, fontSize: 24 }}>
-            Matchup #{n}
-          </div>
+          <HeaderCell label="1" />
+          <HeaderCell label="2" trailing={`#${n}`} />
         </div>
 
-        <div style={{ display: "flex", flex: 1, gap: 4, backgroundColor: THEME.hairline }}>
-          <Plate src={a} label="1" />
-          <Plate src={b} label="2" />
+        <div
+          style={{
+            display: "flex",
+            flex: 1,
+            gap: GAP,
+            backgroundColor: THEME.hairline,
+          }}
+        >
+          <Plate src={a} name={na} />
+          <Plate src={b} name={nb} />
         </div>
       </div>
     ),

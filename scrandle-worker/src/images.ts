@@ -34,6 +34,8 @@ export function matchupImageUrl(
     a: dishUrl(env, a),
     b: dishUrl(env, b),
     n: matchupId,
+    na: a.name ?? "",
+    nb: b.name ?? "",
   });
 }
 
@@ -55,6 +57,8 @@ export function resultImageUrl(
     ca: chefA,
     cb: chefB,
     n: matchupId,
+    na: a.name ?? "",
+    nb: b.name ?? "",
   });
 }
 
