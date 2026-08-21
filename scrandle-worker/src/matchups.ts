@@ -17,11 +17,20 @@ import {
 import { updateElo } from "./elo";
 import { matchupImageUrl, resultImageUrl, standingsImageUrl } from "./images";
 import { pickPair } from "./matchmaking";
-import type { Env, Matchup } from "./types";
+import type { Dish, Env, Matchup } from "./types";
 
 const HOUR = 60 * 60 * 1000;
 const ACCENT = 0x81a1c1;
 const WIN = 0xa3be8c;
+
+/**
+ * Jump link to the message a dish came from, so people can read the original
+ * context. Note this also reveals the poster — anyone who clicks sees who
+ * cooked it.
+ */
+function sourceLink(env: Env, dish: Dish, label: string): string {
+  return `[${label}](https://discord.com/channels/${env.DISCORD_GUILD_ID}/${env.DISCORD_CHANNEL_ID}/${dish.discord_message_id})`;
+}
 
 function voteButtons(matchupId: number) {
   return [
@@ -76,9 +85,10 @@ export async function postMatchupIfDue(
   // which means a failed post would otherwise strand an open matchup that
   // nobody can vote on and that blocks every future one until it expires.
   try {
-    // No message text. The card already carries the question and the matchup
-    // number, so a preamble above every post is noise in the channel.
+    // Just the two jump links — no preamble. The card already carries the
+    // question and the matchup number.
     const message = await postMessage(env, {
+      content: `${sourceLink(env, pair.a, "#1")} · ${sourceLink(env, pair.b, "#2")}`,
       embeds: [{ color: ACCENT, image: { url: image } }],
       components: voteButtons(matchupId),
       allowed_mentions: allowedMentions(env),
@@ -172,7 +182,8 @@ async function closeOne(env: Env, matchup: Matchup, now: number): Promise<void> 
     await editMessage(env, matchup.message_id, {
       content:
         `**Matchup #${matchup.id} — closed.** ${winner}\n` +
-        `${total} ${total === 1 ? "vote" : "votes"}.${selfNote}`,
+        `${total} ${total === 1 ? "vote" : "votes"}.${selfNote}\n` +
+        `${sourceLink(env, dishA, "#1")} · ${sourceLink(env, dishB, "#2")}`,
       embeds: [{ color: WIN, image: { url: image } }],
       components: [],
       allowed_mentions: allowedMentions(env),

@@ -15,14 +15,29 @@ import type { Dish, Env } from "./types";
 const MAX_PER_RUN = 20;
 /** Six simultaneous outgoing connections. */
 const BATCH_SIZE = 5;
+/**
+ * Some images can never be classified — a panorama past the vision API's
+ * dimension limit fails identically every time. Give up after this many tries
+ * so one bad photo does not burn an API call every hour forever.
+ */
+const MAX_ATTEMPTS = 3;
 
-const SYSTEM = `You label photographs from a private Discord channel where friends post what they cook and eat.
+const SYSTEM = `You label photographs from a private Discord channel where friends post what they cook and eat. Plenty of the photos are not food at all — people post each other, their pets, receipts, menus, screenshots — and those need labelling honestly rather than forced into a food category.
 
-For each image return two things.
+category — one of:
+  food        a prepared, edible dish is the subject, whether or not a drink shares the frame. A cocktail beside a plate of fries is food.
+  drink       exclusively drinks, with no solid food as a subject.
+  ingredient  raw or unprepared components — groceries, a shopping haul, produce on a counter, meat before cooking.
+  person      one or more people are the subject.
+  pet         an animal is the subject.
+  place       a room, building, view, or landscape is the subject, with no dish in the foreground.
+  document    a receipt, menu, label, handwritten recipe, or packaging photographed for its text.
+  screenshot  a capture of a phone or computer screen, including memes and text posts.
+  other       anything that fits none of the above — an empty plate, a gadget, a plant.
 
-category — "drink" only when the photo is exclusively drinks. If any solid food appears alongside a drink, the category is "food". A photo of a cocktail beside a plate of fries is food. A flight of beers with nothing else is drink.
+When a dish shares the frame with something else, ask what the photo is *of*. A plate on a restaurant table is food. A wide shot of the restaurant with a plate on a far table is place. A person holding a burger up to the camera is food if the burger fills the frame, person if the photo is of them.
 
-name — a short, specific, faintly deadpan label for what is pictured, in the register of a museum caption written by someone amused. Three to six words. Name what is actually visible, including the setting when it is doing comedic work: "poolside meat in a bag", "pretzel with radish situation", "lone tart, plastic coffin". Do not invent restaurant names, do not guess cuisine you cannot see, and do not editorialise about quality. If the food is genuinely unidentifiable, say so plainly: "unidentifiable brown mass".`;
+name — a short, specific, faintly deadpan label for what is pictured, in the register of a museum caption written by someone amused. Three to six words. Name what is actually visible, including the setting when it is doing comedic work: "poolside meat in a bag", "pretzel with radish situation", "lone tart, plastic coffin". Do not invent restaurant names, do not guess cuisine you cannot see, and do not editorialise about quality. If the subject is genuinely unidentifiable, say so plainly: "unidentifiable brown mass".`;
 
 const TOOL: Anthropic.Tool = {
   name: "label_dish",
@@ -33,7 +48,17 @@ const TOOL: Anthropic.Tool = {
     properties: {
       category: {
         type: "string",
-        enum: ["food", "drink"],
+        enum: [
+          "food",
+          "drink",
+          "ingredient",
+          "person",
+          "pet",
+          "place",
+          "document",
+          "screenshot",
+          "other",
+        ],
       },
       name: {
         type: "string",
@@ -50,6 +75,8 @@ export interface ClassifyReport {
   labelled: number;
   failed: number;
   remaining: number;
+  /** Gave up on these — they failed MAX_ATTEMPTS times. */
+  abandoned: number;
   samples: { id: number; category: string; name: string }[];
 }
 
@@ -57,6 +84,15 @@ interface Label {
   id: number;
   category: string;
   name: string;
+}
+
+async function abandonedCount(env: Env): Promise<number> {
+  const row = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM dishes WHERE category IS NULL AND classify_attempts >= ?"
+  )
+    .bind(MAX_ATTEMPTS)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
 }
 
 async function labelOne(
@@ -115,14 +151,16 @@ export async function classify(
     labelled: 0,
     failed: 0,
     remaining: 0,
+    abandoned: 0,
     samples: [],
   };
 
   const capped = Math.min(limit, MAX_PER_RUN);
   const pending = await env.DB.prepare(
-    "SELECT * FROM dishes WHERE category IS NULL ORDER BY id LIMIT ?"
+    "SELECT * FROM dishes WHERE category IS NULL AND classify_attempts < ? " +
+      "ORDER BY id LIMIT ?"
   )
-    .bind(capped)
+    .bind(MAX_ATTEMPTS, capped)
     .all<Dish>();
 
   const dishes = pending.results ?? [];
@@ -131,6 +169,7 @@ export async function classify(
 
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
   const labels: Label[] = [];
+  const failures: number[] = [];
 
   for (let i = 0; i < dishes.length; i += BATCH_SIZE) {
     const batch = dishes.slice(i, i + BATCH_SIZE);
@@ -139,9 +178,13 @@ export async function classify(
         labelOne(client, env, dish).catch(() => null)
       )
     );
-    for (const label of results) {
+    for (let j = 0; j < results.length; j++) {
+      const label = results[j];
       if (label) labels.push(label);
-      else report.failed++;
+      else {
+        failures.push(batch[j].id);
+        report.failed++;
+      }
     }
   }
 
@@ -159,10 +202,25 @@ export async function classify(
     report.samples = labels.slice(0, 5);
   }
 
+  if (failures.length > 0) {
+    await env.DB.batch(
+      failures.map((id) =>
+        env.DB.prepare(
+          "UPDATE dishes SET classify_attempts = classify_attempts + 1 WHERE id = ?"
+        ).bind(id)
+      )
+    );
+  }
+
+  // "Remaining" means still worth trying — dishes that exhausted their
+  // attempts are done, not pending, or the caller loops forever.
   const left = await env.DB.prepare(
-    "SELECT COUNT(*) AS n FROM dishes WHERE category IS NULL"
-  ).first<{ n: number }>();
+    "SELECT COUNT(*) AS n FROM dishes WHERE category IS NULL AND classify_attempts < ?"
+  )
+    .bind(MAX_ATTEMPTS)
+    .first<{ n: number }>();
   report.remaining = left?.n ?? 0;
+  report.abandoned = await abandonedCount(env);
 
   return report;
 }

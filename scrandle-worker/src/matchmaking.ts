@@ -16,7 +16,7 @@ async function pickPrimary(env: Env): Promise<Dish | null> {
   // what people are actually cooking.
   const recentCutoff = Date.now() - RECENT_WINDOW_DAYS * 24 * 60 * 60 * 1000;
   const fresh = await env.DB.prepare(
-    "SELECT * FROM dishes WHERE first_matchup_id IS NULL AND category IS NOT NULL " +
+    "SELECT * FROM dishes WHERE first_matchup_id IS NULL AND category IN ('food','drink') " +
       "AND posted_at > ? ORDER BY RANDOM() LIMIT 1"
   )
     .bind(recentCutoff)
@@ -28,13 +28,13 @@ async function pickPrimary(env: Env): Promise<Dish | null> {
   // chronological order, which is both predictable and a tell — every matchup
   // would pair two dishes from the same era.
   const unplayed = await env.DB.prepare(
-    "SELECT * FROM dishes WHERE first_matchup_id IS NULL AND category IS NOT NULL " +
+    "SELECT * FROM dishes WHERE first_matchup_id IS NULL AND category IN ('food','drink') " +
       "ORDER BY RANDOM() LIMIT 1"
   ).first<Dish>();
   if (unplayed) return unplayed;
 
   return env.DB.prepare(
-    "SELECT * FROM dishes WHERE category IS NOT NULL " +
+    "SELECT * FROM dishes WHERE category IN ('food','drink') " +
       "ORDER BY matches_played ASC, RANDOM() LIMIT 1"
   ).first<Dish>();
 }
