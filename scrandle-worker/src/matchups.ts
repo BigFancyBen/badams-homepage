@@ -40,13 +40,21 @@ function voteButtons(matchupId: number) {
  * Deliberately does not ping the Tasters role: a ping tied to a matchup would
  * correlate with new dishes entering the pool, which is a tell.
  */
-export async function postMatchupIfDue(env: Env, now: number): Promise<boolean> {
+export async function postMatchupIfDue(
+  env: Env,
+  now: number,
+  { force = false }: { force?: boolean } = {}
+): Promise<boolean> {
+  // Never post over a matchup that is still open, even when forced — two live
+  // matchups would split the vote and confuse the close logic.
   const open = await getOpenMatchup(env);
   if (open) return false;
 
-  const lastAt = Number(await getState(env, "last_matchup_at")) || 0;
-  const minGap = Number(env.MIN_HOURS_BETWEEN_MATCHUPS || "24") * HOUR;
-  if (now - lastAt < minGap) return false;
+  if (!force) {
+    const lastAt = Number(await getState(env, "last_matchup_at")) || 0;
+    const minGap = Number(env.MIN_HOURS_BETWEEN_MATCHUPS || "24") * HOUR;
+    if (now - lastAt < minGap) return false;
+  }
 
   const pair = await pickPair(env);
   if (!pair) return false;
@@ -63,16 +71,14 @@ export async function postMatchupIfDue(env: Env, now: number): Promise<boolean> 
   const matchupId = inserted.id;
 
   const image = await matchupImageUrl(env, matchupId, pair.a, pair.b);
-  const closesAtSeconds = Math.floor((now + windowMs) / 1000);
 
   // The row has to exist before the post so its id can go in the image URL,
   // which means a failed post would otherwise strand an open matchup that
   // nobody can vote on and that blocks every future one until it expires.
   try {
+    // No message text. The card already carries the question and the matchup
+    // number, so a preamble above every post is noise in the channel.
     const message = await postMessage(env, {
-      content:
-        `**Matchup #${matchupId}** — which would you rather eat?\n` +
-        `Closes <t:${closesAtSeconds}:R>. Your vote is private; you can change it until close.`,
       embeds: [{ color: ACCENT, image: { url: image } }],
       components: voteButtons(matchupId),
       allowed_mentions: allowedMentions(env),
