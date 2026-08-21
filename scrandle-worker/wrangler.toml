@@ -13,9 +13,9 @@ TASTER_ROLE_ID = ""              # optional; leave empty to skip pings
 IMAGE_BASE_URL = "https://www.benadams.dev"   # apex 308-redirects to www; avoid the hop
 R2_PUBLIC_BASE = "https://pub-b7525558c8974aa0aa1f10bf9856eb18.r2.dev"
 
-# How long a matchup stays open, and the floor between postings.
+# Fallback window, used only when POST_HOURS_UTC is empty. On a fixed
+# schedule a matchup closes when the next one is due, so this is unused.
 VOTE_WINDOW_HOURS = "12"
-MIN_HOURS_BETWEEN_MATCHUPS = "11"     # floor only; POST_HOURS_UTC decides when
 # 15:00 and 03:00 UTC = 9am and 9pm Mountain *while MDT is in effect*.
 # Cloudflare crons do not follow DST — shift both to 16 and 04 in November.
 POST_HOURS_UTC = "15,3"

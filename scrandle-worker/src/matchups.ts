@@ -18,6 +18,7 @@ import {
 import { updateElo } from "./elo";
 import { matchupImageUrl, resultImageUrl, standingsImageUrl } from "./images";
 import { pickPair } from "./matchmaking";
+import { nextPostTime, parsePostHours, postSlotKey } from "./schedule";
 import type { Dish, Env, Matchup } from "./types";
 
 const HOUR = 60 * 60 * 1000;
@@ -60,34 +61,40 @@ export async function postMatchupIfDue(
   const open = await getOpenMatchup(env);
   if (open) return false;
 
+  const hours = parsePostHours(env.POST_HOURS_UTC);
+
   if (!force) {
     // Post on named hours rather than "N hours since the last one". Elapsed
     // time drifts: one late post pushes every post after it, and within days
     // the matchup is landing at an arbitrary hour. Fixed hours stay put.
-    const hours = (env.POST_HOURS_UTC || "")
-      .split(",")
-      .map((h) => Number(h.trim()))
-      .filter((h) => Number.isInteger(h) && h >= 0 && h <= 23);
-
     if (hours.length > 0 && !hours.includes(new Date(now).getUTCHours())) {
       return false;
     }
 
-    // Still a floor, so a retry inside the same hour cannot double-post.
-    const lastAt = Number(await getState(env, "last_matchup_at")) || 0;
-    const minGap = Number(env.MIN_HOURS_BETWEEN_MATCHUPS || "24") * HOUR;
-    if (now - lastAt < minGap) return false;
+    // One post per named hour, so a retry inside the same hour cannot
+    // double-post. Deliberately not an elapsed-time floor — see postSlotKey.
+    if ((await getState(env, "last_matchup_slot")) === postSlotKey(now)) {
+      return false;
+    }
   }
 
   const pair = await pickPair(env);
   if (!pair) return false;
 
-  const windowMs = Number(env.VOTE_WINDOW_HOURS || "24") * HOUR;
+  // Closes when the next matchup is due, not a fixed span from right now. A
+  // forced post at an odd hour therefore gets a short window rather than one
+  // that runs past the next scheduled slot and blocks it.
+  const closesAt = nextPostTime(
+    hours,
+    now,
+    Number(env.VOTE_WINDOW_HOURS || "24") * HOUR
+  );
+
   const inserted = await env.DB.prepare(
     "INSERT INTO matchups (dish_a_id, dish_b_id, created_at, closes_at) " +
       "VALUES (?, ?, ?, ?) RETURNING id"
   )
-    .bind(pair.a.id, pair.b.id, now, now + windowMs)
+    .bind(pair.a.id, pair.b.id, now, closesAt)
     .first<{ id: number }>();
 
   if (!inserted) throw new Error("Failed to create matchup row");
@@ -116,7 +123,7 @@ export async function postMatchupIfDue(
     throw error;
   }
 
-  await setState(env, "last_matchup_at", String(now));
+  await setState(env, "last_matchup_slot", postSlotKey(now));
 
   return true;
 }
@@ -141,6 +148,17 @@ async function closeOne(env: Env, matchup: Matchup, now: number): Promise<void> 
   // without any rating information to show for it.
   if (votes.a + votes.b === 0) {
     await closeMatchup.run();
+
+    // Still strip the buttons. Leaving them live on a closed matchup means the
+    // card looks votable forever, and anyone who clicks gets told voting has
+    // closed by a message that gives no sign of it.
+    if (matchup.message_id) {
+      await editMessage(env, matchup.message_id, {
+        content: `**Matchup #${matchup.id} — closed.** Nobody voted.`,
+        components: [],
+        allowed_mentions: allowedMentions(env),
+      });
+    }
     return;
   }
 

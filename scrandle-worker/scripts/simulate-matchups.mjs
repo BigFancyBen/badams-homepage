@@ -39,7 +39,7 @@ const startingTotal = (await sql("SELECT SUM(elo) AS total FROM dishes"))[0].tot
 
 for (let round = 0; round < ROUNDS; round++) {
   // Let the tick post a matchup, then make it votable-and-due immediately.
-  await sql("DELETE FROM state WHERE key = 'last_matchup_at';");
+  await sql("DELETE FROM state WHERE key = 'last_matchup_slot';");
   const posted = await fetch(`${WORKER}/__scheduled`);
   if (!posted.ok) throw new Error(`tick failed: ${posted.status}`);
 

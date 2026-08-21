@@ -277,7 +277,7 @@ CREATE TABLE state (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
--- keys: last_message_id, last_matchup_at, last_standings_at,
+-- keys: last_message_id, last_matchup_slot, last_standings_at,
 --       standings_snapshot, backfill_cursor`;
 
 export const SCHEMA_NOTE =
@@ -335,7 +335,7 @@ export const PHASES: Phase[] = [
     blocks: [
       {
         kind: "p",
-        text: "Same hourly tick. Posts only when nothing is open and `MIN_HOURS_BETWEEN_MATCHUPS` has passed. **Pair selection:**",
+        text: "Same hourly tick. Posts only when nothing is open and the current UTC hour is one of `POST_HOURS_UTC`, at most once per hour. A matchup closes when the next one is due rather than a fixed span after it went up, so a post made off-schedule still hands its slot back on time. **Pair selection:**",
       },
       {
         kind: "ol",
@@ -472,7 +472,7 @@ export const PLAIN_VARS = [
   "IMAGE_BASE_URL",
   "R2_PUBLIC_BASE",
   "VOTE_WINDOW_HOURS",
-  "MIN_HOURS_BETWEEN_MATCHUPS",
+  "POST_HOURS_UTC",
   "STANDINGS_WEEKDAY",
   "STANDINGS_HOUR_UTC",
 ];
