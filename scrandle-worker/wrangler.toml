@@ -1,0 +1,37 @@
+name = "scrandle"
+main = "src/index.ts"
+compatibility_date = "2025-01-15"
+
+# Hourly. Ingest, close what is due, post what is due — all in one tick.
+[triggers]
+crons = ["0 * * * *"]
+
+[vars]
+DISCORD_CHANNEL_ID = ""          # the food channel
+DISCORD_GUILD_ID = ""            # the server
+TASTER_ROLE_ID = ""              # optional; leave empty to skip pings
+IMAGE_BASE_URL = "https://benadams.dev"
+R2_PUBLIC_BASE = ""              # e.g. https://pub-xxxx.r2.dev
+
+# How long a matchup stays open, and the floor between postings.
+VOTE_WINDOW_HOURS = "24"
+MIN_HOURS_BETWEEN_MATCHUPS = "24"
+# Weekly standings post: 0 = Sunday. Set to -1 to disable.
+STANDINGS_WEEKDAY = "0"
+STANDINGS_HOUR_UTC = "17"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "scrandle"
+database_id = ""                 # from: wrangler d1 create scrandle
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "scrandle-images"
+
+# Secrets (wrangler secret put <NAME>), never in this file:
+#   DISCORD_BOT_TOKEN
+#   DISCORD_PUBLIC_KEY
+#   DISCORD_LOG_WEBHOOK_URL      (optional)
+#   SCRANDLE_IMAGE_SECRET
+#   BACKFILL_SECRET

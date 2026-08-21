@@ -1,0 +1,7 @@
+# Copy to .dev.vars for `npx wrangler dev`. Never committed — .dev.vars is gitignored.
+# In production these are set with `npx wrangler secret put <NAME>` instead.
+DISCORD_BOT_TOKEN=
+DISCORD_PUBLIC_KEY=
+DISCORD_LOG_WEBHOOK_URL=
+SCRANDLE_IMAGE_SECRET=dev-only-scrandle-secret
+BACKFILL_SECRET=dev-only-backfill-secret
