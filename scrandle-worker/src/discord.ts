@@ -1,13 +1,21 @@
 import type { DiscordMessage, Env } from "./types";
 
-const API = "https://discord.com/api/v10";
+const DISCORD_API = "https://discord.com/api/v10";
+
+/**
+ * Overridable only so the local harness can point at a mock and exercise the
+ * post/close cycle end to end. Unset everywhere except local testing.
+ */
+function apiBase(env: Env): string {
+  return env.DISCORD_API_BASE || DISCORD_API;
+}
 
 async function botFetch(
   env: Env,
   path: string,
   init: RequestInit = {}
 ): Promise<Response> {
-  const response = await fetch(`${API}${path}`, {
+  const response = await fetch(`${apiBase(env)}${path}`, {
     ...init,
     headers: {
       Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`,

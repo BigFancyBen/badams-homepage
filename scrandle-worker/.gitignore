@@ -5,3 +5,4 @@ wrangler.test.toml
 .test-key.pem
 seed.test.sql
 close.test.sql
+mock-discord-log.json

@@ -3,9 +3,11 @@
  * Mints a signed Scrandle render URL for local testing.
  *
  *   node scripts/scrandle-sign.mjs matchup/1 '{"a":"https://...","b":"https://...","n":1}'
+ *   node scripts/scrandle-sign.mjs standings/1 '{"t":"test","rows":[]}' --base https://benadams.dev
  *
- * Reads SCRANDLE_IMAGE_SECRET from the environment (or .env.local) and
- * BASE_URL, defaulting to http://localhost:3000.
+ * Reads SCRANDLE_IMAGE_SECRET from the environment (or .env.local). The base
+ * URL comes from --base or BASE_URL, defaulting to http://localhost:3000.
+ * Use --base rather than a BASE_URL= prefix, which PowerShell cannot parse.
  */
 import { createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -34,7 +36,12 @@ function base64Url(buf) {
 
 loadLocalEnv();
 
-const [route, json] = process.argv.slice(2);
+const argv = process.argv.slice(2);
+const baseFlag = argv.indexOf("--base");
+const baseOverride = baseFlag === -1 ? null : argv[baseFlag + 1];
+const [route, json] = argv.filter(
+  (arg, i) => arg !== "--base" && (baseFlag === -1 || i !== baseFlag + 1)
+);
 if (!route || !json) {
   console.error(
     "usage: node scripts/scrandle-sign.mjs <route> <json-payload>\n" +
@@ -49,7 +56,7 @@ if (!secret) {
   process.exit(1);
 }
 
-const base = process.env.BASE_URL || "http://localhost:3000";
+const base = baseOverride || process.env.BASE_URL || "http://localhost:3000";
 const data = base64Url(Buffer.from(JSON.stringify(JSON.parse(json)), "utf-8"));
 const sig = base64Url(createHmac("sha256", secret).update(data).digest());
 

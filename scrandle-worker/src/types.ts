@@ -19,6 +19,9 @@ export interface Env {
   DISCORD_LOG_WEBHOOK_URL?: string;
   SCRANDLE_IMAGE_SECRET: string;
   BACKFILL_SECRET: string;
+
+  /** Local testing only — points the Discord client at a mock. */
+  DISCORD_API_BASE?: string;
 }
 
 export interface Dish {

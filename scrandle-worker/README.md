@@ -98,7 +98,7 @@ var on Vercel, **redeploy** (env changes only reach functions on a new
 deploy), and confirm a signed URL renders in a browser:
 
 ```bash
-BASE_URL=https://benadams.dev node ../scripts/scrandle-sign.mjs standings/1 '{"t":"test","rows":[]}'
+node ../scripts/scrandle-sign.mjs standings/1 "{\"t\":\"test\",\"rows\":[]}" --base https://benadams.dev
 ```
 
 **2. Backfill before the first matchup.** The hourly cron starts firing the
@@ -118,42 +118,94 @@ curl "https://<your-worker>.workers.dev/backfill?secret=<BACKFILL_SECRET>&pages=
 ## Running it locally
 
 No Cloudflare account needed — `--local` runs against a local D1 and a local
-R2. You need a throwaway config with a placeholder `database_id`, since
-wrangler will not resolve an empty one:
+R2. Everything goes through npm scripts, which work the same in PowerShell,
+cmd, and bash:
 
 ```bash
-sed 's|database_id = ""|database_id = "00000000-0000-0000-0000-000000000000"|' wrangler.toml > wrangler.test.toml
+npm run migrate:local
 ```
 ```bash
-npx wrangler d1 migrations apply scrandle --local --config wrangler.test.toml
+npm run dev:local
 ```
+
+Both generate `wrangler.test.toml` first (gitignored, placeholders only) —
+wrangler will not resolve a D1 binding with an empty `database_id`, even in
+local mode where the id means nothing.
+
+`npm run db:local -- --command="SELECT * FROM dishes"` queries the local
+database. Add `--test-scheduled` to `dev:local` to expose the cron tick at
+`GET /__scheduled`, which runs ingest, close, and post exactly as the hourly
+trigger would.
+
+### Verifying the bot without posting anything
+
+Put a real `DISCORD_BOT_TOKEN` in `.dev.vars`, start `npm run dev:local`, then:
+
 ```bash
-npx wrangler dev --local --config wrangler.test.toml --port 8787 --test-scheduled
+curl "http://localhost:8787/backfill?secret=dev-only-backfill-secret&pages=1"
 ```
 
-`--test-scheduled` exposes the cron tick at `GET /__scheduled`, which runs
-ingest, close, and post in one go exactly as the hourly trigger would.
+That returns a JSON report — `scanned`, `stored`, `duplicates`,
+`skippedFormat`, `failed` — or a readable error naming the channel if the bot
+cannot see it. It proves the token, the intent, channel access, image
+downloads, R2 writes, and sha256 dedupe all work, with no Cloudflare or Vercel
+account involved.
 
-To exercise `POST /interactions` you need a real Ed25519 keypair, because
-every interaction is signed and the Worker rejects anything that fails
-verification:
+**Use `/backfill`, not `/__scheduled`, for this.** With a real token the
+scheduled route will post a genuine matchup to the live channel on its first
+tick, because `last_matchup_at` starts empty and the gap check passes
+immediately. Backfill only reads and stores.
+
+### Testing interactions
+
+`POST /interactions` needs a real Ed25519 keypair, because every interaction is
+signed and the Worker rejects anything that fails verification. Generate one:
 
 ```bash
 node -e "const{generateKeyPairSync}=require('node:crypto');const{publicKey,privateKey}=generateKeyPairSync('ed25519');require('node:fs').writeFileSync('.test-key.pem',privateKey.export({type:'pkcs8',format:'pem'}));console.log(publicKey.export({type:'spki',format:'der'}).subarray(-32).toString('hex'))"
 ```
 
-Put that hex string in `.dev.vars` as `DISCORD_PUBLIC_KEY`, then:
+Put the printed hex in `.dev.vars` as `DISCORD_PUBLIC_KEY`, then run the suite
+against an open matchup:
 
 ```bash
-npm run test:interactions -- <matchupId>
+npm run test:interactions -- 1
 ```
 
 It checks that a bad signature is rejected with 401, PING answers PONG, a vote
 records, changing a pick upserts rather than duplicates, another guild is
 turned away, and an unknown `custom_id` is ignored.
 
-Discord calls fail locally without a real bot token, which is useful in its own
-right — it is how the failed-post cleanup path gets tested.
+### Testing matchmaking
+
+Pair selection is the hardest part to reason about, and a single round tells
+you almost nothing. `simulate-matchups.mjs` drives many rounds through the
+real worker code and asserts the invariants that only show up over time.
+
+It needs Discord calls to succeed, so point the worker at the bundled mock by
+adding `DISCORD_API_BASE=http://127.0.0.1:9911` to `.dev.vars`. That variable
+exists only for this — leave it unset everywhere else and the client talks to
+the real Discord.
+
+In three terminals:
+
+```bash
+npm run mock:discord
+```
+```bash
+npm run dev:local -- --test-scheduled
+```
+```bash
+npm run test:matchups 25
+```
+
+It wipes and reseeds the local catalog with 12 dishes, plays the given number
+of rounds, and checks that no pair repeats inside the 20-matchup recency
+window, that play stays spread rather than favouring a few dishes, that Elo
+stays zero-sum across the catalog, and that the wide-gap rule actually fires.
+
+A 25-round run should show every dish played 4–5 times, gaps mostly in single
+digits, and a deliberate mismatch on every fifth matchup.
 
 ## Behaviour notes
 

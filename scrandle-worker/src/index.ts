@@ -40,8 +40,15 @@ export default {
         return new Response("Nope", { status: 403 });
       }
       const pages = Math.min(Number(url.searchParams.get("pages") ?? "1"), 5);
-      const report = await backfill(env, pages);
-      return Response.json(report);
+      try {
+        return Response.json(await backfill(env, pages));
+      } catch (error) {
+        // This route gets run by hand, usually while working out whether the
+        // bot can actually see the channel. A readable reason beats a stack.
+        const reason = error instanceof Error ? error.message : String(error);
+        await logToDiscord(env, `Backfill failed: ${reason}`);
+        return Response.json({ ok: false, error: reason }, { status: 502 });
+      }
     }
 
     if (url.pathname === "/health") {
