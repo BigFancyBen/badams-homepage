@@ -40,13 +40,21 @@ function voteButtons(matchupId: number) {
  * Deliberately does not ping the Tasters role: a ping tied to a matchup would
  * correlate with new dishes entering the pool, which is a tell.
  */
-export async function postMatchupIfDue(env: Env, now: number): Promise<boolean> {
+export async function postMatchupIfDue(
+  env: Env,
+  now: number,
+  { force = false }: { force?: boolean } = {}
+): Promise<boolean> {
+  // Never post over a matchup that is still open, even when forced — two live
+  // matchups would split the vote and confuse the close logic.
   const open = await getOpenMatchup(env);
   if (open) return false;
 
-  const lastAt = Number(await getState(env, "last_matchup_at")) || 0;
-  const minGap = Number(env.MIN_HOURS_BETWEEN_MATCHUPS || "24") * HOUR;
-  if (now - lastAt < minGap) return false;
+  if (!force) {
+    const lastAt = Number(await getState(env, "last_matchup_at")) || 0;
+    const minGap = Number(env.MIN_HOURS_BETWEEN_MATCHUPS || "24") * HOUR;
+    if (now - lastAt < minGap) return false;
+  }
 
   const pair = await pickPair(env);
   if (!pair) return false;

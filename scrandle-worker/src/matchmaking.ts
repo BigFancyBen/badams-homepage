@@ -7,11 +7,28 @@ const RECENT_PAIR_WINDOW = 20;
 /** Every Nth matchup is a deliberate mismatch — upsets make the best results. */
 const WIDE_GAP_EVERY = 5;
 
+/** Anything cooked in the last fortnight counts as "new" and jumps the queue. */
+const RECENT_WINDOW_DAYS = 14;
+
 async function pickPrimary(env: Env): Promise<Dish | null> {
-  // Anything never played jumps the queue, oldest first, so new dishes are
-  // guaranteed a slot rather than waiting on the Elo band to line up.
+  // Something cooked recently and never played goes first — that is the case
+  // the guaranteed-slot rule was written for, and it keeps the game tracking
+  // what people are actually cooking.
+  const recentCutoff = Date.now() - RECENT_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+  const fresh = await env.DB.prepare(
+    "SELECT * FROM dishes WHERE first_matchup_id IS NULL AND posted_at > ? " +
+      "ORDER BY RANDOM() LIMIT 1"
+  )
+    .bind(recentCutoff)
+    .first<Dish>();
+  if (fresh) return fresh;
+
+  // Otherwise draw at random from the unplayed backlog. Ordering this by
+  // posted_at would walk a backfilled catalog through the channel's history in
+  // chronological order, which is both predictable and a tell — every matchup
+  // would pair two dishes from the same era.
   const unplayed = await env.DB.prepare(
-    "SELECT * FROM dishes WHERE first_matchup_id IS NULL ORDER BY posted_at ASC LIMIT 1"
+    "SELECT * FROM dishes WHERE first_matchup_id IS NULL ORDER BY RANDOM() LIMIT 1"
   ).first<Dish>();
   if (unplayed) return unplayed;
 

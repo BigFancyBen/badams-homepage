@@ -51,6 +51,26 @@ export default {
       }
     }
 
+    // Posts a matchup immediately, ignoring the cadence floor. There is no way
+    // to trigger a cron by hand, and waiting an hour to test a change is not a
+    // workable loop. Still refuses if a matchup is already open.
+    if (url.pathname === "/admin/post-matchup") {
+      if (url.searchParams.get("secret") !== env.BACKFILL_SECRET) {
+        return new Response("Nope", { status: 403 });
+      }
+      try {
+        const posted = await postMatchupIfDue(env, Date.now(), { force: true });
+        return Response.json({
+          posted,
+          reason: posted ? null : "a matchup is already open, or no pair could be drawn",
+        });
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        await logToDiscord(env, `Manual post failed: ${reason}`);
+        return Response.json({ ok: false, error: reason }, { status: 502 });
+      }
+    }
+
     if (url.pathname === "/health") {
       return new Response("ok");
     }
