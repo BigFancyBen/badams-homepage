@@ -15,25 +15,19 @@ interface MatchupPayload {
   nb?: string;
 }
 
-const HEADER_HEIGHT = 78;
+const HEADER_HEIGHT = 76;
 const GAP = 4;
+/** Tall enough for two wrapped lines, so both captions match. */
+const NAME_STRIP_HEIGHT = 96;
 const PLATE_WIDTH = (CARD_WIDTH - GAP) / 2;
-const PLATE_HEIGHT = CARD_HEIGHT - HEADER_HEIGHT;
-/** Tall enough for two wrapped lines, so both strips match. */
-const NAME_STRIP_HEIGHT = 104;
+const IMAGE_HEIGHT = CARD_HEIGHT - HEADER_HEIGHT - NAME_STRIP_HEIGHT;
 
 /**
  * The numbers live in the header rather than on top of the food. They sit
  * directly above their own image, so the mapping stays obvious without
  * covering a corner of the photograph.
  */
-function HeaderCell({
-  label,
-  trailing,
-}: {
-  label: string;
-  trailing?: string;
-}) {
+function HeaderCell({ label, trailing }: { label: string; trailing?: string }) {
   return (
     <div
       style={{
@@ -68,9 +62,10 @@ function Plate({ src, name }: { src: string; name?: string }) {
     <div
       style={{
         display: "flex",
-        position: "relative",
+        flexDirection: "column",
         width: `${PLATE_WIDTH}px`,
         height: "100%",
+        backgroundColor: THEME.bg,
       }}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -78,32 +73,28 @@ function Plate({ src, name }: { src: string; name?: string }) {
         src={src}
         alt=""
         width={PLATE_WIDTH}
-        height={PLATE_HEIGHT}
-        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+        height={IMAGE_HEIGHT}
+        style={{
+          width: `${PLATE_WIDTH}px`,
+          height: `${IMAGE_HEIGHT}px`,
+          objectFit: "cover",
+        }}
       />
 
-      {name ? (
-        // Fixed height so a name that wraps to two lines still lines up with a
-        // one-line name beside it.
-        <div
-          style={{
-            display: "flex",
-            position: "absolute",
-            left: 0,
-            right: 0,
-            bottom: 0,
-            height: NAME_STRIP_HEIGHT,
-            alignItems: "center",
-            padding: "0 24px",
-            backgroundColor: "rgba(10,10,10,0.82)",
-            color: THEME.text,
-            fontSize: 29,
-            lineHeight: 1.25,
-          }}
-        >
-          {name}
-        </div>
-      ) : null}
+      {/* Below the photograph, not over it — nothing of the food is hidden. */}
+      <div
+        style={{
+          display: "flex",
+          height: NAME_STRIP_HEIGHT,
+          alignItems: "center",
+          padding: "0 24px",
+          color: THEME.text,
+          fontSize: 28,
+          lineHeight: 1.25,
+        }}
+      >
+        {name ?? ""}
+      </div>
     </div>
   );
 }
