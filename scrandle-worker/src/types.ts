@@ -8,8 +8,8 @@ export interface Env {
   TASTER_ROLE_ID: string;
   IMAGE_BASE_URL: string;
   R2_PUBLIC_BASE: string;
+  /** Fallback vote window. Ignored while POST_HOURS_UTC is set. */
   VOTE_WINDOW_HOURS: string;
-  MIN_HOURS_BETWEEN_MATCHUPS: string;
   /** Comma-separated UTC hours to post on. Empty means any hour. */
   POST_HOURS_UTC: string;
   STANDINGS_WEEKDAY: string;

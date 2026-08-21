@@ -104,8 +104,9 @@ node ../scripts/scrandle-sign.mjs standings/1 "{\"t\":\"test\",\"rows\":[]}" --b
 **2. Backfill before the first matchup.** The hourly cron starts firing the
 moment you deploy, and with two dishes in the catalog it will happily post a
 matchup to a channel full of people. Deploy the first time with
-`MIN_HOURS_BETWEEN_MATCHUPS = "9999"`, run the backfill, check the catalog
-looks right, then set it back to `24` and redeploy.
+`POST_HOURS_UTC = ""` and no cron hour it can match — or simply an hour that is
+a long way off — run the backfill, check the catalog looks right, then set the
+real hours and redeploy.
 
 ### Backfill
 
@@ -152,9 +153,9 @@ downloads, R2 writes, and sha256 dedupe all work, with no Cloudflare or Vercel
 account involved.
 
 **Use `/backfill`, not `/__scheduled`, for this.** With a real token the
-scheduled route will post a genuine matchup to the live channel on its first
-tick, because `last_matchup_at` starts empty and the gap check passes
-immediately. Backfill only reads and stores.
+scheduled route will post a genuine matchup to the live channel as soon as the
+clock hits a named hour, because `last_matchup_slot` starts empty. Backfill
+only reads and stores.
 
 ### Testing interactions
 
@@ -221,6 +222,20 @@ digits, and a deliberate mismatch on every fifth matchup.
   close, which is why this uses buttons rather than a native Discord poll.
 - **The cursor advances only after a batch commits**, so a failed tick replays
   cleanly on the next hour. Cron does not retry.
+- **A matchup closes when the next one is due**, not a fixed span after it went
+  up. `POST_HOURS_UTC` is the schedule and `closes_at` is derived from it, so a
+  matchup posted off-schedule — a forced `/admin/post-matchup`, or a slot
+  missed because a tick failed — still hands its slot back at the right hour.
+  Measuring the window from post time instead lets an off-hour post stay open
+  across the next named hour, and since an open matchup blocks posting, that
+  cycle is silently skipped. `VOTE_WINDOW_HOURS` is only the fallback for when
+  no hours are configured.
+- **One post per named hour**, enforced by comparing slot keys rather than
+  elapsed time. An elapsed-time floor has the same cycle-skipping failure: set
+  near the cadence, it blocks the scheduled post whenever the previous one was
+  early.
+- **Cron hours are UTC and ignore DST.** `POST_HOURS_UTC = "15,3"` is 9am/9pm
+  Mountain under MDT and 8am/8pm under MST — shift to `"16,4"` in November.
 
 ## Worth verifying before scaling the per-tick cap
 
