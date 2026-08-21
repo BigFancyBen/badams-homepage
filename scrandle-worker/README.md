@@ -85,6 +85,28 @@ paste `https://<your-worker>.workers.dev/interactions` into the Developer
 Portal's Interactions Endpoint URL field. Discord verifies it with a
 deliberately bad signature and expects a 401, which `verify.ts` handles.
 
+### Order matters
+
+Do Vercel before Cloudflare, and backfill before the cron is allowed to post.
+
+**1. Render endpoints first.** The Worker puts `https://benadams.dev/api/scrandle/...`
+into the Discord embed and Discord's proxy fetches it at post time — then
+caches it against that URL. If the endpoint is returning 503 because
+`SCRANDLE_IMAGE_SECRET` is not set yet, that matchup's card can stay broken
+even after you fix it, because the URL never changes. So: merge, set the env
+var on Vercel, **redeploy** (env changes only reach functions on a new
+deploy), and confirm a signed URL renders in a browser:
+
+```bash
+BASE_URL=https://benadams.dev node ../scripts/scrandle-sign.mjs standings/1 '{"t":"test","rows":[]}'
+```
+
+**2. Backfill before the first matchup.** The hourly cron starts firing the
+moment you deploy, and with two dishes in the catalog it will happily post a
+matchup to a channel full of people. Deploy the first time with
+`MIN_HOURS_BETWEEN_MATCHUPS = "9999"`, run the backfill, check the catalog
+looks right, then set it back to `24` and redeploy.
+
 ### Backfill
 
 Run once by hand to pull in the channel's history:
