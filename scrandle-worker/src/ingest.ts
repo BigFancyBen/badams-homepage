@@ -162,9 +162,17 @@ export async function backfill(
 
     report.scanned += messages.length;
     const candidates = messages.flatMap(imageAttachments);
-    await storeAll(env, candidates.slice(0, MAX_IMAGES_PER_TICK), report);
+    const batch = candidates.slice(0, MAX_IMAGES_PER_TICK);
+    await storeAll(env, batch, report);
 
-    before = messages[messages.length - 1].id;
+    // Messages come back newest-first. If the cap truncated this page, resume
+    // from the last image actually handled rather than the end of the page —
+    // otherwise every image past the cap is skipped permanently, which is the
+    // opposite of what a backfill is for.
+    before =
+      batch.length < candidates.length
+        ? batch[batch.length - 1].message.id
+        : messages[messages.length - 1].id;
     await setState(env, "backfill_cursor", before);
   }
 

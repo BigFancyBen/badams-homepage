@@ -10,7 +10,7 @@ crons = ["0 * * * *"]
 DISCORD_CHANNEL_ID = "1290910290086592563"   # the food channel
 DISCORD_GUILD_ID = "108689961535934464"      # the server
 TASTER_ROLE_ID = ""              # optional; leave empty to skip pings
-IMAGE_BASE_URL = "https://benadams.dev"
+IMAGE_BASE_URL = "https://www.benadams.dev"   # apex 308-redirects to www; avoid the hop
 R2_PUBLIC_BASE = ""              # e.g. https://pub-xxxx.r2.dev
 
 # How long a matchup stays open, and the floor between postings.
