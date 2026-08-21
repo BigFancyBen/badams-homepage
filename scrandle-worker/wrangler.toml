@@ -23,7 +23,7 @@ STANDINGS_HOUR_UTC = "17"
 [[d1_databases]]
 binding = "DB"
 database_name = "scrandle"
-database_id = ""                 # from: wrangler d1 create scrandle
+database_id = "ff3e323f-1330-4b56-88d3-3905dae1c1f7"
 
 [[r2_buckets]]
 binding = "BUCKET"
