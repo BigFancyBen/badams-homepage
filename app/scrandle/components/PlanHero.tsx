@@ -32,7 +32,7 @@ export function PlanHero() {
             Build plan
           </span>
           <span className="font-mono text-[10px] uppercase tracking-widest text-gray-600">
-            Code written, not yet deployed
+            Deployed · 1,001 dishes ingested
           </span>
         </div>
 
