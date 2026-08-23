@@ -194,11 +194,18 @@ In three terminals:
 npm run mock:discord
 ```
 ```bash
-npm run dev:local -- --test-scheduled
+npm run dev:local
 ```
 ```bash
 npm run test:matchups 25
 ```
+
+It drives each round through `/admin/post-matchup` and `/admin/close-matchup`
+rather than the cron, so it needs `BACKFILL_SECRET` in `.dev.vars` (the value
+from `.dev.vars.example` is what it assumes). Forcing is deliberate: the cron
+only posts on a named hour, so a cron-driven run posts nothing at all unless
+you happen to start it at 15:00 or 03:00 UTC. The posting schedule has its own
+suite — `npm run test:schedule` — and this one is about the draw.
 
 It wipes and reseeds the local catalog with 12 dishes, plays the given number
 of rounds, and checks that no pair repeats inside the 20-matchup recency
@@ -207,6 +214,33 @@ stays zero-sum across the catalog, and that the wide-gap rule actually fires.
 
 A 25-round run should show every dish played 4–5 times, gaps mostly in single
 digits, and a deliberate mismatch on every fifth matchup.
+
+### Forcing a post by hand
+
+There is no way to fire a cron on demand, so three admin routes stand in. All
+take `?secret=<BACKFILL_SECRET>`.
+
+```bash
+curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>"
+```
+
+Posts an ordinary matchup now, ignoring the schedule. Refuses while one is
+open. Add `&overlap=1` to post a bonus one alongside the open matchup instead
+of refusing — it draws around whatever is already live, so no photograph
+appears in two matchups at once, and it does not claim the hour's slot.
+
+```bash
+curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&place=1"
+```
+
+Posts the place-vs-place bonus on demand — the same thing the Wednesday cron
+does. Always overlaps, always gets the 24-hour window.
+
+```bash
+curl "https://<your-worker>.workers.dev/admin/close-matchup?secret=<BACKFILL_SECRET>"
+```
+
+Closes everything open right now, ignoring `closes_at`.
 
 ## Behaviour notes
 
@@ -236,6 +270,22 @@ digits, and a deliberate mismatch on every fifth matchup.
   early.
 - **Cron hours are UTC and ignore DST.** `POST_HOURS_UTC = "15,3"` is 9am/9pm
   Mountain under MDT and 8am/8pm under MST — shift to `"16,4"` in November.
+  `PLACE_HOUR_UTC` is the same story and needs shifting with it.
+- **One matchup at a time**, with a single exception. Posting refuses while
+  anything is open, even when forced, because two live matchups split the
+  vote. The exception is a bonus: `?overlap=1` on `/admin/post-matchup`, and
+  the weekly place matchup, which are meant to run beside the ordinary one.
+  Closing already handles more than one being open, and a vote carries its
+  matchup id on the button, so nothing else needs to know.
+- **Places only play on their own day.** The classifier labels rooms, views
+  and landscapes `place`, and the everyday draw filters them out — they are
+  drawn only by the weekly bonus, which pairs place against place. That bonus
+  overlaps whatever is open, gets a flat `PLACE_WINDOW_HOURS` window instead
+  of closing on a posting hour, and keeps its own slot key so posting one
+  never consumes a food slot. `PLACE_WEEKDAY = "-1"` turns it off.
+- **Places do not count toward chef standings.** They earn an Elo like any
+  other photo, but averaging a holiday snap into someone's cooking record
+  would rate them on the wrong thing.
 
 ## Worth verifying before scaling the per-tick cap
 
