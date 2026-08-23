@@ -120,11 +120,10 @@ export default {
 
     try {
       const report = await ingest(env);
-      if (report.stored > 0 || report.failed > 0 || report.skippedFormat > 0) {
+      if (report.failed > 0 || report.skippedFormat > 0) {
         await logToDiscord(
           env,
-          `Ingest: ${report.stored} stored, ${report.duplicates} duplicate, ` +
-            `${report.skippedFormat} unsupported format, ${report.failed} failed.`
+          `Ingest: ${report.skippedFormat} unsupported format, ${report.failed} failed.`
         );
       }
     } catch (error) {
@@ -135,10 +134,10 @@ export default {
     // unlabelled dishes, so an unclassified photo is invisible to the game.
     try {
       const labelled = await classify(env);
-      if (labelled.labelled > 0 || labelled.failed > 0) {
+      if (labelled.failed > 0) {
         await logToDiscord(
           env,
-          `Classified ${labelled.labelled}, ${labelled.failed} failed, ${labelled.remaining} left.`
+          `Classify: ${labelled.failed} failed, ${labelled.remaining} left.`
         );
       }
     } catch (error) {

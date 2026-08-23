@@ -15,9 +15,50 @@ interface ResultPayload {
   nb?: string;
 }
 
+const HEADER_HEIGHT = 76;
+const GAP = 4;
+/** Share, votes, dish name and chef, stacked under the photograph. */
+const INFO_STRIP_HEIGHT = 168;
+const PLATE_WIDTH = (CARD_WIDTH - GAP) / 2;
+const IMAGE_HEIGHT = CARD_HEIGHT - HEADER_HEIGHT - INFO_STRIP_HEIGHT;
+
+/**
+ * The numbers live in the header rather than on top of the food, matching the
+ * matchup card. Each cell sits directly above its own image.
+ */
+function HeaderCell({
+  label,
+  color,
+  trailing,
+}: {
+  label: string;
+  color: string;
+  trailing?: string;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        width: `${PLATE_WIDTH}px`,
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "0 24px",
+      }}
+    >
+      <div style={{ display: "flex", color, fontSize: 38, fontWeight: 700 }}>
+        {label}
+      </div>
+      {trailing ? (
+        <div style={{ display: "flex", color: THEME.muted, fontSize: 24 }}>
+          {trailing}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function ResultPlate({
   src,
-  label,
   chef,
   votes,
   share,
@@ -25,7 +66,6 @@ function ResultPlate({
   name,
 }: {
   src: string;
-  label: string;
   chef: string;
   votes: number;
   share: number;
@@ -37,69 +77,55 @@ function ResultPlate({
       style={{
         display: "flex",
         flexDirection: "column",
-        position: "relative",
-        width: `${(CARD_WIDTH - 4) / 2}px`,
+        width: `${PLATE_WIDTH}px`,
         height: "100%",
+        backgroundColor: THEME.bg,
       }}
     >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={src}
-        alt=""
-        width={(CARD_WIDTH - 4) / 2}
-        height={CARD_HEIGHT - 96}
-        style={{
-          width: "100%",
-          height: "100%",
-          objectFit: "cover",
-          opacity: won ? 1 : 0.4,
-        }}
-      />
-
-      {won ? (
-        <div
-          style={{
-            display: "flex",
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            border: `4px solid ${THEME.win}`,
-          }}
-        />
-      ) : null}
-
       <div
         style={{
           display: "flex",
-          position: "absolute",
-          top: 20,
-          left: 20,
-          width: 52,
-          height: 52,
-          alignItems: "center",
-          justifyContent: "center",
-          backgroundColor: "rgba(10,10,10,0.85)",
-          border: `2px solid ${won ? THEME.win : THEME.muted}`,
-          color: won ? THEME.win : THEME.muted,
-          fontSize: 28,
-          fontWeight: 700,
+          position: "relative",
+          width: `${PLATE_WIDTH}px`,
+          height: `${IMAGE_HEIGHT}px`,
         }}
       >
-        {label}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={src}
+          alt=""
+          width={PLATE_WIDTH}
+          height={IMAGE_HEIGHT}
+          style={{
+            width: `${PLATE_WIDTH}px`,
+            height: `${IMAGE_HEIGHT}px`,
+            objectFit: "cover",
+            opacity: won ? 1 : 0.4,
+          }}
+        />
+
+        {won ? (
+          <div
+            style={{
+              display: "flex",
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              border: `4px solid ${THEME.win}`,
+            }}
+          />
+        ) : null}
       </div>
 
+      {/* Below the photograph, not over it — nothing of the food is hidden. */}
       <div
         style={{
           display: "flex",
           flexDirection: "column",
-          position: "absolute",
-          left: 0,
-          right: 0,
-          bottom: 0,
-          padding: "18px 22px",
-          backgroundColor: "rgba(10,10,10,0.88)",
+          height: INFO_STRIP_HEIGHT,
+          padding: "18px 24px",
         }}
       >
         <div
@@ -136,7 +162,14 @@ function ResultPlate({
             {name}
           </div>
         ) : null}
-        <div style={{ display: "flex", color: THEME.accent, fontSize: 24, marginTop: 6 }}>
+        <div
+          style={{
+            display: "flex",
+            color: THEME.accent,
+            fontSize: 24,
+            marginTop: 6,
+          }}
+        >
           {chef}
         </div>
       </div>
@@ -154,6 +187,8 @@ export async function GET(request: Request) {
   const total = va + vb;
   const shareA = total === 0 ? 0 : Math.round((va / total) * 100);
   const shareB = total === 0 ? 0 : 100 - shareA;
+  const wonA = va >= vb;
+  const wonB = vb >= va;
 
   return new ImageResponse(
     (
@@ -169,38 +204,41 @@ export async function GET(request: Request) {
         <div
           style={{
             display: "flex",
-            height: 96,
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "0 32px",
+            height: HEADER_HEIGHT,
+            gap: GAP,
             borderBottom: `1px solid ${THEME.hairline}`,
           }}
         >
-          <div style={{ display: "flex", color: THEME.text, fontSize: 34, fontWeight: 700 }}>
-            Result
-          </div>
-          <div style={{ display: "flex", color: THEME.muted, fontSize: 24 }}>
-            Matchup #{n} &middot; {total} {total === 1 ? "vote" : "votes"}
-          </div>
+          <HeaderCell label="1" color={wonA ? THEME.win : THEME.muted} />
+          <HeaderCell
+            label="2"
+            color={wonB ? THEME.win : THEME.muted}
+            trailing={`Result #${n} · ${total} ${total === 1 ? "vote" : "votes"}`}
+          />
         </div>
 
-        <div style={{ display: "flex", flex: 1, gap: 4, backgroundColor: THEME.hairline }}>
+        <div
+          style={{
+            display: "flex",
+            flex: 1,
+            gap: GAP,
+            backgroundColor: THEME.hairline,
+          }}
+        >
           <ResultPlate
             src={a}
-            label="1"
             chef={ca}
             votes={va}
             share={shareA}
-            won={va >= vb}
+            won={wonA}
             name={na}
           />
           <ResultPlate
             src={b}
-            label="2"
             chef={cb}
             votes={vb}
             share={shareB}
-            won={vb >= va}
+            won={wonB}
             name={nb}
           />
         </div>

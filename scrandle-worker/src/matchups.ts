@@ -1,9 +1,4 @@
-import {
-  allowedMentions,
-  editMessage,
-  logToDiscord,
-  postMessage,
-} from "./discord";
+import { allowedMentions, editMessage, postMessage } from "./discord";
 import {
   chefStandings,
   getDish,
@@ -292,7 +287,6 @@ export async function postStandingsIfDue(
 
   await setState(env, "standings_snapshot", JSON.stringify(nextSnapshot));
   await setState(env, "last_standings_at", String(now));
-  await logToDiscord(env, `Posted standings for ${rows.length} chefs.`);
 
   return true;
 }

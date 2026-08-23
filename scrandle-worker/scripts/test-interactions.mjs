@@ -77,7 +77,7 @@ const vote = await post({
 });
 check(
   "vote accepted",
-  vote.status === 200 && /Locked in/.test(vote.body?.data?.content ?? ""),
+  vote.status === 200 && /Voted 1\./.test(vote.body?.data?.content ?? ""),
   vote
 );
 
