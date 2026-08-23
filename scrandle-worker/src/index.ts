@@ -5,6 +5,7 @@ import { handleInteraction } from "./interactions";
 import {
   closeDueMatchups,
   postMatchupIfDue,
+  postPlaceMatchupIfDue,
   postStandingsIfDue,
 } from "./matchups";
 import type { Env, Interaction } from "./types";
@@ -54,16 +55,31 @@ export default {
 
     // Posts a matchup immediately, ignoring the cadence floor. There is no way
     // to trigger a cron by hand, and waiting an hour to test a change is not a
-    // workable loop. Still refuses if a matchup is already open.
+    // workable loop. Refuses if a matchup is already open unless `overlap=1`,
+    // which puts a bonus matchup up beside the running one. A bonus post never
+    // claims the hour's slot, so the schedule carries on untouched.
     if (url.pathname === "/admin/post-matchup") {
       if (url.searchParams.get("secret") !== env.BACKFILL_SECRET) {
         return new Response("Nope", { status: 403 });
       }
       try {
-        const posted = await postMatchupIfDue(env, Date.now(), { force: true });
+        // `place=1` posts the Wednesday bonus on demand: places only, running
+        // beside whatever is open, on a 24-hour window. It always overlaps.
+        const place = url.searchParams.get("place") === "1";
+        const overlap = place || url.searchParams.get("overlap") === "1";
+        const posted = place
+          ? await postPlaceMatchupIfDue(env, Date.now(), { force: true })
+          : await postMatchupIfDue(env, Date.now(), { force: true, overlap });
         return Response.json({
           posted,
-          reason: posted ? null : "a matchup is already open, or no pair could be drawn",
+          kind: place ? "place" : "matchup",
+          reason: posted
+            ? null
+            : place
+              ? "fewer than two places in the catalog, or both are already live"
+              : overlap
+                ? "no pair could be drawn"
+                : "a matchup is already open, or no pair could be drawn",
         });
       } catch (error) {
         const reason = error instanceof Error ? error.message : String(error);
@@ -154,6 +170,14 @@ export default {
       await postMatchupIfDue(env, now);
     } catch (error) {
       await logToDiscord(env, `Post failed: ${String(error)}`);
+    }
+
+    // After the everyday matchup, and deliberately not gated on it: the place
+    // bonus runs alongside whatever is open rather than instead of it.
+    try {
+      await postPlaceMatchupIfDue(env, now);
+    } catch (error) {
+      await logToDiscord(env, `Place matchup failed: ${String(error)}`);
     }
 
     try {

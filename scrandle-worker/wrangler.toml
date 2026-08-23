@@ -23,6 +23,16 @@ POST_HOURS_UTC = "15,3"
 STANDINGS_WEEKDAY = "0"
 STANDINGS_HOUR_UTC = "17"
 
+# Weekly place-vs-place bonus, posted alongside the ordinary matchup rather
+# than in place of it. 3 = Wednesday; set PLACE_WEEKDAY to -1 to disable.
+# 18:00 UTC = noon Mountain *while MDT is in effect* — shift to 19 in November,
+# same as POST_HOURS_UTC above. Places are drawn nowhere else.
+PLACE_WEEKDAY = "3"
+PLACE_HOUR_UTC = "18"
+# Flat window: the bonus is outside the food cadence, so it does not close on
+# a posting hour. A full day means Wednesday noon to Thursday noon.
+PLACE_WINDOW_HOURS = "24"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "scrandle"

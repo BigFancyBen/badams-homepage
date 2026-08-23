@@ -130,7 +130,10 @@ export async function chefStandings(
       "COALESCE(p.username, 'unknown') AS username, " +
       "AVG(d.elo) AS elo " +
       "FROM dishes d LEFT JOIN players p ON p.discord_id = d.poster_discord_id " +
-      "WHERE d.matches_played > 0 " +
+      // Cooking only. A place photograph earns an Elo like anything else, but
+      // averaging it into a chef's standing would rate them on their holiday
+      // snaps alongside their food.
+      "WHERE d.matches_played > 0 AND d.category IN ('food','drink') " +
       "GROUP BY d.poster_discord_id " +
       "ORDER BY elo DESC LIMIT ?"
   )

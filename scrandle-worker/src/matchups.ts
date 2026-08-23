@@ -42,6 +42,54 @@ function voteButtons(matchupId: number) {
 }
 
 /**
+ * Creates the row, renders the card against its id, posts it, and records the
+ * message. Shared by the everyday matchup and the Wednesday place bonus.
+ */
+async function createAndPost(
+  env: Env,
+  pair: { a: Dish; b: Dish },
+  now: number,
+  closesAt: number,
+  preamble = ""
+): Promise<void> {
+  const inserted = await env.DB.prepare(
+    "INSERT INTO matchups (dish_a_id, dish_b_id, created_at, closes_at) " +
+      "VALUES (?, ?, ?, ?) RETURNING id"
+  )
+    .bind(pair.a.id, pair.b.id, now, closesAt)
+    .first<{ id: number }>();
+
+  if (!inserted) throw new Error("Failed to create matchup row");
+  const matchupId = inserted.id;
+
+  const image = await matchupImageUrl(env, matchupId, pair.a, pair.b);
+
+  // The row has to exist before the post so its id can go in the image URL,
+  // which means a failed post would otherwise strand an open matchup that
+  // nobody can vote on and that blocks every future one until it expires.
+  try {
+    // Just the two jump links — no preamble. The card already carries the
+    // question and the matchup number. The place bonus is the exception: it
+    // runs beside an ordinary matchup, so it has to say which one it is.
+    const links = `${sourceLink(env, pair.a, "#1")} · ${sourceLink(env, pair.b, "#2")}`;
+    const message = await postMessage(env, {
+      content: preamble ? `${preamble}
+${links}` : links,
+      embeds: [{ color: ACCENT, image: { url: image } }],
+      components: voteButtons(matchupId),
+      allowed_mentions: allowedMentions(env),
+    });
+
+    await env.DB.prepare("UPDATE matchups SET message_id = ? WHERE id = ?")
+      .bind(message.id, matchupId)
+      .run();
+  } catch (error) {
+    await env.DB.prepare("DELETE FROM matchups WHERE id = ?").bind(matchupId).run();
+    throw error;
+  }
+}
+
+/**
  * Posts at most one matchup per tick, and only when nothing is still open.
  * Deliberately does not ping the Tasters role: a ping tied to a matchup would
  * correlate with new dishes entering the pool, which is a tell.
@@ -49,12 +97,21 @@ function voteButtons(matchupId: number) {
 export async function postMatchupIfDue(
   env: Env,
   now: number,
-  { force = false }: { force?: boolean } = {}
+  { force = false, overlap = false }: { force?: boolean; overlap?: boolean } = {}
 ): Promise<boolean> {
   // Never post over a matchup that is still open, even when forced — two live
-  // matchups would split the vote and confuse the close logic.
-  const open = await getOpenMatchup(env);
-  if (open) return false;
+  // matchups split the vote. `overlap` is the single deliberate exception: an
+  // admin-triggered bonus matchup running beside the scheduled one. The close
+  // path already iterates every open matchup and votes are keyed to a matchup
+  // id on the button, so the only cost is the split attention.
+  const liveDishIds: number[] = [];
+  if (overlap) {
+    for (const live of await getOpenMatchups(env)) {
+      liveDishIds.push(live.dish_a_id, live.dish_b_id);
+    }
+  } else if (await getOpenMatchup(env)) {
+    return false;
+  }
 
   const hours = parsePostHours(env.POST_HOURS_UTC);
 
@@ -73,7 +130,7 @@ export async function postMatchupIfDue(
     }
   }
 
-  const pair = await pickPair(env);
+  const pair = await pickPair(env, { exclude: liveDishIds });
   if (!pair) return false;
 
   // Closes when the next matchup is due, not a fixed span from right now. A
@@ -85,40 +142,68 @@ export async function postMatchupIfDue(
     Number(env.VOTE_WINDOW_HOURS || "24") * HOUR
   );
 
-  const inserted = await env.DB.prepare(
-    "INSERT INTO matchups (dish_a_id, dish_b_id, created_at, closes_at) " +
-      "VALUES (?, ?, ?, ?) RETURNING id"
-  )
-    .bind(pair.a.id, pair.b.id, now, closesAt)
-    .first<{ id: number }>();
+  await createAndPost(env, pair, now, closesAt);
 
-  if (!inserted) throw new Error("Failed to create matchup row");
-  const matchupId = inserted.id;
+  // A bonus matchup does not claim the hour's slot. Marking it would make an
+  // overlapping post fired during a named hour swallow that hour's scheduled
+  // matchup, which is the exact cycle-skipping this flag exists to avoid.
+  if (!overlap) await setState(env, "last_matchup_slot", postSlotKey(now));
 
-  const image = await matchupImageUrl(env, matchupId, pair.a, pair.b);
+  return true;
+}
 
-  // The row has to exist before the post so its id can go in the image URL,
-  // which means a failed post would otherwise strand an open matchup that
-  // nobody can vote on and that blocks every future one until it expires.
-  try {
-    // Just the two jump links — no preamble. The card already carries the
-    // question and the matchup number.
-    const message = await postMessage(env, {
-      content: `${sourceLink(env, pair.a, "#1")} · ${sourceLink(env, pair.b, "#2")}`,
-      embeds: [{ color: ACCENT, image: { url: image } }],
-      components: voteButtons(matchupId),
-      allowed_mentions: allowedMentions(env),
-    });
+/**
+ * The Wednesday bonus: places rather than plates. Three things make it its own
+ * function instead of a flag on the everyday matchup.
+ *
+ * It runs *beside* whatever ordinary matchup is open — that is what makes it a
+ * bonus — so it deliberately skips the one-at-a-time rule, drawing on the same
+ * exception the admin overlap flag uses.
+ *
+ * It gets a flat 24-hour window instead of closing on the next posting hour.
+ * It is not part of the food cadence and must not hand its slot to it: closing
+ * on the schedule would end it at 9pm the same evening.
+ *
+ * And it keeps its own slot key, so posting one never marks the food slot as
+ * used. Places are drawn only here — the everyday matchup filters them out.
+ */
+export async function postPlaceMatchupIfDue(
+  env: Env,
+  now: number,
+  { force = false }: { force?: boolean } = {}
+): Promise<boolean> {
+  if (!force) {
+    const weekday = Number(env.PLACE_WEEKDAY ?? "-1");
+    if (!Number.isInteger(weekday) || weekday < 0) return false;
 
-    await env.DB.prepare("UPDATE matchups SET message_id = ? WHERE id = ?")
-      .bind(message.id, matchupId)
-      .run();
-  } catch (error) {
-    await env.DB.prepare("DELETE FROM matchups WHERE id = ?").bind(matchupId).run();
-    throw error;
+    const date = new Date(now);
+    if (date.getUTCDay() !== weekday) return false;
+    if (date.getUTCHours() !== Number(env.PLACE_HOUR_UTC || "18")) return false;
+
+    // One per named hour, so an hourly retry cannot double-post. Same
+    // reasoning as last_matchup_slot, on a key of its own.
+    if ((await getState(env, "last_place_slot")) === postSlotKey(now)) {
+      return false;
+    }
   }
 
-  await setState(env, "last_matchup_slot", postSlotKey(now));
+  // Whatever is live keeps its photographs to itself.
+  const liveDishIds: number[] = [];
+  for (const live of await getOpenMatchups(env)) {
+    liveDishIds.push(live.dish_a_id, live.dish_b_id);
+  }
+
+  const pair = await pickPair(env, {
+    exclude: liveDishIds,
+    categories: ["place"],
+  });
+  // Fewer than two places in the catalog, or both of them already live.
+  if (!pair) return false;
+
+  const window = Number(env.PLACE_WINDOW_HOURS || "24") * HOUR;
+  await createAndPost(env, pair, now, now + window, "Bonus round — place vs place.");
+
+  await setState(env, "last_place_slot", postSlotKey(now));
 
   return true;
 }
@@ -186,12 +271,6 @@ async function closeOne(env: Env, matchup: Matchup, now: number): Promise<void> 
   );
 
   const total = votes.a + votes.b;
-  const selfVotes = await env.DB.prepare(
-    "SELECT COUNT(*) AS n FROM votes v JOIN dishes d ON d.id = v.picked_dish_id " +
-      "WHERE v.matchup_id = ? AND v.voter_discord_id = d.poster_discord_id"
-  )
-    .bind(matchup.id)
-    .first<{ n: number }>();
 
   const winner =
     votes.a === votes.b
@@ -200,16 +279,11 @@ async function closeOne(env: Env, matchup: Matchup, now: number): Promise<void> 
         ? `**${chefA}** takes it.`
         : `**${chefB}** takes it.`;
 
-  const selfNote =
-    selfVotes && selfVotes.n > 0
-      ? `\n${selfVotes.n} ${selfVotes.n === 1 ? "person" : "people"} voted for their own dish.`
-      : "";
-
   if (matchup.message_id) {
     await editMessage(env, matchup.message_id, {
       content:
         `**Matchup #${matchup.id} — closed.** ${winner}\n` +
-        `${total} ${total === 1 ? "vote" : "votes"}.${selfNote}\n` +
+        `${total} ${total === 1 ? "vote" : "votes"}.\n` +
         `${sourceLink(env, dishA, "#1")} · ${sourceLink(env, dishB, "#2")}`,
       embeds: [{ color: WIN, image: { url: image } }],
       components: [],

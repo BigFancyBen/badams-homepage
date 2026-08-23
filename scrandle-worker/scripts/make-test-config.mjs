@@ -16,7 +16,11 @@ const SOURCE = "wrangler.toml";
 const TARGET = "wrangler.test.toml";
 
 const PLACEHOLDERS = [
-  [/database_id = ""/, 'database_id = "00000000-0000-0000-0000-000000000000"'],
+  // Any id, not just an empty one. wrangler.toml carries the real database id
+  // so `migrate` can reach production, and local mode was silently inheriting
+  // it — which left the harness talking to an id the local explorer API has
+  // never heard of.
+  [/database_id = "[^"]*"/, 'database_id = "00000000-0000-0000-0000-000000000000"'],
   [/R2_PUBLIC_BASE = ""/, 'R2_PUBLIC_BASE = "https://images.test.local"'],
 ];
 

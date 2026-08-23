@@ -10,6 +10,8 @@ const API = "http://127.0.0.1:8787/cdn-cgi/local/explorer/api";
 const DB = "00000000-0000-0000-0000-000000000000";
 const WORKER = "http://127.0.0.1:8787";
 const ROUNDS = Number(process.argv[2] ?? 25);
+// From .dev.vars — see the local testing section of the README.
+const SECRET = process.env.BACKFILL_SECRET ?? "dev-only-backfill-secret";
 const RECENCY_WINDOW = 20;
 
 async function sql(statement) {
@@ -29,18 +31,27 @@ async function sql(statement) {
 await sql("DELETE FROM votes; DELETE FROM matchups; DELETE FROM dishes; DELETE FROM players; DELETE FROM state;");
 const chefs = ["ben", "sarah", "mike", "dana"];
 const elos = [1500, 1520, 1480, 1510, 1495, 1530, 1470, 1505, 1515, 1490, 1700, 1300];
+// Categories matter: matchmaking only ever draws food and drink, so a seed
+// without them leaves every query empty and the whole suite passes vacuously.
+// One category throughout, because an opponent has to match the primary's —
+// splitting twelve dishes across two categories leaves so few candidates that
+// the pair-recency window cannot be honoured and every run reports a repeat.
 const values = elos
-  .map((elo, i) => `('m${i}','a${i}','user_${chefs[i % 4]}','dishes/h${i}.jpg','h${i}','d${i}',${1700000000000 + i * 1000},${1700000000000 + i * 1000},${elo},0)`)
+  .map((elo, i) => `('m${i}','a${i}','user_${chefs[i % 4]}','dishes/h${i}.jpg','h${i}','d${i}',${1700000000000 + i * 1000},${1700000000000 + i * 1000},${elo},0,'food')`)
   .join(",");
-await sql(`INSERT INTO dishes (discord_message_id, attachment_id, poster_discord_id, r2_key, sha256, caption, posted_at, ingested_at, elo, matches_played) VALUES ${values};`);
+await sql(`INSERT INTO dishes (discord_message_id, attachment_id, poster_discord_id, r2_key, sha256, caption, posted_at, ingested_at, elo, matches_played, category) VALUES ${values};`);
 await sql(`INSERT INTO players (discord_id, username, first_seen) VALUES ${chefs.map((c) => `('user_${c}','${c}',0)`).join(",")};`);
 
 const startingTotal = (await sql("SELECT SUM(elo) AS total FROM dishes"))[0].total;
 
 for (let round = 0; round < ROUNDS; round++) {
-  // Let the tick post a matchup, then make it votable-and-due immediately.
-  await sql("DELETE FROM state WHERE key = 'last_matchup_slot';");
-  const posted = await fetch(`${WORKER}/__scheduled`);
+  // Force the post rather than running the cron: the scheduled path only fires
+  // on a named hour, so a cron-driven simulation posts nothing at all unless
+  // it happens to be run at 15:00 or 03:00 UTC. The posting schedule has its
+  // own suite (test:schedule); what this one is about is the draw.
+  const posted = await fetch(
+    `${WORKER}/admin/post-matchup?secret=${encodeURIComponent(SECRET)}`
+  );
   if (!posted.ok) throw new Error(`tick failed: ${posted.status}`);
 
   const open = await sql("SELECT id, dish_a_id, dish_b_id FROM matchups WHERE status='open' ORDER BY id DESC LIMIT 1");
@@ -59,7 +70,12 @@ for (let round = 0; round < ROUNDS; round++) {
   await sql(`INSERT INTO votes (matchup_id, voter_discord_id, picked_dish_id, voted_at) VALUES ${rows.join(",")};`);
   await sql(`UPDATE matchups SET closes_at = 1 WHERE id = ${id};`);
 
-  await fetch(`${WORKER}/__scheduled`); // closes it
+  // Close it the same way, and for the same reason: the cron tick is gated on
+  // the clock, this is not.
+  const closed = await fetch(
+    `${WORKER}/admin/close-matchup?secret=${encodeURIComponent(SECRET)}`
+  );
+  if (!closed.ok) throw new Error(`close failed: ${closed.status}`);
 }
 
 // ── assertions ────────────────────────────────────────────────────
