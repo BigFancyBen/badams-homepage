@@ -2,9 +2,12 @@ name = "scrandle"
 main = "src/index.ts"
 compatibility_date = "2025-01-15"
 
-# Hourly. Ingest, close what is due, post what is due — all in one tick.
+# Hourly on the hour: ingest, close what is due, post what is due — one tick.
+# The second entry adds a tick at :11 so the person bonus can fire at 11:11am;
+# every other post is gated to :00 and ignores it. Keep both broad and UTC —
+# DST is handled by shifting the *_HOUR_UTC vars, never the cron.
 [triggers]
-crons = ["0 * * * *"]
+crons = ["0 * * * *", "11 * * * *"]
 
 [vars]
 DISCORD_CHANNEL_ID = "1290910290086592563"   # the food channel
@@ -23,15 +26,24 @@ POST_HOURS_UTC = "15,3"
 STANDINGS_WEEKDAY = "0"
 STANDINGS_HOUR_UTC = "17"
 
-# Weekly place-vs-place bonus, posted alongside the ordinary matchup rather
-# than in place of it. 3 = Wednesday; set PLACE_WEEKDAY to -1 to disable.
-# 18:00 UTC = noon Mountain *while MDT is in effect* — shift to 19 in November,
-# same as POST_HOURS_UTC above. Places are drawn nowhere else.
-PLACE_WEEKDAY = "3"
+# Place-vs-place bonus, posted alongside the ordinary matchup rather than in
+# place of it. Comma-separated weekdays: 1 = Monday, 3 = Wednesday; set
+# PLACE_WEEKDAY to -1 (or empty) to disable. 18:00 UTC = noon Mountain *while
+# MDT is in effect* — shift to 19 in November, same as POST_HOURS_UTC above.
+# Places are drawn nowhere else.
+PLACE_WEEKDAY = "1,3"
 PLACE_HOUR_UTC = "18"
 # Flat window: the bonus is outside the food cadence, so it does not close on
-# a posting hour. A full day means Wednesday noon to Thursday noon.
+# a posting hour. A full day means noon to noon.
 PLACE_WINDOW_HOURS = "24"
+
+# Person-vs-person bonus, same machinery as the place bonus. 2 = Tuesday, at
+# 11:11am Mountain — 17:11 UTC while MDT is in effect (shift to 18 in November).
+# The :11 needs the minute-11 cron above. Set PERSON_WEEKDAY to -1 to disable.
+PERSON_WEEKDAY = "2"
+PERSON_HOUR_UTC = "17"
+PERSON_MINUTE = "11"
+PERSON_WINDOW_HOURS = "24"
 
 [[d1_databases]]
 binding = "DB"

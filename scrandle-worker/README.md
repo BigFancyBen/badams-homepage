@@ -231,10 +231,12 @@ appears in two matchups at once, and it does not claim the hour's slot.
 
 ```bash
 curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&place=1"
+curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&person=1"
 ```
 
-Posts the place-vs-place bonus on demand — the same thing the Wednesday cron
-does. Always overlaps, always gets the 24-hour window.
+Posts a weekly bonus on demand — `place=1` for place-vs-place, `person=1` for
+person-vs-person — the same thing the scheduled cron does. Always overlaps,
+always gets the 24-hour window.
 
 ```bash
 curl "https://<your-worker>.workers.dev/admin/close-matchup?secret=<BACKFILL_SECRET>"
@@ -270,22 +272,33 @@ Closes everything open right now, ignoring `closes_at`.
   early.
 - **Cron hours are UTC and ignore DST.** `POST_HOURS_UTC = "15,3"` is 9am/9pm
   Mountain under MDT and 8am/8pm under MST — shift to `"16,4"` in November.
-  `PLACE_HOUR_UTC` is the same story and needs shifting with it.
+  `PLACE_HOUR_UTC` and `PERSON_HOUR_UTC` are the same story and need shifting
+  with it. The clock lives entirely in these vars: the cron stays broad and
+  UTC. It ticks on the hour and at `:11`, and `:11` is the only reason the
+  second entry exists — the person bonus fires at 11:11am, and an hourly cron
+  cannot reach that minute on its own.
 - **One matchup at a time**, with a single exception. Posting refuses while
   anything is open, even when forced, because two live matchups split the
   vote. The exception is a bonus: `?overlap=1` on `/admin/post-matchup`, and
-  the weekly place matchup, which are meant to run beside the ordinary one.
-  Closing already handles more than one being open, and a vote carries its
-  matchup id on the button, so nothing else needs to know.
-- **Places only play on their own day.** The classifier labels rooms, views
-  and landscapes `place`, and the everyday draw filters them out — they are
-  drawn only by the weekly bonus, which pairs place against place. That bonus
-  overlaps whatever is open, gets a flat `PLACE_WINDOW_HOURS` window instead
-  of closing on a posting hour, and keeps its own slot key so posting one
-  never consumes a food slot. `PLACE_WEEKDAY = "-1"` turns it off.
-- **Places do not count toward chef standings.** They earn an Elo like any
-  other photo, but averaging a holiday snap into someone's cooking record
-  would rate them on the wrong thing.
+  the weekly place and person matchups, which are meant to run beside the
+  ordinary one. Closing already handles more than one being open, and a vote
+  carries its matchup id on the button, so nothing else needs to know.
+- **Places and people only play on their own days.** The classifier labels
+  rooms, views and landscapes `place`, and photos whose subject is a person
+  `person`; the everyday draw filters both out. They are drawn only by their
+  weekly bonuses — place against place on `PLACE_WEEKDAY` (Monday and Wednesday
+  noon by default), person against person on `PERSON_WEEKDAY` (Tuesday 11:11am).
+  Each bonus overlaps whatever is open, gets a flat window instead of closing
+  on a posting hour, and keeps its own slot key so posting one never consumes a
+  food slot. `PLACE_WEEKDAY = "-1"` / `PERSON_WEEKDAY = "-1"` turn them off.
+- **Places do not count toward chef standings**, and neither do people. They
+  earn an Elo like any other photo, but averaging a holiday snap or a group
+  shot into someone's cooking record would rate them on the wrong thing.
+- **Two photos from the same person never meet.** Matchmaking excludes the
+  primary's own poster when drawing the opponent, in every category — a matchup
+  between two of your own shots is not something anyone can take a side on. If a
+  category holds only one person's photos, that draw is skipped rather than
+  bent.
 
 ## Worth verifying before scaling the per-tick cap
 

@@ -152,37 +152,67 @@ export async function postMatchupIfDue(
   return true;
 }
 
+/** Weekdays a bonus runs on: comma-separated, 0 = Sunday. Junk is dropped. */
+function parseWeekdays(raw: string | undefined): number[] {
+  const days = (raw || "")
+    .split(",")
+    .map((d) => d.trim())
+    .filter((d) => d.length > 0)
+    .map(Number)
+    .filter((d) => Number.isInteger(d) && d >= 0 && d <= 6);
+  return [...new Set(days)];
+}
+
+interface BonusSchedule {
+  /** The category it draws from — places, people. Its own day, its own pool. */
+  category: "place" | "person";
+  /** Weekdays it fires on, 0 = Sunday. Empty disables it. */
+  weekdays: number[];
+  hourUtc: number;
+  /** Minute of the hour it fires on. The cron has to tick on this minute too. */
+  minute: number;
+  windowHours: number;
+  /** State key for the once-per-slot guard. Each bonus keeps its own. */
+  slotState: string;
+  /** The line above the two jump links, saying which bonus this is. */
+  preamble: string;
+}
+
 /**
- * The Wednesday bonus: places rather than plates. Three things make it its own
- * function instead of a flag on the everyday matchup.
+ * A weekly bonus matchup: a category of its own, on a day of its own. Three
+ * things make it separate from the everyday matchup rather than a flag on it.
  *
  * It runs *beside* whatever ordinary matchup is open — that is what makes it a
  * bonus — so it deliberately skips the one-at-a-time rule, drawing on the same
  * exception the admin overlap flag uses.
  *
- * It gets a flat 24-hour window instead of closing on the next posting hour.
- * It is not part of the food cadence and must not hand its slot to it: closing
- * on the schedule would end it at 9pm the same evening.
+ * It gets a flat window instead of closing on the next posting hour. It is not
+ * part of the food cadence and must not hand its slot to it: closing on the
+ * schedule would end it the same evening.
  *
  * And it keeps its own slot key, so posting one never marks the food slot as
- * used. Places are drawn only here — the everyday matchup filters them out.
+ * used. Its category is drawn only here — the everyday matchup filters it out.
  */
-export async function postPlaceMatchupIfDue(
+async function postBonusMatchupIfDue(
   env: Env,
   now: number,
-  { force = false }: { force?: boolean } = {}
+  schedule: BonusSchedule,
+  force: boolean
 ): Promise<boolean> {
   if (!force) {
-    const weekday = Number(env.PLACE_WEEKDAY ?? "-1");
-    if (!Number.isInteger(weekday) || weekday < 0) return false;
+    if (schedule.weekdays.length === 0) return false;
 
     const date = new Date(now);
-    if (date.getUTCDay() !== weekday) return false;
-    if (date.getUTCHours() !== Number(env.PLACE_HOUR_UTC || "18")) return false;
+    if (!schedule.weekdays.includes(date.getUTCDay())) return false;
+    if (date.getUTCHours() !== schedule.hourUtc) return false;
+    // A bonus can want an off-the-hour minute (the person matchup fires at
+    // :11), which only lands if the cron ticks on that minute — see the second
+    // cron entry in wrangler.toml.
+    if (date.getUTCMinutes() !== schedule.minute) return false;
 
-    // One per named hour, so an hourly retry cannot double-post. Same
+    // One per named slot, so an hourly retry cannot double-post. Same
     // reasoning as last_matchup_slot, on a key of its own.
-    if ((await getState(env, "last_place_slot")) === postSlotKey(now)) {
+    if ((await getState(env, schedule.slotState)) === postSlotKey(now)) {
       return false;
     }
   }
@@ -195,17 +225,74 @@ export async function postPlaceMatchupIfDue(
 
   const pair = await pickPair(env, {
     exclude: liveDishIds,
-    categories: ["place"],
+    categories: [schedule.category],
   });
-  // Fewer than two places in the catalog, or both of them already live.
+  // Fewer than two in the catalog, both already live, or — since a matchup
+  // never pits one person against himself — only one person's photographs.
   if (!pair) return false;
 
-  const window = Number(env.PLACE_WINDOW_HOURS || "24") * HOUR;
-  await createAndPost(env, pair, now, now + window, "Bonus round — place vs place.");
+  await createAndPost(
+    env,
+    pair,
+    now,
+    now + schedule.windowHours * HOUR,
+    schedule.preamble
+  );
 
-  await setState(env, "last_place_slot", postSlotKey(now));
+  await setState(env, schedule.slotState, postSlotKey(now));
 
   return true;
+}
+
+/**
+ * The place bonus: places rather than plates. Runs on every weekday listed in
+ * PLACE_WEEKDAY (Monday and Wednesday by default), at noon Mountain.
+ */
+export function postPlaceMatchupIfDue(
+  env: Env,
+  now: number,
+  { force = false }: { force?: boolean } = {}
+): Promise<boolean> {
+  return postBonusMatchupIfDue(
+    env,
+    now,
+    {
+      category: "place",
+      weekdays: parseWeekdays(env.PLACE_WEEKDAY),
+      hourUtc: Number(env.PLACE_HOUR_UTC || "18"),
+      minute: 0,
+      windowHours: Number(env.PLACE_WINDOW_HOURS || "24"),
+      slotState: "last_place_slot",
+      preamble: "Bonus round — place vs place.",
+    },
+    force
+  );
+}
+
+/**
+ * The person bonus: people rather than plates, on Tuesday at 11:11am Mountain.
+ * The odd minute is deliberate; the second cron entry exists so a tick lands on
+ * it. Same machinery as the place bonus, a different pool and a different day.
+ */
+export function postPersonMatchupIfDue(
+  env: Env,
+  now: number,
+  { force = false }: { force?: boolean } = {}
+): Promise<boolean> {
+  return postBonusMatchupIfDue(
+    env,
+    now,
+    {
+      category: "person",
+      weekdays: parseWeekdays(env.PERSON_WEEKDAY),
+      hourUtc: Number(env.PERSON_HOUR_UTC || "17"),
+      minute: Number(env.PERSON_MINUTE || "11"),
+      windowHours: Number(env.PERSON_WINDOW_HOURS || "24"),
+      slotState: "last_person_slot",
+      preamble: "Bonus round — person vs person.",
+    },
+    force
+  );
 }
 
 async function closeOne(env: Env, matchup: Matchup, now: number): Promise<void> {

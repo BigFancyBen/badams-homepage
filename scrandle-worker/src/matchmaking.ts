@@ -10,11 +10,14 @@ const WIDE_GAP_EVERY = 5;
 /** Anything cooked in the last fortnight counts as "new" and jumps the queue. */
 const RECENT_WINDOW_DAYS = 14;
 
-/** The classifier's labels. Anything else never enters a matchup. */
-const CATEGORIES = ["food", "drink", "place"] as const;
+/** The classifier's labels that can enter a matchup. Anything else cannot. */
+const CATEGORIES = ["food", "drink", "place", "person"] as const;
 export type Category = (typeof CATEGORIES)[number];
 
-/** The everyday draw. Places are Wednesday-only, so they are not in here. */
+/**
+ * The everyday draw. Places and people are bonus-only — drawn on their own
+ * days by the weekly place and person matchups — so they are not in here.
+ */
 export const DEFAULT_CATEGORIES: Category[] = ["food", "drink"];
 
 /**
@@ -80,10 +83,13 @@ async function pickOpponent(
   wideGap: boolean,
   exclude: number[]
 ): Promise<Dish | null> {
-  // ?4 is the primary's category. Pairing a cocktail against a casserole is
-  // not a question anyone can answer, so the categories have to match.
+  // ?4 is the primary's category, ?5 its poster. Categories have to match —
+  // pairing a cocktail against a casserole is not a question anyone can answer
+  // — and the poster must differ: two photographs from the same person is not a
+  // matchup anyone can take a side on, so we never pit someone against himself.
   const notRecentlyPaired =
-    "SELECT * FROM dishes d WHERE d.id != ?1 AND d.category = ?4 AND NOT EXISTS (" +
+    "SELECT * FROM dishes d WHERE d.id != ?1 AND d.category = ?4 " +
+    "AND d.poster_discord_id != ?5 AND NOT EXISTS (" +
     "  SELECT 1 FROM matchups m WHERE m.id > ?2 AND (" +
     "    (m.dish_a_id = ?1 AND m.dish_b_id = d.id) OR" +
     "    (m.dish_a_id = d.id AND m.dish_b_id = ?1)" +
@@ -95,16 +101,16 @@ async function pickOpponent(
     const stretched = await env.DB.prepare(
       `${notRecentlyPaired} ORDER BY ABS(d.elo - ?3) DESC, d.matches_played ASC LIMIT 1`
     )
-      .bind(primary.id, recentCutoff, primary.elo, primary.category)
+      .bind(primary.id, recentCutoff, primary.elo, primary.category, primary.poster_discord_id)
       .first<Dish>();
     if (stretched) return stretched;
   }
 
   const banded = await env.DB.prepare(
-    `${notRecentlyPaired} AND ABS(d.elo - ?3) <= ?5 ` +
+    `${notRecentlyPaired} AND ABS(d.elo - ?3) <= ?6 ` +
       "ORDER BY d.matches_played ASC, ABS(d.elo - ?3) ASC, RANDOM() LIMIT 1"
   )
-    .bind(primary.id, recentCutoff, primary.elo, primary.category, ELO_BAND)
+    .bind(primary.id, recentCutoff, primary.elo, primary.category, primary.poster_discord_id, ELO_BAND)
     .first<Dish>();
   if (banded) return banded;
 
@@ -113,24 +119,31 @@ async function pickOpponent(
   const nearest = await env.DB.prepare(
     `${notRecentlyPaired} ORDER BY ABS(d.elo - ?3) ASC, d.matches_played ASC LIMIT 1`
   )
-    .bind(primary.id, recentCutoff, primary.elo, primary.category)
+    .bind(primary.id, recentCutoff, primary.elo, primary.category, primary.poster_discord_id)
     .first<Dish>();
   if (nearest) return nearest;
 
-  // Everything has been paired with this dish recently. Allow a repeat.
+  // Every eligible opponent has been paired with this dish recently. Allow a
+  // repeat pairing — but still never the same poster; that rule does not bend,
+  // so this can come back empty and skip the matchup when a category holds only
+  // one person's photographs.
   return env.DB.prepare(
-    "SELECT * FROM dishes WHERE id != ? AND category = ?" +
+    "SELECT * FROM dishes WHERE id != ? AND category = ? AND poster_discord_id != ?" +
       `${excludeClause("id", exclude)} ORDER BY matches_played ASC, RANDOM() LIMIT 1`
   )
-    .bind(primary.id, primary.category)
+    .bind(primary.id, primary.category, primary.poster_discord_id)
     .first<Dish>();
 }
 
 /**
  * `exclude` keeps dishes that are already live out of the draw — the same
  * photograph appearing in two simultaneous matchups would be indefensible.
- * `categories` narrows the pool: the Wednesday bonus draws places, everything
- * else draws food and drink.
+ * `categories` narrows the pool: the place and person bonuses draw those
+ * categories, everything else draws food and drink.
+ *
+ * Returns null when no valid opponent exists — including when a category holds
+ * only one person's photographs, since the opponent can never share the
+ * primary's poster.
  */
 export async function pickPair(
   env: Env,
