@@ -14,11 +14,18 @@ export interface Env {
   POST_HOURS_UTC: string;
   STANDINGS_WEEKDAY: string;
   STANDINGS_HOUR_UTC: string;
-  /** Weekday for the place bonus, 0 = Sunday. -1 disables it. */
+  /** Weekdays for the place bonus, comma-separated, 0 = Sunday. Empty/-1 off. */
   PLACE_WEEKDAY: string;
   PLACE_HOUR_UTC: string;
   /** Flat window for the place bonus — it does not close on a posting hour. */
   PLACE_WINDOW_HOURS: string;
+  /** Weekdays for the person bonus, comma-separated, 0 = Sunday. Empty/-1 off. */
+  PERSON_WEEKDAY: string;
+  PERSON_HOUR_UTC: string;
+  /** Minute of the hour the person bonus fires on; the cron must tick on it. */
+  PERSON_MINUTE: string;
+  /** Flat window for the person bonus — it does not close on a posting hour. */
+  PERSON_WINDOW_HOURS: string;
 
   // Secrets (wrangler secret put)
   DISCORD_BOT_TOKEN: string;

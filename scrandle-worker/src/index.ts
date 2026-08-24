@@ -5,6 +5,7 @@ import { handleInteraction } from "./interactions";
 import {
   closeDueMatchups,
   postMatchupIfDue,
+  postPersonMatchupIfDue,
   postPlaceMatchupIfDue,
   postStandingsIfDue,
 } from "./matchups";
@@ -63,20 +64,27 @@ export default {
         return new Response("Nope", { status: 403 });
       }
       try {
-        // `place=1` posts the Wednesday bonus on demand: places only, running
-        // beside whatever is open, on a 24-hour window. It always overlaps.
+        // `place=1` / `person=1` post the weekly bonus on demand: that category
+        // only, running beside whatever is open, on a 24-hour window. A bonus
+        // always overlaps.
         const place = url.searchParams.get("place") === "1";
-        const overlap = place || url.searchParams.get("overlap") === "1";
+        const person = url.searchParams.get("person") === "1";
+        const overlap =
+          place || person || url.searchParams.get("overlap") === "1";
         const posted = place
           ? await postPlaceMatchupIfDue(env, Date.now(), { force: true })
-          : await postMatchupIfDue(env, Date.now(), { force: true, overlap });
+          : person
+            ? await postPersonMatchupIfDue(env, Date.now(), { force: true })
+            : await postMatchupIfDue(env, Date.now(), { force: true, overlap });
+        const kind = place ? "place" : person ? "person" : "matchup";
+        const bonusNoun = place ? "places" : "people";
         return Response.json({
           posted,
-          kind: place ? "place" : "matchup",
+          kind,
           reason: posted
             ? null
-            : place
-              ? "fewer than two places in the catalog, or both are already live"
+            : place || person
+              ? `fewer than two ${bonusNoun} in the catalog, only one person's photographs, or both are already live`
               : overlap
                 ? "no pair could be drawn"
                 : "a matchup is already open, or no pair could be drawn",
@@ -172,12 +180,19 @@ export default {
       await logToDiscord(env, `Post failed: ${String(error)}`);
     }
 
-    // After the everyday matchup, and deliberately not gated on it: the place
-    // bonus runs alongside whatever is open rather than instead of it.
+    // After the everyday matchup, and deliberately not gated on it: the weekly
+    // bonuses run alongside whatever is open rather than instead of it. Each
+    // fires only on its own day and hour, so most ticks post neither.
     try {
       await postPlaceMatchupIfDue(env, now);
     } catch (error) {
       await logToDiscord(env, `Place matchup failed: ${String(error)}`);
+    }
+
+    try {
+      await postPersonMatchupIfDue(env, now);
+    } catch (error) {
+      await logToDiscord(env, `Person matchup failed: ${String(error)}`);
     }
 
     try {
