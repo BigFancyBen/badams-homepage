@@ -3,7 +3,7 @@ import {
   chefStandings,
   getDish,
   getDueMatchups,
-  getOpenMatchup,
+  getOpenStandardMatchup,
   getOpenMatchups,
   getState,
   playerName,
@@ -99,19 +99,29 @@ export async function postMatchupIfDue(
   now: number,
   { force = false, overlap = false }: { force?: boolean; overlap?: boolean } = {}
 ): Promise<boolean> {
-  // Never post over a matchup that is still open, even when forced — two live
-  // matchups split the vote. `overlap` is the single deliberate exception: an
-  // admin-triggered bonus matchup running beside the scheduled one. The close
-  // path already iterates every open matchup and votes are keyed to a matchup
-  // id on the button, so the only cost is the split attention.
+  // Never post over an everyday matchup that is still open, even when forced —
+  // two live everyday matchups split the vote. `overlap` is the single
+  // deliberate exception: an admin-triggered bonus running beside the scheduled
+  // one. The close path already iterates every open matchup and votes are keyed
+  // to a matchup id on the button, so the only cost is the split attention.
+  //
+  // A bonus deliberately does not count here. It is posted to run alongside the
+  // everyday matchup, and its window is a flat 24 hours rather than the next
+  // posting hour — so blocking on it skipped every ordinary slot for the whole
+  // day after each bonus, in both directions of a rule meant to apply in one.
+  //
+  // Excluding live photographs is now unconditional. It used to be done only on
+  // the overlap path, which was safe only because returning early was the sole
+  // other way past this point. Now that a bonus can be open here, the draw has
+  // to skip what the bonus is holding. Nothing pairs the two today — the pools
+  // are disjoint categories — but that is a property of the current pools, not
+  // a rule anything enforces, and it costs one read an hour to not rely on it.
   const liveDishIds: number[] = [];
-  if (overlap) {
-    for (const live of await getOpenMatchups(env)) {
-      liveDishIds.push(live.dish_a_id, live.dish_b_id);
-    }
-  } else if (await getOpenMatchup(env)) {
-    return false;
+  for (const live of await getOpenMatchups(env)) {
+    liveDishIds.push(live.dish_a_id, live.dish_b_id);
   }
+
+  if (!overlap && (await getOpenStandardMatchup(env))) return false;
 
   const hours = parsePostHours(env.POST_HOURS_UTC);
 
