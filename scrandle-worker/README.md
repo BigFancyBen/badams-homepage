@@ -207,13 +207,24 @@ only posts on a named hour, so a cron-driven run posts nothing at all unless
 you happen to start it at 15:00 or 03:00 UTC. The posting schedule has its own
 suite — `npm run test:schedule` — and this one is about the draw.
 
-It wipes and reseeds the local catalog with 12 dishes, plays the given number
-of rounds, and checks that no pair repeats inside the 20-matchup recency
-window, that play stays spread rather than favouring a few dishes, that Elo
-stays zero-sum across the catalog, and that the wide-gap rule actually fires.
+It runs two seeded catalogs, because no single one shows everything.
 
-A 25-round run should show every dish played 4–5 times, gaps mostly in single
-digits, and a deliberate mismatch on every fifth matchup.
+The **small catalog** is 12 dishes across 4 chefs, all in play, ratings
+clustered with two outliers. It strains pair recency and gives the deliberate
+mismatch something to find. A 25-round run should leave every dish played 4–5
+times and within one of every other dish, with gaps mostly in single digits and
+a handful over 150.
+
+The **backlog catalog** is the shape the real channel is in: four dishes that
+have already been on the board six times with ratings far from the opening one,
+behind 36 that have never played. It checks the rotation — that nothing is
+drawn while something less-played was available, and that the veterans stay
+benched entirely until the backlog is swept. Weighing rating ahead of the play
+count fails this one loudly: the four veterans take over a quarter of the
+matchups and the backlog barely moves.
+
+Both catalogs are also checked for pair repeats inside the 20-matchup recency
+window, and the small one for Elo staying zero-sum.
 
 ### Forcing a post by hand
 
@@ -294,6 +305,17 @@ Closes everything open right now, ignoring `closes_at`.
 - **Places do not count toward chef standings**, and neither do people. They
   earn an Elo like any other photo, but averaging a holiday snap or a group
   shot into someone's cooking record would rate them on the wrong thing.
+- **The draw is a rotation.** Both halves of a pair come off the least-played
+  end of the pool, in every category, so the whole catalog plays once before
+  anything plays twice and then again before anything plays three times. Within
+  a play count the pick is random. Rating still shapes the pairing — the Elo
+  band and the every-fifth deliberate mismatch both still apply — but only as a
+  tiebreak between dishes on the same count, never as a reason to reach past one
+  that has played less. That is a preference rather than a gate: the draw spills
+  into the next count on its own when the least-played dishes are all one
+  person's or have all been paired recently. It also means the deliberate
+  mismatch has nothing to find while the unplayed backlog is being swept, since
+  every dish in it is still on the opening rating.
 - **Two photos from the same person never meet.** Matchmaking excludes the
   primary's own poster when drawing the opponent, in every category — a matchup
   between two of your own shots is not something anyone can take a side on. If a
