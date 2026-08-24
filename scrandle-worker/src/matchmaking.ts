@@ -1,6 +1,21 @@
 import type { Dish, Env } from "./types";
 
-/** Close matchups are tense matchups. */
+/**
+ * The draw is a rotation. Both halves of a pair come off the least-played end
+ * of the pool, so the whole catalog plays once before anything plays twice,
+ * then again before anything plays three times. With hundreds of photographs
+ * in the channel, a draw that weighted anything above the play count put the
+ * same handful on the board over and over while most of the catalog sat unseen.
+ *
+ * Rating still shapes the pairing, but only as a tiebreak between dishes on the
+ * same play count — never as a reason to reach past one that has played less.
+ *
+ * It is a preference rather than a gate: ordering by play count instead of
+ * filtering on it lets the draw spill into the next count on its own when the
+ * least-played dishes are all one person's, or have all been paired recently.
+ */
+
+/** Close matchups are tense matchups — decided among the equally played. */
 const ELO_BAND = 150;
 /** Do not repeat a pair seen within this many recent matchups. The pool is small. */
 const RECENT_PAIR_WINDOW = 20;
@@ -48,28 +63,28 @@ async function pickPrimary(
 ): Promise<Dish | null> {
   // Something cooked recently and never played goes first — that is the case
   // the guaranteed-slot rule was written for, and it keeps the game tracking
-  // what people are actually cooking.
+  // what people are actually cooking. It does not jump the rotation: anything
+  // unplayed is already at the front of it, and this only decides the order
+  // dishes come off that front.
   const recentCutoff = Date.now() - RECENT_WINDOW_DAYS * 24 * 60 * 60 * 1000;
   const notOpen = excludeClause("id", exclude);
   const inCategory = `category IN (${categoryList(categories)})`;
   const fresh = await env.DB.prepare(
-    `SELECT * FROM dishes WHERE first_matchup_id IS NULL AND ${inCategory} ` +
+    `SELECT * FROM dishes WHERE matches_played = 0 AND ${inCategory} ` +
       `AND posted_at > ?${notOpen} ORDER BY RANDOM() LIMIT 1`
   )
     .bind(recentCutoff)
     .first<Dish>();
   if (fresh) return fresh;
 
-  // Otherwise draw at random from the unplayed backlog. Ordering this by
-  // posted_at would walk a backfilled catalog through the channel's history in
-  // chronological order, which is both predictable and a tell — every matchup
-  // would pair two dishes from the same era.
-  const unplayed = await env.DB.prepare(
-    `SELECT * FROM dishes WHERE first_matchup_id IS NULL AND ${inCategory}` +
-      `${notOpen} ORDER BY RANDOM() LIMIT 1`
-  ).first<Dish>();
-  if (unplayed) return unplayed;
-
+  // Otherwise the least-played dish in the pool, drawn at random from
+  // everything tied at that count — the unplayed backlog first, then the whole
+  // catalog again a round at a time.
+  //
+  // Random rather than posted_at because ordering the backlog by date would
+  // walk a backfilled catalog through the channel's history in chronological
+  // order, which is both predictable and a tell — every matchup would pair two
+  // dishes from the same era.
   return env.DB.prepare(
     `SELECT * FROM dishes WHERE ${inCategory}` +
       `${notOpen} ORDER BY matches_played ASC, RANDOM() LIMIT 1`
@@ -98,30 +113,41 @@ async function pickOpponent(
     excludeClause("d.id", exclude);
 
   if (wideGap) {
+    // The deliberate mismatch, staged inside the least-played group rather
+    // than across the whole catalog. Reaching for the widest rating gap
+    // anywhere is reaching for a veteran every fifth matchup — only a
+    // well-played dish has a rating far from the opening one.
+    //
+    // While the backlog is being swept that group is all unrated dishes on the
+    // opening rating and there is no gap to find, which is the right answer:
+    // there is no mismatch to stage between two dishes nobody has voted on.
     const stretched = await env.DB.prepare(
-      `${notRecentlyPaired} ORDER BY ABS(d.elo - ?3) DESC, d.matches_played ASC LIMIT 1`
+      `${notRecentlyPaired} ORDER BY d.matches_played ASC, ABS(d.elo - ?3) DESC LIMIT 1`
     )
       .bind(primary.id, recentCutoff, primary.elo, primary.category, primary.poster_discord_id)
       .first<Dish>();
     if (stretched) return stretched;
   }
 
-  const banded = await env.DB.prepare(
-    `${notRecentlyPaired} AND ABS(d.elo - ?3) <= ?6 ` +
-      "ORDER BY d.matches_played ASC, ABS(d.elo - ?3) ASC, RANDOM() LIMIT 1"
+  // Least played first, then rating. MAX(gap - band, 0) ties every rating
+  // inside the band at zero so RANDOM chooses among them rather than always
+  // taking the closest, and when the band is too tight for what is left it
+  // falls through to the nearest rating outside it instead of skipping the
+  // matchup entirely.
+  const matched = await env.DB.prepare(
+    `${notRecentlyPaired} ` +
+      "ORDER BY d.matches_played ASC, MAX(ABS(d.elo - ?3) - ?6, 0) ASC, RANDOM() LIMIT 1"
   )
-    .bind(primary.id, recentCutoff, primary.elo, primary.category, primary.poster_discord_id, ELO_BAND)
+    .bind(
+      primary.id,
+      recentCutoff,
+      primary.elo,
+      primary.category,
+      primary.poster_discord_id,
+      ELO_BAND
+    )
     .first<Dish>();
-  if (banded) return banded;
-
-  // Band too tight for the current catalog — take the nearest rating instead
-  // of skipping the matchup entirely.
-  const nearest = await env.DB.prepare(
-    `${notRecentlyPaired} ORDER BY ABS(d.elo - ?3) ASC, d.matches_played ASC LIMIT 1`
-  )
-    .bind(primary.id, recentCutoff, primary.elo, primary.category, primary.poster_discord_id)
-    .first<Dish>();
-  if (nearest) return nearest;
+  if (matched) return matched;
 
   // Every eligible opponent has been paired with this dish recently. Allow a
   // repeat pairing — but still never the same poster; that rule does not bend,
