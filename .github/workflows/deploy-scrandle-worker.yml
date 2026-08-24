@@ -1,0 +1,56 @@
+# The Worker is not part of the Vercel deploy — the site and the bot ship
+# separately, and nothing on Vercel touches Cloudflare. Left manual, a change
+# to wrangler.toml sits on main looking deployed while the live Worker keeps
+# running the old vars. That is not a hypothetical: the Monday place round was
+# merged and then silently skipped for a day because nobody ran `wrangler
+# deploy`. Merging to main is the deploy now.
+name: Deploy scrandle worker
+
+on:
+  push:
+    branches: [main]
+    # wrangler.toml lives under this path, so a vars-only change deploys too.
+    # That is the case this workflow exists for.
+    paths:
+      - "scrandle-worker/**"
+      - ".github/workflows/deploy-scrandle-worker.yml"
+  # For redeploying without a code change — rotating a secret, or recovering
+  # from a failed run.
+  workflow_dispatch:
+
+# Two deploys racing would leave whichever finished last live, regardless of
+# which commit is newer. Queue them instead of cancelling: a cancelled run
+# still leaves main undeployed, which is the problem being fixed here.
+concurrency:
+  group: deploy-scrandle-worker
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: scrandle-worker
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: scrandle-worker/package-lock.json
+
+      # The Worker keeps its own lockfile, so this pins the same wrangler the
+      # repo builds against locally rather than whatever is latest today.
+      - run: npm ci
+
+      # The pre-commit hook only checks the Next app; nothing type-checks the
+      # Worker before it reaches Cloudflare.
+      - run: npm run type-check
+
+      - run: npx wrangler deploy
+        env:
+          # The token is scoped to one Cloudflare account, so wrangler resolves
+          # the account itself. Add CLOUDFLARE_ACCOUNT_ID here if a second
+          # account is ever added to it.
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

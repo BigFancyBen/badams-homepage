@@ -85,6 +85,44 @@ paste `https://<your-worker>.workers.dev/interactions` into the Developer
 Portal's Interactions Endpoint URL field. Discord verifies it with a
 deliberately bad signature and expects a 401, which `verify.ts` handles.
 
+## Deploying
+
+Merging to `main` deploys. `.github/workflows/deploy-scrandle-worker.yml` runs
+`wrangler deploy` on any push touching `scrandle-worker/**`, which includes
+`wrangler.toml` — a schedule change is a deploy like any other.
+
+That path matters more than it looks. The Worker ships separately from the
+site: Vercel builds the Next app and never touches Cloudflare, so before this
+workflow existed a merged `wrangler.toml` change sat on `main` looking live
+while the running Worker kept the old vars. The Monday place round was merged
+one night and silently skipped the next day for exactly that reason.
+
+The workflow needs one repository secret:
+
+| Secret | Where it comes from |
+| --- | --- |
+| `CLOUDFLARE_API_TOKEN` | Cloudflare dashboard → My Profile → API Tokens → Create Token → **Edit Cloudflare Workers** template |
+
+Use the template rather than a hand-rolled token — the deploy binds D1 and R2,
+so a Workers-Scripts-only token fails at the binding step, not at upload.
+
+```bash
+gh secret set CLOUDFLARE_API_TOKEN --repo BigFancyBen/badams-homepage
+```
+
+The token is scoped to a single Cloudflare account, so wrangler resolves the
+account itself. If that token ever covers more than one, add
+`CLOUDFLARE_ACCOUNT_ID` to the deploy step's `env`.
+
+Deploying by hand still works and is still the right move when testing:
+
+```bash
+npm run deploy
+```
+
+**Migrations are not automated.** `npm run migrate` is still a manual step, and
+it has to run *before* the deploy of any code that reads a new column.
+
 ### Order matters
 
 Do Vercel before Cloudflare, and backfill before the cron is allowed to post.

@@ -43,5 +43,10 @@ next-env.d.ts
 
 # project config
 .claude/
-.github/
 .husky/
+# Local agent/editor config stays out of git, but workflows have to be in it —
+# an ignored workflow is a workflow GitHub never runs. Ignore the *contents* of
+# .github rather than the directory: git will not descend into an excluded
+# directory, so `.github/` followed by a negation cannot re-include anything.
+.github/*
+!.github/workflows/
