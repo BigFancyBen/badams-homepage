@@ -26,9 +26,24 @@ export async function getDish(env: Env, id: number): Promise<Dish | null> {
     .first<Dish>();
 }
 
-export async function getOpenMatchup(env: Env): Promise<Matchup | null> {
+/**
+ * The oldest open *everyday* matchup, ignoring bonus rounds.
+ *
+ * Only the one-at-a-time rule uses this, and a bonus must not trip it. A bonus
+ * is posted to run beside the everyday matchup and holds a flat 24-hour window,
+ * so counting it blacked out every ordinary slot for a full day after each one
+ * — with bonuses on Monday, Tuesday and Wednesday that is most of the week.
+ *
+ * `matchups` has no column saying which is which, and does not need one. The
+ * everyday draw is fixed to DEFAULT_CATEGORIES and both dishes in a matchup
+ * always share a category, so a matchup holding places or people can only have
+ * come from a bonus. Joining dish A is enough to tell them apart.
+ */
+export async function getOpenStandardMatchup(env: Env): Promise<Matchup | null> {
   return env.DB.prepare(
-    "SELECT * FROM matchups WHERE status = 'open' ORDER BY created_at ASC LIMIT 1"
+    "SELECT m.* FROM matchups m JOIN dishes d ON d.id = m.dish_a_id " +
+      "WHERE m.status = 'open' AND d.category IN ('food', 'drink') " +
+      "ORDER BY m.created_at ASC LIMIT 1"
   ).first<Matchup>();
 }
 
