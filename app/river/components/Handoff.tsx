@@ -39,8 +39,22 @@ export function Handoff({ code }: { code: string }) {
     // On iOS there is nothing to hand off to, so skip straight to the offer
     // rather than making the browser refuse a scheme it has never heard of.
     const ios = isIOS();
-    if (!ios) open();
-    const timer = window.setTimeout(() => setPhase("settled"), ios ? 0 : RIVER.handoffMs);
+    let timer = 0;
+
+    // Wait for the page to finish loading before firing the scheme. A
+    // navigation attempt part-way through a load is a race with the hero image
+    // and the screenshots, and the pictures are what a stranger came for. By
+    // `load` they are on screen, and the handoff costs them nothing.
+    const start = () => {
+      if (!ios) open();
+      timer = window.setTimeout(() => setPhase("settled"), ios ? 0 : RIVER.handoffMs);
+    };
+
+    if (document.readyState === "complete") {
+      start();
+    } else {
+      window.addEventListener("load", start, { once: true });
+    }
 
     // The tab going away is the game coming up. Say so rather than telling
     // somebody who comes back to close the tab that nothing happened.
@@ -54,6 +68,7 @@ export function Handoff({ code }: { code: string }) {
 
     return () => {
       window.clearTimeout(timer);
+      window.removeEventListener("load", start);
       document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [open]);

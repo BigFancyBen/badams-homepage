@@ -46,9 +46,11 @@ Playwright tests:
 | `app/river/terms`, `privacy`, `notices` | the legal text, unlinked and noindexed |
 | `public/river/` | five stills and the lockup out of the press kit |
 
-Still to do on the game side: registering the `mfrs://` scheme at first run.
-Until that lands, every visitor sees the marketing page, which is the same thing
-a visitor without the game sees afterwards.
+The game side landed in mfrs #137: an installed build claims `mfrs://` on first
+run, writes `mfrs://join/CODE` from a COPY TRIP LINK button, and reads one back
+through `Link.code_from()`. `app/river/trip-code.ts` mirrors that grammar
+character for character, because a code this page accepts and the game refuses
+is a link that opens the game and then does nothing.
 
 ---
 
@@ -242,10 +244,12 @@ same idea aimed at the operating system, and it is what makes step 1 possible:
   knowing: a phone that has the game opens it straight from the link, no scheme
   and no prompt.
 
-Then feed the same string to Discord — `register_launch_command(APP_ID, "mfrs://join/")`
-if the binding accepts a scheme where it currently gets a path. Worth testing
-early, because if it does, the native Join button and the web link converge on
-one code path and one thing to debug.
+Both halves shipped in mfrs #137 — `Link.claim()` writes the registry key on
+Windows and the `.desktop` file on Linux, and the privacy policy documents both.
+What is left is feeding the same string to Discord:
+`register_launch_command(APP_ID, "mfrs://join/")`, if the binding accepts a
+scheme where it currently gets an executable path. Worth testing early, because
+a yes puts the native Join button and the web link on one code path.
 
 ### The other end of it
 
@@ -287,10 +291,10 @@ to do that is one config object with a `mode` in it, not three pages.
 
 ## What to build, in order
 
-**Phase 1 — the paperwork and the link.** The join link, the put-in page and the
-three legal pages are done. What is left: the `mfrs://` registration in the game,
-the two blanks in the legal text, and pasting the URLs into the portal. Nothing
-here needs a database.
+**Phase 1 — the paperwork and the link.** Done on both sides: the game claims
+`mfrs://` and writes links, and this repo serves the put-in page and the legal
+text. What is left is paperwork — the two blanks in the legal text, and pasting
+the four URLs into the portal.
 
 **Phase 2 — the bot.** `/api/discord/interactions`, then `/trip`, which is what
 puts that link in front of people without anyone copying a URL. Still no

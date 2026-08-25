@@ -35,7 +35,7 @@ directory is:
 
 - **`settings.cfg`** holds your volume, screen mode, window size and position,
   graphics quality, key bindings, controller rumble, crew name, the last address
-  you dialled, and your meetup-server address.
+  you dialled, your meetup-server address, and where the game last registered itself as the handler for trip links (see below).
 - **`records.cfg`** holds how far you have got down the river from each class of
   put-in.
 - **`discord.dat`** appears only if you connect Discord. It holds one Discord
@@ -45,6 +45,27 @@ directory is:
   them and keeps the last few.
 
 Delete any of these whenever you want. The game will make fresh ones.
+
+### One thing the game writes outside that folder
+
+So that a `mfrs://join/...` trip link opens the game when you click one, the
+first run of an installed build tells your operating system that this game
+handles links beginning `mfrs://`. It records where the game is installed, and
+nothing else — no personal information is involved and nothing is sent
+anywhere.
+
+- **Windows:** a key under `HKEY_CURRENT_USER\Software\Classes\mfrs`. It
+  belongs to your user account only; nothing is changed for anyone else who uses
+  the computer, and no administrator rights are asked for.
+- **Linux:** a file at
+  `~/.local/share/applications/middle-fork-rafting-simulator.desktop`, marked so
+  that it does not appear in your applications menu.
+
+The game checks this each time it starts, in case you have moved or reinstalled
+it, and rewrites it only when the location has changed. You can delete the key
+or the file at any time; trip links will stop opening the game and nothing else
+about it will change. Builds run from source, and every automated test and
+screenshot run, register nothing at all.
 
 ---
 

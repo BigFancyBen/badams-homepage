@@ -22,11 +22,21 @@ test('a join link shows the game to somebody who does not have it', async ({ pag
   await expect(page.getByText('Nothing opened.')).toBeVisible({ timeout: 5000 });
 });
 
-test('a mangled code still lands on the game rather than a 404', async ({ page }) => {
-  const response = await page.goto('/river/join/not-a-code');
+test('a code the game would refuse lands on the game rather than a 404', async ({ page }) => {
+  // The grammar is `Link.is_trip_code()`: an address is never a trip code, so
+  // this page must not offer to open one. See app/river/trip-code.ts.
+  const response = await page.goto('/river/join/203.0.113.7:27015');
 
   expect(response?.status()).toBe(200);
   await expect(page.getByRole('heading', { level: 1 })).toContainText('One raft');
+});
+
+test('a code minted without the wordlist still opens', async ({ page }) => {
+  // What the meetup server hands out when NORAY_ENABLE_WORDS_OID is unset.
+  await page.goto('/river/join/V1StGXR8_Z5jdHi6B-myT');
+
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('seat');
+  await expect(page.getByText('V1StGXR8_Z5jdHi6B-myT').first()).toBeVisible();
 });
 
 test('the Discord deep link unwraps a secret onto the trip', async ({ page }) => {
