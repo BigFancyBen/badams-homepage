@@ -48,4 +48,16 @@ export const RIVER = {
    * whole time regardless — this only governs one line of copy.
    */
   handoffMs: 1600,
+
+  /**
+   * The two blanks the legal text ships with. The markdown in
+   * `app/river/legal/` writes them as `[SUPPORT EMAIL]` and `[STATE/COUNTRY]`;
+   * fill these in and every occurrence across all three documents follows.
+   * Left empty, the brackets render in orange so an unfinished policy cannot
+   * pass for a finished one.
+   */
+  legal: {
+    supportEmail: "",
+    jurisdiction: "",
+  },
 } as const;

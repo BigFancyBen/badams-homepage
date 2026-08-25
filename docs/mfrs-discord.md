@@ -1,9 +1,9 @@
 # The Discord half of Middle Fork Rafting Simulator, and the web half that holds it up
 
-A proposal. Nothing in here is implemented. It covers the five URL fields on the
-application's General Information page, what each one is actually for, what
-should go behind it — and the one thing that is not a portal field at all: the
-path from "a friend clicked Join" to either a boat or a discount.
+What each of the five URL fields on the application's General Information page
+is for, what goes behind it, and the one thing that is not a portal field at
+all: the path from "a friend clicked Join" to either a boat or a discount. The
+web half of the first phase is built; the rest is a plan.
 
 Two repos are involved and the split is clean:
 
@@ -25,15 +25,14 @@ with details and state, a public party with an id and a size, a join secret,
 `set_activity_join_callback` wired to the trip code, and
 `register_launch_command` on real builds only.
 
-The legal text exists as well — `docs/legal/privacy-policy.md` and
-`docs/legal/terms-of-use.md` — but only as markdown inside the game repo, which
-is not a URL, which is why two of the five fields are empty.
+The legal text lived only as markdown inside the game repo, which is not a URL,
+which is why two of the five fields were empty. Both are served now.
 
 So this document is mostly about the parts that reach *outside* the game.
 
 ## What is built here now
 
-The web half of phase 1 is in this repo and passes lint, types, build and four
+The web half of phase 1 is in this repo and passes lint, types, build and five
 Playwright tests:
 
 | Path | What it is |
@@ -43,7 +42,8 @@ Playwright tests:
 | `app/river/discord-join/route.ts` | unwraps `?secret=mfrs1:…` and redirects onto the code |
 | `app/river/components/Handoff.tsx` | fires `mfrs://join/<code>`, then stops promising a game |
 | `app/river/components/CodeChip.tsx` | the code, and a button that copies it |
-| `app/river/config.ts` | store mode, itch URLs, coupon URL, timings |
+| `app/river/config.ts` | store mode, itch URLs, coupon URL, timings, the two legal blanks |
+| `app/river/terms`, `privacy`, `notices` | the legal text, unlinked and noindexed |
 | `public/river/` | five stills and the lockup out of the press kit |
 
 Still to do on the game side: registering the `mfrs://` scheme at first run.
@@ -60,21 +60,30 @@ The easy ones, and the ones with a deadline attached: they are required
 paperwork the moment the app leaves your own account, and Discord asks for them
 for anything doing account linking, which this already does.
 
-Publish both under a `/river` section on `benadams.dev`, rendered from the same
-markdown that lives in the game repo rather than retyped:
+Both are live:
 
 ```
 https://benadams.dev/river/terms
 https://benadams.dev/river/privacy
+https://benadams.dev/river/notices     (the terms link to it)
 ```
 
-Copying the files across is the wrong instinct — they will drift. Either fetch
-them from the raw GitHub URL at build time with Next's `revalidate`, or move the
-canonical copy here and have the game's docs link out. Whichever direction you
-pick, the in-client "Disconnect" copy and the privacy page have to keep agreeing
-about the token: the policy promises the refresh token is forgotten locally
-*and* revoked at Discord, `revoke_token` is in the API table, and that promise is
-currently honest. It has to stay that way.
+**Nothing links to them and all three carry `noindex, nofollow`.** They exist for
+the application form and for a player who goes looking, not for search. There is
+deliberately no `Disallow` in `robots.ts`: a crawler barred from fetching the
+page never reads the tag telling it not to index the page, and a URL blocked that
+way can still show up in results.
+
+The markdown is copied from the game repo rather than fetched, because that repo
+is private and a build-time fetch would need a token in Vercel. Copy the text
+across in the same pull request that changes it. One pairing to watch: the
+in-client "Disconnect" copy and the privacy page have to keep agreeing about the
+token. The policy promises the refresh token is forgotten locally *and* revoked
+at Discord, `revoke_token` is in the API table, and that promise is honest today.
+
+Two blanks are still open in the source text, `[SUPPORT EMAIL]` and
+`[STATE/COUNTRY]`. Fill `RIVER.legal` in `app/river/config.ts` and every
+occurrence across all three documents follows. Until then they render in orange.
 
 ### 3. Deep Link URL
 
@@ -278,10 +287,10 @@ to do that is one config object with a `mode` in it, not three pages.
 
 ## What to build, in order
 
-**Phase 1 — the paperwork and the link.** The join link and the put-in page are
-done. What is left: `/river/terms` and `/river/privacy`, the `mfrs://`
-registration in the game, and the Deep Link URL field pointed at `/river`.
-Nothing here needs a database.
+**Phase 1 — the paperwork and the link.** The join link, the put-in page and the
+three legal pages are done. What is left: the `mfrs://` registration in the game,
+the two blanks in the legal text, and pasting the URLs into the portal. Nothing
+here needs a database.
 
 **Phase 2 — the bot.** `/api/discord/interactions`, then `/trip`, which is what
 puts that link in front of people without anyone copying a URL. Still no

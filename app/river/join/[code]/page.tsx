@@ -16,10 +16,14 @@ export async function generateMetadata({
   params: Promise<{ code: string }>;
 }): Promise<Metadata> {
   const { code } = await params;
-  if (!isTripCode(code)) return {};
+  // A trip code lives as long as its host is on the water, so there is nothing
+  // here worth a search result. `/river` is the page that gets indexed.
+  const robots = { index: false, follow: false };
+  if (!isTripCode(code)) return { robots };
   return {
     title: `Join ${code} — Middle Fork Rafting Simulator`,
-    description: `Somebody is on the water on trip ${code}. There is a seat on the thwart.`,
+    description: `Somebody is on the water on trip ${code}. There is a seat on the boat.`,
+    robots,
   };
 }
 

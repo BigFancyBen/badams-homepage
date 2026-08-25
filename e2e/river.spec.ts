@@ -36,6 +36,27 @@ test('the Discord deep link unwraps a secret onto the trip', async ({ page }) =>
   await expect(page.getByText('PortageSieveBeater').first()).toBeVisible();
 });
 
+test('the legal pages serve, stay out of the index, and stay unlinked', async ({ page }) => {
+  for (const [path, heading] of [
+    ['/river/terms', 'Terms of Use'],
+    ['/river/privacy', 'Privacy Policy'],
+    ['/river/notices', 'Third-Party Notices'],
+  ]) {
+    await page.goto(path);
+    await expect(page.getByRole('heading', { level: 1 })).toContainText(heading, {
+      ignoreCase: true,
+    });
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute(
+      'content',
+      /noindex/,
+    );
+  }
+
+  // Discord holds these URLs. Nothing on the site hands them to a crawler.
+  await page.goto('/river');
+  await expect(page.locator('a[href*="/river/terms"], a[href*="/river/privacy"]')).toHaveCount(0);
+});
+
 test('a secret from a build we do not know falls back to the plain page', async ({ page }) => {
   await page.goto('/river/_discord/join?secret=someoneelse:Whatever');
 
