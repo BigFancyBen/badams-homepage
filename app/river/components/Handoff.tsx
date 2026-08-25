@@ -29,6 +29,31 @@ function isIOS(): boolean {
   return /iPad|iPhone|iPod/.test(navigator.userAgent);
 }
 
+/**
+ * Fire once per code per tab, and never again.
+ *
+ * Watched on a Pixel: the page opened the game, and fifteen seconds later the
+ * browser restored the tab behind it and the effect ran a second time, sending
+ * a second `mfrs://` to a game that was already on that trip. Nobody had
+ * touched the phone. A player who switches back to their browser to read what
+ * this page says should not be thrown into the game again for it.
+ *
+ * `sessionStorage` is the right shelf: it survives a restore and dies with the
+ * tab, so a link opened tomorrow is a fresh attempt. Private modes throw on
+ * access rather than returning null, hence the catch — and a browser that will
+ * not remember gets the old behaviour, which is only ever one extra launch.
+ */
+function claimHandoff(code: string): boolean {
+  const key = `mfrs:handoff:${code}`;
+  try {
+    if (sessionStorage.getItem(key)) return false;
+    sessionStorage.setItem(key, "1");
+  } catch {
+    return true;
+  }
+  return true;
+}
+
 export function Handoff({ code }: { code: string }) {
   const [phase, setPhase] = useState<Phase>("trying");
 
@@ -45,8 +70,9 @@ export function Handoff({ code }: { code: string }) {
     // and the screenshots, and the pictures are what a stranger came for. By
     // `load` they are on screen, and the handoff costs them nothing.
     const start = () => {
-      if (!ios) open();
-      timer = window.setTimeout(() => setPhase("settled"), ios ? 0 : RIVER.handoffMs);
+      const fire = !ios && claimHandoff(code);
+      if (fire) open();
+      timer = window.setTimeout(() => setPhase("settled"), fire ? RIVER.handoffMs : 0);
     };
 
     if (document.readyState === "complete") {
@@ -70,7 +96,7 @@ export function Handoff({ code }: { code: string }) {
       window.removeEventListener("load", start);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [open]);
+  }, [open, code]);
 
   if (phase === "handed-off") {
     return (
