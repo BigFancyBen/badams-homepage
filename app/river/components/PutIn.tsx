@@ -126,20 +126,20 @@ function Hero({ code }: { code?: string }) {
   );
 }
 
-/** Four screenshots, no captions. They carry the pitch. */
+/** Three screenshots, no captions. They carry the pitch. */
 function Gallery() {
   return (
     <section>
       <Shot
-        src="/river/shot-wave.jpg"
-        alt="A raft crossing a sunlit reach with two swimmers alongside"
+        src="/river/shot-wrap.jpg"
+        alt="Two otters on a rock holding a rope out to a raft pinned in the current"
         className="aspect-[4/3] sm:aspect-[21/9]"
         sizes="100vw"
       />
       <div className="grid sm:grid-cols-2">
         <Shot
-          src="/river/shot-dogleg.jpg"
-          alt="A raft dropping a green tongue in a narrow gorge, swimmers ahead of it"
+          src="/river/shot-wave.jpg"
+          alt="A raft crossing a sunlit reach with two swimmers alongside"
           className="aspect-[4/3]"
           sizes="(max-width: 640px) 100vw, 50vw"
         />
@@ -150,12 +150,6 @@ function Gallery() {
           sizes="(max-width: 640px) 100vw, 50vw"
         />
       </div>
-      <Shot
-        src="/river/shot-wrap.jpg"
-        alt="Two otters on a rock holding a rope out to a raft pinned in the current"
-        className="aspect-[4/3] sm:aspect-[21/9]"
-        sizes="100vw"
-      />
     </section>
   );
 }
