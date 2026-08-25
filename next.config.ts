@@ -33,6 +33,19 @@ const nextConfig: NextConfig = {
     ],
   },
   serverExternalPackages: ['ably'],
+  async rewrites() {
+    return [
+      /**
+       * Discord builds the invite URL itself: it takes the Deep Link URL from
+       * the application's General Information page and appends
+       * `/_discord/join?secret=...`. The path is not ours to choose, and a
+       * folder named `_discord` in the app directory would be a PRIVATE folder
+       * — Next excludes those from routing entirely — so the segment is served
+       * by rewriting it onto a route with an ordinary name.
+       */
+      { source: '/river/_discord/join', destination: '/river/discord-join' },
+    ];
+  },
 };
 
 export default nextConfig;

@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.middlefork.raftingsimulator",
+      "sha256_cert_fingerprints": [
+        "EA:E1:91:96:2D:3C:22:25:C8:A2:2B:CF:AA:EF:07:C5:6E:D7:24:B4:83:A5:43:0A:F5:4B:CF:18:04:6E:19:91"
+      ]
+    }
+  }
+]
