@@ -43,14 +43,26 @@ Playwright tests:
 | `app/river/components/Handoff.tsx` | fires `mfrs://join/<code>`, then stops promising a game |
 | `app/river/components/CodeChip.tsx` | the code, and a button that copies it |
 | `app/river/config.ts` | store mode, itch URLs, coupon URL, timings, the two legal blanks |
+| `public/.well-known/assetlinks.json` | Android's proof that these URLs are the game's |
 | `app/river/terms`, `privacy`, `notices` | the legal text, unlinked and noindexed |
 | `public/river/` | five stills and the lockup out of the press kit |
 
-The game side landed in mfrs #137: an installed build claims `mfrs://` on first
-run, writes `mfrs://join/CODE` from a COPY TRIP LINK button, and reads one back
-through `Link.code_from()`. `app/river/trip-code.ts` mirrors that grammar
-character for character, because a code this page accepts and the game refuses
-is a link that opens the game and then does nothing.
+The game side landed in mfrs #137 and #141. An installed build claims `mfrs://`
+on first run and reads a link back through `Link.code_from()`; COPY TRIP LINK now
+writes `https://benadams.dev/river/join/CODE`, because an `mfrs://` link is grey
+text in a chat window and does nothing on a phone. `app/river/trip-code.ts`
+mirrors the game's grammar character for character, because a code this page
+accepts and the game refuses is a link that opens the game and then does nothing.
+
+`public/.well-known/assetlinks.json` is the half only this repo can serve. It
+names the package and the release signing fingerprint, both facts about the
+built APK rather than choices, and Android reads it at install time to decide
+whether tapping a trip link opens the game or a "complete action using" prompt.
+It is a file in `public/` and not a route on purpose: Android follows no
+redirect, accepts no self-signed certificate, will not fall back to `http`, and
+wants `200` with the JSON itself. If the signing key is ever replaced this file
+changes with it, and every phone on the old build stops opening links until it
+updates.
 
 ---
 
@@ -237,12 +249,12 @@ same idea aimed at the operating system, and it is what makes step 1 possible:
 - **Linux** — a `.desktop` file carrying `MimeType=x-scheme-handler/mfrs;` and a
   run of `update-desktop-database`. The itch app unpacks to a folder rather than
   installing, so the game has to do this for itself on first run.
-- **Android** — no scheme needed. Use an **App Link** on the same
-  `https://benadams.dev/river/join/…` URL, which means serving
-  `/.well-known/assetlinks.json` from the homepage with the APK's signing
-  fingerprint in it. This works for a sideloaded itch APK, which is worth
-  knowing: a phone that has the game opens it straight from the link, no scheme
-  and no prompt.
+- **Android** — no scheme needed, and this is shipped. The manifest claims
+  `https://benadams.dev/river/join/` with `autoVerify`, and this repo serves the
+  `/.well-known/assetlinks.json` that backs the claim. It works for a sideloaded
+  itch APK: a phone that has the game opens it straight from the link, no scheme
+  and no prompt. Android's verifier cannot be tested until the file is deployed —
+  a phone reports `benadams.dev: 1024`, "not verified", until then.
 
 Both halves shipped in mfrs #137 — `Link.claim()` writes the registry key on
 Windows and the `.desktop` file on Linux, and the privacy policy documents both.
@@ -292,9 +304,11 @@ to do that is one config object with a `mode` in it, not three pages.
 ## What to build, in order
 
 **Phase 1 — the paperwork and the link.** Done on both sides: the game claims
-`mfrs://` and writes links, and this repo serves the put-in page and the legal
-text. What is left is paperwork — the two blanks in the legal text, and pasting
-the four URLs into the portal.
+`mfrs://` and Android App Links and writes `https://` links, and this repo serves
+the put-in page, the legal text and the assetlinks file. What is left is
+paperwork — the two blanks in the legal text, and pasting the four URLs into the
+portal — plus one thing only a deploy can finish: Android's verifier has never
+seen the assetlinks file, so a phone still says `1024`.
 
 **Phase 2 — the bot.** `/api/discord/interactions`, then `/trip`, which is what
 puts that link in front of people without anyone copying a URL. Still no

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { RIVER } from "../config";
+import { openTrip } from "../open-trip";
 import { MONO } from "../typography";
 
 /**
@@ -31,9 +32,7 @@ function isIOS(): boolean {
 export function Handoff({ code }: { code: string }) {
   const [phase, setPhase] = useState<Phase>("trying");
 
-  const open = useCallback(() => {
-    window.location.href = `${RIVER.scheme}://join/${code}`;
-  }, [code]);
+  const open = useCallback(() => openTrip(code), [code]);
 
   useEffect(() => {
     // On iOS there is nothing to hand off to, so skip straight to the offer

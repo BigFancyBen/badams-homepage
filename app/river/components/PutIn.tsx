@@ -4,6 +4,7 @@ import { RIVER } from "../config";
 import { MONO } from "../typography";
 import { CodeChip } from "./CodeChip";
 import { Handoff } from "./Handoff";
+import { OpenGameButton } from "./OpenGameButton";
 
 /**
  * The put-in page: what somebody sees when they click a friend's join link and
@@ -13,9 +14,10 @@ import { Handoff } from "./Handoff";
  * about four seconds of interest, and a screenshot of otters in helmets going
  * over a drop spends those seconds better than a paragraph does.
  *
- * Rendered on the server, complete without JavaScript. Two small client pieces
- * ride on top: the strip that knows whether the game opened, and the button
- * that copies the trip code. Neither one gates the page.
+ * Rendered on the server, complete without JavaScript. Three small client
+ * pieces ride on top: the strip that knows whether the game opened, the button
+ * that opens it by hand, and the one that copies the code. None of them gates
+ * the page, and the code is readable with all three inert.
  */
 export function PutIn({ code }: { code?: string }) {
   return (
@@ -23,7 +25,6 @@ export function PutIn({ code }: { code?: string }) {
       <Hero code={code} />
       <Gallery />
       <Facts />
-      {code ? <AlreadyOwn code={code} /> : null}
       <Close />
     </main>
   );
@@ -55,7 +56,7 @@ function Hero({ code }: { code?: string }) {
           className="h-11 w-auto self-start sm:h-14"
         />
 
-        <div className="max-w-xl py-8">
+        <div className="min-w-0 max-w-xl py-8">
           {code ? <Handoff code={code} /> : null}
 
           <h1 className="mt-6 text-4xl leading-[1.05] font-semibold tracking-tight uppercase sm:text-6xl">
@@ -74,20 +75,41 @@ function Hero({ code }: { code?: string }) {
             )}
           </h1>
 
-          <p className="mt-4 text-lg text-[#f2efe3]/80">
-            {code ? (
-              <>
-                Your friends are running trip{" "}
-                <span className={`${MONO} text-[#e2650f]`}>{code}</span> right now.
-              </>
-            ) : (
-              <>Multiplayer whitewater, down a canyon that builds itself as you run it.</>
-            )}
-          </p>
+          {code ? (
+            <>
+              <p className="mt-4 text-lg text-[#f2efe3]/80">
+                Your friends are on the water right now.
+              </p>
 
-          <div className="mt-8">
-            <Offer />
-          </div>
+              {/* The code leads. A scheme can be unregistered and an App Link
+                  unverified, and this still works: it is typed into the trip
+                  board like any other. */}
+              <div className="mt-6">
+                <CodeChip code={code} />
+              </div>
+              {/* Reads over the bright half of the falls, so it carries more
+                  contrast than the small print elsewhere on the page. */}
+              <p className={`${MONO} mt-3 text-xs tracking-wide text-[#f2efe3]/75`}>
+                Type it under <span className="text-[#f2efe3]">Another trip</span> on the
+                board.
+              </p>
+
+              <div className="mt-8 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
+                <OpenGameButton code={code} />
+                <Offer compact />
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="mt-4 text-lg text-[#f2efe3]/80">
+                Multiplayer whitewater, down a canyon that builds itself as you run it.
+              </p>
+
+              <div className="mt-8">
+                <Offer />
+              </div>
+            </>
+          )}
 
           <p className={`${MONO} mt-6 text-xs tracking-widest text-[#f2efe3]/50 uppercase`}>
             Windows · Linux · Android
@@ -177,25 +199,6 @@ function Facts() {
   );
 }
 
-/**
- * For the player who already owns the game and got here anyway, which happens
- * whenever the `mfrs://` handoff fails. The code is the way in that predates
- * all of this and never breaks.
- */
-function AlreadyOwn({ code }: { code: string }) {
-  return (
-    <section className="border-t border-[#f2efe3]/15">
-      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-8 gap-y-4 px-6 py-10 sm:px-10">
-        <p className="text-[#f2efe3]/70">
-          Already own it? Open the game and type this under{" "}
-          <span className="text-[#f2efe3]">Another trip</span>.
-        </p>
-        <CodeChip code={code} />
-      </div>
-    </section>
-  );
-}
-
 function Close() {
   return (
     <section className="border-t border-[#f2efe3]/15">
@@ -204,10 +207,10 @@ function Close() {
         <div
           className={`${MONO} mt-12 flex flex-wrap items-center gap-x-8 gap-y-3 text-xs text-[#f2efe3]/50`}
         >
-          {/* Terms and privacy belong here too. The text lives as markdown in
-              the game repo (docs/legal/) and needs a home on the web before the
-              Discord application's own fields can point at it. Not linked until
-              it has one: a dead legal link is worse than a missing one. */}
+          {/* No terms or privacy link on purpose. Both are served at
+              /river/terms and /river/privacy for the Discord application to
+              point at, and both are noindexed; linking them here would put them
+              back in front of a crawler. */}
           <a href={RIVER.itchUrl} className="hover:text-[#f2efe3]">
             itch.io
           </a>
@@ -224,8 +227,11 @@ function Close() {
  * The one call to action. Every branch says where the game actually is today,
  * because a button promising a download that does not exist yet costs more than
  * no button.
+ *
+ * `compact` drops the note beside the button. It rides next to OPEN THE GAME in
+ * the hero, where a second line of small print reads as an apology.
  */
-function Offer() {
+function Offer({ compact = false }: { compact?: boolean }) {
   if (RIVER.mode === "demo" && RIVER.demoUrl) {
     return (
       <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
@@ -243,7 +249,7 @@ function Offer() {
         <Primary href={RIVER.couponUrl || RIVER.itchUrl}>
           {RIVER.couponUrl ? `Get the game, ${RIVER.couponLabel}` : "Get the game"}
         </Primary>
-        {RIVER.couponUrl ? (
+        {RIVER.couponUrl && !compact ? (
           <span className={`${MONO} text-xs text-[#f2efe3]/50`}>
             Discount is in the link. Nothing to type.
           </span>
@@ -255,7 +261,9 @@ function Offer() {
   return (
     <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
       <Primary href={RIVER.interestUrl}>See it on itch.io</Primary>
-      <span className={`${MONO} text-xs text-[#f2efe3]/50`}>Still in testing.</span>
+      {compact ? null : (
+        <span className={`${MONO} text-xs text-[#f2efe3]/50`}>Still in testing.</span>
+      )}
     </div>
   );
 }

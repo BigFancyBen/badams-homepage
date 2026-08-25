@@ -15,11 +15,35 @@ test('a join link shows the game to somebody who does not have it', async ({ pag
   await expect(page.getByRole('heading', { level: 1 })).toContainText('seat');
   await expect(page.getByRole('link', { name: /itch\.io/i }).first()).toBeVisible();
 
-  // The trip code survives for anyone who owns the game and has to type it in.
+  // The trip code survives for anyone who owns the game and has to type it in,
+  // and there is a button for a browser that blocked the automatic handoff.
   await expect(page.getByText('FrothGorgeSurf').first()).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open the game' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Copy' })).toBeVisible();
 
   // Nothing took the scheme, so the strip says so instead of promising a game.
   await expect(page.getByText('Nothing opened.')).toBeVisible({ timeout: 5000 });
+});
+
+test('Android gets its proof, verbatim and without a redirect', async ({ request }) => {
+  // The whole of Android's App Link check. It follows no redirect and accepts
+  // nothing but 200 with the JSON itself, so this asserts the shape as well as
+  // the contents. Both values are facts about the built APK — package name from
+  // export_presets.cfg, fingerprint from run_itch.sh — so a mismatch here is a
+  // phone that shows a "complete action using" prompt instead of the game.
+  const response = await request.get('/.well-known/assetlinks.json', {
+    maxRedirects: 0,
+  });
+
+  expect(response.status()).toBe(200);
+
+  const [statement] = await response.json();
+  expect(statement.relation).toContain('delegate_permission/common.handle_all_urls');
+  expect(statement.target.namespace).toBe('android_app');
+  expect(statement.target.package_name).toBe('com.middlefork.raftingsimulator');
+  expect(statement.target.sha256_cert_fingerprints).toEqual([
+    'EA:E1:91:96:2D:3C:22:25:C8:A2:2B:CF:AA:EF:07:C5:6E:D7:24:B4:83:A5:43:0A:F5:4B:CF:18:04:6E:19:91',
+  ]);
 });
 
 test('a code the game would refuse lands on the game rather than a 404', async ({ page }) => {
