@@ -314,7 +314,9 @@ why not.
 
 - **Only JPEG and PNG are ingested.** satori rasterizes those two; a WebP or
   GIF would ingest fine and then fail to render mid-matchup. Skips are counted
-  and reported to the logs webhook.
+  in the ingest report but deliberately not logged: a reaction GIF being turned
+  away is the filter working, and nobody wants to be told about it every time
+  it happens. The logs webhook hears about downloads and writes that failed.
 - **Cards are rendered before they are posted.** The Worker fetches the card
   from the render endpoint, mirrors the PNG into R2 under `cards/`, and puts
   that R2 URL in the embed. Discord fetches an embed image once, at post time,
