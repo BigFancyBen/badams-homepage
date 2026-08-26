@@ -179,11 +179,12 @@ export default {
 
     try {
       const report = await ingest(env);
-      if (report.failed > 0 || report.skippedFormat > 0) {
-        await logToDiscord(
-          env,
-          `Ingest: ${report.skippedFormat} unsupported format, ${report.failed} failed.`
-        );
+      // A GIF or a WebP being turned away is the format filter doing its job —
+      // someone posted a reaction GIF, and it is not meant to end up in the
+      // pool. Only a download or a write that actually failed is worth a line;
+      // the count is still in the ingest report either way.
+      if (report.failed > 0) {
+        await logToDiscord(env, `Ingest: ${report.failed} failed.`);
       }
     } catch (error) {
       await logToDiscord(env, `Ingest failed: ${String(error)}`);
