@@ -7,7 +7,9 @@ The whole game. One Cloudflare Worker, one hourly cron, no frontend.
 
 Rendering lives in the Next app (`app/api/scrandle/*`) because Workers Free
 allows 10ms of CPU per invocation, which cannot rasterize an image. The Worker
-builds a signed URL, Discord's proxy fetches the PNG.
+builds a signed URL, fetches the PNG itself, and mirrors it into R2 — Discord
+is handed a static object, never a render it has to wait on. See **Cards are
+rendered before they are posted** below.
 
 ## Setup
 
@@ -127,13 +129,13 @@ it has to run *before* the deploy of any code that reads a new column.
 
 Do Vercel before Cloudflare, and backfill before the cron is allowed to post.
 
-**1. Render endpoints first.** The Worker puts `https://benadams.dev/api/scrandle/...`
-into the Discord embed and Discord's proxy fetches it at post time — then
-caches it against that URL. If the endpoint is returning 503 because
-`SCRANDLE_IMAGE_SECRET` is not set yet, that matchup's card can stay broken
-even after you fix it, because the URL never changes. So: merge, set the env
-var on Vercel, **redeploy** (env changes only reach functions on a new
-deploy), and confirm a signed URL renders in a browser:
+**1. Render endpoints first.** The Worker renders every card through
+`https://benadams.dev/api/scrandle/...` before it posts. If that endpoint is
+returning 503 because `SCRANDLE_IMAGE_SECRET` is not set yet, matchups go out
+with no card on them at all — playable, but bare — and each one has to be
+repaired by hand afterwards. So: merge, set the env var on Vercel, **redeploy**
+(env changes only reach functions on a new deploy), and confirm a signed URL
+renders in a browser:
 
 ```bash
 node ../scripts/scrandle-sign.mjs standings/1 "{\"t\":\"test\",\"rows\":[]}" --base https://benadams.dev
@@ -293,11 +295,46 @@ curl "https://<your-worker>.workers.dev/admin/close-matchup?secret=<BACKFILL_SEC
 
 Closes everything open right now, ignoring `closes_at`.
 
+```bash
+curl "https://<your-worker>.workers.dev/admin/repair-card?secret=<BACKFILL_SECRET>&message=<discord message id>"
+curl "https://<your-worker>.workers.dev/admin/repair-card?secret=<BACKFILL_SECRET>&matchup=<id>"
+```
+
+Takes either the Discord message id — the last segment of the message link,
+and the only handle a card-less round gives you — or the matchup id.
+
+Puts a card back on a matchup that went out without one — or one posted before
+cards were proven, where Discord holds a failure it will never re-fetch. It
+re-renders, writes the copy under a stamped key, and edits only the embed, so
+the text and the vote buttons are untouched. Open matchups get the matchup
+card, closed ones the result card. It answers `{"repaired":true}`, or a reason
+why not.
+
 ## Behaviour notes
 
 - **Only JPEG and PNG are ingested.** satori rasterizes those two; a WebP or
   GIF would ingest fine and then fail to render mid-matchup. Skips are counted
   and reported to the logs webhook.
+- **Cards are rendered before they are posted.** The Worker fetches the card
+  from the render endpoint, mirrors the PNG into R2 under `cards/`, and puts
+  that R2 URL in the embed. Discord fetches an embed image once, at post time,
+  and caches whatever it gets against that URL forever — so a render that is
+  slow or briefly failing used to leave a card broken with no way back, which
+  is exactly how a place round went out with no image on it. Rendering it here
+  first moves the waiting somewhere that can afford it: the Worker has no
+  proxy deadline to miss, retries twice more on a fresh URL, and hands Discord
+  a static object. Large photographs are the ones that made this matter — two
+  full-size landscapes take seconds to rasterize where a pair of phone photos
+  takes under one. A card is a megabyte or two, and at two or three a day that
+  is a couple of gigabytes a year against R2's 10 GB free tier: `cards/` will
+  want sweeping eventually. Nothing reads a matchup card once its result card
+  has replaced it.
+- **A matchup with no card still posts.** If all three render attempts fail,
+  the round goes out as jump links and vote buttons with no embed at all,
+  rather than an embed pointing at nothing. It stays playable, the logs
+  webhook says so, and `/admin/repair-card` attaches the card afterwards. The
+  weekly standings post is the exception — it is nothing *but* the card, so it
+  waits for the next tick instead.
 - **Matchups never ping the role.** A ping would correlate with new dishes
   entering the pool, which tells people which photo is the new one. The weekly
   standings post is the only thing that pings.

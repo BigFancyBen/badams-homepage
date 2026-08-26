@@ -1,8 +1,15 @@
-import { allowedMentions, editMessage, postMessage } from "./discord";
+import {
+  allowedMentions,
+  editMessage,
+  logToDiscord,
+  postMessage,
+} from "./discord";
 import {
   chefStandings,
   getDish,
   getDueMatchups,
+  getMatchup,
+  getMatchupByMessage,
   getOpenStandardMatchup,
   getOpenMatchups,
   getState,
@@ -11,7 +18,13 @@ import {
   tallyVotes,
 } from "./db";
 import { updateElo } from "./elo";
-import { matchupImageUrl, resultImageUrl, standingsImageUrl } from "./images";
+import {
+  cardKey,
+  matchupImageUrl,
+  renderCard,
+  resultImageUrl,
+  standingsImageUrl,
+} from "./images";
 import { pickPair } from "./matchmaking";
 import { nextPostTime, parsePostHours, postSlotKey } from "./schedule";
 import type { Dish, Env, Matchup } from "./types";
@@ -62,7 +75,20 @@ async function createAndPost(
   if (!inserted) throw new Error("Failed to create matchup row");
   const matchupId = inserted.id;
 
-  const image = await matchupImageUrl(env, matchupId, pair.a, pair.b);
+  const image = await renderCard(env, cardKey("matchup", matchupId), (attempt) =>
+    matchupImageUrl(env, matchupId, pair.a, pair.b, attempt)
+  );
+
+  // Posting an embed whose image never arrived leaves a card that is broken
+  // for good, so a matchup that cannot be illustrated goes out as links and
+  // buttons instead. The round still runs, and the card can be added after.
+  if (!image) {
+    await logToDiscord(
+      env,
+      `Matchup #${matchupId} posted without a card — the render never came back. ` +
+        `Retry it with /admin/repair-card?matchup=${matchupId}.`
+    );
+  }
 
   // The row has to exist before the post so its id can go in the image URL,
   // which means a failed post would otherwise strand an open matchup that
@@ -75,7 +101,7 @@ async function createAndPost(
     const message = await postMessage(env, {
       content: preamble ? `${preamble}
 ${links}` : links,
-      embeds: [{ color: ACCENT, image: { url: image } }],
+      embeds: image ? [{ color: ACCENT, image: { url: image } }] : [],
       components: voteButtons(matchupId),
       allowed_mentions: allowedMentions(env),
     });
@@ -356,16 +382,27 @@ async function closeOne(env: Env, matchup: Matchup, now: number): Promise<void> 
     playerName(env, dishB.poster_discord_id),
   ]);
 
-  const image = await resultImageUrl(
-    env,
-    matchup.id,
-    dishA,
-    dishB,
-    votes.a,
-    votes.b,
-    chefA,
-    chefB
+  const image = await renderCard(env, cardKey("result", matchup.id), (attempt) =>
+    resultImageUrl(
+      env,
+      matchup.id,
+      dishA,
+      dishB,
+      votes.a,
+      votes.b,
+      chefA,
+      chefB,
+      attempt
+    )
   );
+
+  if (!image) {
+    await logToDiscord(
+      env,
+      `Matchup #${matchup.id} closed without a result card — the render never ` +
+        `came back. Retry it with /admin/repair-card?matchup=${matchup.id}.`
+    );
+  }
 
   const total = votes.a + votes.b;
 
@@ -382,7 +419,7 @@ async function closeOne(env: Env, matchup: Matchup, now: number): Promise<void> 
         `**Matchup #${matchup.id} — closed.** ${winner}\n` +
         `${total} ${total === 1 ? "vote" : "votes"}.\n` +
         `${sourceLink(env, dishA, "#1")} · ${sourceLink(env, dishB, "#2")}`,
-      embeds: [{ color: WIN, image: { url: image } }],
+      embeds: image ? [{ color: WIN, image: { url: image } }] : [],
       components: [],
       allowed_mentions: allowedMentions(env),
     });
@@ -439,12 +476,17 @@ export async function postStandingsIfDue(
     };
   });
 
-  const image = await standingsImageUrl(
-    env,
-    Math.floor(now / 1000),
-    "Chef standings",
-    rows
+  const stamp = Math.floor(now / 1000);
+  const image = await renderCard(env, cardKey("standings", stamp), (attempt) =>
+    standingsImageUrl(env, stamp, "Chef standings", rows, attempt)
   );
+
+  // Unlike a matchup, standings with no card are nothing but a ping. Leave the
+  // week un-posted and try again on the next tick rather than send that.
+  if (!image) {
+    await logToDiscord(env, "Standings card never rendered — not posting.");
+    return false;
+  }
 
   const ping = env.TASTER_ROLE_ID ? `<@&${env.TASTER_ROLE_ID}> ` : "";
   await postMessage(env, {
@@ -460,4 +502,88 @@ export async function postStandingsIfDue(
   await setState(env, "last_standings_at", String(now));
 
   return true;
+}
+
+/**
+ * Re-renders a matchup's card and puts it back on the message. Open matchups
+ * get the matchup card, closed ones the result card.
+ *
+ * Every card now goes out proven, so this is for the ones that went out before
+ * that was true — and for the rare round posted with no card at all. The
+ * repair has to arrive at a URL Discord has never seen, or its proxy answers
+ * from what it cached the first time, which is the whole problem. That is what
+ * the stamp in the key is for.
+ */
+export async function repairCard(
+  env: Env,
+  target: { matchupId?: number; messageId?: string }
+): Promise<{ repaired: boolean; matchup?: number; reason?: string }> {
+  const matchup = target.messageId
+    ? await getMatchupByMessage(env, target.messageId)
+    : await getMatchup(env, target.matchupId ?? 0);
+  if (!matchup) return { repaired: false, reason: "no such matchup" };
+  if (!matchup.message_id) {
+    return { repaired: false, reason: "that matchup was never posted" };
+  }
+
+  const matchupId = matchup.id;
+
+  const [dishA, dishB] = await Promise.all([
+    getDish(env, matchup.dish_a_id),
+    getDish(env, matchup.dish_b_id),
+  ]);
+  if (!dishA || !dishB) {
+    return { repaired: false, reason: "matchup has a missing dish" };
+  }
+
+  const open = matchup.status === "open";
+  const stamp = Date.now();
+
+  let image: string | null;
+  if (open) {
+    image = await renderCard(
+      env,
+      cardKey("matchup", matchupId, stamp),
+      (attempt) => matchupImageUrl(env, matchupId, dishA, dishB, attempt)
+    );
+  } else {
+    // Names are read once rather than per attempt — a retry is a re-render,
+    // not a re-count.
+    const [chefA, chefB] = await Promise.all([
+      playerName(env, dishA.poster_discord_id),
+      playerName(env, dishB.poster_discord_id),
+    ]);
+    image = await renderCard(
+      env,
+      cardKey("result", matchupId, stamp),
+      (attempt) =>
+        resultImageUrl(
+          env,
+          matchupId,
+          dishA,
+          dishB,
+          matchup.votes_a,
+          matchup.votes_b,
+          chefA,
+          chefB,
+          attempt
+        )
+    );
+  }
+
+  if (!image) {
+    return {
+      repaired: false,
+      matchup: matchupId,
+      reason: "the card still will not render",
+    };
+  }
+
+  // Only the embed. A PATCH leaves out what it does not name, so the text and
+  // the vote buttons stay exactly as they are.
+  await editMessage(env, matchup.message_id, {
+    embeds: [{ color: open ? ACCENT : WIN, image: { url: image } }],
+  });
+
+  return { repaired: true, matchup: matchupId };
 }
