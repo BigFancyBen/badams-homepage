@@ -77,6 +77,21 @@ export async function getMatchup(
 }
 
 /**
+ * By the Discord message it was posted as. A matchup that went out without a
+ * card carries its id nowhere a reader can see — not in the text, only in the
+ * vote buttons — so a repair has to be reachable from the message link, which
+ * is the one thing anyone looking at a broken round actually has.
+ */
+export async function getMatchupByMessage(
+  env: Env,
+  messageId: string
+): Promise<Matchup | null> {
+  return env.DB.prepare("SELECT * FROM matchups WHERE message_id = ?")
+    .bind(messageId)
+    .first<Matchup>();
+}
+
+/**
  * Upsert so people can change their pick until close. The UNIQUE constraint on
  * (matchup_id, voter_discord_id) is what actually enforces one vote each.
  */

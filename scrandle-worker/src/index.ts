@@ -8,6 +8,7 @@ import {
   postPersonMatchupIfDue,
   postPlaceMatchupIfDue,
   postStandingsIfDue,
+  repairCard,
 } from "./matchups";
 import type { Env, Interaction } from "./types";
 import { verifyDiscordRequest } from "./verify";
@@ -109,6 +110,40 @@ export default {
       } catch (error) {
         const reason = error instanceof Error ? error.message : String(error);
         await logToDiscord(env, `Manual close failed: ${reason}`);
+        return Response.json({ ok: false, error: reason }, { status: 502 });
+      }
+    }
+
+    // Puts a card back on a message that went out without one, or with one
+    // Discord failed to fetch. Renders to a URL Discord has never seen, so it
+    // cannot answer from the failure it cached the first time.
+    if (url.pathname === "/admin/repair-card") {
+      if (url.searchParams.get("secret") !== env.BACKFILL_SECRET) {
+        return new Response("Nope", { status: 403 });
+      }
+      // Either the matchup id or the Discord message it went out as. The
+      // message id is what a broken round actually hands you — it is the last
+      // segment of the message link — and a card-less matchup shows its id
+      // nowhere at all.
+      const messageId = url.searchParams.get("message");
+      const matchupId = Number(url.searchParams.get("matchup"));
+      const byId = Number.isInteger(matchupId) && matchupId > 0;
+      if (!messageId && !byId) {
+        return Response.json(
+          { ok: false, error: "pass ?matchup=<id> or ?message=<discord id>" },
+          { status: 400 }
+        );
+      }
+      try {
+        return Response.json(
+          await repairCard(
+            env,
+            messageId ? { messageId } : { matchupId }
+          )
+        );
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        await logToDiscord(env, `Card repair failed: ${reason}`);
         return Response.json({ ok: false, error: reason }, { status: 502 });
       }
     }

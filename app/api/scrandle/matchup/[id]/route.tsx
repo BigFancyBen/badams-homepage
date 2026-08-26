@@ -13,6 +13,8 @@ interface MatchupPayload {
   n: number;
   na?: string;
   nb?: string;
+  /** Retry counter. Only there to make a re-render a different URL. */
+  r?: number;
 }
 
 const HEADER_HEIGHT = 76;
@@ -98,6 +100,14 @@ function Plate({ src, name }: { src: string; name?: string }) {
     </div>
   );
 }
+
+/**
+ * Rasterizing two full-size photographs is not quick — a pair of large
+ * landscapes takes seconds — and the default cap is short enough that a cold
+ * one can run into it. The Worker waits for this render and mirrors the result
+ * to R2, so the only thing a slow one costs now is the Worker's patience.
+ */
+export const maxDuration = 60;
 
 export async function GET(request: Request) {
   const result = await readSignedPayload<MatchupPayload>(new URL(request.url));
