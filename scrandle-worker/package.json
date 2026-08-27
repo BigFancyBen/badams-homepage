@@ -15,7 +15,8 @@
     "db:local": "node scripts/make-test-config.mjs && wrangler d1 execute scrandle --local --config wrangler.test.toml",
     "mock:discord": "node scripts/mock-discord.mjs",
     "test:matchups": "node scripts/simulate-matchups.mjs",
-    "test:schedule": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/test-schedule.mjs"
+    "test:schedule": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/test-schedule.mjs",
+    "test:ingest": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/test-ingest.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260821.1",

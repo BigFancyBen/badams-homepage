@@ -187,8 +187,8 @@ curl "http://localhost:8787/backfill?secret=dev-only-backfill-secret&pages=1"
 ```
 
 That returns a JSON report — `scanned`, `stored`, `duplicates`,
-`skippedFormat`, `failed` — or a readable error naming the channel if the bot
-cannot see it. It proves the token, the intent, channel access, image
+`skippedFormat`, `failed`, `firstFailure`, `more` — or a readable error naming
+the channel if the bot cannot see it. It proves the token, the intent, channel access, image
 downloads, R2 writes, and sha256 dedupe all work, with no Cloudflare or Vercel
 account involved.
 
@@ -245,7 +245,9 @@ rather than the cron, so it needs `BACKFILL_SECRET` in `.dev.vars` (the value
 from `.dev.vars.example` is what it assumes). Forcing is deliberate: the cron
 only posts on a named hour, so a cron-driven run posts nothing at all unless
 you happen to start it at 15:00 or 03:00 UTC. The posting schedule has its own
-suite — `npm run test:schedule` — and this one is about the draw.
+suite — `npm run test:schedule` — and this one is about the draw. Ingest has a
+third, `npm run test:ingest`, covering the batching rule that keeps the cursor
+on a message boundary and the D1 write retry.
 
 It runs two seeded catalogs, because no single one shows everything.
 
@@ -313,10 +315,34 @@ why not.
 ## Behaviour notes
 
 - **Only JPEG and PNG are ingested.** satori rasterizes those two; a WebP or
-  GIF would ingest fine and then fail to render mid-matchup. Skips are counted
-  in the ingest report but deliberately not logged: a reaction GIF being turned
-  away is the filter working, and nobody wants to be told about it every time
-  it happens. The logs webhook hears about downloads and writes that failed.
+  GIF would ingest fine and then fail to render mid-matchup. They are dropped
+  while the page is being read, before they can take up a slot in the ten-image
+  budget — a burst of reaction GIFs used to fill all ten and store nothing.
+  Skips are counted in the ingest report but deliberately not logged: a
+  reaction GIF being turned away is the filter working, and nobody wants to be
+  told about it every time it happens. The logs webhook hears about downloads
+  and writes that failed, and now hears why the first one failed.
+- **Ingest batches whole messages, never part of one.** Discord's `after` and
+  `before` cursors are exclusive, so a cursor left on a half-handled message
+  skips the rest of its attachments permanently — and a meal posted as three
+  photos is the common case. The budget is spent in whole messages so the
+  cursor always lands on a boundary. A single message carrying more than the
+  budget is taken anyway: refusing it would park the cursor in front of it and
+  stall ingest for good.
+- **Idempotent D1 writes are retried.** `D1_ERROR: Network connection lost` is
+  on [Cloudflare's list of transient D1 errors][d1-errors], and since September
+  2025 D1 retries them itself — but only for statements it can prove are
+  read-only. Writes are left to the caller, so an hourly ingest could die on a
+  blip that a `SELECT` two lines earlier would have shrugged off. `retryWrite`
+  in `db.ts` covers the writes that are safe to repeat: the cursor upsert, the
+  chef upsert, and the `ON CONFLICT`-guarded dish insert. Nothing else.
+- **Chefs are written before their dishes.** A dish row whose poster never made
+  it into `players` reads as "unknown chef" for good, because the dedupe check
+  skips that message on every later run and the upsert never gets a second
+  chance. Writing chefs first means a failure there leaves nothing committed
+  and the batch simply runs again next tick.
+
+[d1-errors]: https://developers.cloudflare.com/d1/observability/debug-d1/#error-list
 - **Cards are rendered before they are posted.** The Worker fetches the card
   from the render endpoint, mirrors the PNG into R2 under `cards/`, and puts
   that R2 URL in the embed. Discord fetches an embed image once, at post time,
