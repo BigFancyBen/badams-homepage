@@ -182,9 +182,14 @@ export default {
       // A GIF or a WebP being turned away is the format filter doing its job —
       // someone posted a reaction GIF, and it is not meant to end up in the
       // pool. Only a download or a write that actually failed is worth a line;
-      // the count is still in the ingest report either way.
+      // the count is still in the ingest report either way. The reason comes
+      // with it: a bare number cannot tell a dead attachment URL from a D1
+      // blip, and only one of those is worth getting out of bed for.
       if (report.failed > 0) {
-        await logToDiscord(env, `Ingest: ${report.failed} failed.`);
+        await logToDiscord(
+          env,
+          `Ingest: ${report.failed} failed. First: ${report.firstFailure}`
+        );
       }
     } catch (error) {
       await logToDiscord(env, `Ingest failed: ${String(error)}`);

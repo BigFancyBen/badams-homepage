@@ -1,5 +1,59 @@
 import type { Dish, Env, Matchup } from "./types";
 
+/**
+ * D1 fails transiently. Cloudflare's own error table lists "Network connection
+ * lost", a Durable Object restart behind the database, and a replica losing
+ * its primary, all with the same recommended action: retry.
+ *
+ * Since September 2025 D1 retries these itself — but only for statements it
+ * can prove are read-only (`SELECT`, `WITH`, `EXPLAIN`). Anything that writes
+ * is left to the caller, which is why an hourly ingest could die on a blip
+ * that a `SELECT` two lines earlier would have shrugged off.
+ *
+ * https://developers.cloudflare.com/d1/observability/debug-d1/#error-list
+ */
+const RETRYABLE = [
+  "Network connection lost",
+  "storage caused object to be reset",
+  "reset because its code was updated",
+  "Cannot resolve D1 DB due to transient issue on remote node",
+  "Replica disconnected from primary",
+];
+
+function isRetryable(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return RETRYABLE.some((fragment) => message.includes(fragment));
+}
+
+/** 100ms then 200ms — 300ms of added latency in the worst case. */
+const RETRY_ATTEMPTS = 3;
+const RETRY_BASE_MS = 100;
+
+/**
+ * Retries a D1 write through a transient failure.
+ *
+ * **Only for idempotent statements.** A retry cannot tell "the write never
+ * landed" from "the write landed and the reply got lost", so re-running has to
+ * be harmless — an upsert, or an insert guarded by `ON CONFLICT`. Never wrap a
+ * bare `INSERT` or a counter bump in this.
+ *
+ * Retries cost a subrequest each, which matters on the ingest path where the
+ * budget is already counted out. Failing on the subrequest ceiling instead of
+ * on D1 is no worse, and only happens when things are already going wrong.
+ */
+export async function retryWrite<T>(run: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await run();
+    } catch (error) {
+      if (attempt >= RETRY_ATTEMPTS - 1 || !isRetryable(error)) throw error;
+      await new Promise((resolve) =>
+        setTimeout(resolve, RETRY_BASE_MS * 2 ** attempt)
+      );
+    }
+  }
+}
+
 export async function getState(env: Env, key: string): Promise<string | null> {
   const row = await env.DB.prepare("SELECT value FROM state WHERE key = ?")
     .bind(key)
@@ -7,17 +61,20 @@ export async function getState(env: Env, key: string): Promise<string | null> {
   return row?.value ?? null;
 }
 
+/** Retried: an upsert of a known value, so re-running it changes nothing. */
 export async function setState(
   env: Env,
   key: string,
   value: string
 ): Promise<void> {
-  await env.DB.prepare(
-    "INSERT INTO state (key, value) VALUES (?, ?) " +
-      "ON CONFLICT (key) DO UPDATE SET value = excluded.value"
-  )
-    .bind(key, value)
-    .run();
+  await retryWrite(() =>
+    env.DB.prepare(
+      "INSERT INTO state (key, value) VALUES (?, ?) " +
+        "ON CONFLICT (key) DO UPDATE SET value = excluded.value"
+    )
+      .bind(key, value)
+      .run()
+  );
 }
 
 export async function getDish(env: Env, id: number): Promise<Dish | null> {
