@@ -41,7 +41,7 @@ export const DECISIONS: Decision[] = [
   {
     id: "buttons-not-polls",
     title: "Buttons, not a native Discord poll",
-    body: "Polls are zero code, but they show a live tally and anyone can expand an answer to see who voted. That kills anonymity and invites bandwagoning. Buttons cost about 50 lines more and give both back — each click gets a private ephemeral reply and nobody sees a thing until close.",
+    body: "Polls are zero code, but they show a live tally, which invites bandwagoning. Buttons cost about 50 lines more and take that away — each click gets a private ephemeral reply and nobody sees a thing until close. Revisited later, when the channel asked to see who voted for what: a poll gives that for free, but a poll message can never be edited, and the whole close flow is an edit that swaps the matchup card for the result card. Publishing the ballot from the buttons was forty lines. Losing the reveal would have been the game.",
   },
   {
     id: "one-pair",
@@ -171,7 +171,7 @@ export const NOTHING_ELSE =
 
 export const STACK = [
   { name: "Cloudflare Workers", detail: "the whole game, one Worker" },
-  { name: "D1", detail: "dishes, matchups, votes, players, cursor state" },
+  { name: "D1", detail: "dishes, matchups, votes, rounds, players, cursor state" },
   {
     name: "R2",
     detail:
@@ -281,7 +281,7 @@ CREATE TABLE state (
 --       standings_snapshot, backfill_cursor`;
 
 export const SCHEMA_NOTE =
-  "The `UNIQUE` on `votes` gives you one-vote-per-person enforcement in the database rather than in application logic, and the upsert on top of it is what lets people change their pick until close. The `UNIQUE` on `sha256` handles reposts. Query `matchups` directly for pair history rather than keeping a separate table. There is no `drops` table — one pair at a time made it unnecessary.";
+  "The `UNIQUE` on `votes` gives you one-vote-per-person enforcement in the database rather than in application logic, and the upsert on top of it is what lets people change their pick until close. The `UNIQUE` on `sha256` handles reposts. Query `matchups` directly for pair history rather than keeping a separate table. There is no `drops` table — one pair at a time made it unnecessary. The weekly ranking round got its own `rounds`, `round_entries` and `round_votes` rather than widening these: a pair is a ranking of two and could have been the n=2 case, but `matchups` is what the everyday game, the standings and every admin route read, and generalising it would have meant rewriting all of them at once on a bot that was already running.";
 
 export const PHASES: Phase[] = [
   {
@@ -374,7 +374,11 @@ export const PHASES: Phase[] = [
       },
       {
         kind: "note",
-        text: "Every response is ephemeral. That is the entire reason this uses buttons instead of a native poll — nobody sees who voted, and there is no running tally to bandwagon onto.",
+        text: "Every response is ephemeral. That is the entire reason this uses buttons instead of a native poll — while a round is running nobody sees who voted, and there is no tally to bandwagon onto. Once it closes, the result names everyone.",
+      },
+      {
+        kind: "p",
+        text: "The weekly place round carries `b:<roundId>:<slot>` instead, and clicks accumulate rather than replace: the first is your favourite, the second your runner-up, and you can stop whenever. A ballot of one is valid — it says that photo beat the other four and says nothing about how those four compare.",
       },
     ],
   },
@@ -392,6 +396,14 @@ export const PHASES: Phase[] = [
       {
         kind: "p",
         text: "The original message is then edited in place — result card, chefs named, buttons removed, self-vote tally appended. The reveal happens where the argument will happen.",
+      },
+      {
+        kind: "p",
+        text: "A second embed under the card names who voted for what, in the order they voted. It rides on the edit that was happening anyway, so it costs no extra call, no extra permission and no second message — and it renders below the card, which keeps the card the headline.",
+      },
+      {
+        kind: "p",
+        text: "A ranking round closes as the round-robin it already is: every pair of photos in it is an ordinary matchup, scored by the same vote-share Elo, where a ballot ranking one above another is a vote for it and anything ranked beats everything left unranked. Each comparison carries K/(n-1), because a photo in a five-way round is judged four times — at full K one bonus round would move a rating as far as four matchups.",
       },
     ],
   },

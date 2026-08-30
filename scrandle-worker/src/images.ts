@@ -76,6 +76,45 @@ export function resultImageUrl(
   });
 }
 
+/**
+ * The ranking card: up to five photographs, numbered to match the buttons.
+ * `t` is the classifier's name for each, and may be blank.
+ */
+export function ballotImageUrl(
+  env: Env,
+  roundId: number,
+  entries: Dish[],
+  attempt = 0
+): Promise<string> {
+  return signedUrl(env, `ballot/${roundId}`, {
+    n: roundId,
+    items: entries.map((dish) => ({
+      u: dishUrl(env, dish),
+      t: dish.name ?? "",
+    })),
+    ...retryField(attempt),
+  });
+}
+
+/**
+ * The reveal: the same photographs in finishing order, with each one's rating
+ * movement. `p` is the position label, `d` the rounded Elo delta.
+ */
+export function ballotResultImageUrl(
+  env: Env,
+  roundId: number,
+  rows: { u: string; t: string; p: string; d: number }[],
+  ballots: number,
+  attempt = 0
+): Promise<string> {
+  return signedUrl(env, `ballot-result/${roundId}`, {
+    n: roundId,
+    b: ballots,
+    items: rows,
+    ...retryField(attempt),
+  });
+}
+
 export function standingsImageUrl(
   env: Env,
   stamp: number,
@@ -98,7 +137,7 @@ const RENDER_ATTEMPTS = 3;
  * seen — when replacing a card that already went out.
  */
 export function cardKey(
-  kind: "matchup" | "result" | "standings",
+  kind: "matchup" | "result" | "standings" | "ballot" | "ballot-result",
   id: number,
   stamp?: number
 ): string {

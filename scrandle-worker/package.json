@@ -15,6 +15,7 @@
     "db:local": "node scripts/make-test-config.mjs && wrangler d1 execute scrandle --local --config wrangler.test.toml",
     "mock:discord": "node scripts/mock-discord.mjs",
     "test:matchups": "node scripts/simulate-matchups.mjs",
+    "test:rounds": "node scripts/simulate-rounds.mjs",
     "test:schedule": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/test-schedule.mjs",
     "test:ingest": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/test-ingest.mjs"
   },

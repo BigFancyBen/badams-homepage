@@ -1,8 +1,13 @@
 import {
+  ACCENT,
+  WIN,
   allowedMentions,
+  ballotEmbed,
   editMessage,
+  escapeMarkdown,
   logToDiscord,
   postMessage,
+  sourceLink,
 } from "./discord";
 import {
   chefStandings,
@@ -13,9 +18,11 @@ import {
   getOpenStandardMatchup,
   getOpenMatchups,
   getState,
+  openRoundDishIds,
   playerName,
   setState,
   tallyVotes,
+  voteBreakdown,
 } from "./db";
 import { updateElo } from "./elo";
 import {
@@ -26,21 +33,15 @@ import {
   standingsImageUrl,
 } from "./images";
 import { pickPair } from "./matchmaking";
-import { nextPostTime, parsePostHours, postSlotKey } from "./schedule";
+import {
+  nextPostTime,
+  parsePostHours,
+  parseWeekdays,
+  postSlotKey,
+} from "./schedule";
 import type { Dish, Env, Matchup } from "./types";
 
 const HOUR = 60 * 60 * 1000;
-const ACCENT = 0x81a1c1;
-const WIN = 0xa3be8c;
-
-/**
- * Jump link to the message a dish came from, so people can read the original
- * context. Note this also reveals the poster — anyone who clicks sees who
- * cooked it.
- */
-function sourceLink(env: Env, dish: Dish, label: string): string {
-  return `[${label}](https://discord.com/channels/${env.DISCORD_GUILD_ID}/${env.DISCORD_CHANNEL_ID}/${dish.discord_message_id})`;
-}
 
 function voteButtons(matchupId: number) {
   return [
@@ -142,7 +143,7 @@ export async function postMatchupIfDue(
   // to skip what the bonus is holding. Nothing pairs the two today — the pools
   // are disjoint categories — but that is a property of the current pools, not
   // a rule anything enforces, and it costs one read an hour to not rely on it.
-  const liveDishIds: number[] = [];
+  const liveDishIds: number[] = await openRoundDishIds(env);
   for (const live of await getOpenMatchups(env)) {
     liveDishIds.push(live.dish_a_id, live.dish_b_id);
   }
@@ -188,20 +189,13 @@ export async function postMatchupIfDue(
   return true;
 }
 
-/** Weekdays a bonus runs on: comma-separated, 0 = Sunday. Junk is dropped. */
-function parseWeekdays(raw: string | undefined): number[] {
-  const days = (raw || "")
-    .split(",")
-    .map((d) => d.trim())
-    .filter((d) => d.length > 0)
-    .map(Number)
-    .filter((d) => Number.isInteger(d) && d >= 0 && d <= 6);
-  return [...new Set(days)];
-}
-
 interface BonusSchedule {
-  /** The category it draws from — places, people. Its own day, its own pool. */
-  category: "place" | "person";
+  /**
+   * The category it draws from. People, now that places moved to the weekly
+   * ranking round — kept as a shape rather than inlined because it is the one
+   * thing that makes a bonus a bonus, and the next one will want it too.
+   */
+  category: "person";
   /** Weekdays it fires on, 0 = Sunday. Empty disables it. */
   weekdays: number[];
   hourUtc: number;
@@ -253,8 +247,9 @@ async function postBonusMatchupIfDue(
     }
   }
 
-  // Whatever is live keeps its photographs to itself.
-  const liveDishIds: number[] = [];
+  // Whatever is live keeps its photographs to itself — open matchups and the
+  // weekly ranking round alike.
+  const liveDishIds: number[] = await openRoundDishIds(env);
   for (const live of await getOpenMatchups(env)) {
     liveDishIds.push(live.dish_a_id, live.dish_b_id);
   }
@@ -278,31 +273,6 @@ async function postBonusMatchupIfDue(
   await setState(env, schedule.slotState, postSlotKey(now));
 
   return true;
-}
-
-/**
- * The place bonus: places rather than plates. Runs on every weekday listed in
- * PLACE_WEEKDAY (Monday and Wednesday by default), at noon Mountain.
- */
-export function postPlaceMatchupIfDue(
-  env: Env,
-  now: number,
-  { force = false }: { force?: boolean } = {}
-): Promise<boolean> {
-  return postBonusMatchupIfDue(
-    env,
-    now,
-    {
-      category: "place",
-      weekdays: parseWeekdays(env.PLACE_WEEKDAY),
-      hourUtc: Number(env.PLACE_HOUR_UTC || "18"),
-      minute: 0,
-      windowHours: Number(env.PLACE_WINDOW_HOURS || "24"),
-      slotState: "last_place_slot",
-      preamble: "Bonus round — place vs place.",
-    },
-    force
-  );
 }
 
 /**
@@ -413,17 +383,43 @@ async function closeOne(env: Env, matchup: Matchup, now: number): Promise<void> 
         ? `**${chefA}** takes it.`
         : `**${chefB}** takes it.`;
 
+  const log = await voteLog(env, matchup, dishA, dishB);
+
   if (matchup.message_id) {
     await editMessage(env, matchup.message_id, {
       content:
         `**Matchup #${matchup.id} — closed.** ${winner}\n` +
         `${total} ${total === 1 ? "vote" : "votes"}.\n` +
         `${sourceLink(env, dishA, "#1")} · ${sourceLink(env, dishB, "#2")}`,
-      embeds: image ? [{ color: WIN, image: { url: image } }] : [],
+      embeds: [
+        ...(image ? [{ color: WIN, image: { url: image } }] : []),
+        log,
+      ],
       components: [],
       allowed_mentions: allowedMentions(env),
     });
   }
+}
+
+/**
+ * The two sides of a closed matchup with the names behind them, as an embed
+ * that rides along on the close edit. Names rather than mentions: a mention
+ * chip in a list of twenty is noise, and it would put the burden of not
+ * pinging anyone entirely on allowed_mentions.
+ */
+async function voteLog(env: Env, matchup: Matchup, dishA: Dish, dishB: Dish) {
+  const breakdown = await voteBreakdown(env, matchup);
+  const side = (dishId: number) => {
+    const names = breakdown
+      .filter((vote) => vote.dish_id === dishId)
+      .map((vote) => escapeMarkdown(vote.name));
+    return names.length > 0 ? names.join(", ") : "nobody";
+  };
+
+  return ballotEmbed("Who voted for what", [
+    `**#1** ${side(dishA.id)}`,
+    `**#2** ${side(dishB.id)}`,
+  ]);
 }
 
 export async function closeDueMatchups(
@@ -579,10 +575,15 @@ export async function repairCard(
     };
   }
 
-  // Only the embed. A PATCH leaves out what it does not name, so the text and
-  // the vote buttons stay exactly as they are.
+  // Only the embeds. A PATCH leaves out what it does not name, so the text and
+  // the vote buttons stay exactly as they are — but it *replaces* the embeds it
+  // does name, so a closed matchup has to have its vote log rebuilt alongside
+  // the card or the repair would quietly delete it.
   await editMessage(env, matchup.message_id, {
-    embeds: [{ color: open ? ACCENT : WIN, image: { url: image } }],
+    embeds: [
+      { color: open ? ACCENT : WIN, image: { url: image } },
+      ...(open ? [] : [await voteLog(env, matchup, dishA, dishB)]),
+    ],
   });
 
   return { repaired: true, matchup: matchupId };

@@ -5,6 +5,11 @@ The whole game. One Cloudflare Worker, one hourly cron, no frontend.
 - `scheduled()` — ingest new photos, close what is due, post what is due, post weekly standings
 - `fetch()` — `POST /interactions` for button clicks, plus `/backfill` and `/health`
 
+Two shapes of round. The everyday matchup is a pair with a button each, in
+`matchups.ts`. The weekly place round puts five photographs on one card and
+each voter ranks them, in `rounds.ts` — its own tables, its own close path,
+the same Elo underneath.
+
 Rendering lives in the Next app (`app/api/scrandle/*`) because Workers Free
 allows 10ms of CPU per invocation, which cannot rasterize an image. The Worker
 builds a signed URL, fetches the PNG itself, and mirrors it into R2 — Discord
@@ -123,7 +128,10 @@ npm run deploy
 ```
 
 **Migrations are not automated.** `npm run migrate` is still a manual step, and
-it has to run *before* the deploy of any code that reads a new column.
+it has to run *before* the deploy of any code that reads a new column. Since
+merging is what deploys, that means running it *before* the merge, not after:
+a merge that lands table-reading code on a database without the tables leaves
+every tick throwing until the migration catches up.
 
 ### Order matters
 
@@ -210,12 +218,20 @@ Put the printed hex in `.dev.vars` as `DISCORD_PUBLIC_KEY`, then run the suite
 against an open matchup:
 
 ```bash
-npm run test:interactions -- 1
+npm run test:interactions -- 1 1
 ```
+
+The first argument is an open matchup id, the second an open ranking round id.
 
 It checks that a bad signature is rejected with 401, PING answers PONG, a vote
 records, changing a pick upserts rather than duplicates, another guild is
 turned away, and an unknown `custom_id` is ignored.
+
+With a round id it also walks a whole ballot: the first click opens it, the
+second lands after the first, clicking the same photo twice is refused without
+reordering anything, a slot that is not in the round is turned away, `Start
+over` clears it, and the next click begins a fresh ballot. Leave the second
+argument off and those are skipped.
 
 ### Testing matchmaking
 
@@ -277,6 +293,37 @@ ever free of one.
 The small and backlog catalogs are also checked for pair repeats inside the
 20-matchup recency window, and the small one for Elo staying zero-sum.
 
+### Testing ranking rounds
+
+`simulate-rounds.mjs` is the same idea for the weekly place round, and needs
+the same mock and dev server running:
+
+```bash
+npm run test:rounds 15
+```
+
+It seeds places rather than food — the round draws nothing else, so a food
+seed would leave every query empty and the suite would pass having tested
+nothing — posts each round through `/admin/post-matchup?place=1`, writes
+ballots straight into `round_votes`, and closes through
+`/admin/close-matchup`.
+
+Three catalogs again. A **deep** one of 40 places across 8 people, with six
+voters ranking in six different orders, covers the rotation, the two-per-person
+cap, Elo staying zero-sum, and the rule that a round is one match played rather
+than one per comparison. A **unanimous** one, where five voters submit the same
+order, is the only place the arithmetic is legible: it checks that the photo
+everyone put first wins, that the finishing order is the ranked order, and that
+a clean sweep of a five-way round moves a rating exactly as far as a clean
+sweep of a matchup would — which is the whole point of dividing K by `n-1`.
+The deep catalog cannot show that last one, because six voters disagreeing
+split every pair near even and nothing moves more than a point.
+
+The third is the one worth having: **nobody ranks more than one photo**. That
+is the ballot most people will actually cast, and it checks that a single click
+still scores, still beats the four it did not rank, and still leaves those four
+unscored against each other.
+
 ### Forcing a post by hand
 
 There is no way to fire a cron on demand, so three admin routes stand in. All
@@ -296,23 +343,29 @@ curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECR
 curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&person=1"
 ```
 
-Posts a weekly bonus on demand — `place=1` for place-vs-place, `person=1` for
-person-vs-person — the same thing the scheduled cron does. Always overlaps,
-always gets the 24-hour window.
+Posts a weekly bonus on demand — `place=1` for the five-photo place ranking
+round, `person=1` for person-vs-person — the same thing the scheduled cron
+does. Always overlaps, always gets the 24-hour window. `place=1` answers
+`{"posted":false}` when fewer than three places are available to rank, or when
+the per-poster cap leaves it short.
 
 ```bash
 curl "https://<your-worker>.workers.dev/admin/close-matchup?secret=<BACKFILL_SECRET>"
 ```
 
-Closes everything open right now, ignoring `closes_at`.
+Closes everything open right now, ignoring `closes_at` — matchups and ranking
+rounds alike. Answers `{"closed":N,"rounds":N}`.
 
 ```bash
 curl "https://<your-worker>.workers.dev/admin/repair-card?secret=<BACKFILL_SECRET>&message=<discord message id>"
 curl "https://<your-worker>.workers.dev/admin/repair-card?secret=<BACKFILL_SECRET>&matchup=<id>"
+curl "https://<your-worker>.workers.dev/admin/repair-card?secret=<BACKFILL_SECRET>&round=<id>"
 ```
 
-Takes either the Discord message id — the last segment of the message link,
-and the only handle a card-less round gives you — or the matchup id.
+Takes the Discord message id — the last segment of the message link, and the
+only handle a card-less round gives you — or a matchup id, or a ranking round
+id. By message it tries the matchups first and then the rounds, so you do not
+have to know which kind you are looking at.
 
 Puts a card back on a matchup that went out without one — or one posted before
 cards were proven, where Discord holds a failure it will never re-fetch. It
@@ -377,8 +430,19 @@ why not.
   standings post is the only thing that pings.
 - **Sides are randomized** for the same reason — position 1 is not always the
   newer dish.
-- **Votes are ephemeral.** Nobody sees who voted or the running tally until
-  close, which is why this uses buttons rather than a native Discord poll.
+- **Votes are ephemeral until the round closes.** Nobody sees who voted or the
+  running tally while it is running, which is why this uses buttons rather than
+  a native Discord poll. The close then publishes the ballot as a second embed
+  under the result card — who voted for what, in the order they voted. That is
+  a deliberate reversal of half the original reasoning: the secrecy was there
+  to stop bandwagoning, closing the round ends the reason for it, and who
+  picked what is the part people actually want to argue about. Names rather
+  than mentions, so nothing pings, and markdown in a username is escaped.
+- **The vote log rides on the edit that was already happening.** It is an embed
+  on the same message rather than a follow-up post or a thread, which costs no
+  extra API call, no extra permission and no second message in the channel. It
+  also means `/admin/repair-card` has to rebuild it: a PATCH replaces the
+  embeds it names, so sending only the card would quietly delete the log.
 - **The cursor advances only after a batch commits**, so a failed tick replays
   cleanly on the next hour. Cron does not retry.
 - **A matchup closes when the next one is due**, not a fixed span after it went
@@ -409,11 +473,31 @@ why not.
 - **Places and people only play on their own days.** The classifier labels
   rooms, views and landscapes `place`, and photos whose subject is a person
   `person`; the everyday draw filters both out. They are drawn only by their
-  weekly bonuses — place against place on `PLACE_WEEKDAY` (Monday and Wednesday
+  weekly bonuses — a five-photo place ranking round on `PLACE_WEEKDAY` (Monday
   noon by default), person against person on `PERSON_WEEKDAY` (Tuesday 11:11am).
   Each bonus overlaps whatever is open, gets a flat window instead of closing
   on a posting hour, and keeps its own slot key so posting one never consumes a
   food slot. `PLACE_WEEKDAY = "-1"` / `PERSON_WEEKDAY = "-1"` turn them off.
+- **Places are ranked, not paired.** Five places go up on one card and each
+  voter clicks them in the order they like them, best first. A pair asks the
+  wrong question of places — two holiday snaps side by side is close to a coin
+  toss — while five in an order is a real opinion and gets four comparisons out
+  of what used to be one. It runs once a week rather than the twice the pair
+  round did, because it eats five photos instead of two.
+- **A partial ballot counts.** Click one and wander off and that is a valid
+  vote: whatever you ranked beat everything you did not, and the ones you left
+  say nothing about each other. Demanding all five would collect fewer opinions
+  than the one-click matchup it replaced, not more. `Start over` clears a
+  ballot; there is deliberately no undo of a single pick, because what that
+  should do to the picks after it is a worse interface than starting again.
+- **A ranking round is scored as the round-robin it already is.** Every pair
+  inside it is an ordinary matchup with its own vote split, resolved by the
+  same vote-share Elo, against the ratings as they stood when the round opened
+  — summed and applied once, so the answer cannot depend on the order the pairs
+  are walked in. Each comparison carries `K/(n-1)`: a photo in a five-way round
+  is judged four times, and at full `K` one bonus round would move a rating as
+  far as four matchups and the weekly bonus would outweigh the week. A round is
+  one match played, not four — the rotation counts rounds.
 - **Places do not count toward chef standings**, and neither do people. They
   earn an Elo like any other photo, but averaging a holiday snap or a group
   shot into someone's cooking record would rate them on the wrong thing.

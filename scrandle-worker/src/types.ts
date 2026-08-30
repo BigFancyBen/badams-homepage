@@ -14,11 +14,13 @@ export interface Env {
   POST_HOURS_UTC: string;
   STANDINGS_WEEKDAY: string;
   STANDINGS_HOUR_UTC: string;
-  /** Weekdays for the place bonus, comma-separated, 0 = Sunday. Empty/-1 off. */
+  /** Weekdays for the place round, comma-separated, 0 = Sunday. Empty/-1 off. */
   PLACE_WEEKDAY: string;
   PLACE_HOUR_UTC: string;
-  /** Flat window for the place bonus — it does not close on a posting hour. */
+  /** Flat window for the place round — it does not close on a posting hour. */
   PLACE_WINDOW_HOURS: string;
+  /** How many photographs the weekly place round puts on one card. */
+  PLACE_BALLOT_SIZE: string;
   /** Weekdays for the person bonus, comma-separated, 0 = Sunday. Empty/-1 off. */
   PERSON_WEEKDAY: string;
   PERSON_HOUR_UTC: string;
@@ -72,6 +74,40 @@ export interface Matchup {
   elo_a_after: number | null;
   elo_b_after: number | null;
 }
+
+/**
+ * A ranking round: one card, several photographs, each voter putting them in
+ * their own order. Separate from `Matchup` for the reasons in migration 0005.
+ */
+export interface Round {
+  id: number;
+  category: string;
+  status: "open" | "closed";
+  message_id: string | null;
+  created_at: number;
+  closes_at: number;
+  closed_at: number | null;
+}
+
+/** A photograph in a ranking round, and how it did once the round closed. */
+export interface RoundEntry {
+  round_id: number;
+  dish_id: number;
+  /** The number on the card and on the button. 1-based. */
+  slot: number;
+  elo_before: number | null;
+  elo_after: number | null;
+  wins: number | null;
+  firsts: number | null;
+}
+
+/**
+ * A round entry joined to its photograph — what the card, the draw and the
+ * close path all want. The entry's own columns are null until the round
+ * closes; after that they are the record of what it did, which is what a
+ * repair reads rather than scoring the round a second time.
+ */
+export type RoundDish = Dish & Omit<RoundEntry, "round_id" | "dish_id">;
 
 // ── Discord ────────────────────────────────────────────────────────
 
