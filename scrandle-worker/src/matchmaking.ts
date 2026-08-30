@@ -187,6 +187,68 @@ async function pickOpponent(
  * only one person's photographs, since the opponent can never share the
  * primary's poster.
  */
+/** A ranking round wants five, and is not worth posting below three. */
+const BALLOT_MIN = 3;
+/** At most this many from one person, so a round is nobody's photo album. */
+const BALLOT_PER_POSTER = 2;
+
+/**
+ * The draw for a ranking round: the least-played end of one category, in the
+ * same rotation the pair draw uses, capped so no one person fills the card.
+ *
+ * No fresh slot and no wide-gap rule here. Both exist to shape a two-way
+ * question — which of these, and how close should it be — and neither has an
+ * answer in a five-way round. The rotation already puts the unplayed backlog
+ * first, and a spread of ratings across five is what the format is for rather
+ * than something to stage.
+ */
+export async function pickBallot(
+  env: Env,
+  {
+    size = 5,
+    categories = DEFAULT_CATEGORIES,
+    exclude = [],
+  }: { size?: number; categories?: Category[]; exclude?: number[] } = {}
+): Promise<Dish[] | null> {
+  const notOpen = excludeClause("id", exclude);
+  const inCategory = `category IN (${categoryList(categories)})`;
+
+  // Deliberate headroom. The per-poster cap can skip a long run of one
+  // person's photographs, and a candidate list exactly `size` long would come
+  // up short on a pool that could have filled the card comfortably.
+  const candidates = await env.DB.prepare(
+    `SELECT * FROM dishes WHERE ${inCategory}${notOpen} ` +
+      `ORDER BY matches_played ASC, RANDOM() LIMIT ?`
+  )
+    .bind(Math.max(1, size) * 5)
+    .all<Dish>();
+
+  const chosen: Dish[] = [];
+  const perPoster = new Map<string, number>();
+
+  for (const dish of candidates.results ?? []) {
+    if (chosen.length >= size) break;
+    const already = perPoster.get(dish.poster_discord_id) ?? 0;
+    if (already >= BALLOT_PER_POSTER) continue;
+    perPoster.set(dish.poster_discord_id, already + 1);
+    chosen.push(dish);
+  }
+
+  // Below the floor there is nothing here worth posting — three is the fewest
+  // that is a ranking rather than a matchup wearing an unfamiliar card.
+  if (chosen.length < BALLOT_MIN) return null;
+
+  // Shuffled for the same reason the pair draw randomizes sides: the query
+  // hands them back least-played first, so slot 1 would otherwise always be
+  // the photograph least likely to have been seen before.
+  for (let i = chosen.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [chosen[i], chosen[j]] = [chosen[j], chosen[i]];
+  }
+
+  return chosen;
+}
+
 export async function pickPair(
   env: Env,
   {

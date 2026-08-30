@@ -1,4 +1,4 @@
-import type { Dish, Env, Matchup } from "./types";
+import type { Dish, Env, Matchup, Round, RoundDish } from "./types";
 
 /**
  * D1 fails transiently. Cloudflare's own error table lists "Network connection
@@ -182,6 +182,177 @@ export async function tallyVotes(
     .bind(matchup.dish_a_id, matchup.dish_b_id, matchup.id)
     .first<{ a: number | null; b: number | null }>();
   return { a: row?.a ?? 0, b: row?.b ?? 0 };
+}
+
+/**
+ * Every vote in a matchup with the name behind it, oldest first.
+ *
+ * Vote order rather than alphabetical: it is free — `voted_at` is already
+ * stored — and who committed first is the part worth reading. Only final picks
+ * exist to report, because recordVote upserts; somebody who changed their mind
+ * leaves no trace of having done so.
+ */
+export async function voteBreakdown(
+  env: Env,
+  matchup: Matchup
+): Promise<{ dish_id: number; name: string }[]> {
+  const result = await env.DB.prepare(
+    "SELECT v.picked_dish_id AS dish_id, " +
+      "COALESCE(p.username, 'someone') AS name " +
+      "FROM votes v LEFT JOIN players p ON p.discord_id = v.voter_discord_id " +
+      "WHERE v.matchup_id = ? ORDER BY v.voted_at ASC, v.id ASC"
+  )
+    .bind(matchup.id)
+    .all<{ dish_id: number; name: string }>();
+  return result.results ?? [];
+}
+
+// ── Ranking rounds ─────────────────────────────────────────────────
+
+export async function getRound(env: Env, id: number): Promise<Round | null> {
+  return env.DB.prepare("SELECT * FROM rounds WHERE id = ?")
+    .bind(id)
+    .first<Round>();
+}
+
+export async function getRoundByMessage(
+  env: Env,
+  messageId: string
+): Promise<Round | null> {
+  return env.DB.prepare("SELECT * FROM rounds WHERE message_id = ?")
+    .bind(messageId)
+    .first<Round>();
+}
+
+export async function getOpenRounds(env: Env): Promise<Round[]> {
+  const result = await env.DB.prepare(
+    "SELECT * FROM rounds WHERE status = 'open' ORDER BY created_at ASC"
+  ).all<Round>();
+  return result.results ?? [];
+}
+
+export async function getDueRounds(env: Env, now: number): Promise<Round[]> {
+  const result = await env.DB.prepare(
+    "SELECT * FROM rounds WHERE status = 'open' AND closes_at <= ?"
+  )
+    .bind(now)
+    .all<Round>();
+  return result.results ?? [];
+}
+
+/**
+ * Photographs held by an open ranking round, so the pair draw can leave them
+ * alone. Nothing pairs the two pools today — places are drawn nowhere else —
+ * but that is a property of the current categories rather than a rule anything
+ * enforces, and it costs one read a tick to not rely on it.
+ */
+export async function openRoundDishIds(env: Env): Promise<number[]> {
+  const result = await env.DB.prepare(
+    "SELECT e.dish_id AS id FROM round_entries e " +
+      "JOIN rounds r ON r.id = e.round_id WHERE r.status = 'open'"
+  ).all<{ id: number }>();
+  return (result.results ?? []).map((row) => row.id);
+}
+
+/** The round's photographs in slot order — the order they sit on the card. */
+export async function getRoundEntries(
+  env: Env,
+  roundId: number
+): Promise<RoundDish[]> {
+  const result = await env.DB.prepare(
+    "SELECT d.*, e.slot AS slot, e.elo_before AS elo_before, " +
+      "e.elo_after AS elo_after, e.wins AS wins, e.firsts AS firsts " +
+      "FROM round_entries e JOIN dishes d ON d.id = e.dish_id " +
+      "WHERE e.round_id = ? ORDER BY e.slot ASC"
+  )
+    .bind(roundId)
+    .all<RoundDish>();
+  return result.results ?? [];
+}
+
+/** One person's ballot so far, best first. Empty until they click something. */
+export async function getBallot(
+  env: Env,
+  roundId: number,
+  voterId: string
+): Promise<{ dish_id: number; slot: number }[]> {
+  const result = await env.DB.prepare(
+    "SELECT v.dish_id AS dish_id, e.slot AS slot FROM round_votes v " +
+      "JOIN round_entries e ON e.round_id = v.round_id AND e.dish_id = v.dish_id " +
+      "WHERE v.round_id = ? AND v.voter_discord_id = ? ORDER BY v.rank ASC"
+  )
+    .bind(roundId, voterId)
+    .all<{ dish_id: number; slot: number }>();
+  return result.results ?? [];
+}
+
+/**
+ * Adds one photograph to the end of somebody's ballot.
+ *
+ * The rank is computed inside the statement rather than read out and sent
+ * back, so two clicks arriving together cannot both decide they are third.
+ * The upsert clause is what absorbs a double-click on the *same* photograph;
+ * the SELECT keeps its WHERE for the reason SQLite's upsert documentation
+ * gives, which is that a bare SELECT here would make `ON` ambiguous.
+ */
+export async function appendToBallot(
+  env: Env,
+  roundId: number,
+  voterId: string,
+  dishId: number,
+  now: number
+): Promise<void> {
+  await env.DB.prepare(
+    "INSERT INTO round_votes (round_id, voter_discord_id, dish_id, rank, voted_at) " +
+      "SELECT ?1, ?2, ?3, COALESCE(MAX(rank), 0) + 1, ?4 FROM round_votes " +
+      "WHERE round_id = ?1 AND voter_discord_id = ?2 " +
+      "ON CONFLICT (round_id, voter_discord_id, dish_id) DO NOTHING"
+  )
+    .bind(roundId, voterId, dishId, now)
+    .run();
+}
+
+export async function clearBallot(
+  env: Env,
+  roundId: number,
+  voterId: string
+): Promise<void> {
+  await env.DB.prepare(
+    "DELETE FROM round_votes WHERE round_id = ? AND voter_discord_id = ?"
+  )
+    .bind(roundId, voterId)
+    .run();
+}
+
+/**
+ * Every ballot in a round, each best-first, ordered by who started first.
+ *
+ * One query and a group rather than a read per voter: a busy round is twenty
+ * ballots, and twenty round trips inside a close tick is a bad trade for
+ * ordering that SQL already did.
+ */
+export async function getRoundBallots(
+  env: Env,
+  roundId: number
+): Promise<{ name: string; dishIds: number[] }[]> {
+  const result = await env.DB.prepare(
+    "SELECT v.voter_discord_id AS voter, " +
+      "COALESCE(p.username, 'someone') AS name, v.dish_id AS dish_id " +
+      "FROM round_votes v " +
+      "LEFT JOIN players p ON p.discord_id = v.voter_discord_id " +
+      "WHERE v.round_id = ? ORDER BY v.voted_at ASC, v.rank ASC"
+  )
+    .bind(roundId)
+    .all<{ voter: string; name: string; dish_id: number }>();
+
+  // Insertion order is first-vote order, because the rows arrive oldest first.
+  const ballots = new Map<string, { name: string; dishIds: number[] }>();
+  for (const row of result.results ?? []) {
+    const existing = ballots.get(row.voter);
+    if (existing) existing.dishIds.push(row.dish_id);
+    else ballots.set(row.voter, { name: row.name, dishIds: [row.dish_id] });
+  }
+  return [...ballots.values()];
 }
 
 export async function upsertPlayer(

@@ -6,10 +6,14 @@ import {
   closeDueMatchups,
   postMatchupIfDue,
   postPersonMatchupIfDue,
-  postPlaceMatchupIfDue,
   postStandingsIfDue,
   repairCard,
 } from "./matchups";
+import {
+  closeDueRounds,
+  postPlaceRoundIfDue,
+  repairRoundCard,
+} from "./rounds";
 import type { Env, Interaction } from "./types";
 import { verifyDiscordRequest } from "./verify";
 
@@ -67,28 +71,30 @@ export default {
       try {
         // `place=1` / `person=1` post the weekly bonus on demand: that category
         // only, running beside whatever is open, on a 24-hour window. A bonus
-        // always overlaps.
+        // always overlaps. `place=1` posts the five-photograph ranking round,
+        // which is what the place bonus became.
         const place = url.searchParams.get("place") === "1";
         const person = url.searchParams.get("person") === "1";
         const overlap =
           place || person || url.searchParams.get("overlap") === "1";
         const posted = place
-          ? await postPlaceMatchupIfDue(env, Date.now(), { force: true })
+          ? await postPlaceRoundIfDue(env, Date.now(), { force: true })
           : person
             ? await postPersonMatchupIfDue(env, Date.now(), { force: true })
             : await postMatchupIfDue(env, Date.now(), { force: true, overlap });
-        const kind = place ? "place" : person ? "person" : "matchup";
-        const bonusNoun = place ? "places" : "people";
+        const kind = place ? "place round" : person ? "person" : "matchup";
         return Response.json({
           posted,
           kind,
           reason: posted
             ? null
-            : place || person
-              ? `fewer than two ${bonusNoun} in the catalog, only one person's photographs, or both are already live`
-              : overlap
-                ? "no pair could be drawn"
-                : "a matchup is already open, or no pair could be drawn",
+            : place
+              ? "fewer than three places available to rank, or too many of them one person's"
+              : person
+                ? "fewer than two people in the catalog, only one person's photographs, or both are already live"
+                : overlap
+                  ? "no pair could be drawn"
+                  : "a matchup is already open, or no pair could be drawn",
         });
       } catch (error) {
         const reason = error instanceof Error ? error.message : String(error);
@@ -97,16 +103,19 @@ export default {
       }
     }
 
-    // Closes whatever is open right now, ignoring closes_at. Same reason as
-    // the manual post: a cron cannot be fired by hand, and the close path is
-    // the one most worth being able to exercise on demand.
+    // Closes whatever is open right now, ignoring closes_at — every matchup
+    // and every ranking round, which is what "whatever is open" has always
+    // meant here. Same reason as the manual post: a cron cannot be fired by
+    // hand, and the close path is the one most worth exercising on demand.
     if (url.pathname === "/admin/close-matchup") {
       if (url.searchParams.get("secret") !== env.BACKFILL_SECRET) {
         return new Response("Nope", { status: 403 });
       }
       try {
-        const closed = await closeDueMatchups(env, Date.now(), { force: true });
-        return Response.json({ closed });
+        const now = Date.now();
+        const closed = await closeDueMatchups(env, now, { force: true });
+        const rounds = await closeDueRounds(env, now, { force: true });
+        return Response.json({ closed, rounds });
       } catch (error) {
         const reason = error instanceof Error ? error.message : String(error);
         await logToDiscord(env, `Manual close failed: ${reason}`);
@@ -121,25 +130,38 @@ export default {
       if (url.searchParams.get("secret") !== env.BACKFILL_SECRET) {
         return new Response("Nope", { status: 403 });
       }
-      // Either the matchup id or the Discord message it went out as. The
-      // message id is what a broken round actually hands you — it is the last
-      // segment of the message link — and a card-less matchup shows its id
-      // nowhere at all.
+      // Either an id or the Discord message it went out as. The message id is
+      // what a broken round actually hands you — it is the last segment of the
+      // message link — and a card-less post shows its id nowhere at all. By
+      // message it could be either kind, so try the matchups and then the
+      // ranking rounds.
       const messageId = url.searchParams.get("message");
       const matchupId = Number(url.searchParams.get("matchup"));
-      const byId = Number.isInteger(matchupId) && matchupId > 0;
-      if (!messageId && !byId) {
+      const roundId = Number(url.searchParams.get("round"));
+      const byMatchup = Number.isInteger(matchupId) && matchupId > 0;
+      const byRound = Number.isInteger(roundId) && roundId > 0;
+      if (!messageId && !byMatchup && !byRound) {
         return Response.json(
-          { ok: false, error: "pass ?matchup=<id> or ?message=<discord id>" },
+          {
+            ok: false,
+            error: "pass ?matchup=<id>, ?round=<id> or ?message=<discord id>",
+          },
           { status: 400 }
         );
       }
       try {
+        if (byRound) {
+          return Response.json(await repairRoundCard(env, { roundId }));
+        }
+        if (byMatchup) {
+          return Response.json(await repairCard(env, { matchupId }));
+        }
+        const asMatchup = await repairCard(env, { messageId: messageId! });
+        if (asMatchup.repaired || asMatchup.reason !== "no such matchup") {
+          return Response.json(asMatchup);
+        }
         return Response.json(
-          await repairCard(
-            env,
-            messageId ? { messageId } : { matchupId }
-          )
+          await repairRoundCard(env, { messageId: messageId! })
         );
       } catch (error) {
         const reason = error instanceof Error ? error.message : String(error);
@@ -215,6 +237,14 @@ export default {
       await logToDiscord(env, `Close failed: ${String(error)}`);
     }
 
+    // Its own try, so a ranking round that cannot close does not also stop the
+    // matchups closing, or the reverse.
+    try {
+      await closeDueRounds(env, now);
+    } catch (error) {
+      await logToDiscord(env, `Round close failed: ${String(error)}`);
+    }
+
     try {
       await postMatchupIfDue(env, now);
     } catch (error) {
@@ -225,9 +255,9 @@ export default {
     // bonuses run alongside whatever is open rather than instead of it. Each
     // fires only on its own day and hour, so most ticks post neither.
     try {
-      await postPlaceMatchupIfDue(env, now);
+      await postPlaceRoundIfDue(env, now);
     } catch (error) {
-      await logToDiscord(env, `Place matchup failed: ${String(error)}`);
+      await logToDiscord(env, `Place round failed: ${String(error)}`);
     }
 
     try {

@@ -26,16 +26,24 @@ POST_HOURS_UTC = "15,3"
 STANDINGS_WEEKDAY = "0"
 STANDINGS_HOUR_UTC = "17"
 
-# Place-vs-place bonus, posted alongside the ordinary matchup rather than in
-# place of it. Comma-separated weekdays: 1 = Monday, 3 = Wednesday; set
-# PLACE_WEEKDAY to -1 (or empty) to disable. 18:00 UTC = noon Mountain *while
-# MDT is in effect* — shift to 19 in November, same as POST_HOURS_UTC above.
-# Places are drawn nowhere else.
-PLACE_WEEKDAY = "1,3"
+# The weekly place round: five places on one card, ranked best-first, posted
+# alongside the ordinary matchup rather than in place of it. Comma-separated
+# weekdays, 1 = Monday; set PLACE_WEEKDAY to -1 (or empty) to disable. 18:00
+# UTC = noon Mountain *while MDT is in effect* — shift to 19 in November, same
+# as POST_HOURS_UTC above. Places are drawn nowhere else.
+#
+# Once a week rather than the twice it ran as a pair: a round eats five
+# photographs instead of two, and one good ranking is worth more than two coin
+# tosses between holiday snaps.
+PLACE_WEEKDAY = "1"
 PLACE_HOUR_UTC = "18"
-# Flat window: the bonus is outside the food cadence, so it does not close on
+# Flat window: the round is outside the food cadence, so it does not close on
 # a posting hour. A full day means noon to noon.
 PLACE_WINDOW_HOURS = "24"
+# Five is the most buttons Discord will put in one action row, and about the
+# most photographs that stay legible on a phone. Three is the floor below which
+# the round refuses to post.
+PLACE_BALLOT_SIZE = "5"
 
 # Person-vs-person bonus, same machinery as the place bonus. 2 = Tuesday, at
 # 11:11am Mountain — 17:11 UTC while MDT is in effect (shift to 18 in November).

@@ -15,6 +15,17 @@ export function parsePostHours(raw: string | undefined): number[] {
   return [...new Set(hours)].sort((a, b) => a - b);
 }
 
+/** Weekdays a weekly post runs on: comma-separated, 0 = Sunday. Junk is dropped. */
+export function parseWeekdays(raw: string | undefined): number[] {
+  const days = (raw || "")
+    .split(",")
+    .map((d) => d.trim())
+    .filter((d) => d.length > 0)
+    .map(Number)
+    .filter((d) => Number.isInteger(d) && d >= 0 && d <= 6);
+  return [...new Set(days)];
+}
+
 /**
  * The next scheduled posting time strictly after `now`.
  *
