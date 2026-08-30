@@ -13,6 +13,10 @@ import type { Dish, Env } from "./types";
  * It is a preference rather than a gate: ordering by play count instead of
  * filtering on it lets the draw spill into the next count on its own when the
  * least-played dishes are all one person's, or have all been paired recently.
+ *
+ * Recency gets a share of the draw rather than the front of it. Every fourth
+ * primary is reserved for something cooked in the last fortnight; the other
+ * three are drawn from the unplayed catalog at large, recent or not.
  */
 
 /** Close matchups are tense matchups — decided among the equally played. */
@@ -22,8 +26,17 @@ const RECENT_PAIR_WINDOW = 20;
 /** Every Nth matchup is a deliberate mismatch — upsets make the best results. */
 const WIDE_GAP_EVERY = 5;
 
-/** Anything cooked in the last fortnight counts as "new" and jumps the queue. */
+/** Anything cooked in the last fortnight counts as "new" for the fresh slot. */
 const RECENT_WINDOW_DAYS = 14;
+/**
+ * How often the fresh slot fires. The channel is hundreds of photographs deep
+ * and only two everyday matchups go up a day, so the unplayed backlog never
+ * empties — which turned an unconditional "recent and unplayed goes first" into
+ * the whole draw. Every primary came from the last fortnight and the rest of
+ * the catalog was unreachable. One primary in four keeps recent cooking on the
+ * board without the board being only recent cooking.
+ */
+const FRESH_SLOT_EVERY = 4;
 
 /** The classifier's labels that can enter a matchup. Anything else cannot. */
 const CATEGORIES = ["food", "drink", "place", "person"] as const;
@@ -59,23 +72,26 @@ function categoryList(categories: Category[]): string {
 async function pickPrimary(
   env: Env,
   exclude: number[],
-  categories: Category[]
+  categories: Category[],
+  freshSlot: boolean
 ): Promise<Dish | null> {
-  // Something cooked recently and never played goes first — that is the case
-  // the guaranteed-slot rule was written for, and it keeps the game tracking
-  // what people are actually cooking. It does not jump the rotation: anything
-  // unplayed is already at the front of it, and this only decides the order
-  // dishes come off that front.
-  const recentCutoff = Date.now() - RECENT_WINDOW_DAYS * 24 * 60 * 60 * 1000;
   const notOpen = excludeClause("id", exclude);
   const inCategory = `category IN (${categoryList(categories)})`;
-  const fresh = await env.DB.prepare(
-    `SELECT * FROM dishes WHERE matches_played = 0 AND ${inCategory} ` +
-      `AND posted_at > ?${notOpen} ORDER BY RANDOM() LIMIT 1`
-  )
-    .bind(recentCutoff)
-    .first<Dish>();
-  if (fresh) return fresh;
+
+  // The fresh slot. Something cooked recently and never played goes first, so
+  // the game keeps tracking what people are actually cooking — but only on its
+  // own cadence. It never jumps the rotation: anything unplayed is already at
+  // the front of it, and this only decides which of the unplayed goes next.
+  if (freshSlot) {
+    const recentCutoff = Date.now() - RECENT_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+    const fresh = await env.DB.prepare(
+      `SELECT * FROM dishes WHERE matches_played = 0 AND ${inCategory} ` +
+        `AND posted_at > ?${notOpen} ORDER BY RANDOM() LIMIT 1`
+    )
+      .bind(recentCutoff)
+      .first<Dish>();
+    if (fresh) return fresh;
+  }
 
   // Otherwise the least-played dish in the pool, drawn at random from
   // everything tied at that count — the unplayed backlog first, then the whole
@@ -183,15 +199,18 @@ export async function pickPair(
   ).first<{ n: number }>();
   if (!count || count.n < 2) return null;
 
-  const primary = await pickPrimary(env, exclude, categories);
-  if (!primary) return null;
-
   const latest = await env.DB.prepare(
     "SELECT COALESCE(MAX(id), 0) AS id FROM matchups"
   ).first<{ id: number }>();
   const latestId = latest?.id ?? 0;
   const recentCutoff = Math.max(0, latestId - RECENT_PAIR_WINDOW);
   const wideGap = (latestId + 1) % WIDE_GAP_EVERY === 0;
+  // Keyed off the matchup id like the wide-gap rule, so the cadence is the
+  // draw's own rather than a coin flip that can come up heads five times over.
+  const freshSlot = (latestId + 1) % FRESH_SLOT_EVERY === 0;
+
+  const primary = await pickPrimary(env, exclude, categories, freshSlot);
+  if (!primary) return null;
 
   const opponent = await pickOpponent(env, primary, recentCutoff, wideGap, exclude);
   if (!opponent) return null;

@@ -6,12 +6,14 @@
  *   - no pair repeats inside the recency window
  *   - the wide-gap rule fires on the expected cadence
  *   - Elo stays zero-sum across the catalog
+ *   - a steady trickle of new photographs does not take over the board
  *
- * Two catalogs, because one cannot show both halves of that. A small catalog
+ * Three catalogs, because no one of them can show all of that. A small catalog
  * where everything is in play exercises pair recency and the deliberate
  * mismatch. A large one with a backlog and a handful of veterans exercises the
- * rotation — and is the shape the real channel is in, hundreds of photographs
- * deep with a few that have been on the board repeatedly.
+ * rotation. A third adds a photograph between every round, which is the only
+ * way to see the fresh slot: it needs new arrivals to keep arriving, and a
+ * fixed seed can only ever run it dry.
  */
 const API = "http://127.0.0.1:8787/cdn-cgi/local/explorer/api";
 const DB = "00000000-0000-0000-0000-000000000000";
@@ -41,7 +43,7 @@ const check = (name, ok, detail) => {
 };
 
 /**
- * `dishes` is a list of `{ chef, elo, played }`. Categories matter:
+ * `dishes` is a list of `{ chef, elo, played, postedAt? }`. Categories matter:
  * matchmaking only ever draws food and drink, so a seed without them leaves
  * every query empty and the whole suite passes vacuously. One category
  * throughout, because an opponent has to match the primary's.
@@ -51,18 +53,35 @@ const check = (name, ok, detail) => {
  * and inventing matchup ids for history that was never played would be a
  * bigger lie than the null.
  */
+let nextTag = 0;
+
+/** One row's worth of VALUES, with a tag that stays unique across a whole run. */
+function dishRow(d) {
+  const tag = nextTag++;
+  const at = d.postedAt ?? 1700000000000 + tag * 1000;
+  return `('m${tag}','a${tag}','user_${d.chef}','dishes/h${tag}.jpg','h${tag}','d${tag}',${at},${at},${d.elo},${d.played},'food')`;
+}
+
+const DISH_COLUMNS =
+  "discord_message_id, attachment_id, poster_discord_id, r2_key, sha256, caption, posted_at, ingested_at, elo, matches_played, category";
+
 async function seed(dishes) {
   await sql("DELETE FROM votes; DELETE FROM matchups; DELETE FROM dishes; DELETE FROM players; DELETE FROM state;");
+  nextTag = 0;
   const chefs = [...new Set(dishes.map((d) => d.chef))];
-  const values = dishes
-    .map((d, i) => `('m${i}','a${i}','user_${d.chef}','dishes/h${i}.jpg','h${i}','d${i}',${1700000000000 + i * 1000},${1700000000000 + i * 1000},${d.elo},${d.played},'food')`)
-    .join(",");
-  await sql(`INSERT INTO dishes (discord_message_id, attachment_id, poster_discord_id, r2_key, sha256, caption, posted_at, ingested_at, elo, matches_played, category) VALUES ${values};`);
+  const values = dishes.map(dishRow).join(",");
+  await sql(`INSERT INTO dishes (${DISH_COLUMNS}) VALUES ${values};`);
   await sql(`INSERT INTO players (discord_id, username, first_seen) VALUES ${chefs.map((c) => `('user_${c}','${c}',0)`).join(",")};`);
 }
 
-async function playRounds(rounds) {
+/** A photograph arriving mid-run, the way ingest delivers them. */
+async function addDish(dish) {
+  await sql(`INSERT INTO dishes (${DISH_COLUMNS}) VALUES ${dishRow(dish)};`);
+}
+
+async function playRounds(rounds, beforeRound) {
   for (let round = 0; round < rounds; round++) {
+    if (beforeRound) await beforeRound(round);
     // Force the post rather than running the cron: the scheduled path only
     // fires on a named hour, so a cron-driven simulation posts nothing at all
     // unless it happens to be run at 15:00 or 03:00 UTC. The posting schedule
@@ -220,6 +239,93 @@ check(`no pair repeats within ${RECENCY_WINDOW} matchups`, backlogRepeats.length
 const unplayed = dishes.filter((d) => d.matches_played === 0).length;
 const vetCounts = dishes.filter((d) => veterans.includes(d.id)).map((d) => `#${d.id}:${d.matches_played}`);
 console.log(`backlog drawn down: ${unplayed} of 36 still unplayed; veterans ${vetCounts.join(" ")} (seeded at 6)`);
+
+// ── scenario 3: a trickle of new arrivals over a deep backlog ───────
+// The bias the channel complained about. Forty photographs nobody has voted on
+// sit behind new cooking that keeps arriving — one more every round, the way
+// ingest actually delivers them.
+//
+// An unconditional "recent and unplayed goes first" is a rotation rule only
+// while the backlog empties, and at two matchups a day against hundreds of
+// photographs it never does. Every primary is then something from the last
+// fortnight and the rest of the catalog is unreachable: against that draw the
+// arrivals take about two thirds of the slots and most of the backlog is never
+// seen at all.
+const DAY = 24 * 60 * 60 * 1000;
+const trickleChefs = ["ben", "sarah", "mike", "dana", "kit"];
+await seed(
+  Array.from({ length: 40 }, (_, i) => ({
+    chef: trickleChefs[i % 5],
+    elo: 1500,
+    played: 0,
+    // Well outside the fortnight, so none of these can take the fresh slot.
+    postedAt: Date.now() - 300 * DAY,
+  }))
+);
+const backlogIds = new Set((await sql("SELECT id FROM dishes")).map((d) => d.id));
+const trickleStart = new Map((await sql("SELECT id, matches_played FROM dishes")).map((d) => [d.id, d.matches_played]));
+
+await playRounds(ROUNDS, (round) =>
+  addDish({
+    chef: trickleChefs[round % 5],
+    elo: 1500,
+    played: 0,
+    // Yesterday, so it is inside the fortnight and eligible for the fresh slot.
+    postedAt: Date.now() - DAY,
+  })
+);
+
+matchups = await sql("SELECT id, dish_a_id, dish_b_id FROM matchups WHERE status='closed' ORDER BY id");
+
+const slots = matchups.flatMap((m) => [m.dish_a_id, m.dish_b_id]);
+const arrivals = slots.filter((id) => !backlogIds.has(id)).length;
+const share = slots.length === 0 ? 0 : arrivals / slots.length;
+
+console.log(`\ntrickle catalog: ${matchups.length} matchups over ${ROUNDS} rounds\n`);
+
+// The fresh slot is one primary in four, so arrivals earn roughly a quarter of
+// the board by cadence plus their share of the pool on every other draw. Half
+// is the line, and it is a structural one rather than a tuned threshold: a draw
+// that hands every primary to a recent photograph scores 50% by construction —
+// one of the two slots, every time — so anything below it means the primary is
+// no longer reserved for new arrivals.
+check(
+  "new arrivals do not take over the board",
+  share < 0.5,
+  `arrivals took ${arrivals} of ${slots.length} slots (${(share * 100).toFixed(0)}%)`
+);
+
+// The sharper version of the same thing, and the one the channel notices: whole
+// boards drawn from the backlog. While the primary belongs to recency there are
+// none at all — every matchup has a photograph from the last fortnight in it.
+const allBacklog = matchups.filter(
+  (m) => backlogIds.has(m.dish_a_id) && backlogIds.has(m.dish_b_id)
+).length;
+check(
+  "some boards are drawn entirely from the backlog",
+  allBacklog >= matchups.length / 4,
+  `${allBacklog} of ${matchups.length} matchups had no photo from the last fortnight`
+);
+
+// And the other direction — recency still gets its share. Dropping the fresh
+// slot altogether would pass the checks above and fail this one.
+check(
+  "recent cooking still reaches the board",
+  arrivals > 0,
+  "nothing posted inside the fortnight was ever drawn"
+);
+
+// Arrivals start unplayed, so they join the rotation at the floor rather than
+// jumping it. Every dish added mid-run starts the replay on zero.
+const trickleCounts = new Map(trickleStart);
+for (const d of await sql("SELECT id FROM dishes")) {
+  if (!trickleCounts.has(d.id)) trickleCounts.set(d.id, 0);
+}
+const trickleSpills = rotationViolations(matchups, trickleCounts);
+check("the rotation holds through the trickle", trickleSpills.length === 0, trickleSpills.join("; "));
+
+const backlogSeen = new Set(slots.filter((id) => backlogIds.has(id))).size;
+console.log(`arrivals took ${arrivals} of ${slots.length} slots; ${backlogSeen} of 40 backlog photos played`);
 
 console.log(failures === 0 ? "\nall invariants held" : `\n${failures} invariant(s) violated`);
 process.exit(failures === 0 ? 0 : 1);

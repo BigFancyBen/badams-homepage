@@ -249,7 +249,7 @@ suite — `npm run test:schedule` — and this one is about the draw. Ingest has
 third, `npm run test:ingest`, covering the batching rule that keeps the cursor
 on a message boundary and the D1 write retry.
 
-It runs two seeded catalogs, because no single one shows everything.
+It runs three seeded catalogs, because no single one shows everything.
 
 The **small catalog** is 12 dishes across 4 chefs, all in play, ratings
 clustered with two outliers. It strains pair recency and gives the deliberate
@@ -265,8 +265,17 @@ benched entirely until the backlog is swept. Weighing rating ahead of the play
 count fails this one loudly: the four veterans take over a quarter of the
 matchups and the backlog barely moves.
 
-Both catalogs are also checked for pair repeats inside the 20-matchup recency
-window, and the small one for Elo staying zero-sum.
+The **trickle catalog** is 40 never-played photos with one new arrival added
+between every round, which is the only way to exercise the fresh slot — it
+needs new photos to keep arriving, and a fixed seed can only run it dry. It
+checks that arrivals take under half the slots and that at least a quarter of
+boards are drawn entirely from the backlog. Giving recency the front of the
+queue rather than a share of it fails both: every primary is then a photo from
+the last fortnight, so arrivals take exactly half the slots and no board is
+ever free of one.
+
+The small and backlog catalogs are also checked for pair repeats inside the
+20-matchup recency window, and the small one for Elo staying zero-sum.
 
 ### Forcing a post by hand
 
@@ -419,6 +428,13 @@ why not.
   person's or have all been paired recently. It also means the deliberate
   mismatch has nothing to find while the unplayed backlog is being swept, since
   every dish in it is still on the opening rating.
+- **Recency gets a share of the draw, not the front of it.** Every fourth
+  primary is reserved for something posted in the last fortnight that has never
+  played, so new cooking reaches the board quickly; the other three are drawn
+  from the unplayed catalog at large. That slot used to fire unconditionally,
+  which reads as a rotation rule only if the backlog eventually empties — and
+  at two matchups a day against hundreds of photos it never does. Every primary
+  came from the last fortnight and the rest of the catalog was unreachable.
 - **Two photos from the same person never meet.** Matchmaking excludes the
   primary's own poster when drawing the opponent, in every category — a matchup
   between two of your own shots is not something anyone can take a side on. If a
