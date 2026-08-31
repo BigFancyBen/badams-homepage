@@ -13,6 +13,7 @@ import {
   getDueRounds,
   getOpenMatchups,
   getOpenRounds,
+  heldDishIds,
   getRound,
   getRoundBallots,
   getRoundByMessage,
@@ -183,14 +184,11 @@ export async function postPlaceRoundIfDue(
     }
   }
 
-  // Whatever is live keeps its photographs to itself — both the open pair
-  // matchups and any round that has not closed yet.
-  const live: number[] = [];
+  // Whatever is live keeps its photographs to itself — the open pair matchups,
+  // any round that has not closed yet, and a running caption contest.
+  const live: number[] = await heldDishIds(env);
   for (const matchup of await getOpenMatchups(env)) {
     live.push(matchup.dish_a_id, matchup.dish_b_id);
-  }
-  for (const round of await getOpenRounds(env)) {
-    for (const entry of await getRoundEntries(env, round.id)) live.push(entry.id);
   }
 
   const dishes = await pickBallot(env, {

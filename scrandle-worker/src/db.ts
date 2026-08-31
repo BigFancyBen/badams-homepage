@@ -1,4 +1,12 @@
-import type { Dish, Env, Matchup, Round, RoundDish } from "./types";
+import type {
+  Contest,
+  ContestEntry,
+  Dish,
+  Env,
+  Matchup,
+  Round,
+  RoundDish,
+} from "./types";
 
 /**
  * D1 fails transiently. Cloudflare's own error table lists "Network connection
@@ -277,6 +285,26 @@ export async function openRoundDishIds(env: Env): Promise<number[]> {
   return (result.results ?? []).map((row) => row.id);
 }
 
+/**
+ * Every photograph held by something that is not a pair matchup — open
+ * ranking rounds and live caption contests together, in one read.
+ *
+ * A union rather than two calls because the callers all want the same thing:
+ * the list of photographs a draw must not touch. Nothing pairs these pools
+ * with the everyday one today — they are disjoint categories — but that is a
+ * property of the current pools rather than a rule anything enforces, and the
+ * same photograph in two live rounds at once would be indefensible.
+ */
+export async function heldDishIds(env: Env): Promise<number[]> {
+  const result = await env.DB.prepare(
+    "SELECT e.dish_id AS id FROM round_entries e " +
+      "JOIN rounds r ON r.id = e.round_id WHERE r.status = 'open' " +
+      "UNION " +
+      "SELECT dish_id AS id FROM contests WHERE status IN ('writing', 'voting')"
+  ).all<{ id: number }>();
+  return (result.results ?? []).map((row) => row.id);
+}
+
 /** The round's photographs in slot order — the order they sit on the card. */
 export async function getRoundEntries(
   env: Env,
@@ -421,4 +449,228 @@ export async function chefStandings(
     .bind(limit)
     .all<{ discord_id: string; username: string; elo: number }>();
   return result.results ?? [];
+}
+
+// ── caption contests ───────────────────────────────────────────────
+
+export async function getContest(
+  env: Env,
+  id: number
+): Promise<Contest | null> {
+  return env.DB.prepare("SELECT * FROM contests WHERE id = ?")
+    .bind(id)
+    .first<Contest>();
+}
+
+/** Contests that have not reached their result yet, in either phase. */
+export async function getLiveContests(env: Env): Promise<Contest[]> {
+  const result = await env.DB.prepare(
+    "SELECT * FROM contests WHERE status IN ('writing', 'voting') ORDER BY id"
+  ).all<Contest>();
+  return result.results ?? [];
+}
+
+/** Writing phases whose time is up, ready for the vote to open. */
+export async function getDueWriting(
+  env: Env,
+  now: number
+): Promise<Contest[]> {
+  const result = await env.DB.prepare(
+    "SELECT * FROM contests WHERE status = 'writing' AND writing_closes_at <= ? ORDER BY id"
+  )
+    .bind(now)
+    .all<Contest>();
+  return result.results ?? [];
+}
+
+/** Votes whose time is up, ready for the result. */
+export async function getDueVoting(env: Env, now: number): Promise<Contest[]> {
+  const result = await env.DB.prepare(
+    "SELECT * FROM contests WHERE status = 'voting' AND voting_closes_at <= ? ORDER BY id"
+  )
+    .bind(now)
+    .all<Contest>();
+  return result.results ?? [];
+}
+
+/**
+ * Photographs a live contest is using, so no other draw picks them up. Same
+ * job as openRoundDishIds on the ranking side — the pools are disjoint
+ * categories today, but that is a property of the current pools rather than a
+ * rule anything enforces.
+ */
+export async function liveContestDishIds(env: Env): Promise<number[]> {
+  const result = await env.DB.prepare(
+    "SELECT dish_id FROM contests WHERE status IN ('writing', 'voting')"
+  ).all<{ dish_id: number }>();
+  return (result.results ?? []).map((row) => row.dish_id);
+}
+
+export async function getContestEntries(
+  env: Env,
+  contestId: number
+): Promise<ContestEntry[]> {
+  const result = await env.DB.prepare(
+    "SELECT * FROM contest_entries WHERE contest_id = ? ORDER BY slot, id"
+  )
+    .bind(contestId)
+    .all<ContestEntry>();
+  return result.results ?? [];
+}
+
+/** Somebody's caption for this contest, if they have written one. */
+export async function getEntryByAuthor(
+  env: Env,
+  contestId: number,
+  authorId: string
+): Promise<ContestEntry | null> {
+  return env.DB.prepare(
+    "SELECT * FROM contest_entries WHERE contest_id = ? AND author_discord_id = ?"
+  )
+    .bind(contestId, authorId)
+    .first<ContestEntry>();
+}
+
+/**
+ * Writes a caption, replacing the author's previous one if they had it.
+ *
+ * The upsert is the point: writing again is editing, not entering twice. It
+ * also re-stamps `submitted_at`, so the "who got in first" ordering reflects
+ * the version that actually stands.
+ */
+export async function upsertEntry(
+  env: Env,
+  contestId: number,
+  authorId: string,
+  text: string,
+  now: number
+): Promise<void> {
+  await env.DB.prepare(
+    "INSERT INTO contest_entries (contest_id, author_discord_id, text, submitted_at) " +
+      "VALUES (?1, ?2, ?3, ?4) " +
+      "ON CONFLICT (contest_id, author_discord_id) DO UPDATE SET " +
+      "text = ?3, submitted_at = ?4"
+  )
+    .bind(contestId, authorId, text, now)
+    .run();
+}
+
+/** The bot's own entry. Author null, so it cannot collide with a person's. */
+export async function insertBotEntry(
+  env: Env,
+  contestId: number,
+  text: string,
+  now: number
+): Promise<void> {
+  await env.DB.prepare(
+    "INSERT INTO contest_entries (contest_id, author_discord_id, text, submitted_at) " +
+      "VALUES (?, NULL, ?, ?)"
+  )
+    .bind(contestId, text, now)
+    .run();
+}
+
+/** How many people have written one. The bot's entry is not a person. */
+export async function humanEntryCount(
+  env: Env,
+  contestId: number
+): Promise<number> {
+  const row = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM contest_entries " +
+      "WHERE contest_id = ? AND author_discord_id IS NOT NULL"
+  )
+    .bind(contestId)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
+/** Somebody's ballot so far, best first. */
+export async function getContestBallot(
+  env: Env,
+  contestId: number,
+  voterId: string
+): Promise<{ entry_id: number; rank: number; slot: number }[]> {
+  const result = await env.DB.prepare(
+    "SELECT v.entry_id, v.rank, e.slot FROM contest_votes v " +
+      "JOIN contest_entries e ON e.id = v.entry_id " +
+      "WHERE v.contest_id = ? AND v.voter_discord_id = ? ORDER BY v.rank"
+  )
+    .bind(contestId, voterId)
+    .all<{ entry_id: number; rank: number; slot: number }>();
+  return result.results ?? [];
+}
+
+/**
+ * Appends a caption to the end of somebody's ballot.
+ *
+ * The rank is computed inside the statement rather than read first and sent
+ * back, so two fast clicks cannot both read the same MAX and write the same
+ * position — the second one would fail the primary key and lose the vote.
+ */
+export async function appendToContestBallot(
+  env: Env,
+  contestId: number,
+  voterId: string,
+  entryId: number,
+  now: number
+): Promise<void> {
+  await env.DB.prepare(
+    "INSERT INTO contest_votes (contest_id, voter_discord_id, entry_id, rank, voted_at) " +
+      "SELECT ?1, ?2, ?3, COALESCE(MAX(rank), 0) + 1, ?4 FROM contest_votes " +
+      "WHERE contest_id = ?1 AND voter_discord_id = ?2 " +
+      "ON CONFLICT (contest_id, voter_discord_id, entry_id) DO NOTHING"
+  )
+    .bind(contestId, voterId, entryId, now)
+    .run();
+}
+
+export async function clearContestBallot(
+  env: Env,
+  contestId: number,
+  voterId: string
+): Promise<void> {
+  await env.DB.prepare(
+    "DELETE FROM contest_votes WHERE contest_id = ? AND voter_discord_id = ?"
+  )
+    .bind(contestId, voterId)
+    .run();
+}
+
+/** Every ballot, grouped by voter, each in rank order. */
+export async function getContestBallots(
+  env: Env,
+  contestId: number
+): Promise<{ voterId: string; name: string; entryIds: number[] }[]> {
+  const result = await env.DB.prepare(
+    "SELECT v.voter_discord_id, v.entry_id, v.rank, " +
+      "COALESCE(p.username, 'someone') AS username " +
+      "FROM contest_votes v " +
+      "LEFT JOIN players p ON p.discord_id = v.voter_discord_id " +
+      "WHERE v.contest_id = ? ORDER BY v.voter_discord_id, v.rank"
+  )
+    .bind(contestId)
+    .all<{
+      voter_discord_id: string;
+      entry_id: number;
+      rank: number;
+      username: string;
+    }>();
+
+  const byVoter = new Map<
+    string,
+    { voterId: string; name: string; entryIds: number[] }
+  >();
+  for (const row of result.results ?? []) {
+    let ballot = byVoter.get(row.voter_discord_id);
+    if (!ballot) {
+      ballot = {
+        voterId: row.voter_discord_id,
+        name: row.username,
+        entryIds: [],
+      };
+      byVoter.set(row.voter_discord_id, ballot);
+    }
+    ballot.entryIds.push(row.entry_id);
+  }
+  return [...byVoter.values()];
 }
