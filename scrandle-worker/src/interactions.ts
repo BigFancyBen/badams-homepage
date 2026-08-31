@@ -1,19 +1,33 @@
 import {
   appendToBallot,
+  appendToContestBallot,
   clearBallot,
+  clearContestBallot,
   getBallot,
+  getContest,
+  getContestBallot,
+  getContestEntries,
+  getEntryByAuthor,
   getMatchup,
   getRound,
   getRoundEntries,
+  humanEntryCount,
   recordVote,
+  upsertEntry,
   upsertPlayer,
 } from "./db";
+import {
+  MAX_CAPTION_LENGTH,
+  MAX_HUMAN_ENTRIES,
+  PICKS,
+} from "./contests";
 import {
   EPHEMERAL,
   InteractionResponseType,
   InteractionType,
   type Env,
   type Interaction,
+  type InteractionComponent,
 } from "./types";
 
 function reply(content: string) {
@@ -40,7 +54,12 @@ export async function handleInteraction(
     return Response.json({ type: InteractionResponseType.PONG });
   }
 
-  if (interaction.type !== InteractionType.MESSAGE_COMPONENT) {
+  // Modal submits arrive as their own interaction type, not as a component
+  // click, so the caption contest's writing phase needs both let through here.
+  if (
+    interaction.type !== InteractionType.MESSAGE_COMPONENT &&
+    interaction.type !== InteractionType.MODAL_SUBMIT
+  ) {
     return reply("Unsupported interaction.");
   }
 
@@ -70,6 +89,32 @@ export async function handleInteraction(
       env,
       Number(rawId),
       prefix === "bx" ? null : Number(rawSlot),
+      user,
+      now
+    );
+  }
+
+  // The caption contest. `cw` opens the box, `cm` is the box coming back,
+  // `c`/`cx` are the ballot — the same shape as `b`/`bx` one format over.
+  if (prefix === "cw") {
+    return openCaptionModal(env, Number(rawId), user, now);
+  }
+
+  if (prefix === "cm") {
+    return submitCaption(
+      env,
+      Number(rawId),
+      readModalValue(interaction.data?.components, "caption"),
+      user,
+      now
+    );
+  }
+
+  if (prefix === "c" || prefix === "cx") {
+    return handleCaptionBallot(
+      env,
+      Number(rawId),
+      prefix === "cx" ? null : Number(rawSlot),
       user,
       now
     );
@@ -159,4 +204,194 @@ async function handleBallot(
   await appendToBallot(env, roundId, user.id, picked.id, now);
 
   return reply(orderLine([...slots, slot], entries.length));
+}
+
+/**
+ * Pulls the caption out of a submitted modal.
+ *
+ * Discord has shipped two shapes for a modal's components — a text input
+ * inside an action row, and one inside a Label — and which arrives depends on
+ * how the modal was declared and on the API version. Walking the tree for the
+ * custom_id we asked for is shorter than either shape's index path and
+ * survives both.
+ */
+function readModalValue(
+  components: InteractionComponent[] | undefined,
+  customId: string
+): string | null {
+  for (const node of components ?? []) {
+    if (node.custom_id === customId && typeof node.value === "string") {
+      return node.value;
+    }
+    const nested = readModalValue(node.components, customId);
+    if (nested !== null) return nested;
+  }
+  return null;
+}
+
+/**
+ * Opens the caption box. The only interaction here that answers with anything
+ * other than an ephemeral message — a modal is the sole way Discord will take
+ * free text from somebody without giving them a message box in the channel,
+ * which would show everyone else what they wrote.
+ */
+async function openCaptionModal(
+  env: Env,
+  contestId: number,
+  user: { id: string; username: string },
+  now: number
+): Promise<Response> {
+  const contest = await getContest(env, contestId);
+  if (!contest) return reply("That contest is gone.");
+  if (contest.status !== "writing" || contest.writing_closes_at <= now) {
+    return reply("Writing on that one has closed.");
+  }
+
+  // Pre-filled with whatever they already wrote, so the button is an edit as
+  // well as an entry — there is no separate way to change your mind, and
+  // without this a second click would look like it had lost the first one.
+  const existing = await getEntryByAuthor(env, contestId, user.id);
+
+  if (!existing) {
+    const written = await humanEntryCount(env, contestId);
+    if (written >= MAX_HUMAN_ENTRIES) {
+      return reply(
+        `This one is full — ${MAX_HUMAN_ENTRIES} captions already in. ` +
+          `There will be another.`
+      );
+    }
+  }
+
+  return Response.json({
+    type: InteractionResponseType.MODAL,
+    data: {
+      custom_id: `cm:${contestId}`,
+      title: `Caption contest #${contestId}`,
+      components: [
+        {
+          type: 1,
+          components: [
+            {
+              type: 4,
+              custom_id: "caption",
+              label: "Your caption",
+              style: 1,
+              min_length: 1,
+              max_length: MAX_CAPTION_LENGTH,
+              required: true,
+              placeholder: "One line. Deadpan travels furthest.",
+              ...(existing ? { value: existing.text } : {}),
+            },
+          ],
+        },
+      ],
+    },
+  });
+}
+
+/** Records a submitted caption. Writing again replaces, never duplicates. */
+async function submitCaption(
+  env: Env,
+  contestId: number,
+  raw: string | null,
+  user: { id: string; username: string },
+  now: number
+): Promise<Response> {
+  const contest = await getContest(env, contestId);
+  if (!contest) return reply("That contest is gone.");
+  if (contest.status !== "writing" || contest.writing_closes_at <= now) {
+    return reply("Writing on that one has closed.");
+  }
+
+  // Collapse the whitespace as well as trimming it. A caption goes into a
+  // numbered list where a stray line break would split it across two entries
+  // and make one person's look like two.
+  const text = (raw ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_CAPTION_LENGTH);
+  if (!text) return reply("That was empty. Have another go.");
+
+  const existing = await getEntryByAuthor(env, contestId, user.id);
+
+  if (!existing) {
+    // Re-checked here, not only when the modal opened. A modal can sit open on
+    // somebody's screen for as long as they like, and the contest can fill up
+    // underneath it.
+    const written = await humanEntryCount(env, contestId);
+    if (written >= MAX_HUMAN_ENTRIES) {
+      return reply(`This one filled up while you were writing. Sorry.`);
+    }
+  }
+
+  await upsertPlayer(env, user.id, user.username, now);
+  await upsertEntry(env, contestId, user.id, text, now);
+
+  return reply(
+    existing
+      ? `Changed it to: “${text}”`
+      : `In. Yours reads: “${text}”\nClick again to change it before the vote opens.`
+  );
+}
+
+/** Somebody's contest ballot so far, in the slot numbers on the buttons. */
+function contestOrderLine(slots: number[]): string {
+  const order = slots.map((slot) => `#${slot}`).join(" › ");
+  return slots.length >= PICKS
+    ? `Your top ${PICKS}: ${order}. That is the lot — Start over to change it.`
+    : `Your order: ${order}. ${PICKS - slots.length} more to go, or leave it there — a partial ballot counts.`;
+}
+
+/**
+ * A click on a caption. `slot` null means "start over".
+ *
+ * Capped at three, unlike the ranking round, which takes as many as you like.
+ * Three is what was asked for and it is the right cap here for a reason the
+ * photo rounds do not have: a contest can carry ten captions, and ranking all
+ * ten is a chore that would collect fewer ballots rather than better ones.
+ *
+ * Ranking your own is allowed. It costs one of your three, which is its own
+ * disincentive, and the reveal names every ballot — the same bargain the pair
+ * matchup already makes with self-votes.
+ */
+async function handleCaptionBallot(
+  env: Env,
+  contestId: number,
+  slot: number | null,
+  user: { id: string; username: string },
+  now: number
+): Promise<Response> {
+  const contest = await getContest(env, contestId);
+  if (!contest) return reply("That contest is gone.");
+  if (
+    contest.status !== "voting" ||
+    (contest.voting_closes_at ?? 0) <= now
+  ) {
+    return reply("Voting on that one has closed.");
+  }
+
+  await upsertPlayer(env, user.id, user.username, now);
+
+  if (slot === null) {
+    await clearContestBallot(env, contestId, user.id);
+    return reply("Cleared. Start again whenever you like.");
+  }
+
+  const entries = await getContestEntries(env, contestId);
+  const picked = entries.find((entry) => entry.slot === slot);
+  if (!picked) return reply("That one is not in this contest.");
+
+  const ballot = await getContestBallot(env, contestId, user.id);
+  const slots = ballot.map((row) => row.slot);
+
+  if (ballot.some((row) => row.entry_id === picked.id)) {
+    return reply(`You already ranked #${slot}. ${contestOrderLine(slots)}`);
+  }
+
+  if (ballot.length >= PICKS) {
+    return reply(
+      `You have already picked ${PICKS}. ${contestOrderLine(slots)}`
+    );
+  }
+
+  await appendToContestBallot(env, contestId, user.id, picked.id, now);
+
+  return reply(contestOrderLine([...slots, slot]));
 }

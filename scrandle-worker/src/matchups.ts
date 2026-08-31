@@ -19,7 +19,7 @@ import {
   getOpenStandardMatchup,
   getOpenMatchups,
   getState,
-  openRoundDishIds,
+  heldDishIds,
   playerName,
   setState,
   tallyVotes,
@@ -142,10 +142,11 @@ export async function postMatchupIfDue(
   // Excluding live photographs is now unconditional. It used to be done only on
   // the overlap path, which was safe only because returning early was the sole
   // other way past this point. Now that a bonus can be open here, the draw has
-  // to skip what the bonus is holding. Nothing pairs the two today — the pools
-  // are disjoint categories — but that is a property of the current pools, not
-  // a rule anything enforces, and it costs one read an hour to not rely on it.
-  const liveDishIds: number[] = await openRoundDishIds(env);
+  // to skip what the bonus is holding — ranking rounds and caption contests
+  // alike. Nothing pairs the pools today — they are disjoint categories — but
+  // that is a property of the current pools, not a rule anything enforces, and
+  // it costs one read an hour to not rely on it.
+  const liveDishIds: number[] = await heldDishIds(env);
   for (const live of await getOpenMatchups(env)) {
     liveDishIds.push(live.dish_a_id, live.dish_b_id);
   }
@@ -252,9 +253,9 @@ async function postBonusMatchupIfDue(
     }
   }
 
-  // Whatever is live keeps its photographs to itself — open matchups and the
-  // weekly ranking round alike.
-  const liveDishIds: number[] = await openRoundDishIds(env);
+  // Whatever is live keeps its photographs to itself — open matchups, the
+  // weekly ranking round and a running caption contest alike.
+  const liveDishIds: number[] = await heldDishIds(env);
   for (const live of await getOpenMatchups(env)) {
     liveDishIds.push(live.dish_a_id, live.dish_b_id);
   }

@@ -38,8 +38,29 @@ const RECENT_WINDOW_DAYS = 14;
  */
 const FRESH_SLOT_EVERY = 4;
 
-/** The classifier's labels that can enter a matchup. Anything else cannot. */
-const CATEGORIES = ["food", "drink", "place", "person"] as const;
+/**
+ * The classifier's labels a draw may ask for. Anything else is rejected in
+ * `categoryList` rather than passed through to SQL — a category that is not
+ * one of ours is a bug, not a value.
+ *
+ * The last five were unreachable until the caption contest gave them somewhere
+ * to go. They are the residue of the channel — a receipt, a shopping haul,
+ * somebody's cat — and nothing that asks which of two is better has a
+ * sensible question to put to them. A contest does: there the photograph is
+ * the prompt rather than the contestant, and a baffling one is worth more than
+ * a good one.
+ */
+const CATEGORIES = [
+  "food",
+  "drink",
+  "place",
+  "person",
+  "ingredient",
+  "pet",
+  "document",
+  "screenshot",
+  "other",
+] as const;
 export type Category = (typeof CATEGORIES)[number];
 
 /**
@@ -252,6 +273,30 @@ export async function pickBallot(
   }
 
   return chosen;
+}
+
+/**
+ * One photograph, for a format that wants a prompt rather than a field. Same
+ * rotation as everything else — least-played first, random among the tie — so
+ * a contest does not keep landing on the same receipt.
+ *
+ * `matches_played` is doing double duty here. For these categories it can only
+ * ever mean "has been used", because none of them enter an Elo matchup at all;
+ * for the ones that do, this simply joins the same rotation they are already
+ * in. Either way it is the column that answers "what has been on the board
+ * least", which is the question.
+ */
+export async function pickOne(
+  env: Env,
+  {
+    categories,
+    exclude = [],
+  }: { categories: Category[]; exclude?: number[] }
+): Promise<Dish | null> {
+  return env.DB.prepare(
+    `SELECT * FROM dishes WHERE category IN (${categoryList(categories)})` +
+      `${excludeClause("id", exclude)} ORDER BY matches_played ASC, RANDOM() LIMIT 1`
+  ).first<Dish>();
 }
 
 export async function pickPair(
