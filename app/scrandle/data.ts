@@ -388,6 +388,10 @@ export const PHASES: Phase[] = [
         kind: "p",
         text: "The weekly place round carries `b:<roundId>:<slot>` instead, and clicks accumulate rather than replace: the first is your favourite, the second your runner-up, and you can stop whenever. A ballot of one is valid — it says that photo beat the other four and says nothing about how those four compare.",
       },
+      {
+        kind: "p",
+        text: "The caption contest needed the one thing buttons cannot do: take a sentence. That is a modal — `type: 9` in the response, a `MODAL_SUBMIT` interaction coming back — and it is the only way Discord will collect free text from somebody without giving them a message box the rest of the channel can read. Reopening it prefills what they already wrote, so a second click is an edit rather than something that looks like it lost the first one.",
+      },
     ],
   },
   {
@@ -412,6 +416,10 @@ export const PHASES: Phase[] = [
       {
         kind: "p",
         text: "A ranking round closes as the round-robin it already is: every pair of photos in it is an ordinary matchup, scored by the same vote-share Elo, where a ballot ranking one above another is a vote for it and anything ranked beats everything left unranked. Each comparison carries K/(n-1), because a photo in a five-way round is judged four times — at full K one bonus round would move a rating as far as four matchups.",
+      },
+      {
+        kind: "p",
+        text: "A caption contest closes on Borda points — 3, 2, 1 — and not on Elo. A caption has no rating to carry anywhere: it exists for one photograph and will never appear again, so a rating would need a pool to be rated against and there is not one. A contest has a winner, which is a different thing from a rating, and the result names the authors of every line for the first time.",
       },
     ],
   },

@@ -69,10 +69,16 @@ const DISH_COLUMNS =
   "discord_message_id, attachment_id, poster_discord_id, r2_key, sha256, caption, posted_at, ingested_at, elo, matches_played, category";
 
 async function seed(dishes) {
-  // The ranking-round tables first, and before the dishes: they hold foreign
-  // keys into `dishes`, so a reset that skips them fails on the constraint
-  // rather than on anything to do with the draw.
-  await sql("DELETE FROM round_votes; DELETE FROM round_entries; DELETE FROM rounds; DELETE FROM votes; DELETE FROM matchups; DELETE FROM dishes; DELETE FROM players; DELETE FROM state;");
+  // Every table holding a foreign key into `dishes` first, and in dependency
+  // order among themselves — contests and ranking rounds both point at it,
+  // so a reset that skips either fails on the constraint rather than on
+  // anything to do with the draw. A format added later has to be added here.
+  await sql(
+    "DELETE FROM contest_votes; DELETE FROM contest_entries; DELETE FROM contests; " +
+      "DELETE FROM round_votes; DELETE FROM round_entries; DELETE FROM rounds; " +
+      "DELETE FROM votes; DELETE FROM matchups; DELETE FROM dishes; " +
+      "DELETE FROM players; DELETE FROM state;"
+  );
   nextTag = 0;
   const chefs = [...new Set(dishes.map((d) => d.chef))];
   const values = dishes.map(dishRow).join(",");

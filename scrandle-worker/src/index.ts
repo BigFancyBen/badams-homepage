@@ -15,6 +15,11 @@ import {
   postPlaceRoundIfDue,
   repairRoundCard,
 } from "./rounds";
+import {
+  closeDueContests,
+  openDueVoting,
+  postCaptionContestIfDue,
+} from "./contests";
 import type { Env, Interaction } from "./types";
 import { verifyDiscordRequest } from "./verify";
 
@@ -77,22 +82,31 @@ export default {
         const place = url.searchParams.get("place") === "1";
         const person = url.searchParams.get("person") === "1";
         const drink = url.searchParams.get("drink") === "1";
+        const caption = url.searchParams.get("caption") === "1";
         const overlap =
-          place || person || drink || url.searchParams.get("overlap") === "1";
+          place ||
+          person ||
+          drink ||
+          caption ||
+          url.searchParams.get("overlap") === "1";
         const posted = place
           ? await postPlaceRoundIfDue(env, Date.now(), { force: true })
           : person
             ? await postPersonMatchupIfDue(env, Date.now(), { force: true })
             : drink
               ? await postDrinkMatchupIfDue(env, Date.now(), { force: true })
-              : await postMatchupIfDue(env, Date.now(), { force: true, overlap });
+              : caption
+                ? await postCaptionContestIfDue(env, Date.now(), { force: true })
+                : await postMatchupIfDue(env, Date.now(), { force: true, overlap });
         const kind = place
           ? "place round"
           : person
             ? "person"
             : drink
               ? "drink"
-              : "matchup";
+              : caption
+                ? "caption contest"
+                : "matchup";
         return Response.json({
           posted,
           kind,
@@ -104,9 +118,11 @@ export default {
                 ? "fewer than two people in the catalog, only one person's photographs, or both are already live"
                 : drink
                   ? "fewer than two drinks in the catalog, only one person's drinks, or both are already live"
-                  : overlap
-                    ? "no pair could be drawn"
-                    : "a matchup is already open, or no pair could be drawn",
+                  : caption
+                    ? "a contest is already live, or there is nothing in the ingredient/pet/document/screenshot/other categories to draw"
+                    : overlap
+                      ? "no pair could be drawn"
+                      : "a matchup is already open, or no pair could be drawn",
         });
       } catch (error) {
         const reason = error instanceof Error ? error.message : String(error);
@@ -127,10 +143,36 @@ export default {
         const now = Date.now();
         const closed = await closeDueMatchups(env, now, { force: true });
         const rounds = await closeDueRounds(env, now, { force: true });
-        return Response.json({ closed, rounds });
+        // Contests that are being voted on, not ones still being written.
+        // Forcing both phases from one route would shut a contest before
+        // anybody could vote in it — /admin/open-vote is the other half.
+        const contests = await closeDueContests(env, now, { force: true });
+        return Response.json({ closed, rounds, contests });
       } catch (error) {
         const reason = error instanceof Error ? error.message : String(error);
         await logToDiscord(env, `Manual close failed: ${reason}`);
+        return Response.json({ ok: false, error: reason }, { status: 502 });
+      }
+    }
+
+    // Ends a caption contest's writing phase early and puts the vote up. Its
+    // own route rather than a flag on the close, because the two halves have
+    // to be callable separately: forcing them together would open a vote and
+    // shut it in the same request, which is no use to anybody wanting to see
+    // the thing work.
+    if (url.pathname === "/admin/open-vote") {
+      if (url.searchParams.get("secret") !== env.BACKFILL_SECRET) {
+        return new Response("Nope", { status: 403 });
+      }
+      try {
+        const opened = await openDueVoting(env, Date.now(), { force: true });
+        return Response.json({
+          opened,
+          reason: opened ? null : "no contest is collecting captions",
+        });
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        await logToDiscord(env, `Manual vote open failed: ${reason}`);
         return Response.json({ ok: false, error: reason }, { status: 502 });
       }
     }
@@ -282,6 +324,28 @@ export default {
       await postDrinkMatchupIfDue(env, now);
     } catch (error) {
       await logToDiscord(env, `Drink matchup failed: ${String(error)}`);
+    }
+
+    // The caption contest moves through three states rather than two, so it
+    // gets three calls. Opening the vote comes before opening a new contest:
+    // a contest refuses to start while another is live, and the one whose
+    // writing just ended is still live until its vote is up.
+    try {
+      await openDueVoting(env, now);
+    } catch (error) {
+      await logToDiscord(env, `Caption vote failed to open: ${String(error)}`);
+    }
+
+    try {
+      await closeDueContests(env, now);
+    } catch (error) {
+      await logToDiscord(env, `Caption contest close failed: ${String(error)}`);
+    }
+
+    try {
+      await postCaptionContestIfDue(env, now);
+    } catch (error) {
+      await logToDiscord(env, `Caption contest failed: ${String(error)}`);
     }
 
     try {
