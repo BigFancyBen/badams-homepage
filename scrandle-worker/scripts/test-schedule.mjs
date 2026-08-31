@@ -12,7 +12,12 @@
  * no build step and no test dependency.
  */
 import assert from "node:assert/strict";
-import { nextPostTime, parsePostHours, postSlotKey } from "../src/schedule.ts";
+import {
+  drinkCadence,
+  nextPostTime,
+  parsePostHours,
+  postSlotKey,
+} from "../src/schedule.ts";
 
 const HOUR = 3600e3;
 const FALLBACK = 12 * HOUR;
@@ -133,6 +138,71 @@ check("every gap is exactly 12 hours", gaps, [12]);
 // The real assertion: a post for every named hour in the window, no more and
 // no fewer. Hard-coding a count just moves the arithmetic into the test.
 check("exactly one post per named hour, none skipped", posts.length, namedHoursInWindow);
+
+// ── the drink cadence ──────────────────────────────────────────────
+// Drinks post on a slot of their own, as often as there is drink to post. The
+// rule is a constant sweep — every drink on the board about once a month — so
+// most of what follows is that sweep, computed back out of the answer.
+console.log("\ndrinkCadence");
+
+check("nothing to draw from", drinkCadence(0, 0), []);
+check("one drink cannot make a pair", drinkCadence(1, 1), []);
+// A matchup never pits someone against himself, so a one-person cellar holds
+// no pair at all, however deep it goes.
+check("forty drinks, all one person's", drinkCadence(40, 1), []);
+
+check("the smallest real pool posts weekly", drinkCadence(2, 2), [4]);
+check("eight drinks: one a week", drinkCadence(8, 3), [4]);
+check("sixteen drinks: two a week", drinkCadence(16, 4), [1, 4]);
+check("twenty-four drinks: three a week", drinkCadence(24, 5), [1, 3, 5]);
+check("thirty-two drinks: four a week", drinkCadence(32, 5), [0, 2, 4, 6]);
+check("fifty-two drinks: daily", drinkCadence(52, 6), [0, 1, 2, 3, 4, 5, 6]);
+check("and it stops at daily", drinkCadence(400, 9), [0, 1, 2, 3, 4, 5, 6]);
+
+// Monotonic: a bigger catalog never posts less often than a smaller one.
+const cadences = [];
+for (let count = 2; count <= 200; count++) cadences.push(drinkCadence(count, 4).length);
+check(
+  "the cadence never goes backwards as the catalog grows",
+  cadences.every((n, i) => i === 0 || n >= cadences[i - 1]),
+  true
+);
+
+// The property the ladder exists for: whatever size the catalog is, a sweep of
+// it — every drink on the board once, two to a matchup — lands between three
+// and five weeks. Only the ends fall outside, and both are the clamp doing its
+// job rather than the arithmetic: under eight drinks there is nothing to sweep
+// slowly enough, and past fifty-two the slot is already daily.
+const sweeps = [];
+for (let count = 8; count <= 52; count++) {
+  sweeps.push(Math.ceil(count / 2) / drinkCadence(count, 4).length);
+}
+check(
+  "a sweep of the catalog stays near four weeks at every size",
+  sweeps.every((weeks) => weeks >= 3 && weeks <= 5),
+  true
+);
+
+// Every day handed back has to be a real weekday and appear once. parseWeekdays
+// drops anything else, so a bad list would not fail loudly — the slot would
+// quietly run at a cadence nobody chose.
+const drinkDays = [];
+const duplicated = [];
+for (let count = 2; count <= 200; count++) {
+  const list = drinkCadence(count, 4);
+  drinkDays.push(...list);
+  if (new Set(list).size !== list.length) duplicated.push(count);
+}
+check(
+  "every day is a weekday in range",
+  drinkDays.every((d) => Number.isInteger(d) && d >= 0 && d <= 6),
+  true
+);
+check("no day is listed twice", duplicated, []);
+
+// The drink slot has an hour to itself. Sharing one with the food posts would
+// put a cocktail right beside the cooking matchup it was moved out of.
+check("23:00 is clear of the food hours", HOURS.includes(23), false);
 
 console.log(failures === 0 ? "\nAll passed." : `\n${failures} failed.`);
 process.exit(failures === 0 ? 0 : 1);

@@ -43,10 +43,15 @@ const CATEGORIES = ["food", "drink", "place", "person"] as const;
 export type Category = (typeof CATEGORIES)[number];
 
 /**
- * The everyday draw. Places and people are bonus-only — drawn on their own
- * days by the weekly place and person matchups — so they are not in here.
+ * The everyday draw: cooking, and nothing else. Places, people and drinks are
+ * all drawn on slots of their own, so none of them are in here.
+ *
+ * Drinks were in here until the 9am and 9pm posts were meant to be food. They
+ * were not, quite — both halves of a pair have to share a category, so whenever
+ * the draw's primary came up a cocktail the day's cooking matchup was a drinks
+ * matchup instead, at a rate nobody chose and nobody could predict.
  */
-export const DEFAULT_CATEGORIES: Category[] = ["food", "drink"];
+export const DEFAULT_CATEGORIES: Category[] = ["food"];
 
 /**
  * Ids come straight out of the database and are integer-checked here, so they
@@ -180,8 +185,8 @@ async function pickOpponent(
 /**
  * `exclude` keeps dishes that are already live out of the draw — the same
  * photograph appearing in two simultaneous matchups would be indefensible.
- * `categories` narrows the pool: the place and person bonuses draw those
- * categories, everything else draws food and drink.
+ * `categories` narrows the pool: the drink, place and person slots each draw
+ * their own category, everything else draws food.
  *
  * Returns null when no valid opponent exists — including when a category holds
  * only one person's photographs, since the opponent can never share the

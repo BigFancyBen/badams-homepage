@@ -4,6 +4,7 @@ import { backfill, ingest } from "./ingest";
 import { handleInteraction } from "./interactions";
 import {
   closeDueMatchups,
+  postDrinkMatchupIfDue,
   postMatchupIfDue,
   postPersonMatchupIfDue,
   postStandingsIfDue,
@@ -69,20 +70,29 @@ export default {
         return new Response("Nope", { status: 403 });
       }
       try {
-        // `place=1` / `person=1` post the weekly bonus on demand: that category
-        // only, running beside whatever is open, on a 24-hour window. A bonus
-        // always overlaps. `place=1` posts the five-photograph ranking round,
-        // which is what the place bonus became.
+        // `place=1` / `person=1` / `drink=1` post that slot on demand: that
+        // category only, running beside whatever is open, on a flat window. A
+        // bonus always overlaps. `place=1` posts the five-photograph ranking
+        // round, which is what the place bonus became.
         const place = url.searchParams.get("place") === "1";
         const person = url.searchParams.get("person") === "1";
+        const drink = url.searchParams.get("drink") === "1";
         const overlap =
-          place || person || url.searchParams.get("overlap") === "1";
+          place || person || drink || url.searchParams.get("overlap") === "1";
         const posted = place
           ? await postPlaceRoundIfDue(env, Date.now(), { force: true })
           : person
             ? await postPersonMatchupIfDue(env, Date.now(), { force: true })
-            : await postMatchupIfDue(env, Date.now(), { force: true, overlap });
-        const kind = place ? "place round" : person ? "person" : "matchup";
+            : drink
+              ? await postDrinkMatchupIfDue(env, Date.now(), { force: true })
+              : await postMatchupIfDue(env, Date.now(), { force: true, overlap });
+        const kind = place
+          ? "place round"
+          : person
+            ? "person"
+            : drink
+              ? "drink"
+              : "matchup";
         return Response.json({
           posted,
           kind,
@@ -92,9 +102,11 @@ export default {
               ? "fewer than three places available to rank, or too many of them one person's"
               : person
                 ? "fewer than two people in the catalog, only one person's photographs, or both are already live"
-                : overlap
-                  ? "no pair could be drawn"
-                  : "a matchup is already open, or no pair could be drawn",
+                : drink
+                  ? "fewer than two drinks in the catalog, only one person's drinks, or both are already live"
+                  : overlap
+                    ? "no pair could be drawn"
+                    : "a matchup is already open, or no pair could be drawn",
         });
       } catch (error) {
         const reason = error instanceof Error ? error.message : String(error);
@@ -251,9 +263,9 @@ export default {
       await logToDiscord(env, `Post failed: ${String(error)}`);
     }
 
-    // After the everyday matchup, and deliberately not gated on it: the weekly
-    // bonuses run alongside whatever is open rather than instead of it. Each
-    // fires only on its own day and hour, so most ticks post neither.
+    // After the everyday matchup, and deliberately not gated on it: these run
+    // alongside whatever is open rather than instead of it. Each fires only on
+    // its own day and hour, so most ticks post none of them.
     try {
       await postPlaceRoundIfDue(env, now);
     } catch (error) {
@@ -264,6 +276,12 @@ export default {
       await postPersonMatchupIfDue(env, now);
     } catch (error) {
       await logToDiscord(env, `Person matchup failed: ${String(error)}`);
+    }
+
+    try {
+      await postDrinkMatchupIfDue(env, now);
+    } catch (error) {
+      await logToDiscord(env, `Drink matchup failed: ${String(error)}`);
     }
 
     try {

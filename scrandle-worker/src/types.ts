@@ -28,6 +28,15 @@ export interface Env {
   PERSON_MINUTE: string;
   /** Flat window for the person bonus — it does not close on a posting hour. */
   PERSON_WINDOW_HOURS: string;
+  /**
+   * Weekdays for the drink slot. "auto" (or empty) derives them from the size
+   * of the drink catalog; an explicit comma-separated list overrides that, and
+   * -1 turns the slot off.
+   */
+  DRINK_WEEKDAY: string;
+  DRINK_HOUR_UTC: string;
+  /** Flat window for the drink slot — it does not close on a posting hour. */
+  DRINK_WINDOW_HOURS: string;
 
   // Secrets (wrangler secret put)
   DISCORD_BOT_TOKEN: string;
