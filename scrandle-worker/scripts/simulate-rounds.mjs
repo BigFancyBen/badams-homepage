@@ -60,7 +60,7 @@ const DISH_COLUMNS =
 
 async function seed(dishes) {
   await sql(
-    "DELETE FROM round_votes; DELETE FROM round_entries; DELETE FROM rounds; " +
+    "DELETE FROM contest_votes; DELETE FROM contest_entries; DELETE FROM contests; DELETE FROM round_votes; DELETE FROM round_entries; DELETE FROM rounds; " +
       "DELETE FROM votes; DELETE FROM matchups; DELETE FROM dishes; " +
       "DELETE FROM players; DELETE FROM state;"
   );

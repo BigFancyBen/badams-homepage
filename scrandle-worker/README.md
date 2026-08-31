@@ -5,14 +5,16 @@ The whole game. One Cloudflare Worker, one hourly cron, no frontend.
 - `scheduled()` — ingest new photos, close what is due, post what is due, post weekly standings
 - `fetch()` — `POST /interactions` for button clicks, plus `/backfill` and `/health`
 
-Two shapes of round. The everyday matchup is a pair with a button each, in
+Three shapes of round. The everyday matchup is a pair with a button each, in
 `matchups.ts`. The weekly place round puts five photographs on one card and
 each voter ranks them, in `rounds.ts` — its own tables, its own close path,
-the same Elo underneath.
+the same Elo underneath. The caption contest is in `contests.ts` and is the
+odd one out: players write rather than judge, and nothing gets a rating.
 
-Four slots, each drawing one category and nothing else. Cooking twice a day
+Five slots, each drawing categories nothing else touches. Cooking twice a day
 at 9am and 9pm, drinks at happy hour as often as there is drink to post,
-places on Monday, people on Tuesday.
+places on Monday, people on Tuesday, and the caption contest across the
+weekend on everything left over.
 
 Rendering lives in the Next app (`app/api/scrandle/*`) because Workers Free
 allows 10ms of CPU per invocation, which cannot rasterize an image. The Worker
@@ -306,6 +308,35 @@ bug: the drink slot looks like it works and quietly eats a cooking slot a day.
 The small and backlog catalogs are also checked for pair repeats inside the
 20-matchup recency window, and the small one for Elo staying zero-sum.
 
+### Testing caption contests
+
+```bash
+npm run test:contests
+```
+
+A contest has two live phases and three transitions, one more than anything
+else here, and most of what can go wrong lives in the seams. Captions and
+ballots are written straight into the database rather than clicked — the
+button path is signed and has its own suite — so this one is about the
+engine.
+
+Three scenarios. The **full contest** walks one photograph through writing,
+voting and the result, with three ballots whose Borda arithmetic is small
+enough to do in your head: it checks the bot's caption is the name the
+classifier wrote and that it arrives only when the vote opens, that slots are
+numbered from one, that the points are what the ballots say, and that no
+points are invented — every ballot is worth exactly 3+2+1 and no more.
+
+The **abandoned** one has a single caption in it. The vote must not open, the
+bot must not enter a contest that never ran, and the slot must free up
+immediately so the next weekend is not blocked by a contest nobody entered.
+
+The **shuffle** runs twelve contests with the same four writers in the same
+order every time and checks slot 1 does not always go to whoever wrote first.
+Without the shuffle that is exactly what happens, and people learn to read
+the slot instead of the caption. It also confirms the rotation holds — twelve
+photographs over twelve contests, none drawn twice.
+
 ### Testing ranking rounds
 
 `simulate-rounds.mjs` is the same idea for the weekly place round, and needs
@@ -355,6 +386,7 @@ appears in two matchups at once, and it does not claim the hour's slot.
 curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&place=1"
 curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&person=1"
 curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&drink=1"
+curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&caption=1"
 ```
 
 Posts one of the other slots on demand — `place=1` for the five-photo place
@@ -366,12 +398,27 @@ places are available to rank, or when the per-poster cap leaves it short;
 they are all one person's. Forcing ignores the cadence entirely, so `drink=1`
 posts on a day the slot would not have fired on.
 
+`caption=1` opens a caption contest. It refuses while another is live —
+forced or not, because two open contests would ask people to write and to
+rank at the same time on two photographs in one channel.
+
+```bash
+curl "https://<your-worker>.workers.dev/admin/open-vote?secret=<BACKFILL_SECRET>"
+```
+
+Ends a contest's writing phase early and puts the vote up. Its own route
+rather than a flag on the close, because the two halves have to be callable
+separately — forcing them together would open a vote and shut it in the same
+request. Answers `{"opened":0}` when nothing is collecting captions.
+
 ```bash
 curl "https://<your-worker>.workers.dev/admin/close-matchup?secret=<BACKFILL_SECRET>"
 ```
 
-Closes everything open right now, ignoring `closes_at` — matchups and ranking
-rounds alike. Answers `{"closed":N,"rounds":N}`.
+Closes everything open right now, ignoring `closes_at` — matchups, ranking
+rounds and contests being voted on. Answers `{"closed":N,"rounds":N,
+"contests":N}`. Contests still collecting captions are deliberately left
+alone; `/admin/open-vote` is what moves those on.
 
 ```bash
 curl "https://<your-worker>.workers.dev/admin/repair-card?secret=<BACKFILL_SECRET>&message=<discord message id>"
@@ -476,8 +523,8 @@ why not.
   early.
 - **Cron hours are UTC and ignore DST.** `POST_HOURS_UTC = "15,3"` is 9am/9pm
   Mountain under MDT and 8am/8pm under MST — shift to `"16,4"` in November.
-  `PLACE_HOUR_UTC`, `PERSON_HOUR_UTC` and `DRINK_HOUR_UTC` are the same story
-  and need shifting with it. The clock lives entirely in these vars: the cron stays broad and
+  `PLACE_HOUR_UTC`, `PERSON_HOUR_UTC`, `DRINK_HOUR_UTC` and `CAPTION_HOUR_UTC`
+  are the same story and need shifting with it. The clock lives entirely in these vars: the cron stays broad and
   UTC. It ticks on the hour and at `:11`, and `:11` is the only reason the
   second entry exists — the person bonus fires at 11:11am, and an hourly cron
   cannot reach that minute on its own.
@@ -505,6 +552,50 @@ why not.
   have to match category, so whenever the draw's primary came up a cocktail
   the day's cooking matchup was a drinks matchup instead — at a rate nobody
   chose and nobody could predict from the outside.
+- **Nine categories, and every one of them now has somewhere to go.** The
+  classifier labels `food`, `drink`, `place` and `person`, which each have a
+  slot, and five more — `ingredient`, `pet`, `document`, `screenshot`,
+  `other` — which for a long time had none. They were unreachable rather
+  than unscheduled: `CATEGORIES` in `matchmaking.ts` gated the draw and none
+  of the five were in it.
+
+  The reason was not an oversight. Those photographs are the residue of the
+  channel — a receipt, a meme, a shopping haul, somebody's cat — and every
+  format up to now asks which of these is better, which is not a question
+  anybody can put to two receipts. The caption contest asks a different one,
+  and there a baffling photograph is worth more than a good one.
+- **The caption contest is the first format where players make something.**
+  One photograph goes up on Saturday with a button; the button opens a modal,
+  which is the only way Discord will take free text from somebody without
+  giving them a message box the whole channel can read. Sunday the captions
+  go on the board, shuffled and numbered, and everyone ranks their top three.
+  Monday names the winner.
+
+  It is scored with Borda points — 3, 2, 1 — and not with Elo. A caption has
+  no rating to carry anywhere: it exists for one photograph and will never
+  appear again, so a rating would need a pool to be rated against and there
+  is not one. A contest has a winner, which is a different thing.
+- **The bot enters its own contest, anonymously.** The classifier already
+  wrote a deadpan name for every photograph when it labelled it, and until
+  now that line only ever appeared beside its own picture. It goes on the
+  board with nothing marking it, and where it placed is the first line of the
+  result. It is added when the vote opens rather than when the contest starts,
+  so a contest nobody entered can tell "nobody wrote one" from "one person
+  did" — below two human captions there is nothing to vote on and the contest
+  is abandoned rather than posted.
+- **Captions are text in the message, not a rendered card.** Every other
+  format composites several photographs into one image and needs Vercel to
+  rasterize it. A contest shows one photograph, which R2 already serves at a
+  public URL, and a list of sentences, which Discord renders better as text
+  than any PNG would — selectable, wrapping, and legible on a phone. So there
+  is nothing here that can fail to render, and no `repair-card` path.
+- **A contest's ballot is capped at three; a ranking round's is not.** The
+  round wants every comparison it can get, because each one is an Elo update.
+  A contest can carry ten captions and ranking all ten is a chore that would
+  collect fewer ballots rather than better ones. Ranking your own is allowed:
+  it costs one of your three, which is its own disincentive, and the reveal
+  names every ballot — the same bargain the pair matchup makes with
+  self-votes.
 - **How often drinks post is computed, not configured.** `DRINK_WEEKDAY` is
   normally left at `"auto"`, which asks the catalog. A fixed weekly day is
   wrong in both directions: six drinks and a weekly post shows the same two

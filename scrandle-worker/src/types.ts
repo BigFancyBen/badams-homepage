@@ -37,6 +37,13 @@ export interface Env {
   DRINK_HOUR_UTC: string;
   /** Flat window for the drink slot — it does not close on a posting hour. */
   DRINK_WINDOW_HOURS: string;
+  /** Weekdays the caption contest opens on, comma-separated. Empty/-1 off. */
+  CAPTION_WEEKDAY: string;
+  CAPTION_HOUR_UTC: string;
+  /** How long captions are collected for before the vote opens. */
+  CAPTION_WRITING_HOURS: string;
+  /** How long the vote runs once the captions are on the board. */
+  CAPTION_VOTING_HOURS: string;
 
   // Secrets (wrangler secret put)
   DISCORD_BOT_TOKEN: string;
@@ -118,6 +125,36 @@ export interface RoundEntry {
  */
 export type RoundDish = Dish & Omit<RoundEntry, "round_id" | "dish_id">;
 
+/**
+ * A caption contest. Two live phases rather than one: `writing` while captions
+ * are collected, `voting` once they are on the board. See migration 0006 for
+ * why it is not a `Round`.
+ */
+export interface Contest {
+  id: number;
+  dish_id: number;
+  status: "writing" | "voting" | "closed";
+  submit_message_id: string | null;
+  vote_message_id: string | null;
+  created_at: number;
+  writing_closes_at: number;
+  voting_closes_at: number | null;
+  closed_at: number | null;
+}
+
+/** One caption. `author_discord_id` null means the bot wrote it. */
+export interface ContestEntry {
+  id: number;
+  contest_id: number;
+  author_discord_id: string | null;
+  text: string;
+  /** Null until voting opens — the order is shuffled at that point. */
+  slot: number | null;
+  points: number | null;
+  firsts: number | null;
+  submitted_at: number;
+}
+
 // ── Discord ────────────────────────────────────────────────────────
 
 export interface DiscordAttachment {
@@ -141,23 +178,39 @@ export const InteractionType = {
   PING: 1,
   APPLICATION_COMMAND: 2,
   MESSAGE_COMPONENT: 3,
+  /** Somebody submitted a modal — the caption contest's writing phase. */
+  MODAL_SUBMIT: 5,
 } as const;
 
 export const InteractionResponseType = {
   PONG: 1,
   CHANNEL_MESSAGE_WITH_SOURCE: 4,
   DEFERRED_UPDATE_MESSAGE: 6,
+  /** Opens a text box over the channel. The only way to collect free text. */
+  MODAL: 9,
 } as const;
 
 /** Message flag 64 = ephemeral: only the person who clicked sees it. */
 export const EPHEMERAL = 64;
+
+/**
+ * A node in a modal's component tree. Discord has shipped two shapes for this
+ * — a text input inside an action row, and one inside a Label — so the value
+ * is read by walking rather than by index. Both nest through `components`.
+ */
+export interface InteractionComponent {
+  type: number;
+  custom_id?: string;
+  value?: string;
+  components?: InteractionComponent[];
+}
 
 export interface Interaction {
   type: number;
   id: string;
   guild_id?: string;
   channel_id?: string;
-  data?: { custom_id?: string };
+  data?: { custom_id?: string; components?: InteractionComponent[] };
   member?: { user: { id: string; username: string } };
   user?: { id: string; username: string };
 }

@@ -6,11 +6,12 @@
  * testing this path needs a real keypair — generate one, put the public half
  * in .dev.vars as DISCORD_PUBLIC_KEY, and sign requests with the private half.
  *
- *   node scripts/test-interactions.mjs [matchupId] [roundId] [--url http://localhost:8787]
+ *   node scripts/test-interactions.mjs [matchupId] [roundId] [contestId] [--url ...]
  *
- * Expects .test-key.pem (private key) beside wrangler.toml. The round id is
- * optional — pass one to exercise the ranking buttons as well as the vote
- * ones, and it has to be a round that is actually open.
+ * Expects .test-key.pem (private key) beside wrangler.toml. The round and
+ * contest ids are optional — pass a round that is genuinely open to exercise
+ * the ranking buttons, and a contest that is still collecting captions to
+ * exercise the modal and the ballot behind it.
  */
 import { readFileSync } from "node:fs";
 import { createPrivateKey, sign as edSign } from "node:crypto";
@@ -186,6 +187,168 @@ if (Number.isInteger(roundId) && roundId > 0) {
   check("an unknown round is turned away", /round is gone/.test(gone.body?.data?.content ?? ""), gone);
 } else {
   console.log("SKIP  ranking rounds (pass an open round id as the second argument)");
+}
+
+// ── caption contests ───────────────────────────────────────────────
+// Pass a contest id that is still collecting captions. The block writes two
+// captions through the modal, then moves the contest to its vote through the
+// admin route and exercises the ballot — which is the real transition, not a
+// second fixture standing in for it.
+const contestId = Number(process.argv[4]);
+
+if (Number.isInteger(contestId) && contestId > 0) {
+  const secret = process.env.BACKFILL_SECRET ?? "dev-only-backfill-secret";
+
+  const writer = { user: { id: "user_writer", username: "writer" } };
+  const second = { user: { id: "user_second", username: "second" } };
+
+  const click = (customId, member = writer) =>
+    post({
+      type: 3,
+      id: `c${customId}`,
+      guild_id: GUILD,
+      channel_id: CHANNEL,
+      data: { custom_id: customId },
+      member,
+    });
+
+  /** A modal coming back, in the action-row shape Discord sends today. */
+  const submit = (customId, value, member = writer) =>
+    post({
+      type: 5,
+      id: `s${customId}`,
+      guild_id: GUILD,
+      channel_id: CHANNEL,
+      data: {
+        custom_id: customId,
+        components: [
+          {
+            type: 1,
+            components: [{ type: 4, custom_id: "caption", value }],
+          },
+        ],
+      },
+      member,
+    });
+
+  const opened = await click(`cw:${contestId}`);
+  check(
+    "the write button opens a modal",
+    opened.body?.type === 9 && opened.body?.data?.custom_id === `cm:${contestId}`,
+    opened
+  );
+
+  const wrote = await submit(`cm:${contestId}`, "a genuinely baffling photograph");
+  check(
+    "a caption is recorded",
+    /In\. Yours reads/.test(wrote.body?.data?.content ?? ""),
+    wrote
+  );
+
+  // Writing again is editing, not entering twice. If it were an insert the
+  // second one would fail the unique index and lose the caption silently.
+  const rewrote = await submit(`cm:${contestId}`, "second thoughts, sharper");
+  check(
+    "writing again replaces rather than duplicates",
+    /Changed it to/.test(rewrote.body?.data?.content ?? ""),
+    rewrote
+  );
+
+  // Whitespace is collapsed, not just trimmed: a caption goes into a numbered
+  // list, where a line break would split one person's entry across two lines
+  // and make it look like two.
+  const messy = await submit(`cm:${contestId}`, "  line one\n\nline two   ");
+  check(
+    "newlines are collapsed into one line",
+    (messy.body?.data?.content ?? "").includes("line one line two"),
+    messy
+  );
+
+  const empty = await submit(`cm:${contestId}`, "     ");
+  check(
+    "an empty caption is turned away",
+    /That was empty/.test(empty.body?.data?.content ?? ""),
+    empty
+  );
+
+  // The reopened modal is prefilled, so a second click reads as an edit rather
+  // than looking like it lost the first one.
+  const reopened = await click(`cw:${contestId}`);
+  const field = reopened.body?.data?.components?.[0]?.components?.[0];
+  check(
+    "reopening it prefills what they already wrote",
+    field?.value === "line one line two",
+    reopened
+  );
+
+  // A second person, so the vote has something to be about.
+  await submit(`cm:${contestId}`, "the other one", second);
+
+  const gone = await click("cw:999999");
+  check("an unknown contest is turned away", /contest is gone/.test(gone.body?.data?.content ?? ""), gone);
+
+  // ── move it to the vote ──────────────────────────────────────────
+  const openVote = await fetch(
+    `${url}/admin/open-vote?secret=${encodeURIComponent(secret)}`
+  );
+  const openBody = await openVote.json();
+  check("the vote opens for the ballot checks", openBody.opened === 1, openBody);
+
+  const stale = await submit(`cm:${contestId}`, "too late");
+  check(
+    "writing is refused once the vote is open",
+    /Writing on that one has closed/.test(stale.body?.data?.content ?? ""),
+    stale
+  );
+
+  const first = await click(`c:${contestId}:2`);
+  check(
+    "a caption can be ranked",
+    /Your order: #2\./.test(first.body?.data?.content ?? ""),
+    first
+  );
+
+  const again = await click(`c:${contestId}:2`);
+  check(
+    "ranking the same one twice is refused",
+    /already ranked #2/.test(again.body?.data?.content ?? ""),
+    again
+  );
+
+  await click(`c:${contestId}:1`);
+  const third = await click(`c:${contestId}:3`);
+  check(
+    "three picks fills the ballot and says so",
+    /That is the lot/.test(third.body?.data?.content ?? ""),
+    third
+  );
+
+  // The cap is the one thing this format has that the ranking round does not.
+  const fourth = await click(`c:${contestId}:1`);
+  const capped = await click(`c:${contestId}:2`);
+  check(
+    "a fourth pick is refused",
+    /already picked 3/.test(fourth.body?.data?.content ?? "") ||
+      /already ranked/.test(fourth.body?.data?.content ?? ""),
+    fourth
+  );
+  check(
+    "and the ballot is unchanged by it",
+    /#2 › #1 › #3/.test(capped.body?.data?.content ?? ""),
+    capped
+  );
+
+  const missing = await click(`c:${contestId}:99`);
+  check(
+    "a slot that is not in the contest is turned away",
+    /not in this contest/.test(missing.body?.data?.content ?? ""),
+    missing
+  );
+
+  const cleared = await click(`cx:${contestId}`);
+  check("start over clears it", /Cleared/.test(cleared.body?.data?.content ?? ""), cleared);
+} else {
+  console.log("SKIP  caption contest (pass a writing-phase contest id as the third argument)");
 }
 
 console.log(failures === 0 ? "\nall checks passed" : `\n${failures} check(s) failed`);

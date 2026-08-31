@@ -70,6 +70,20 @@ DRINK_HOUR_UTC = "23"
 # or missed tick would otherwise leave two live at once.
 DRINK_WINDOW_HOURS = "22"
 
+# The caption contest: one photograph, everybody writes a line, then everybody
+# ranks the lines. Two phases of a day each. 6 = Saturday, 16:00 UTC = 10am
+# Mountain *while MDT is in effect* — shift to 17 in November with the rest.
+#
+# Saturday 10am opens the writing, Sunday 10am opens the vote, Monday 10am
+# gives the result — two hours before the Monday place round and a day clear
+# of the Sunday standings post. Set CAPTION_WEEKDAY to -1 (or empty) to
+# disable. It draws only the categories nothing else has a question for:
+# ingredient, pet, document, screenshot, other.
+CAPTION_WEEKDAY = "6"
+CAPTION_HOUR_UTC = "16"
+CAPTION_WRITING_HOURS = "24"
+CAPTION_VOTING_HOURS = "24"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "scrandle"
