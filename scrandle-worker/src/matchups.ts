@@ -11,6 +11,7 @@ import {
 } from "./discord";
 import {
   chefStandings,
+  drinkPool,
   getDish,
   getDueMatchups,
   getMatchup,
@@ -34,6 +35,7 @@ import {
 } from "./images";
 import { pickPair } from "./matchmaking";
 import {
+  drinkCadence,
   nextPostTime,
   parsePostHours,
   parseWeekdays,
@@ -191,11 +193,11 @@ export async function postMatchupIfDue(
 
 interface BonusSchedule {
   /**
-   * The category it draws from. People, now that places moved to the weekly
-   * ranking round — kept as a shape rather than inlined because it is the one
-   * thing that makes a bonus a bonus, and the next one will want it too.
+   * The category it draws from — the one thing that makes a bonus a bonus.
+   * People, and drinks now that those have a slot of their own; places went to
+   * the weekly ranking round and are drawn there instead.
    */
-  category: "person";
+  category: "person" | "drink";
   /** Weekdays it fires on, 0 = Sunday. Empty disables it. */
   weekdays: number[];
   hourUtc: number;
@@ -209,8 +211,8 @@ interface BonusSchedule {
 }
 
 /**
- * A weekly bonus matchup: a category of its own, on a day of its own. Three
- * things make it separate from the everyday matchup rather than a flag on it.
+ * A bonus matchup: a category of its own, on days of its own. Three things make
+ * it separate from the everyday matchup rather than a flag on it.
  *
  * It runs *beside* whatever ordinary matchup is open — that is what makes it a
  * bonus — so it deliberately skips the one-at-a-time rule, drawing on the same
@@ -222,6 +224,9 @@ interface BonusSchedule {
  *
  * And it keeps its own slot key, so posting one never marks the food slot as
  * used. Its category is drawn only here — the everyday matchup filters it out.
+ *
+ * `weekdays` is a plain list rather than a setting because the drink slot
+ * computes its own; the person bonus reads its list straight from the config.
  */
 async function postBonusMatchupIfDue(
   env: Env,
@@ -296,6 +301,52 @@ export function postPersonMatchupIfDue(
       windowHours: Number(env.PERSON_WINDOW_HOURS || "24"),
       slotState: "last_person_slot",
       preamble: "Bonus round — person vs person.",
+    },
+    force
+  );
+}
+
+/**
+ * Drink against drink, on a slot of its own at a cadence set by how much drink
+ * there is. Everything else about it is the person bonus: its own category, its
+ * own hour, its own slot key, running alongside whatever is open.
+ *
+ * What is different is that its days are computed rather than configured.
+ * `DRINK_WEEKDAY` is normally left at "auto", which asks the catalog — see
+ * drinkCadence. An explicit list overrides it, and -1 turns the slot off.
+ */
+export async function postDrinkMatchupIfDue(
+  env: Env,
+  now: number,
+  { force = false }: { force?: boolean } = {}
+): Promise<boolean> {
+  const hourUtc = Number(env.DRINK_HOUR_UTC || "23");
+
+  // The hour gate first, before the cadence is worked out at all. Deciding the
+  // days means counting the drinks, and there is no point paying for that on
+  // the twenty-three ticks a day that could not post whatever it said.
+  if (!force && new Date(now).getUTCHours() !== hourUtc) return false;
+
+  const configured = (env.DRINK_WEEKDAY ?? "auto").trim();
+  let weekdays: number[];
+  if (configured === "" || configured === "auto") {
+    const pool = await drinkPool(env);
+    weekdays = drinkCadence(pool.count, pool.posters);
+  } else {
+    weekdays = parseWeekdays(configured);
+  }
+
+  return postBonusMatchupIfDue(
+    env,
+    now,
+    {
+      category: "drink",
+      weekdays,
+      hourUtc,
+      minute: 0,
+      windowHours: Number(env.DRINK_WINDOW_HOURS || "22"),
+      slotState: "last_drink_slot",
+      preamble: "Happy hour — drink vs drink.",
     },
     force
   );

@@ -87,21 +87,44 @@ export async function getDish(env: Env, id: number): Promise<Dish | null> {
  * The oldest open *everyday* matchup, ignoring bonus rounds.
  *
  * Only the one-at-a-time rule uses this, and a bonus must not trip it. A bonus
- * is posted to run beside the everyday matchup and holds a flat 24-hour window,
- * so counting it blacked out every ordinary slot for a full day after each one
- * — with bonuses on Monday, Tuesday and Wednesday that is most of the week.
+ * is posted to run beside the everyday matchup and holds a flat window of its
+ * own, so counting it blacked out every ordinary slot for a full day after each
+ * one — with bonuses on Monday, Tuesday and Wednesday that is most of the week.
  *
  * `matchups` has no column saying which is which, and does not need one. The
  * everyday draw is fixed to DEFAULT_CATEGORIES and both dishes in a matchup
- * always share a category, so a matchup holding places or people can only have
+ * always share a category, so a matchup holding anything else can only have
  * come from a bonus. Joining dish A is enough to tell them apart.
+ *
+ * Food only, now that drinks have a slot of their own. Leaving drinks in here
+ * would have been the exact blackout described above, on the busiest bonus of
+ * the lot: an open drink matchup would have stood in front of the next cooking
+ * matchup and skipped it.
  */
 export async function getOpenStandardMatchup(env: Env): Promise<Matchup | null> {
   return env.DB.prepare(
     "SELECT m.* FROM matchups m JOIN dishes d ON d.id = m.dish_a_id " +
-      "WHERE m.status = 'open' AND d.category IN ('food', 'drink') " +
+      "WHERE m.status = 'open' AND d.category = 'food' " +
       "ORDER BY m.created_at ASC LIMIT 1"
   ).first<Matchup>();
+}
+
+/**
+ * How much drink there is to play with, and how many people it came from.
+ *
+ * Both numbers, because the cadence needs both: a catalog of forty drinks that
+ * are all one person's cannot produce a single matchup, since a matchup never
+ * pits someone against himself. Counted at post time rather than cached — it is
+ * one aggregate over a small table, read at most once an hour.
+ */
+export async function drinkPool(
+  env: Env
+): Promise<{ count: number; posters: number }> {
+  const row = await env.DB.prepare(
+    "SELECT COUNT(*) AS count, COUNT(DISTINCT poster_discord_id) AS posters " +
+      "FROM dishes WHERE category = 'drink'"
+  ).first<{ count: number; posters: number }>();
+  return { count: row?.count ?? 0, posters: row?.posters ?? 0 };
 }
 
 /** Every open matchup, regardless of closes_at. */

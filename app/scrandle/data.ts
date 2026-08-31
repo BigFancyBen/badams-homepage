@@ -355,6 +355,14 @@ export const PHASES: Phase[] = [
         kind: "note",
         text: "Sides are randomized, and the post never pings. A ping would correlate with new dishes entering the pool, and position 1 would otherwise always be the newer plate.",
       },
+      {
+        kind: "p",
+        text: "The two daily posts are cooking and nothing else. Drinks used to share them, and because both halves of a pair have to match category, that meant the 9am post was a food matchup only when the draw happened to land on food — at a rate nobody chose. Drinks, places and people each got a slot of their own instead.",
+      },
+      {
+        kind: "p",
+        text: "How often the drink slot fires is computed rather than configured, because a fixed weekly day is wrong in both directions — six drinks and it shows the same two every month, eighty and it never gets through them. It aims at a constant **sweep**: the time for every drink to reach the board once. Two drinks a matchup, a four-week sweep, so about one post a week per eight drinks, clamped between weekly and daily.",
+      },
     ],
   },
   {

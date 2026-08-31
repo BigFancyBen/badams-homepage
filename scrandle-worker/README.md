@@ -10,6 +10,10 @@ Two shapes of round. The everyday matchup is a pair with a button each, in
 each voter ranks them, in `rounds.ts` — its own tables, its own close path,
 the same Elo underneath.
 
+Four slots, each drawing one category and nothing else. Cooking twice a day
+at 9am and 9pm, drinks at happy hour as often as there is drink to post,
+places on Monday, people on Tuesday.
+
 Rendering lives in the Next app (`app/api/scrandle/*`) because Workers Free
 allows 10ms of CPU per invocation, which cannot rasterize an image. The Worker
 builds a signed URL, fetches the PNG itself, and mirrors it into R2 — Discord
@@ -261,11 +265,12 @@ rather than the cron, so it needs `BACKFILL_SECRET` in `.dev.vars` (the value
 from `.dev.vars.example` is what it assumes). Forcing is deliberate: the cron
 only posts on a named hour, so a cron-driven run posts nothing at all unless
 you happen to start it at 15:00 or 03:00 UTC. The posting schedule has its own
-suite — `npm run test:schedule` — and this one is about the draw. Ingest has a
-third, `npm run test:ingest`, covering the batching rule that keeps the cursor
-on a message boundary and the D1 write retry.
+suite — `npm run test:schedule`, which also covers the drink cadence — and this
+one is about the draw. Ingest has a third, `npm run test:ingest`, covering the
+batching rule that keeps the cursor on a message boundary and the D1 write
+retry.
 
-It runs three seeded catalogs, because no single one shows everything.
+It runs four seeded catalogs, because no single one shows everything.
 
 The **small catalog** is 12 dishes across 4 chefs, all in play, ratings
 clustered with two outliers. It strains pair recency and gives the deliberate
@@ -289,6 +294,14 @@ boards are drawn entirely from the backlog. Giving recency the front of the
 queue rather than a share of it fails both: every primary is then a photo from
 the last fortnight, so arrivals take exactly half the slots and no board is
 ever free of one.
+
+The **mixed catalog** is 14 food and 10 drinks, and covers the slot split. It
+checks that the everyday draw never reaches a drink and leaves all ten for the
+drink slot, that `?drink=1` draws two drinks, and — the sharp one — that a live
+drink matchup does not block the next cooking post while still not letting a
+second cooking matchup up beside the first. Counting drinks in the
+one-at-a-time rule fails the middle two and nothing else, which is exactly the
+bug: the drink slot looks like it works and quietly eats a cooking slot a day.
 
 The small and backlog catalogs are also checked for pair repeats inside the
 20-matchup recency window, and the small one for Elo staying zero-sum.
@@ -341,13 +354,17 @@ appears in two matchups at once, and it does not claim the hour's slot.
 ```bash
 curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&place=1"
 curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&person=1"
+curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&drink=1"
 ```
 
-Posts a weekly bonus on demand — `place=1` for the five-photo place ranking
-round, `person=1` for person-vs-person — the same thing the scheduled cron
-does. Always overlaps, always gets the 24-hour window. `place=1` answers
-`{"posted":false}` when fewer than three places are available to rank, or when
-the per-poster cap leaves it short.
+Posts one of the other slots on demand — `place=1` for the five-photo place
+ranking round, `person=1` for person-vs-person, `drink=1` for drink-vs-drink
+— the same thing the scheduled cron does. Always overlaps, always gets that
+slot's flat window. `place=1` answers `{"posted":false}` when fewer than three
+places are available to rank, or when the per-poster cap leaves it short;
+`drink=1` answers the same when the catalog holds fewer than two drinks or
+they are all one person's. Forcing ignores the cadence entirely, so `drink=1`
+posts on a day the slot would not have fired on.
 
 ```bash
 curl "https://<your-worker>.workers.dev/admin/close-matchup?secret=<BACKFILL_SECRET>"
@@ -459,25 +476,47 @@ why not.
   early.
 - **Cron hours are UTC and ignore DST.** `POST_HOURS_UTC = "15,3"` is 9am/9pm
   Mountain under MDT and 8am/8pm under MST — shift to `"16,4"` in November.
-  `PLACE_HOUR_UTC` and `PERSON_HOUR_UTC` are the same story and need shifting
-  with it. The clock lives entirely in these vars: the cron stays broad and
+  `PLACE_HOUR_UTC`, `PERSON_HOUR_UTC` and `DRINK_HOUR_UTC` are the same story
+  and need shifting with it. The clock lives entirely in these vars: the cron stays broad and
   UTC. It ticks on the hour and at `:11`, and `:11` is the only reason the
   second entry exists — the person bonus fires at 11:11am, and an hourly cron
   cannot reach that minute on its own.
 - **One matchup at a time**, with a single exception. Posting refuses while
   anything is open, even when forced, because two live matchups split the
   vote. The exception is a bonus: `?overlap=1` on `/admin/post-matchup`, and
-  the weekly place and person matchups, which are meant to run beside the
+  the place, person and drink slots, which are meant to run beside the
   ordinary one. Closing already handles more than one being open, and a vote
   carries its matchup id on the button, so nothing else needs to know.
-- **Places and people only play on their own days.** The classifier labels
-  rooms, views and landscapes `place`, and photos whose subject is a person
-  `person`; the everyday draw filters both out. They are drawn only by their
-  weekly bonuses — a five-photo place ranking round on `PLACE_WEEKDAY` (Monday
-  noon by default), person against person on `PERSON_WEEKDAY` (Tuesday 11:11am).
-  Each bonus overlaps whatever is open, gets a flat window instead of closing
-  on a posting hour, and keeps its own slot key so posting one never consumes a
-  food slot. `PLACE_WEEKDAY = "-1"` / `PERSON_WEEKDAY = "-1"` turn them off.
+  "Open" here means an open *food* matchup, and that word is load-bearing:
+  while it counted drinks, a live drink matchup stood in front of the next
+  cooking slot and skipped it — the same cycle-skipping bug that closing on
+  the schedule was written to fix, arriving from a new direction.
+- **The 9am and 9pm posts are cooking, and only cooking.** The everyday draw
+  is fixed to `food`. Everything else the classifier labels — `drink`,
+  `place`, `person` — is drawn on a slot of its own: a five-photo place
+  ranking round on `PLACE_WEEKDAY` (Monday noon by default), person against
+  person on `PERSON_WEEKDAY` (Tuesday 11:11am), drink against drink on
+  `DRINK_WEEKDAY` (happy hour, 5pm Mountain). Each overlaps whatever is open,
+  gets a flat window instead of closing on a posting hour, and keeps its own
+  slot key so posting one never consumes a food slot. Setting any of the
+  `*_WEEKDAY` vars to `"-1"` turns that slot off.
+
+  Drinks shared the everyday slots until they didn't. Both halves of a pair
+  have to match category, so whenever the draw's primary came up a cocktail
+  the day's cooking matchup was a drinks matchup instead — at a rate nobody
+  chose and nobody could predict from the outside.
+- **How often drinks post is computed, not configured.** `DRINK_WEEKDAY` is
+  normally left at `"auto"`, which asks the catalog. A fixed weekly day is
+  wrong in both directions: six drinks and a weekly post shows the same two
+  every month, eighty drinks and a weekly post never gets through them. So
+  the cadence aims at a constant **sweep** — the time it takes for every
+  drink to have been on the board once. A matchup uses two, so a sweep is
+  `ceil(count / 2)` posts, and a four-week sweep wants a quarter of that a
+  week: roughly one post a week per eight drinks, clamped between weekly and
+  daily. Eight drinks is Thursdays; sixteen adds Monday; fifty-two is every
+  day. Below two drinks, or two people with a drink, there is no schedule at
+  all — a matchup never pits someone against himself, so no pair exists to
+  draw. An explicit comma-separated list overrides the whole thing.
 - **Places are ranked, not paired.** Five places go up on one card and each
   voter clicks them in the order they like them, best first. A pair asks the
   wrong question of places — two holiday snaps side by side is close to a coin

@@ -79,3 +79,59 @@ export function nextPostTime(
 export function postSlotKey(now: number): string {
   return new Date(now).toISOString().slice(0, 13);
 }
+
+/**
+ * How many drink matchups a week a catalog of `count` drinks deserves, as the
+ * weekdays to post them on.
+ *
+ * Drinks used to share the everyday slots with food, which meant the 9am and
+ * 9pm posts were food *usually* — whenever the draw happened to land on a
+ * cocktail, the day's cooking matchup was not a cooking matchup. Giving drinks
+ * a slot of their own fixes that, and raises the question this answers: how
+ * often should that slot fire? A fixed weekly day is wrong in both directions.
+ * Six drinks in the catalog and a weekly post shows the same two every month;
+ * eighty drinks and a weekly post never gets through them.
+ *
+ * So the cadence follows the catalog, aiming at a constant *sweep* — the time
+ * it takes for every drink to have been on the board once. A matchup uses two,
+ * so a sweep is `ceil(count / 2)` posts, and a four-week sweep wants a quarter
+ * of that a week. Four weeks because it is long enough that a drink does not
+ * come round often enough to be boring, and short enough that somebody's
+ * negroni from last month is still a live argument.
+ *
+ * Clamped to at most daily, which is where the ladder tops out however deep
+ * the catalog gets, and to at least weekly, so a small pool still runs.
+ *
+ * `posters` is the number of distinct people with a drink in the catalog. Below
+ * two there is no schedule at all: a matchup never pits someone against
+ * himself, so the draw could not produce a pair however often it was asked.
+ */
+export function drinkCadence(count: number, posters: number): number[] {
+  if (count < 2 || posters < 2) return [];
+
+  // Posts, not drinks. Dividing the count straight through is off by the
+  // rounding at small sizes — eleven drinks is six matchups, and eleven halved
+  // and rounded says one a week, which sweeps in six weeks rather than four.
+  const sweep = Math.ceil(count / DRINKS_PER_MATCHUP);
+  const perWeek = Math.min(7, Math.max(1, Math.round(sweep / SWEEP_WEEKS)));
+  return DRINK_DAYS[perWeek];
+}
+
+const DRINKS_PER_MATCHUP = 2;
+/** The sweep the cadence aims at: every drink on the board once a month. */
+const SWEEP_WEEKS = 4;
+
+/**
+ * Which days each cadence uses, spread as evenly as seven allows. The single
+ * day is Thursday: late enough in the week to be its own thing, and clear of
+ * the Monday place round and the Tuesday person bonus.
+ */
+const DRINK_DAYS: Record<number, number[]> = {
+  1: [4],
+  2: [1, 4],
+  3: [1, 3, 5],
+  4: [0, 2, 4, 6],
+  5: [1, 2, 3, 4, 5],
+  6: [1, 2, 3, 4, 5, 6],
+  7: [0, 1, 2, 3, 4, 5, 6],
+};

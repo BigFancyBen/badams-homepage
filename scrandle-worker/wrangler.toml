@@ -21,6 +21,7 @@ R2_PUBLIC_BASE = "https://pub-b7525558c8974aa0aa1f10bf9856eb18.r2.dev"
 VOTE_WINDOW_HOURS = "12"
 # 15:00 and 03:00 UTC = 9am and 9pm Mountain *while MDT is in effect*.
 # Cloudflare crons do not follow DST — shift both to 16 and 04 in November.
+# These two slots are cooking and nothing else; drinks have their own, below.
 POST_HOURS_UTC = "15,3"
 # Weekly standings post: 0 = Sunday. Set to -1 to disable.
 STANDINGS_WEEKDAY = "0"
@@ -52,6 +53,22 @@ PERSON_WEEKDAY = "2"
 PERSON_HOUR_UTC = "17"
 PERSON_MINUTE = "11"
 PERSON_WINDOW_HOURS = "24"
+
+# Drink vs drink, on a slot of its own so the 9am and 9pm posts are always
+# cooking. 23:00 UTC = 5pm Mountain *while MDT is in effect* — shift to 00 in
+# November, same as the hours above. Happy hour, and clear of every other slot.
+#
+# "auto" sets the days from the size of the drink catalog, aiming to put every
+# drink on the board about once a month — roughly one post a week per eight
+# drinks, from weekly at the bottom to daily at the top. See drinkCadence in
+# schedule.ts. A comma-separated list overrides it (0 = Sunday); -1 turns the
+# slot off entirely.
+DRINK_WEEKDAY = "auto"
+DRINK_HOUR_UTC = "23"
+# 22 rather than 24 so a daily cadence closes the previous drink matchup two
+# hours before the next one goes up, instead of exactly on top of it — a late
+# or missed tick would otherwise leave two live at once.
+DRINK_WINDOW_HOURS = "22"
 
 [[d1_databases]]
 binding = "DB"

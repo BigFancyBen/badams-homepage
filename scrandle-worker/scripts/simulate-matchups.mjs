@@ -43,10 +43,12 @@ const check = (name, ok, detail) => {
 };
 
 /**
- * `dishes` is a list of `{ chef, elo, played, postedAt? }`. Categories matter:
- * matchmaking only ever draws food and drink, so a seed without them leaves
- * every query empty and the whole suite passes vacuously. One category
- * throughout, because an opponent has to match the primary's.
+ * `dishes` is a list of `{ chef, elo, played, postedAt?, category? }`.
+ * Categories matter: the everyday draw only ever reaches food, so a seed
+ * without any leaves every query empty and the whole suite passes vacuously.
+ * Food is the default and the first three scenarios use nothing else, because
+ * an opponent has to match the primary's category. The last one seeds drinks
+ * as well, to check that the everyday draw leaves them alone.
  *
  * `played` seeds matches_played directly and leaves first_matchup_id null.
  * Nothing in the draw reads that column — the rotation keys off the count —
@@ -59,7 +61,8 @@ let nextTag = 0;
 function dishRow(d) {
   const tag = nextTag++;
   const at = d.postedAt ?? 1700000000000 + tag * 1000;
-  return `('m${tag}','a${tag}','user_${d.chef}','dishes/h${tag}.jpg','h${tag}','d${tag}',${at},${at},${d.elo},${d.played},'food')`;
+  const category = d.category ?? "food";
+  return `('m${tag}','a${tag}','user_${d.chef}','dishes/h${tag}.jpg','h${tag}','d${tag}',${at},${at},${d.elo},${d.played},'${category}')`;
 }
 
 const DISH_COLUMNS =
@@ -329,6 +332,112 @@ check("the rotation holds through the trickle", trickleSpills.length === 0, tric
 
 const backlogSeen = new Set(slots.filter((id) => backlogIds.has(id))).size;
 console.log(`arrivals took ${arrivals} of ${slots.length} slots; ${backlogSeen} of 40 backlog photos played`);
+
+// ── scenario 4: drinks on a slot of their own ──────────────────────
+// Drinks used to be drawn by the everyday matchup alongside food, so the 9am
+// and 9pm posts were cooking only when the draw happened to land on cooking.
+// Now they have their own slot, which puts two things at risk that only a
+// mixed catalog can show: that the everyday draw never reaches a drink, and
+// that a live drink matchup does not stand in front of the next food one.
+//
+// The second is the sharp one. The one-at-a-time rule reads "is an everyday
+// matchup open", and while that question counted drinks, an open drink matchup
+// would have blocked the cooking slot outright — the same cycle-skipping bug
+// that closing on the schedule was written to fix, arriving from a new
+// direction.
+await seed([
+  ...Array.from({ length: 14 }, (_, i) => ({
+    chef: chefs[i % 4],
+    elo: 1500,
+    played: 0,
+    category: "food",
+  })),
+  ...Array.from({ length: 10 }, (_, i) => ({
+    chef: chefs[i % 4],
+    elo: 1500,
+    played: 0,
+    category: "drink",
+  })),
+]);
+
+const drinkIds = new Set(
+  (await sql("SELECT id FROM dishes WHERE category='drink'")).map((d) => d.id)
+);
+
+// Force the drink slot up, the way the cron does on one of its own days.
+const drinkPost = await fetch(
+  `${WORKER}/admin/post-matchup?secret=${encodeURIComponent(SECRET)}&drink=1`
+);
+const drinkBody = await drinkPost.json();
+check("the drink slot posts", drinkBody.posted === true, JSON.stringify(drinkBody));
+
+const liveDrink = (
+  await sql("SELECT id, dish_a_id, dish_b_id FROM matchups WHERE status='open' ORDER BY id DESC LIMIT 1")
+)[0];
+check(
+  "and it drew two drinks",
+  liveDrink && drinkIds.has(liveDrink.dish_a_id) && drinkIds.has(liveDrink.dish_b_id),
+  JSON.stringify(liveDrink)
+);
+
+// The regression. No overlap flag: this is the ordinary scheduled post, asked
+// for while a drink matchup is open.
+const foodPost = await fetch(
+  `${WORKER}/admin/post-matchup?secret=${encodeURIComponent(SECRET)}`
+);
+const foodBody = await foodPost.json();
+check(
+  "an open drink matchup does not block the cooking slot",
+  foodBody.posted === true,
+  JSON.stringify(foodBody)
+);
+
+const liveFood = (
+  await sql(`SELECT id, dish_a_id, dish_b_id FROM matchups WHERE status='open' AND id > ${liveDrink?.id ?? 0} ORDER BY id DESC LIMIT 1`)
+)[0];
+check(
+  "and the cooking slot drew food",
+  liveFood && !drinkIds.has(liveFood.dish_a_id) && !drinkIds.has(liveFood.dish_b_id),
+  JSON.stringify(liveFood)
+);
+
+// The other half of the one-at-a-time rule still holds: a second everyday
+// matchup on top of an open one is still refused. Narrowing the query to food
+// must not have turned the rule off along with it.
+const second = await fetch(
+  `${WORKER}/admin/post-matchup?secret=${encodeURIComponent(SECRET)}`
+);
+const secondBody = await second.json();
+check(
+  "a second cooking matchup is still refused while one is open",
+  secondBody.posted === false,
+  JSON.stringify(secondBody)
+);
+
+// Clear the board, then run the everyday draw properly. Over a long run not
+// one of its matchups may contain a drink.
+await sql("DELETE FROM votes; DELETE FROM matchups;");
+await playRounds(ROUNDS);
+
+matchups = await sql("SELECT id, dish_a_id, dish_b_id FROM matchups WHERE status='closed' ORDER BY id");
+const drinkSlots = matchups.filter(
+  (m) => drinkIds.has(m.dish_a_id) || drinkIds.has(m.dish_b_id)
+);
+
+console.log(`\nmixed catalog: ${matchups.length} everyday matchups over ${ROUNDS} rounds\n`);
+
+check(
+  "the everyday draw never reaches a drink",
+  drinkSlots.length === 0,
+  `drinks appeared in ${drinkSlots.map((m) => `#${m.id}`).join(", ")}`
+);
+
+// And the drinks are still there to be drawn by their own slot — an everyday
+// draw that quietly consumed them would pass the check above by leaving none.
+const drinksUnplayed = (
+  await sql("SELECT COUNT(*) AS n FROM dishes WHERE category='drink' AND matches_played = 0")
+)[0].n;
+check("and leaves them for it", drinksUnplayed === 10, `${drinksUnplayed} of 10 still unplayed`);
 
 console.log(failures === 0 ? "\nall invariants held" : `\n${failures} invariant(s) violated`);
 process.exit(failures === 0 ? 0 : 1);
