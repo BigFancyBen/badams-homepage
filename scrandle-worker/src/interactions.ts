@@ -279,7 +279,7 @@ async function openCaptionModal(
               min_length: 1,
               max_length: MAX_CAPTION_LENGTH,
               required: true,
-              placeholder: "One line. Deadpan travels furthest.",
+              placeholder: "Write your caption here.",
               ...(existing ? { value: existing.text } : {}),
             },
           ],
