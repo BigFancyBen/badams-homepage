@@ -16,6 +16,7 @@
     "mock:discord": "node scripts/mock-discord.mjs",
     "test:matchups": "node scripts/simulate-matchups.mjs",
     "test:rounds": "node scripts/simulate-rounds.mjs",
+    "test:placement": "node scripts/simulate-placement.mjs",
     "test:contests": "node scripts/simulate-contests.mjs",
     "test:schedule": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/test-schedule.mjs",
     "test:ingest": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/test-ingest.mjs"

@@ -87,6 +87,36 @@ export function nextPostTime(
 }
 
 /**
+ * Whether a weekly slot's day, hour and minute all land on this tick.
+ *
+ * Every slot that is not the everyday matchup asks the same three questions in
+ * the same order, and there are five of them now — the place round, the
+ * placement round, the person bonus, the drink slot and the caption contest.
+ * The once-per-slot guard stays at the call site because it is a database read
+ * and this file is arithmetic, but the calendar part belongs in one place.
+ *
+ * An empty weekday list means the slot is off, which is how -1 and a blank
+ * setting both arrive here after parseWeekdays has dropped them.
+ */
+export function weeklySlotDue(
+  now: number,
+  { weekdays, hourUtc, minute = 0 }: {
+    weekdays: number[];
+    hourUtc: number;
+    minute?: number;
+  }
+): boolean {
+  if (weekdays.length === 0) return false;
+
+  const date = new Date(now);
+  return (
+    weekdays.includes(date.getUTCDay()) &&
+    date.getUTCHours() === hourUtc &&
+    date.getUTCMinutes() === minute
+  );
+}
+
+/**
  * Identifies the posting slot a moment falls in, as `2026-08-21T15`.
  *
  * Replaces the old "N hours since the last post" floor, whose only real job

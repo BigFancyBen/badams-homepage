@@ -33,9 +33,17 @@ import {
   renderCard,
 } from "./images";
 import { kindLabel } from "./kinds";
-import { pickBallot, pickThemedBallot, type Category } from "./matchmaking";
-import { parseWeekdays, postSlotKey } from "./schedule";
-import type { Env, Round, RoundDish } from "./types";
+import {
+  BALLOT_MIN,
+  pickBallot,
+  pickOpponentFor,
+  pickPlacement,
+  pickThemedBallot,
+  type Category,
+} from "./matchmaking";
+import { postDrawnPair } from "./matchups";
+import { parseWeekdays, postSlotKey, weeklySlotDue } from "./schedule";
+import type { Dish, Env, Round, RoundDish } from "./types";
 
 const HOUR = 60 * 60 * 1000;
 
@@ -140,9 +148,10 @@ async function createAndPost(
   await env.DB.batch(
     dishes.map((dish, index) =>
       env.DB.prepare(
-        "INSERT INTO round_entries (round_id, dish_id, slot, elo_before) " +
-          "VALUES (?, ?, ?, (SELECT elo FROM dishes WHERE id = ?))"
-      ).bind(roundId, dish.id, index + 1, dish.id)
+        "INSERT INTO round_entries (round_id, dish_id, slot, elo_before, rd_before) " +
+          "VALUES (?, ?, ?, (SELECT elo FROM dishes WHERE id = ?), " +
+          "(SELECT rd FROM dishes WHERE id = ?))"
+      ).bind(roundId, dish.id, index + 1, dish.id, dish.id)
     )
   );
 
@@ -228,12 +237,7 @@ async function postRoundIfDue(
   force: boolean
 ): Promise<boolean> {
   if (!force) {
-    if (schedule.weekdays.length === 0) return false;
-
-    const date = new Date(now);
-    if (!schedule.weekdays.includes(date.getUTCDay())) return false;
-    if (date.getUTCHours() !== schedule.hourUtc) return false;
-    if (date.getUTCMinutes() !== 0) return false;
+    if (!weeklySlotDue(now, schedule)) return false;
 
     // One per named slot, so an hourly retry cannot double-post.
     if ((await getState(env, schedule.slotState)) === postSlotKey(now)) {
@@ -376,6 +380,141 @@ export function postDrinkRoundIfDue(
   );
 }
 
+/**
+ * The placement round: the week's new cooking, ranked so it arrives with a
+ * rating instead of the opening one.
+ *
+ * Its own function rather than another `RoundSchedule`, because the schedule
+ * is the only thing it shares with the other three. Those draw a category — or
+ * a kind inside one — from the whole catalog; this draws on recency and on
+ * never having played, which is a different question and has a different
+ * answer when the week comes up thin.
+ *
+ * The everyday rotation does put unplayed photographs first, and that is not
+ * the same thing as putting *new* ones first. 539 of the 577 have never played
+ * and the pick among them is random, so something posted on Tuesday joins the
+ * back of a queue about three months deep. The fresh slot fires on one primary
+ * in four and helps, but it draws one photograph at a time; this draws the
+ * week.
+ *
+ * The deviation is what makes it worth a slot of its own. Five newcomers at
+ * their widest deviation judged against each other is a card that can separate
+ * them by 500 rating points, where the same card on settled ratings moves them
+ * 73. Under the fixed K this replaced it was worth twelve points a head and
+ * everything stayed at 1500.
+ *
+ * Deliberately unthemed. A themed round waits for five of one kind and falls
+ * back to a mixed card when it cannot find them; the point here is to seed
+ * *this week*, and what was cooked this week is whatever was cooked this week.
+ */
+export async function postPlacementRoundIfDue(
+  env: Env,
+  now: number,
+  { force = false }: { force?: boolean } = {}
+): Promise<boolean> {
+  if (!force) {
+    const due = weeklySlotDue(now, {
+      weekdays: parseWeekdays(env.PLACEMENT_WEEKDAY),
+      hourUtc: Number(env.PLACEMENT_HOUR_UTC || "19"),
+    });
+    if (!due) return false;
+
+    // One per named slot, so an hourly retry cannot double-post.
+    if ((await getState(env, "last_placement_slot")) === postSlotKey(now)) {
+      return false;
+    }
+  }
+
+  // Whatever is live keeps its photographs to itself — the open pair matchups,
+  // any round that has not closed yet, and a running caption contest.
+  const live: number[] = await heldDishIds(env);
+  for (const matchup of await getOpenMatchups(env)) {
+    live.push(matchup.dish_a_id, matchup.dish_b_id);
+  }
+
+  const fresh = await pickPlacement(env, {
+    size: Number(env.PLACEMENT_BALLOT_SIZE || "5"),
+    days: Number(env.PLACEMENT_RECENT_DAYS || "14"),
+    exclude: live,
+    now,
+  });
+  // Nothing new this week, or whatever is live already holds it.
+  if (fresh.length === 0) return false;
+
+  const closesAt = now + Number(env.PLACEMENT_WINDOW_HOURS || "24") * HOUR;
+
+  // Three is the fewest that is a ranking rather than a matchup wearing an
+  // unfamiliar card. Below it there is still a question worth asking, so a
+  // quiet week gets a pair rather than nothing — and a quiet week is the
+  // normal case here, not the edge one.
+  const posted =
+    fresh.length >= BALLOT_MIN
+      ? await postPlacementCard(env, fresh, now, closesAt)
+      : await postPlacementPair(env, fresh, now, closesAt, live);
+
+  // Only a slot that actually posted is a slot used. A week whose single new
+  // photograph had no legal opponent should be tried again on the next tick,
+  // not written off for the day.
+  if (posted) await setState(env, "last_placement_slot", postSlotKey(now));
+
+  return posted;
+}
+
+async function postPlacementCard(
+  env: Env,
+  fresh: Dish[],
+  now: number,
+  closesAt: number
+): Promise<boolean> {
+  await createAndPost(env, "food", fresh, now, closesAt, "Placement round");
+  return true;
+}
+
+/**
+ * Too few new photographs for a card. Two from different people is a matchup
+ * on its own terms; anything else — one photograph, or two from one kitchen,
+ * which never meet — goes up against the catalog instead.
+ *
+ * The second case is the one that earns its keep. A single new photograph
+ * would otherwise wait on the fresh slot to notice it, and that fires once
+ * every four matchups and picks at random from a fortnight's worth.
+ */
+async function postPlacementPair(
+  env: Env,
+  fresh: Dish[],
+  now: number,
+  closesAt: number,
+  live: number[]
+): Promise<boolean> {
+  const [first, second] = fresh;
+
+  if (second && first.poster_discord_id !== second.poster_discord_id) {
+    // Already shuffled by the draw, so neither side is the newer by position.
+    await postDrawnPair(
+      env,
+      { a: first, b: second },
+      now,
+      closesAt,
+      "Placement — the week's new cooking, head to head."
+    );
+    return true;
+  }
+
+  const opponent = await pickOpponentFor(env, first, live);
+  // No legal opponent: everything in the category is this person's, or already
+  // live, or paired with this photograph too recently.
+  if (!opponent) return false;
+
+  await postDrawnPair(
+    env,
+    Math.random() < 0.5 ? { a: first, b: opponent } : { a: opponent, b: first },
+    now,
+    closesAt,
+    "Placement — something new against the catalog."
+  );
+  return true;
+}
+
 /** The ballot log: everyone's order, in the order they started ranking. */
 function ballotLines(
   ballots: { name: string; dishIds: number[] }[],
@@ -418,7 +557,7 @@ async function closeOne(env: Env, round: Round, now: number): Promise<void> {
   }
 
   const results = scoreRanking(
-    entries.map((entry) => ({ id: entry.id, elo: entry.elo })),
+    entries.map((entry) => ({ id: entry.id, elo: entry.elo, rd: entry.rd })),
     ballots.map((ballot) => ballot.dishIds)
   );
 
@@ -436,12 +575,22 @@ async function closeOne(env: Env, round: Round, now: number): Promise<void> {
 
     statements.push(
       env.DB.prepare(
-        "UPDATE dishes SET elo = ?, matches_played = matches_played + 1 WHERE id = ?"
-      ).bind(after, result.id),
+        "UPDATE dishes SET elo = ?, rd = ?, matches_played = matches_played + 1 " +
+          "WHERE id = ?"
+      ).bind(after, result.rd, result.id),
       env.DB.prepare(
-        "UPDATE round_entries SET elo_before = ?, elo_after = ?, wins = ?, " +
-          "firsts = ? WHERE round_id = ? AND dish_id = ?"
-      ).bind(entry.elo, after, result.wins, result.firsts, round.id, result.id)
+        "UPDATE round_entries SET elo_before = ?, elo_after = ?, rd_before = ?, " +
+          "rd_after = ?, wins = ?, firsts = ? WHERE round_id = ? AND dish_id = ?"
+      ).bind(
+        entry.elo,
+        after,
+        entry.rd,
+        result.rd,
+        result.wins,
+        result.firsts,
+        round.id,
+        result.id
+      )
     );
   }
 
@@ -611,6 +760,7 @@ export async function repairRoundCard(
     .map((entry) => ({
       id: entry.id,
       delta: (entry.elo_after ?? 0) - (entry.elo_before ?? 0),
+      rd: entry.rd_after ?? entry.rd,
       wins: entry.wins ?? 0,
       firsts: entry.firsts ?? 0,
     }))

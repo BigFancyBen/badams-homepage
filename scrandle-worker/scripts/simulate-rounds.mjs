@@ -4,8 +4,8 @@
  *   - the draw is the same rotation the pair game uses
  *   - no round is more than two photographs from any one person
  *   - a round counts as one match played, not one per comparison
- *   - Elo stays zero-sum inside a round
- *   - a whole ranking round moves a rating about as far as one matchup does
+ *   - a round is one Glicko rating period, and narrows the deviation once
+ *   - a settled round stays near enough zero-sum, and an unrated one need not
  *   - the photograph most people put first is the one that wins
  *   - a partial ballot still scores, and still beats what it left unranked
  *   - a themed round puts five of one kind up, and works through the kinds
@@ -24,8 +24,18 @@ const API = `${WORKER}/cdn-cgi/local/explorer/api`;
 const ROUNDS = Number(process.argv[2] ?? 15);
 // From .dev.vars — see the local testing section of the README.
 const SECRET = process.env.BACKFILL_SECRET ?? "dev-only-backfill-secret";
-/** Matches K in src/elo.ts: the most one matchup can move a rating. */
-const K = 24;
+/** Matches RD_MIN in src/elo.ts: the deviation a settled photograph sits on. */
+const RD_MIN = 60;
+/** Matches RD_START: the deviation a photograph nobody has voted on carries. */
+const RD_START = 250;
+/**
+ * What a settled pair shutout is worth under Glicko at RD_MIN, to a tenth.
+ * The fixed K it replaced was 24, so a shutout moved 12; two settled
+ * photographs now produce an effective K near 20 and a shutout of 9.9. That
+ * closeness is deliberate — the change is meant to be felt at the new end of
+ * the catalog, not the old one.
+ */
+const SETTLED_SHUTOUT = 9.9;
 
 async function sql(statement) {
   const response = await fetch(`${API}/d1/database/${DB}/raw`, {
@@ -49,21 +59,27 @@ const check = (name, ok, detail) => {
 let nextTag = 0;
 
 /**
- * `dishes` is a list of `{ chef, elo, played, category, kind }`. Category
+ * `dishes` is a list of `{ chef, elo, played, rd, category, kind }`. Category
  * defaults to place, because the place round draws nothing else and a seed of
  * food would leave every query empty and the whole suite would pass having
  * tested nothing. The themed scenarios override it, and set the kind the
  * classifier would have written.
+ *
+ * `rd` is the Glicko deviation and defaults to the settled floor. A seed is a
+ * catalog with a history behind it; leaving everything on the opening 250
+ * would make every scenario's first round swing hundreds of points, which is
+ * right for photographs nobody has voted on and no use for reading arithmetic.
  */
 function dishRow(d) {
   const tag = nextTag++;
   const at = 1700000000000 + tag * 1000;
+  const rd = d.rd ?? RD_MIN;
   const kind = d.kind ? `'${d.kind}'` : "NULL";
-  return `('m${tag}','a${tag}','user_${d.chef}','dishes/h${tag}.jpg','h${tag}','d${tag}',${at},${at},${d.elo},${d.played},'${d.category ?? "place"}',${kind})`;
+  return `('m${tag}','a${tag}','user_${d.chef}','dishes/h${tag}.jpg','h${tag}','d${tag}',${at},${at},${d.elo},${rd},${d.played},'${d.category ?? "place"}',${kind})`;
 }
 
 const DISH_COLUMNS =
-  "discord_message_id, attachment_id, poster_discord_id, r2_key, sha256, caption, posted_at, ingested_at, elo, matches_played, category, kind";
+  "discord_message_id, attachment_id, poster_discord_id, r2_key, sha256, caption, posted_at, ingested_at, elo, rd, matches_played, category, kind";
 
 async function seed(dishes) {
   await sql(
@@ -138,8 +154,8 @@ async function playRounds(rounds, vote, flag = "place") {
 async function closedRounds() {
   const rounds = await sql("SELECT id FROM rounds WHERE status='closed' ORDER BY id");
   const entries = await sql(
-    "SELECT round_id, dish_id, slot, elo_before, elo_after, wins, firsts " +
-      "FROM round_entries ORDER BY round_id, slot"
+    "SELECT round_id, dish_id, slot, elo_before, elo_after, rd_before, " +
+      "rd_after, wins, firsts FROM round_entries ORDER BY round_id, slot"
   );
   return rounds.map((round) => ({
     id: round.id,
@@ -243,23 +259,45 @@ check(
   miscounted.map((d) => `#${d.id}: ${d.matches_played} played, ${appearances.get(d.id) ?? 0} rounds`).join("; ")
 );
 
+// Glicko is not zero-sum in general — the side with the wider deviation moves
+// further. On a catalog that starts settled every photograph is equally well
+// known, so the movements inside a round cancel and the total holds to within
+// rounding. The unrated round below is where that stops being true, and it is
+// checked there rather than asserted away here.
 const drift = Math.abs(endingTotal - startingTotal);
-check("Elo total conserved", drift < 0.01, `drift ${drift}`);
+check("a settled catalog's total holds", drift < 0.01, `drift ${drift}`);
 
-// The reason K is divided by (n-1). A photograph in a five-way round is judged
-// four times, and at full weight one bonus round would move a rating as far as
-// four matchups — the weekly bonus would outweigh the week it sits in.
+// The deviation is a measure of ignorance and a round only ever reduces it.
+const widened = rounds.flatMap((round) =>
+  round.entries.filter((entry) => entry.rd_after > entry.rd_before + 0.01)
+);
+check(
+  "a round never widens a deviation",
+  widened.length === 0,
+  widened.map((e) => `#${e.dish_id}: ${e.rd_before} to ${e.rd_after}`).join("; ")
+);
+
+// What replaced dividing K by (n-1). A photograph in a five-way round is
+// judged four times, and the worry was always that one weekly bonus would
+// outweigh the week it sits in. Glicko damps it with the prior instead of by
+// hand: four comparisons move a settled rating about three and a half times a
+// matchup's worth rather than four, and — the part dividing K never did — the
+// round leaves the photograph on a tighter deviation, so the round after moves
+// it less. Four settled shutouts is the ceiling, and nothing may exceed it.
 const moves = rounds.flatMap((round) =>
   round.entries.map((entry) => Math.abs((entry.elo_after ?? 0) - (entry.elo_before ?? 0)))
 );
 const biggest = Math.max(...moves);
+const ceiling = 4 * SETTLED_SHUTOUT;
 check(
-  "one round moves a rating no further than one matchup could",
-  biggest <= K + 0.01,
-  `biggest move ${biggest.toFixed(1)}, ceiling ${K}`
+  "a settled round stays inside four matchups' worth",
+  biggest <= ceiling + 0.01,
+  `biggest move ${biggest.toFixed(1)}, ceiling ${ceiling.toFixed(1)}`
 );
 
-console.log(`biggest rating move: ${biggest.toFixed(1)} of a possible ${K}`);
+console.log(
+  `biggest rating move: ${biggest.toFixed(1)} of a possible ${ceiling.toFixed(1)}`
+);
 
 // ── scenario 2: everybody agrees ───────────────────────────────────
 // Ten places, five voters, all of them ranking the slots in the same order.
@@ -296,28 +334,48 @@ check(
   unanimous.entries.map((e) => `#${e.slot}:${e.wins}`).join(" ")
 );
 
-// The K/(n-1) decision, stated as a number rather than a ceiling. A clean
-// sweep of a five-way round has to be worth the same as a clean sweep of a
-// matchup — four comparisons at a quarter weight each. Everything starts on
-// the opening rating here, so a shutout is K/2 either way.
+// What a clean sweep of a five-way round is actually worth, stated as a
+// number. Four comparisons, all won outright, against opponents as settled as
+// the winner — and the answer is a little under four matchup shutouts, because
+// the prior term damps it. That is the whole of what dividing K by (n-1) was
+// approximating, arrived at rather than imposed.
 //
 // The deep catalog cannot show this: six voters disagreeing split every pair
 // near even, and nothing there moves more than a point or two.
 const sweep = top.elo_after - top.elo_before;
+const ratio = sweep / SETTLED_SHUTOUT;
 check(
-  "a clean sweep is worth exactly what a clean sweep of a matchup is worth",
-  Math.abs(sweep - K / 2) < 0.01,
-  `moved ${sweep.toFixed(2)}, a matchup shutout moves ${(K / 2).toFixed(2)}`
+  "a settled sweep is worth a little under four matchup shutouts",
+  ratio > 3.5 && ratio < 4,
+  `moved ${sweep.toFixed(2)}, which is ${ratio.toFixed(2)} shutouts of ${SETTLED_SHUTOUT}`
 );
-console.log(`unanimous winner moved ${sweep.toFixed(2)}`);
+check(
+  "and the sweep narrows the winner's deviation",
+  top.rd_after <= top.rd_before + 0.01,
+  `deviation went ${top.rd_before} to ${top.rd_after}`
+);
+console.log(
+  `unanimous winner moved ${sweep.toFixed(2)} (${ratio.toFixed(2)} shutouts)`
+);
 
 // ── scenario 3: nobody ranks more than one ─────────────────────────
 // The ballot most people will actually cast: one click and gone. It has to
 // count, and it has to say something about every pair it touches — whatever
 // they picked beat all four they did not, and the four say nothing about each
 // other. A round that quietly ignored these would collect almost no opinions.
+//
+// Seeded unrated rather than settled, which is both the interesting case and
+// the common one — a one-click ballot on a card of photographs nobody has
+// voted on is precisely what the placement round collects. It also leaves the
+// deviations room to move: at the floor they are all pinned at RD_MIN and the
+// round's effect on them cannot be read at all.
 await seed(
-  Array.from({ length: 10 }, (_, i) => ({ chef: chefs[i % chefs.length], elo: 1500, played: 0 }))
+  Array.from({ length: 10 }, (_, i) => ({
+    chef: chefs[i % chefs.length],
+    elo: 1500,
+    played: 0,
+    rd: RD_START,
+  }))
 );
 
 await playRounds(1, async (roundId, slots) => {
@@ -350,10 +408,98 @@ check(
   ignored.map((e) => `#${e.slot}:${e.wins}`).join(" ")
 );
 
+// A partial ballot is where the deviation stops being an accounting detail.
+// Slots 1 and 2 were judged four times each; slots 3, 4 and 5 were judged
+// twice — beaten by the two that were ranked, and never set against each
+// other. So the round knows more about the top two than the bottom three, the
+// prior damps them by different amounts, and the movements no longer cancel.
+//
+// That is Glicko working rather than Glicko leaking. What has to hold is that
+// the drift stays small against the movements that produced it, and that the
+// photographs judged more often come out better known than the ones judged
+// less. A fixed K could express neither.
 const partialDrift = Math.abs(
   partial.entries.reduce((sum, entry) => sum + (entry.elo_after - entry.elo_before), 0)
 );
-check("partial ballots stay zero-sum too", partialDrift < 0.01, `drift ${partialDrift}`);
+const partialTravel = partial.entries.reduce(
+  (sum, entry) => sum + Math.abs(entry.elo_after - entry.elo_before),
+  0
+);
+check(
+  "a partial ballot's drift is small against what it moved",
+  partialDrift < partialTravel / 4,
+  `drift ${partialDrift.toFixed(2)} against ${partialTravel.toFixed(2)} of movement`
+);
+check(
+  "the photographs judged four times end better known than those judged twice",
+  Math.max(favourite.rd_after, runnerUp.rd_after) <
+    Math.min(...ignored.map((e) => e.rd_after)),
+  partial.entries.map((e) => `#${e.slot}:${e.rd_after.toFixed(1)}`).join(" ")
+);
+
+// ── scenario 4: the placement round ────────────────────────────────
+// The same unanimous ballots on five photographs nobody has ever voted on,
+// which is exactly the card the placement slot puts up. This is the whole
+// reason the round exists: five photographs at their widest deviation, judged
+// against each other, and one card is allowed to place them properly. Under
+// the fixed K it replaced, the identical card was worth twelve points a head
+// and everything stayed at 1500.
+await seed(
+  Array.from({ length: 5 }, (_, i) => ({
+    chef: chefs[i],
+    elo: 1500,
+    played: 0,
+    rd: RD_START,
+  }))
+);
+
+await playRounds(1, async (roundId, slots) => {
+  for (let voter = 0; voter < 5; voter++) {
+    await castBallot(roundId, `voter_${voter}`, slots);
+  }
+});
+
+const [placement] = await closedRounds();
+const placementBySlot = new Map(placement.entries.map((e) => [e.slot, e]));
+const placedTop = placementBySlot.get(1);
+const placedBottom = placementBySlot.get(placement.entries.length);
+const placedSpread = placedTop.elo_after - placedBottom.elo_after;
+const settledSpread = top.elo_after - bottom.elo_after;
+
+console.log(
+  `
+placement round: ${placement.entries
+    .map((e) => `#${e.slot}:${Math.round(e.elo_after)}`)
+    .join(" ")}`
+);
+
+check(
+  "one placement round separates five unrated photographs",
+  placedSpread > 400,
+  `spread ${placedSpread.toFixed(0)}, and a settled card of the same ballots spreads ${settledSpread.toFixed(0)}`
+);
+check(
+  "which is far more than the same card does to settled ratings",
+  placedSpread > settledSpread * 4,
+  `${placedSpread.toFixed(0)} against ${settledSpread.toFixed(0)}`
+);
+check(
+  "and every photograph comes out of it substantially better known",
+  placement.entries.every(
+    (e) => e.rd_after < RD_START * 0.75 && e.rd_after >= RD_MIN
+  ),
+  placement.entries.map((e) => `#${e.slot}:${e.rd_after.toFixed(0)}`).join(" ")
+);
+
+// The middle photograph is the check that the card places rather than merely
+// scatters: ranked third of five by everybody, it beat two and lost to two,
+// and it belongs exactly where it started.
+const middle = placementBySlot.get(3);
+check(
+  "the photograph everyone ranked in the middle stays in the middle",
+  Math.abs(middle.elo_after - middle.elo_before) < 1,
+  `moved ${(middle.elo_after - middle.elo_before).toFixed(2)}`
+);
 
 // ── scenario 4: the themed food round ──────────────────────────────
 // The reason this format exists for food at all. An ungrouped five drawn from

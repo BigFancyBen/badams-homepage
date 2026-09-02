@@ -237,6 +237,7 @@ export const SCHEMA_SQL = `CREATE TABLE dishes (
   posted_at INTEGER NOT NULL,
   ingested_at INTEGER NOT NULL,
   elo REAL NOT NULL DEFAULT 1500,
+  rd REAL NOT NULL DEFAULT 250,        -- Glicko deviation: how sure we are
   matches_played INTEGER NOT NULL DEFAULT 0,
   first_matchup_id INTEGER
 );
@@ -255,7 +256,12 @@ CREATE TABLE matchups (
   elo_a_before REAL,
   elo_b_before REAL,
   elo_a_after REAL,
-  elo_b_after REAL
+  elo_b_after REAL,
+  rd_a_before REAL,
+  rd_b_before REAL,
+  rd_a_after REAL,
+  rd_b_after REAL,
+  bonus INTEGER NOT NULL DEFAULT 0     -- runs beside the everyday slot
 );
 
 CREATE TABLE votes (
@@ -365,6 +371,10 @@ export const PHASES: Phase[] = [
       },
       {
         kind: "p",
+        text: "Thursday is the placement round: up to five photographs from the last fortnight that nobody has voted on, ranked on one card. The rotation does put unplayed photographs first, which is not the same as putting new ones first — 539 of them are unplayed and the pick among them is random, so something posted on Tuesday joins the back of a queue three months deep. This does not change how fast the pool is spent, only the order, and the order is the point. Below three new photographs it posts a pair instead; below one it posts nothing and leaves the slot for the next tick.",
+      },
+      {
+        kind: "p",
         text: "How often the drink slot fires is computed rather than configured, because a fixed weekly day is wrong in both directions — six drinks and it shows the same two every month, eighty and it never gets through them. It aims at a constant **sweep**: the time for every drink to reach the board once. Two drinks a matchup, a four-week sweep, so about one post a week per eight drinks, clamped between weekly and daily.",
       },
     ],
@@ -402,12 +412,12 @@ export const PHASES: Phase[] = [
     id: "phase-4",
     number: "4",
     title: "Close and reveal",
-    tagline: "One Elo update per matchup, then edit the message.",
+    tagline: "One rating update per matchup, then edit the message.",
     shipped: true,
     blocks: [
       {
         kind: "p",
-        text: "Elo is applied once per matchup rather than once per vote. Sequential per-voter updates are order-dependent and jumpy with a pool this small. Vote share becomes a fractional score: 6 of 8 voters pick A, so A scored 0.75. K=24.",
+        text: "The rating is applied once per matchup rather than once per vote. Sequential per-voter updates are order-dependent and jumpy with a pool this small. Vote share becomes a fractional score: 6 of 8 voters pick A, so A scored 0.75.",
       },
       {
         kind: "p",
@@ -419,7 +429,15 @@ export const PHASES: Phase[] = [
       },
       {
         kind: "p",
-        text: "A ranking round closes as the round-robin it already is: every pair of photos in it is an ordinary matchup, scored by the same vote-share Elo, where a ballot ranking one above another is a vote for it and anything ranked beats everything left unranked. Each comparison carries K/(n-1), because a photo in a five-way round is judged four times — at full K one bonus round would move a rating as far as four matchups.",
+        text: "How far a result moves a rating depends on how much is already known about it. Every photograph carries a Glicko deviation beside its rating — 250 when nobody has voted on it, narrowing with every result, floored at 60. A fixed K could not work here: at 6.7 photographs a day out of 577, a photograph gets about four outings a year, and at K=24 one that belongs 300 points above the opening rating needs thirty-five games to get there. That is most of a decade, so every rating in the table was 1500 plus a coin toss. The floor is picked so two settled photographs still move about as far as the old K moved them; the change is felt at the new end of the catalog and nowhere else.",
+      },
+      {
+        kind: "note",
+        text: "One consequence: ratings are no longer zero-sum. The side with the wider deviation moves further, because a newcomer beating a veteran says far more about the newcomer.",
+      },
+      {
+        kind: "p",
+        text: "A ranking round closes as the round-robin it already is: every pair of photos in it is an ordinary matchup scored the same way, where a ballot ranking one above another is a vote for it and anything ranked beats everything left unranked. A photo's whole card is one rating period — the four comparisons it appears in, resolved together — so the prior damps them to about three and a half matchups' worth rather than four, and tightens its deviation on the way out.",
       },
       {
         kind: "p",

@@ -37,6 +37,18 @@ export interface Env {
   DRINK_ROUND_HOUR_UTC: string;
   DRINK_ROUND_WINDOW_HOURS: string;
   DRINK_ROUND_BALLOT_SIZE: string;
+  /**
+   * Weekdays for the placement round — this week's new cooking, ranked so it
+   * arrives with a rating instead of the opening one. Empty/-1 off.
+   */
+  PLACEMENT_WEEKDAY: string;
+  PLACEMENT_HOUR_UTC: string;
+  /** Flat window for the placement round — it is not part of the food cadence. */
+  PLACEMENT_WINDOW_HOURS: string;
+  /** How many new photographs the placement round puts on one card. */
+  PLACEMENT_BALLOT_SIZE: string;
+  /** How far back "new" reaches when the placement round draws. */
+  PLACEMENT_RECENT_DAYS: string;
   /** Weekdays for the person bonus, comma-separated, 0 = Sunday. Empty/-1 off. */
   PERSON_WEEKDAY: string;
   PERSON_HOUR_UTC: string;
@@ -84,6 +96,8 @@ export interface Dish {
   posted_at: number;
   ingested_at: number;
   elo: number;
+  /** Glicko rating deviation — how unsure we are of `elo`. See src/elo.ts. */
+  rd: number;
   matches_played: number;
   first_matchup_id: number | null;
   category: string | null;
@@ -117,6 +131,16 @@ export interface Matchup {
   elo_b_before: number | null;
   elo_a_after: number | null;
   elo_b_after: number | null;
+  rd_a_before: number | null;
+  rd_b_before: number | null;
+  rd_a_after: number | null;
+  rd_b_after: number | null;
+  /**
+   * A bonus runs beside the everyday matchup rather than instead of it, so it
+   * must not trip the one-at-a-time rule. Said outright rather than inferred
+   * from the category — see migration 0008.
+   */
+  bonus: number;
 }
 
 /**
@@ -143,6 +167,8 @@ export interface RoundEntry {
   slot: number;
   elo_before: number | null;
   elo_after: number | null;
+  rd_before: number | null;
+  rd_after: number | null;
   wins: number | null;
   firsts: number | null;
 }

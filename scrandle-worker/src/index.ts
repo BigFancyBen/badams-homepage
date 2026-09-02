@@ -15,6 +15,7 @@ import {
   postDrinkRoundIfDue,
   postFoodRoundIfDue,
   postPlaceRoundIfDue,
+  postPlacementRoundIfDue,
   repairRoundCard,
 } from "./rounds";
 import {
@@ -116,6 +117,13 @@ export default {
             post: () => postDrinkRoundIfDue(env, Date.now(), { force: true }),
             reason:
               "fewer than three drinks available to rank, or too many of them one person's",
+          },
+          {
+            flag: "placement",
+            label: "placement round",
+            post: () => postPlacementRoundIfDue(env, Date.now(), { force: true }),
+            reason:
+              "no new cooking inside the window, or its one new photograph has no legal opponent",
           },
           {
             flag: "person",
@@ -371,6 +379,14 @@ export default {
       await postDrinkRoundIfDue(env, now);
     } catch (error) {
       await logToDiscord(env, `Drink round failed: ${String(error)}`);
+    }
+
+    // The placement round, which is a draw rather than a theme: the week's new
+    // cooking, so it arrives with a rating instead of the opening one.
+    try {
+      await postPlacementRoundIfDue(env, now);
+    } catch (error) {
+      await logToDiscord(env, `Placement round failed: ${String(error)}`);
     }
 
     try {

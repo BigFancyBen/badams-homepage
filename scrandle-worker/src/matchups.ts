@@ -43,6 +43,7 @@ import {
   parsePostHours,
   parseWeekdays,
   postSlotKey,
+  weeklySlotDue,
 } from "./schedule";
 import type { Dish, Env, Matchup } from "./types";
 
@@ -69,13 +70,13 @@ async function createAndPost(
   pair: { a: Dish; b: Dish },
   now: number,
   closesAt: number,
-  preamble = ""
+  { preamble = "", bonus = false }: { preamble?: string; bonus?: boolean } = {}
 ): Promise<void> {
   const inserted = await env.DB.prepare(
-    "INSERT INTO matchups (dish_a_id, dish_b_id, created_at, closes_at) " +
-      "VALUES (?, ?, ?, ?) RETURNING id"
+    "INSERT INTO matchups (dish_a_id, dish_b_id, created_at, closes_at, bonus) " +
+      "VALUES (?, ?, ?, ?, ?) RETURNING id"
   )
-    .bind(pair.a.id, pair.b.id, now, closesAt)
+    .bind(pair.a.id, pair.b.id, now, closesAt, bonus ? 1 : 0)
     .first<{ id: number }>();
 
   if (!inserted) throw new Error("Failed to create matchup row");
@@ -121,6 +122,30 @@ ${links}` : links,
   }
 }
 
+/**
+ * Posts a pair the caller drew itself, as a bonus.
+ *
+ * The placement slot is the caller. It is a ranking round when the week gave it
+ * enough new photographs to make a card and a pair when it did not, and the
+ * pair half of that has to go through the same create-render-post-record path
+ * every other matchup does rather than a second copy of it. Always a bonus: it
+ * runs beside the everyday matchup on a window of its own, and would otherwise
+ * stand in front of the next cooking slot and skip it.
+ */
+export function postDrawnPair(
+  env: Env,
+  pair: { a: Dish; b: Dish },
+  now: number,
+  closesAt: number,
+  preamble: string
+): Promise<void> {
+  return createAndPost(env, pair, now, closesAt, { preamble, bonus: true });
+}
+
+/**
+ * Posts at most one matchup per tick, and only when nothing is still open.
+ * Deliberately does not ping the Tasters role: a ping tied to a matchup would
+ * correlate with new dishes entering the pool, which is a tell.
 /**
  * Posts the slot's everyday matchups: `MATCHUPS_PER_SLOT` of them, together, on
  * a named hour. Deliberately does not ping the Tasters role — a ping tied to a
@@ -210,7 +235,10 @@ export async function postMatchupIfDue(
     if (!pair) break;
 
     try {
-      await createAndPost(env, pair, now, closesAt);
+      // A forced overlap is a bonus — it runs beside the scheduled batch on a
+      // window of its own, and `countOpenStandardMatchups` has to keep
+      // ignoring it tomorrow as well as today.
+      await createAndPost(env, pair, now, closesAt, { bonus: overlap });
     } catch (error) {
       // Stop rather than carry on. Whatever broke this one — Discord refusing
       // the message, D1 refusing the row — will break the next as well, and
@@ -295,15 +323,10 @@ async function postBonusMatchupIfDue(
   force: boolean
 ): Promise<boolean> {
   if (!force) {
-    if (schedule.weekdays.length === 0) return false;
-
-    const date = new Date(now);
-    if (!schedule.weekdays.includes(date.getUTCDay())) return false;
-    if (date.getUTCHours() !== schedule.hourUtc) return false;
     // A bonus can want an off-the-hour minute (the person matchup fires at
     // :11), which only lands if the cron ticks on that minute — see the second
     // cron entry in wrangler.toml.
-    if (date.getUTCMinutes() !== schedule.minute) return false;
+    if (!weeklySlotDue(now, schedule)) return false;
 
     // One per named slot, so an hourly retry cannot double-post. Same
     // reasoning as last_matchup_slot, on a key of its own.
@@ -327,13 +350,10 @@ async function postBonusMatchupIfDue(
   // never pits one person against himself — only one person's photographs.
   if (!pair) return false;
 
-  await createAndPost(
-    env,
-    pair,
-    now,
-    now + schedule.windowHours * HOUR,
-    schedule.preamble
-  );
+  await createAndPost(env, pair, now, now + schedule.windowHours * HOUR, {
+    preamble: schedule.preamble,
+    bonus: true,
+  });
 
   await setState(env, schedule.slotState, postSlotKey(now));
 
@@ -420,12 +440,31 @@ async function closeOne(env: Env, matchup: Matchup, now: number): Promise<void> 
   if (!dishA || !dishB) throw new Error(`Matchup ${matchup.id} has a missing dish`);
 
   const votes = await tallyVotes(env, matchup);
-  const next = updateElo(dishA.elo, dishB.elo, votes.a, votes.b);
+  const next = updateElo(
+    { elo: dishA.elo, rd: dishA.rd },
+    { elo: dishB.elo, rd: dishB.rd },
+    votes.a,
+    votes.b
+  );
 
   const closeMatchup = env.DB.prepare(
     "UPDATE matchups SET status = 'closed', closed_at = ?, votes_a = ?, votes_b = ?, " +
-      "elo_a_before = ?, elo_b_before = ?, elo_a_after = ?, elo_b_after = ? WHERE id = ?"
-  ).bind(now, votes.a, votes.b, dishA.elo, dishB.elo, next.a, next.b, matchup.id);
+      "elo_a_before = ?, elo_b_before = ?, elo_a_after = ?, elo_b_after = ?, " +
+      "rd_a_before = ?, rd_b_before = ?, rd_a_after = ?, rd_b_after = ? WHERE id = ?"
+  ).bind(
+    now,
+    votes.a,
+    votes.b,
+    dishA.elo,
+    dishB.elo,
+    next.a.elo,
+    next.b.elo,
+    dishA.rd,
+    dishB.rd,
+    next.a.rd,
+    next.b.rd,
+    matchup.id
+  );
 
   // A matchup nobody voted on is not a match played. Counting it would burn
   // both dishes' unplayed status and skew the low-matches_played preference
@@ -451,13 +490,13 @@ async function closeOne(env: Env, matchup: Matchup, now: number): Promise<void> 
   await env.DB.batch([
     closeMatchup,
     env.DB.prepare(
-      "UPDATE dishes SET elo = ?, matches_played = matches_played + 1, " +
+      "UPDATE dishes SET elo = ?, rd = ?, matches_played = matches_played + 1, " +
         "first_matchup_id = COALESCE(first_matchup_id, ?) WHERE id = ?"
-    ).bind(next.a, matchup.id, dishA.id),
+    ).bind(next.a.elo, next.a.rd, matchup.id, dishA.id),
     env.DB.prepare(
-      "UPDATE dishes SET elo = ?, matches_played = matches_played + 1, " +
+      "UPDATE dishes SET elo = ?, rd = ?, matches_played = matches_played + 1, " +
         "first_matchup_id = COALESCE(first_matchup_id, ?) WHERE id = ?"
-    ).bind(next.b, matchup.id, dishB.id),
+    ).bind(next.b.elo, next.b.rd, matchup.id, dishB.id),
   ]);
 
   const [chefA, chefB] = await Promise.all([
