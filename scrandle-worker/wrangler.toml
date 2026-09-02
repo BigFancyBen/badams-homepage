@@ -29,21 +29,22 @@ VOTE_WINDOW_HOURS = "24"
 # open until the same time tomorrow. More cooking on the board comes from
 # MATCHUPS_PER_SLOT instead.
 POST_HOURS_UTC = "15"
-# Three matchups at 9am, all closing at 9am the next day.
+# Five matchups at 9am, all closing at 9am the next day.
 #
 # The everyday pool is 577 photographs, of which 539 have never been on the
-# board, and it refills at about one a day. Counting the Wednesday five, two
-# matchups a day spends 4.7 and gains one — a runway of about five months before
-# anything repeats. Three spends 6.7 and makes it three. That is the trade being
-# made here, and it is worth making: at two a day a photograph gets 1.9 outings
-# a year and a rating built on that is noise. Repeats are what standings are
-# made of, and nothing runs out either way — the draw orders by matches_played,
-# so an empty backlog is simply a second lap.
+# board, and it refills at about one a day. Counting the Wednesday five, three
+# matchups a day spends 6.7 and gains one — a runway of about three months
+# before anything repeats. Five spends 10.7 and makes it under two. That is the
+# trade being made here, and it is worth making: at three a day a photograph
+# gets under three outings a year, and a rating built on that is still thin.
+# Repeats are what standings are made of, and nothing runs out either way — the
+# draw orders by matches_played, so an empty backlog is simply a second lap.
 #
 # Vote turnout says there is room: eight people vote, matchups average six votes
 # each, and on 30 August six went up in one day and every one of them still got
-# seven. Revisit if that average starts sliding.
-MATCHUPS_PER_SLOT = "3"
+# seven. Five a day is inside what that day already proved. Revisit if the
+# average starts sliding.
+MATCHUPS_PER_SLOT = "5"
 # Weekly standings post: 0 = Sunday. Set to -1 to disable.
 STANDINGS_WEEKDAY = "0"
 STANDINGS_HOUR_UTC = "17"

@@ -49,7 +49,7 @@ check("empty string", parsePostHours(""), []);
 check("undefined", parsePostHours(undefined), []);
 
 console.log("\nparsePerSlot");
-check("the configured batch", parsePerSlot("3"), 3);
+check("the configured batch", parsePerSlot("5"), 5);
 check("one is one", parsePerSlot("1"), 1);
 check("unset means the old behaviour", parsePerSlot(undefined), 1);
 check("empty means the old behaviour", parsePerSlot(""), 1);
@@ -60,7 +60,7 @@ check("negatives likewise", parsePerSlot("-2"), 1);
 check("a fraction is not a count", parsePerSlot("2.5"), 1);
 check("a typo cannot empty the catalog", parsePerSlot("300"), 10);
 
-// The live schedule: one named hour, three matchups on it, each open until the
+// The live schedule: one named hour, five matchups on it, each open until the
 // same hour tomorrow. The point of moving the cadence off POST_HOURS_UTC is
 // that adding matchups no longer shortens the window, so that is what to
 // assert — under the old two-hour schedule these would have been 12 apart.
@@ -72,8 +72,8 @@ const batchCloses = nextPostTime(NINE_AM, posted, FALLBACK);
 check("the batch closes on tomorrow's slot", iso(batchCloses), "2026-09-03T15:00:00Z");
 check("which is a full day of voting", Math.round((batchCloses - posted) / HOUR), 24);
 check(
-  "three matchups posted together are one slot, not three",
-  new Set([1, 2, 3].map((i) => postSlotKey(posted + i))).size,
+  "five matchups posted together are one slot, not five",
+  new Set([1, 2, 3, 4, 5].map((i) => postSlotKey(posted + i))).size,
   1
 );
 
