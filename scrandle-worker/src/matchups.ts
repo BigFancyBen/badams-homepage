@@ -143,17 +143,13 @@ export function postDrawnPair(
 }
 
 /**
- * Posts at most one matchup per tick, and only when nothing is still open.
- * Deliberately does not ping the Tasters role: a ping tied to a matchup would
- * correlate with new dishes entering the pool, which is a tell.
-/**
  * Posts the slot's everyday matchups: `MATCHUPS_PER_SLOT` of them, together, on
  * a named hour. Deliberately does not ping the Tasters role — a ping tied to a
  * matchup would correlate with new dishes entering the pool, which is a tell.
  *
  * Several at once rather than several times a day. A matchup closes when the
- * next posting hour comes round, so spreading the day's cooking across three
- * hours would cut every vote window to a third; posting the three together at
+ * next posting hour comes round, so spreading the day's cooking across five
+ * hours would cut every vote window to a fifth; posting the five together at
  * one hour leaves each of them open until the same hour tomorrow. Nobody has to
  * be in the channel at the right moment to get a vote in.
  */
@@ -188,8 +184,8 @@ export async function postMatchupIfDue(
 
   // What the slot owes, less what is somehow still open. The old rule was
   // "never post over an open everyday matchup", which is this rule with a slot
-  // of one: two live everyday matchups split the vote, and three do not so long
-  // as three is the number that was meant to be there. Yesterday's batch closes
+  // of one: two live everyday matchups split the vote, and five do not so long
+  // as five is the number that was meant to be there. Yesterday's batch closes
   // earlier in the same tick, so in the ordinary case this subtracts nothing —
   // it matters when a close failed, and then it posts the shortfall rather than
   // stacking a fresh batch on top of a stuck one.
@@ -217,7 +213,7 @@ export async function postMatchupIfDue(
   );
 
   // Excluding live photographs is unconditional, and the list grows as the
-  // batch is drawn — the same photograph in two of this morning's three
+  // batch is drawn — the same photograph in two of this morning's five
   // matchups would be as indefensible as it appearing twice across two days.
   // Ranking rounds and caption contests are in here for the same reason.
   const liveDishIds: number[] = await heldDishIds(env);

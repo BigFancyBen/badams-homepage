@@ -11,7 +11,7 @@ voter ranks them, in `rounds.ts` — its own tables, its own close path, the sam
 ratings underneath. The caption contest is in `contests.ts` and is the odd one
 out: players write rather than judge, and nothing gets a rating.
 
-Eight slots. Cooking three matchups at 9am, all open for a full day, drinks at
+Eight slots. Cooking five matchups at 9am, all open for a full day, drinks at
 happy hour as often as there is drink to post, places ranked on Monday, people
 on Tuesday, five of one kind of plate on Wednesday, the week's new cooking on
 Thursday, five of one kind of drink on Friday, and the caption contest across
@@ -705,10 +705,10 @@ why not.
   cannot reach that minute on its own.
 - **`MATCHUPS_PER_SLOT` matchups at a time**, with a single exception. The
   slot posts that many together and then refuses, even when forced, because a
-  fourth live matchup on a slot of three splits the vote the same way a second
+  sixth live matchup on a slot of five splits the vote the same way a second
   did on a slot of one. The cap counts what is open rather than what was
   posted, so a batch that could not close — a failed tick, a D1 blip — is
-  topped back up to three next time instead of being stacked on.
+  topped back up to five next time instead of being stacked on.
 
   The exception is a bonus: `?overlap=1` on `/admin/post-matchup`, and the
   place, person and drink slots, which are meant to run beside the ordinary
@@ -718,26 +718,28 @@ why not.
   a live drink matchup stood in front of the next cooking slot and skipped it —
   the same cycle-skipping bug that closing on the schedule was written to fix,
   arriving from a new direction.
-- **The batch is one hour, not one an hour.** Three matchups go up together at
-  9am rather than at three times of day, because a matchup closes when the next
-  posting hour comes round: spreading them would cut every window to a third of
+- **The batch is one hour, not one an hour.** Five matchups go up together at
+  9am rather than at five times of day, because a matchup closes when the next
+  posting hour comes round: spreading them would cut every window to a fifth of
   a day and make voting a matter of being in the channel at the right moment.
-  Together on one hour, each of the three stays open until 9am tomorrow.
+  Together on one hour, each of the five stays open until 9am tomorrow.
 
   The number is a decision about the backlog, and it is worth restating why.
   577 food photographs, 539 of which have never been on the board, refilling at
-  about one a day. The Wednesday five comes out of the same pool, so two
-  matchups a day spends 4.7 photographs and gains one — a runway of about five
-  months before anything repeats. Three spends 6.7 and makes it three months.
-  That is a real cost and worth paying: at two a day a photograph gets 1.9
-  outings a year, and a rating built on that is noise. Nothing here runs out —
-  the draw orders by `matches_played`, so an empty backlog simply means a second
-  lap — and the second lap is where the standings start to mean something.
+  about one a day. The Wednesday five comes out of the same pool, so three
+  matchups a day spends 6.7 photographs and gains one — a runway of about three
+  months before anything repeats. Five spends 10.7 and makes it under two.
+  That is a real cost and worth paying: at three a day a photograph still gets
+  under three outings a year, and a rating built on that is thin. Nothing here
+  runs out — the draw orders by `matches_played`, so an empty backlog simply
+  means a second lap — and the second lap is where the standings start to mean
+  something.
 
   Turnout is the thing to watch rather than the catalog. Eight people vote,
   matchups average six votes each, and on 30 August six went up in one day and
-  every one of them still took seven votes. If that average starts sliding,
-  this is the number to turn down.
+  every one of them still took seven votes. Five a day sits inside what that
+  day already proved. If that average starts sliding, this is the number to
+  turn down.
 - **The 9am posts are cooking, and only cooking.** The everyday draw
   is fixed to `food`. Everything else the classifier labels — `drink`,
   `place`, `person` — is drawn on a slot of its own: a five-photo place
@@ -838,12 +840,12 @@ why not.
   250, narrows as results come in, and floors at 60.
 
   The fixed `K` of 24 it replaced could not work here, and the numbers say so
-  plainly. The everyday pool is 577 photographs and about 6.7 go on the board a
-  day counting the weekly five, so a sweep takes roughly three months and a
-  photograph gets about four outings a year. At `K` 24 a photograph that
+  plainly. The everyday pool is 577 photographs and about 10.7 go on the board
+  a day counting the weekly five, so a sweep takes under two months and a
+  photograph gets about seven outings a year. At `K` 24 a photograph that
   belongs 300 points above the opening rating gains about eight points the
-  first time it wins — thirty-five games to arrive, which at four a year is the
-  better part of a decade. Every rating in the table was 1500 plus a coin toss
+  first time it wins — thirty-five games to arrive, which even at seven a year
+  is five years. Every rating in the table was 1500 plus a coin toss
   and would have stayed that way. Under Glicko the same photograph is where it
   belongs inside a handful of games.
 
@@ -873,7 +875,7 @@ why not.
   The everyday rotation does already put unplayed photographs first, and that
   is not the same thing as putting *new* ones first. 539 of the 577 in the pool
   have never played and the pick among them is random, so something posted on
-  Tuesday joins the back of a queue about three months deep. The fresh slot
+  Tuesday joins the back of a queue about two months deep. The fresh slot
   fires on one primary in four and helps, but it draws one photograph at a
   time; this draws the week, and a card is four comparisons per photograph
   rather than one.
