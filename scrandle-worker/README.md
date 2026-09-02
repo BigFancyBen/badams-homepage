@@ -100,9 +100,11 @@ deliberately bad signature and expects a 401, which `verify.ts` handles.
 
 ## Deploying
 
-Merging to `main` deploys. `.github/workflows/deploy-scrandle-worker.yml` runs
-`wrangler deploy` on any push touching `scrandle-worker/**`, which includes
-`wrangler.toml` — a schedule change is a deploy like any other.
+Merging to `main` deploys. `.github/workflows/deploy-scrandle-worker.yml`
+applies pending D1 migrations and then runs `wrangler deploy` on any push
+touching `scrandle-worker/**`, which includes `wrangler.toml` and
+`migrations/` — a schedule change is a deploy like any other, and a new
+migration file is one too.
 
 That path matters more than it looks. The Worker ships separately from the
 site: Vercel builds the Next app and never touches Cloudflare, so before this
@@ -117,7 +119,10 @@ The workflow needs one repository secret:
 | `CLOUDFLARE_API_TOKEN` | Cloudflare dashboard → My Profile → API Tokens → Create Token → **Edit Cloudflare Workers** template |
 
 Use the template rather than a hand-rolled token — the deploy binds D1 and R2,
-so a Workers-Scripts-only token fails at the binding step, not at upload.
+so a Workers-Scripts-only token fails at the binding step, not at upload. The
+migration step needs **D1 → Edit** on top of that; the template grants it, but
+a token minted before D1 was added to it will not have it and the step will
+fail on authorization. Re-roll the token from the template if so.
 
 ```bash
 gh secret set CLOUDFLARE_API_TOKEN --repo BigFancyBen/badams-homepage
@@ -133,11 +138,20 @@ Deploying by hand still works and is still the right move when testing:
 npm run deploy
 ```
 
-**Migrations are not automated.** `npm run migrate` is still a manual step, and
-it has to run *before* the deploy of any code that reads a new column. Since
-merging is what deploys, that means running it *before* the merge, not after:
-a merge that lands table-reading code on a database without the tables leaves
-every tick throwing until the migration catches up.
+**Migrations run on merge, before the deploy.** Add a numbered file to
+`migrations/`, merge it, and the workflow applies it to the remote D1 and only
+then uploads the bundle. That order is the whole point: code that reads a new
+column must never be live against a database that lacks it, or every tick
+throws until somebody runs `npm run migrate` by hand. Applying is idempotent —
+wrangler tracks what has run in `d1_migrations` — so code-only deploys pass
+straight through the step.
+
+If the migration fails, the job stops there and the deploy never happens: the
+live Worker stays on the old bundle against the old schema, which is a working
+pair, rather than new code against a schema that never changed.
+
+`npm run migrate` still exists for applying a migration out of band, and
+`npm run migrate:local` is the local equivalent.
 
 ### Order matters
 

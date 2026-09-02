@@ -9,8 +9,9 @@ name: Deploy scrandle worker
 on:
   push:
     branches: [main]
-    # wrangler.toml lives under this path, so a vars-only change deploys too.
-    # That is the case this workflow exists for.
+    # wrangler.toml and migrations/ both live under this path, so a vars-only
+    # change deploys too, and a new migration applies itself. Those are the
+    # cases this workflow exists for.
     paths:
       - "scrandle-worker/**"
       - ".github/workflows/deploy-scrandle-worker.yml"
@@ -47,6 +48,18 @@ jobs:
       # The pre-commit hook only checks the Next app; nothing type-checks the
       # Worker before it reaches Cloudflare.
       - run: npm run type-check
+
+      # Migrations first, and in their own step: code that reads a new column
+      # must never reach Cloudflare before the column exists, or every tick
+      # throws until somebody notices. A failure here fails the job and the
+      # deploy below never runs, so main stays on the old bundle against the
+      # old schema rather than the new bundle against the old schema.
+      #
+      # Applying is idempotent — wrangler skips what the d1_migrations table
+      # already records — so ordinary code-only deploys pass straight through.
+      - run: npx wrangler d1 migrations apply scrandle --remote
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
       - run: npx wrangler deploy
         env:
