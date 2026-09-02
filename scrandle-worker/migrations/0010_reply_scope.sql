@@ -1,0 +1,21 @@
+-- The private reply stops being keyed by the message and starts being keyed by
+-- whatever the click says it belongs to.
+--
+-- Migration 0009 keyed it by (message, person), which was exactly right for the
+-- thing it was written for: five photographs on one card is five clicks on one
+-- message, so the message is the conversation. The 9am cooking batch is the
+-- same five clicks arranged the other way — five matchups, five messages, one
+-- each — and under a key of "message" every one of them opened a reply of its
+-- own. The stack of near-identical lines came back, five "Voted 1." this time,
+-- and dismissing them by hand came back with it.
+--
+-- So the key becomes a scope string the handler chooses. Almost everything
+-- still passes the message id and behaves exactly as before; the pair vote
+-- passes a single constant, so the whole board is one conversation and the
+-- reply reads as a running scoreline across it. See deliver in interactions.ts.
+--
+-- A scope is a message id or a word, and a snowflake is all digits, so the two
+-- cannot collide. Rows written before this land under their old message-id
+-- scope, which the vote path will no longer look for — they are worthless
+-- within fifteen minutes either way, and the hourly sweep takes them.
+ALTER TABLE ephemeral_replies RENAME COLUMN message_id TO scope;

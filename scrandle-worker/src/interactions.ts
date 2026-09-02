@@ -1,6 +1,7 @@
 import {
   appendToBallot,
   appendToContestBallot,
+  boardFor,
   clearBallot,
   clearContestBallot,
   getBallot,
@@ -38,15 +39,43 @@ import {
  * whether to send it or edit it over the last one. Handlers answer with this
  * rather than a finished Response so that decision is made in one place — see
  * deliver.
+ *
+ * `scope` says which running reply the line belongs to. Left off, it is the
+ * message the buttons are on, which is what a card wants. See BOARD for the
+ * one thing that wants something else.
  */
 interface Ephemeral {
   content: string;
+  scope?: string;
 }
 
 type Answer = Ephemeral | Response;
 
 function reply(content: string): Ephemeral {
   return { content };
+}
+
+/**
+ * The scope every pair vote's reply shares.
+ *
+ * The 9am cooking batch is five matchups, which is five messages with one
+ * button pair each. Keyed by message, a person voting through the batch got
+ * five separate replies — the stack of near-identical lines that the running
+ * reply was written to end, rearranged rather than avoided. One scope for the
+ * lot makes it a single line that follows them down the board.
+ *
+ * It has to be a running scoreline rather than "Voted 2." for the reason any
+ * edit does: the text that replaces a line has to still be true of everything
+ * that line covered. See withBoard.
+ *
+ * A word rather than an id, so it cannot collide with the message ids every
+ * other scope is — a snowflake is all digits.
+ */
+const BOARD = "board";
+
+/** Moves an answer onto the board's running reply. Responses pass through. */
+function onBoard(answer: Answer): Answer {
+  return answer instanceof Response ? answer : { ...answer, scope: BOARD };
 }
 
 /**
@@ -57,13 +86,18 @@ function reply(content: string): Ephemeral {
 const EDIT_WINDOW = 14 * 60 * 1000;
 
 /**
- * One running reply per person per card, rather than one message per click.
+ * One running reply per person per scope, rather than one message per click.
  *
  * Ranking five photographs is five clicks, and answering each with its own
  * ephemeral message buried the card under a stack of near-identical "Your
  * order:" lines — four of them already out of date, every one of them needing
  * dismissing by hand. So the first click gets a message and every click after
  * it edits that message.
+ *
+ * The scope is what counts as "after it". A card is a message, so the message
+ * id is the scope for almost everything; the pair vote hands one of its own,
+ * because the five matchups it spans are five messages and would otherwise be
+ * five replies. See BOARD.
  *
  * Discord has no way to say "edit my last ephemeral": an ephemeral message has
  * no id anyone can address it by, only the token of the interaction that
@@ -79,7 +113,7 @@ async function deliver(
   env: Env,
   now: number,
   interaction: Interaction,
-  content: string
+  { content, scope }: Ephemeral
 ): Promise<Response> {
   const fresh = Response.json({
     type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
@@ -87,15 +121,15 @@ async function deliver(
   });
 
   const userId = (interaction.member?.user ?? interaction.user)?.id;
-  const messageId = interaction.message?.id;
+  const key = scope ?? interaction.message?.id;
   // Nothing to key on means nothing to edit and nothing worth keeping: a
   // modal submitted from outside a message, or the test harness, which sends
   // neither a message nor a token.
-  if (!userId || !messageId || !interaction.token || !interaction.application_id) {
+  if (!userId || !key || !interaction.token || !interaction.application_id) {
     return fresh;
   }
 
-  const existing = await getEphemeralReply(env, messageId, userId);
+  const existing = await getEphemeralReply(env, key, userId);
   if (existing && now - existing.created_at < EDIT_WINDOW) {
     const edited = await editInteractionReply(
       env,
@@ -114,7 +148,7 @@ async function deliver(
 
   await rememberEphemeralReply(
     env,
-    messageId,
+    key,
     userId,
     interaction.application_id,
     interaction.token,
@@ -140,7 +174,7 @@ export async function handleInteraction(
   const answer = await route(env, interaction, now);
   return answer instanceof Response
     ? answer
-    : deliver(env, now, interaction, answer.content);
+    : deliver(env, now, interaction, answer);
 }
 
 /** What to say. Whether that is a new message or an edit is deliver's problem. */
@@ -179,7 +213,10 @@ async function route(
   const [prefix, rawId, rawSlot] = customId.split(":");
 
   if (prefix === "v") {
-    return handleVote(env, Number(rawId), rawSlot, user, now);
+    // Every answer here shares the board's reply, refusals included. One that
+    // opened a message of its own beside the scoreline would be the stack this
+    // is here to end, one message smaller.
+    return onBoard(await handleVote(env, Number(rawId), rawSlot, user, now));
   }
 
   if (prefix === "b" || prefix === "bx") {
@@ -233,8 +270,13 @@ async function handleVote(
   const matchup = await getMatchup(env, matchupId);
   if (!matchup) return reply("That matchup is gone.");
 
+  // Yesterday's cards are still on the screen, so this is the refusal a real
+  // voter actually meets. It carries the board for the same reason the ranking
+  // round's refusals carry the ballot: this line replaces the scoreline, and
+  // taking somebody's picks off the screen to tell them a card is shut is a
+  // worse answer than telling them both.
   if (matchup.status !== "open" || matchup.closes_at <= now) {
-    return reply("Voting on that one has closed.");
+    return withBoard(env, "Voting on that one has closed.", user.id, now);
   }
 
   const pickedDishId = side === "a" ? matchup.dish_a_id : matchup.dish_b_id;
@@ -243,8 +285,43 @@ async function handleVote(
   await recordVote(env, matchupId, user.id, pickedDishId, now);
 
   // Confirmation only, and only to the person who cast it. No running tally:
-  // the channel sees nothing until close, and neither should a voter.
-  return reply(`Voted ${side === "a" ? "1" : "2"}.`);
+  // the channel sees nothing until close, and neither should a voter. What a
+  // voter does get back is their own board, which is what withBoard reads.
+  return withBoard(env, "Voted.", user.id, now);
+}
+
+/**
+ * A line with the voter's board on the end of it.
+ *
+ * The reply says the whole board rather than the click that prompted it
+ * because it is one message being rewritten: "Voted 2." is true of this click
+ * and wrong about the four it replaces. Said in the numbers printed on the
+ * cards and the buttons, which is all a voter has to go on — the dish ids
+ * never leave the database, and neither does anybody else's pick.
+ */
+async function withBoard(
+  env: Env,
+  lead: string,
+  userId: string,
+  now: number
+): Promise<Ephemeral> {
+  const board = await boardFor(env, userId, now);
+  const voted = board.filter((row) => row.pick !== null);
+
+  // Nothing to read back — a first click on a shut card, or a board that
+  // emptied between the vote going in and this reading it. Whatever the lead
+  // says stands on its own.
+  if (voted.length === 0) return reply(lead);
+
+  const picks = voted.map((row) => `#${row.id} → ${row.pick}`).join(" · ");
+  const left = board.length - voted.length;
+
+  return reply(
+    `${lead} Your board: ${picks}. ` +
+      (left === 0
+        ? "That is all of them."
+        : `${left === 1 ? "One" : left} still open.`)
+  );
 }
 
 /**

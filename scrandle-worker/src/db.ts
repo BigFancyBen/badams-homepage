@@ -244,6 +244,36 @@ export async function voteBreakdown(
   return result.results ?? [];
 }
 
+/**
+ * The board as one person sees it: every matchup still taking votes, and what
+ * they picked on each, oldest first.
+ *
+ * One query rather than one for the open matchups and one for their votes,
+ * because the running reply this feeds is rewritten on every click and the two
+ * halves are only ever read together. Filtered on `closes_at` as well as
+ * `status`, so the line agrees with what handleVote will actually accept: a
+ * matchup whose window ran out before the tick that closes it is not on the
+ * board, whatever the row still says.
+ */
+export async function boardFor(
+  env: Env,
+  voterId: string,
+  now: number
+): Promise<{ id: number; pick: number | null }[]> {
+  const result = await env.DB.prepare(
+    "SELECT m.id AS id, CASE " +
+      "WHEN v.picked_dish_id IS NULL THEN NULL " +
+      "WHEN v.picked_dish_id = m.dish_a_id THEN 1 ELSE 2 END AS pick " +
+      "FROM matchups m LEFT JOIN votes v " +
+      "ON v.matchup_id = m.id AND v.voter_discord_id = ? " +
+      "WHERE m.status = 'open' AND m.closes_at > ? " +
+      "ORDER BY m.created_at ASC, m.id ASC"
+  )
+    .bind(voterId, now)
+    .all<{ id: number; pick: number | null }>();
+  return result.results ?? [];
+}
+
 // ── Ranking rounds ─────────────────────────────────────────────────
 
 export async function getRound(env: Env, id: number): Promise<Round | null> {
@@ -685,9 +715,10 @@ export async function getContestBallots(
 }
 
 // ── ephemeral replies ──────────────────────────────────────────────
-// Where somebody's private reply to a message's buttons is, so the next click
-// on those buttons can edit it instead of posting another one. See migration
-// 0009 for why the token has to be stored at all.
+// Where somebody's private reply is, so the next click can edit it instead of
+// posting another one. See migration 0009 for why the token has to be stored
+// at all, and 0010 for why the key is a scope the handler picks rather than
+// the message the buttons are on.
 
 export interface EphemeralReply {
   application_id: string;
@@ -697,14 +728,14 @@ export interface EphemeralReply {
 
 export async function getEphemeralReply(
   env: Env,
-  messageId: string,
+  scope: string,
   userId: string
 ): Promise<EphemeralReply | null> {
   const row = await env.DB.prepare(
     "SELECT application_id, token, created_at FROM ephemeral_replies " +
-      "WHERE message_id = ? AND user_discord_id = ?"
+      "WHERE scope = ? AND user_discord_id = ?"
   )
-    .bind(messageId, userId)
+    .bind(scope, userId)
     .first<EphemeralReply>();
   return row ?? null;
 }
@@ -712,14 +743,14 @@ export async function getEphemeralReply(
 /**
  * Records the reply we are about to send as the one to edit next time.
  *
- * Retried: an upsert of a known value. One row per person per message, so a
- * second reply on the same buttons replaces the address of the first — which
- * is right, because by then the first is the one that got edited or the one
- * that went away.
+ * Retried: an upsert of a known value. One row per person per scope, so a
+ * second reply in the same scope replaces the address of the first — which is
+ * right, because by then the first is the one that got edited or the one that
+ * went away.
  */
 export async function rememberEphemeralReply(
   env: Env,
-  messageId: string,
+  scope: string,
   userId: string,
   applicationId: string,
   token: string,
@@ -728,13 +759,13 @@ export async function rememberEphemeralReply(
   await retryWrite(() =>
     env.DB.prepare(
       "INSERT INTO ephemeral_replies " +
-        "(message_id, user_discord_id, application_id, token, created_at) " +
+        "(scope, user_discord_id, application_id, token, created_at) " +
         "VALUES (?, ?, ?, ?, ?) " +
-        "ON CONFLICT (message_id, user_discord_id) DO UPDATE SET " +
+        "ON CONFLICT (scope, user_discord_id) DO UPDATE SET " +
         "application_id = excluded.application_id, " +
         "token = excluded.token, created_at = excluded.created_at"
     )
-      .bind(messageId, userId, applicationId, token, now)
+      .bind(scope, userId, applicationId, token, now)
       .run()
   );
 }
