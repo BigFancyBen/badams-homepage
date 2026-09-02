@@ -361,7 +361,7 @@ export const PHASES: Phase[] = [
       },
       {
         kind: "p",
-        text: "Three a morning rather than two a day is a decision about the backlog. 577 food photographs, 539 never on the board, refilling at about one a day: two matchups a day spends four and gains one, so the unplayed pile lasts five months; three makes it three and a half. Worth paying — at two a day a photograph gets 1.6 outings a year and a rating built on that is noise. Nothing runs out either way, because the draw orders by play count and an empty backlog just means a second lap.",
+        text: "Three a morning rather than two a day is a decision about the backlog. 577 food photographs, 539 never on the board, refilling at about one a day — and the Wednesday five comes out of the same pool. Two matchups a day spends 4.7 photographs and gains one, so the unplayed pile lasts about five months; three spends 6.7 and makes it three. Worth paying — at two a day a photograph gets 1.9 outings a year and a rating built on that is noise. Nothing runs out either way, because the draw orders by play count and an empty backlog just means a second lap.",
       },
       {
         kind: "p",

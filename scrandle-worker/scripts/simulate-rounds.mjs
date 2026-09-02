@@ -8,11 +8,14 @@
  *   - a whole ranking round moves a rating about as far as one matchup does
  *   - the photograph most people put first is the one that wins
  *   - a partial ballot still scores, and still beats what it left unranked
+ *   - a themed round puts five of one kind up, and works through the kinds
  *
- * Three catalogs. A deep one for the rotation and the arithmetic, a small one
- * with unanimous voters for the ordering, and one where nobody ranks more than
- * a single photograph — which is the case worth being sure about, because it
- * is the one most people will actually cast.
+ * Five catalogs. A deep one for the rotation and the arithmetic, a small one
+ * with unanimous voters for the ordering, one where nobody ranks more than a
+ * single photograph — the case worth being sure about, because it is the one
+ * most people will actually cast — and two for the themed food round: a
+ * catalog with kinds deep enough to theme on, and one with none, which has to
+ * fall back to a mixed five rather than skip the week.
  */
 const DB = "00000000-0000-0000-0000-000000000000";
 // Overridable for the same reason as the mock's port: parallel worktrees.
@@ -46,18 +49,21 @@ const check = (name, ok, detail) => {
 let nextTag = 0;
 
 /**
- * `dishes` is a list of `{ chef, elo, played }`, all in the place category —
- * the ranking round draws nothing else, so a seed of food would leave every
- * query empty and the whole suite would pass having tested nothing.
+ * `dishes` is a list of `{ chef, elo, played, category, kind }`. Category
+ * defaults to place, because the place round draws nothing else and a seed of
+ * food would leave every query empty and the whole suite would pass having
+ * tested nothing. The themed scenarios override it, and set the kind the
+ * classifier would have written.
  */
 function dishRow(d) {
   const tag = nextTag++;
   const at = 1700000000000 + tag * 1000;
-  return `('m${tag}','a${tag}','user_${d.chef}','dishes/h${tag}.jpg','h${tag}','d${tag}',${at},${at},${d.elo},${d.played},'place')`;
+  const kind = d.kind ? `'${d.kind}'` : "NULL";
+  return `('m${tag}','a${tag}','user_${d.chef}','dishes/h${tag}.jpg','h${tag}','d${tag}',${at},${at},${d.elo},${d.played},'${d.category ?? "place"}',${kind})`;
 }
 
 const DISH_COLUMNS =
-  "discord_message_id, attachment_id, poster_discord_id, r2_key, sha256, caption, posted_at, ingested_at, elo, matches_played, category";
+  "discord_message_id, attachment_id, poster_discord_id, r2_key, sha256, caption, posted_at, ingested_at, elo, matches_played, category, kind";
 
 async function seed(dishes) {
   await sql(
@@ -100,10 +106,10 @@ async function castBallot(roundId, voter, order) {
  * so a cron-driven simulation would post nothing at all unless it happened to
  * be run at noon on a Monday.
  */
-async function playRounds(rounds, vote) {
+async function playRounds(rounds, vote, flag = "place") {
   for (let round = 0; round < rounds; round++) {
     const posted = await fetch(
-      `${WORKER}/admin/post-matchup?place=1&secret=${encodeURIComponent(SECRET)}`
+      `${WORKER}/admin/post-matchup?${flag}=1&secret=${encodeURIComponent(SECRET)}`
     );
     if (!posted.ok) throw new Error(`post failed: ${posted.status}`);
 
@@ -348,6 +354,131 @@ const partialDrift = Math.abs(
   partial.entries.reduce((sum, entry) => sum + (entry.elo_after - entry.elo_before), 0)
 );
 check("partial ballots stay zero-sum too", partialDrift < 0.01, `drift ${partialDrift}`);
+
+// ── scenario 4: the themed food round ──────────────────────────────
+// The reason this format exists for food at all. An ungrouped five drawn from
+// the catalog is a lasagne, a fry-up, a cheeseboard, a taco and a bowl of
+// ramen, and what people rank there is which meal they fancy. A round has to
+// be five of one thing.
+//
+// Kinds of four different depths, plus a handful of `other` — the bucket for
+// what fits nowhere, which must never be themed on — and one kind that is a
+// single person's, which cannot fill a card because no more than two of
+// anyone's go on one.
+const THEMED = [
+  ...spread("pasta", 8),
+  ...spread("burger", 6),
+  ...spread("pizza", 5),
+  ...spread("tacos", 4),
+  ...spread("other", 6),
+  // Four steaks, all Ben's. Eligible on count and ineligible on people.
+  ...Array.from({ length: 4 }, () => ({ chef: "ben", kind: "steak" })),
+];
+
+function spread(kind, count) {
+  return Array.from({ length: count }, (_, i) => ({
+    chef: chefs[i % chefs.length],
+    kind,
+  }));
+}
+
+await seed(
+  THEMED.map((d) => ({ ...d, category: "food", elo: 1500, played: 0 }))
+);
+
+// One round per themeable kind, which is what the rotation should take to work
+// through them. Four qualify: pasta, burger, pizza and tacos.
+const THEMEABLE = 4;
+await playRounds(
+  THEMEABLE,
+  async (roundId, slots) => {
+    for (let voter = 0; voter < 3; voter++) {
+      const order = slots.map((_, i) => slots[(i + voter) % slots.length]);
+      await castBallot(roundId, `voter_${voter}`, order);
+    }
+  },
+  "foodround"
+);
+
+const themed = await sql(
+  "SELECT r.id AS round, d.kind AS kind, d.poster_discord_id AS chef " +
+    "FROM round_entries e JOIN rounds r ON r.id = e.round_id " +
+    "JOIN dishes d ON d.id = e.dish_id ORDER BY r.id, e.slot"
+);
+const themedRounds = [...new Set(themed.map((row) => row.round))].map((id) => ({
+  id,
+  kinds: [...new Set(themed.filter((row) => row.round === id).map((r) => r.kind))],
+}));
+
+console.log(`\nthemed food rounds: ${themedRounds.length}\n`);
+
+check(
+  "every round is all one kind",
+  themedRounds.length === THEMEABLE &&
+    themedRounds.every((round) => round.kinds.length === 1),
+  themedRounds.map((r) => `#${r.id}:${r.kinds.join("+")}`).join(" ")
+);
+
+check(
+  "the round is never built on 'other'",
+  themedRounds.every((round) => round.kinds[0] !== "other"),
+  themedRounds.map((r) => r.kinds[0]).join(" ")
+);
+
+// A kind one person owns is short a card however many photographs are in it —
+// the per-poster cap allows two, and three is the floor. Picking it would mean
+// drawing it, failing to fill, and falling back to a mixed five with the theme
+// already announced.
+check(
+  "a kind that is one person's is never drawn",
+  themedRounds.every((round) => round.kinds[0] !== "steak"),
+  themedRounds.map((r) => r.kinds[0]).join(" ")
+);
+
+// The rotation, applied a level up. Kinds come off the least-played end the
+// same way photographs do, so every themeable kind gets a week before any of
+// them gets a second.
+check(
+  "the kinds rotate rather than repeating",
+  new Set(themedRounds.map((round) => round.kinds[0])).size === THEMEABLE,
+  themedRounds.map((r) => r.kinds[0]).join(" ")
+);
+
+// ── scenario 5: nothing to theme on ────────────────────────────────
+// Six plates, six kinds, no three of anything. The week still has to have a
+// round in it: a slot that fires only when the catalog is deep enough is a
+// weekly post that does not appear for months.
+await seed(
+  ["pasta", "burger", "pizza", "tacos", "curry", "sushi"].map((kind, i) => ({
+    chef: chefs[i % chefs.length],
+    category: "food",
+    kind,
+    elo: 1500,
+    played: 0,
+  }))
+);
+
+await playRounds(
+  1,
+  async (roundId, slots) => castBallot(roundId, "voter_0", slots),
+  "foodround"
+);
+
+const mixed = await sql(
+  "SELECT d.kind AS kind FROM round_entries e JOIN dishes d ON d.id = e.dish_id " +
+    "JOIN rounds r ON r.id = e.round_id WHERE r.status = 'closed'"
+);
+
+check(
+  "a catalog with no themeable kind still posts a round",
+  mixed.length >= 3,
+  `${mixed.length} photographs on the card`
+);
+check(
+  "and it is honestly a mixed one",
+  new Set(mixed.map((row) => row.kind)).size > 1,
+  mixed.map((row) => row.kind).join(" ")
+);
 
 console.log(failures === 0 ? "\nall invariants held" : `\n${failures} invariant(s) violated`);
 process.exit(failures === 0 ? 0 : 1);

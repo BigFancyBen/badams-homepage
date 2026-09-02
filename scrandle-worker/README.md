@@ -6,15 +6,21 @@ The whole game. One Cloudflare Worker, one hourly cron, no frontend.
 - `fetch()` — `POST /interactions` for button clicks, plus `/backfill` and `/health`
 
 Three shapes of round. The everyday matchup is a pair with a button each, in
-`matchups.ts`. The weekly place round puts five photographs on one card and
-each voter ranks them, in `rounds.ts` — its own tables, its own close path,
-the same Elo underneath. The caption contest is in `contests.ts` and is the
-odd one out: players write rather than judge, and nothing gets a rating.
+`matchups.ts`. The ranking round puts five photographs on one card and each
+voter ranks them, in `rounds.ts` — its own tables, its own close path, the
+same Elo underneath. The caption contest is in `contests.ts` and is the odd
+one out: players write rather than judge, and nothing gets a rating.
 
-Five slots, each drawing categories nothing else touches. Cooking three
-matchups at 9am, all open for a full day, drinks at happy hour as often as
-there is drink to post, places on Monday, people on Tuesday, and the caption
-contest across the weekend on everything left over.
+Seven slots. Cooking three matchups at 9am, all open for a full day, drinks at
+happy hour as often as there is drink to post, places ranked on Monday, people
+on Tuesday, five of one kind of plate on Wednesday, five of one kind of drink
+on Friday, and the caption contest across the weekend on everything left over.
+
+The two Wednesday-and-Friday fives are *themed*: five pastas, five steaks,
+five beers. Ranking five things asks a question a pair does not, and it only
+works when the five are comparable — so the classifier labels every dish and
+drink with a `kind` as well as a category, and the round is built around one
+of them. See **Kinds** below.
 
 Rendering lives in the Next app (`app/api/scrandle/*`) because Workers Free
 allows 10ms of CPU per invocation, which cannot rasterize an image. The Worker
@@ -100,9 +106,11 @@ deliberately bad signature and expects a 401, which `verify.ts` handles.
 
 ## Deploying
 
-Merging to `main` deploys. `.github/workflows/deploy-scrandle-worker.yml` runs
-`wrangler deploy` on any push touching `scrandle-worker/**`, which includes
-`wrangler.toml` — a schedule change is a deploy like any other.
+Merging to `main` deploys. `.github/workflows/deploy-scrandle-worker.yml`
+applies pending D1 migrations and then runs `wrangler deploy` on any push
+touching `scrandle-worker/**`, which includes `wrangler.toml` and
+`migrations/` — a schedule change is a deploy like any other, and a new
+migration file is one too.
 
 That path matters more than it looks. The Worker ships separately from the
 site: Vercel builds the Next app and never touches Cloudflare, so before this
@@ -117,7 +125,10 @@ The workflow needs one repository secret:
 | `CLOUDFLARE_API_TOKEN` | Cloudflare dashboard → My Profile → API Tokens → Create Token → **Edit Cloudflare Workers** template |
 
 Use the template rather than a hand-rolled token — the deploy binds D1 and R2,
-so a Workers-Scripts-only token fails at the binding step, not at upload.
+so a Workers-Scripts-only token fails at the binding step, not at upload. The
+migration step needs **D1 → Edit** on top of that; the template grants it, but
+a token minted before D1 was added to it will not have it and the step will
+fail on authorization. Re-roll the token from the template if so.
 
 ```bash
 gh secret set CLOUDFLARE_API_TOKEN --repo BigFancyBen/badams-homepage
@@ -133,11 +144,20 @@ Deploying by hand still works and is still the right move when testing:
 npm run deploy
 ```
 
-**Migrations are not automated.** `npm run migrate` is still a manual step, and
-it has to run *before* the deploy of any code that reads a new column. Since
-merging is what deploys, that means running it *before* the merge, not after:
-a merge that lands table-reading code on a database without the tables leaves
-every tick throwing until the migration catches up.
+**Migrations run on merge, before the deploy.** Add a numbered file to
+`migrations/`, merge it, and the workflow applies it to the remote D1 and only
+then uploads the bundle. That order is the whole point: code that reads a new
+column must never be live against a database that lacks it, or every tick
+throws until somebody runs `npm run migrate` by hand. Applying is idempotent —
+wrangler tracks what has run in `d1_migrations` — so code-only deploys pass
+straight through the step.
+
+If the migration fails, the job stops there and the deploy never happens: the
+live Worker stays on the old bundle against the old schema, which is a working
+pair, rather than new code against a schema that never changed.
+
+`npm run migrate` still exists for applying a migration out of band, and
+`npm run migrate:local` is the local equivalent.
 
 ### Order matters
 
@@ -387,6 +407,16 @@ is the ballot most people will actually cast, and it checks that a single click
 still scores, still beats the four it did not rank, and still leaves those four
 unscored against each other.
 
+Two more cover the themed food round, which is the same machinery pointed at a
+pool that has kinds in it. The **themed catalog** holds four kinds deep enough
+to fill a card, a handful of `other`, and a fifth kind that is one person's
+entire collection: it checks that every round is all one kind, that `other` is
+never themed on, that a kind nobody can field a card from is not drawn, and
+that the kinds rotate rather than the draw landing on burgers every week. The
+**unthemeable catalog** is six plates and six kinds, and checks the fallback —
+a week where nothing can be themed still gets a round, and that round is
+honestly a mixed one.
+
 ### Forcing a post by hand
 
 There is no way to fire a cron on demand, so three admin routes stand in. All
@@ -406,16 +436,22 @@ curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECR
 curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&person=1"
 curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&drink=1"
 curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&caption=1"
+curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&foodround=1"
+curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&drinkround=1"
 ```
 
 Posts one of the other slots on demand — `place=1` for the five-photo place
-ranking round, `person=1` for person-vs-person, `drink=1` for drink-vs-drink
-— the same thing the scheduled cron does. Always overlaps, always gets that
-slot's flat window. `place=1` answers `{"posted":false}` when fewer than three
+ranking round, `person=1` for person-vs-person, `drink=1` for
+drink-vs-drink, `foodround=1` and `drinkround=1` for the themed fives — the
+same thing the scheduled cron does. Always overlaps, always gets that slot's
+flat window. `place=1` answers `{"posted":false}` when fewer than three
 places are available to rank, or when the per-poster cap leaves it short;
 `drink=1` answers the same when the catalog holds fewer than two drinks or
 they are all one person's. Forcing ignores the cadence entirely, so `drink=1`
 posts on a day the slot would not have fired on.
+
+The flags are read in the order they are listed in `index.ts`, and the first
+one set wins — passing two is a request nobody meant to make, not two posts.
 
 `caption=1` opens a caption contest. It refuses while another is live —
 forced or not, because two open contests would ask people to write and to
@@ -453,8 +489,10 @@ have to know which kind you are looking at.
 Puts a card back on a matchup that went out without one — or one posted before
 cards were proven, where Discord holds a failure it will never re-fetch. It
 re-renders, writes the copy under a stamped key, and edits only the embed, so
-the text and the vote buttons are untouched. Open matchups get the matchup
-card, closed ones the result card. It answers `{"repaired":true}`, or a reason
+the text and the vote buttons are untouched. Open matchups get the matchup card
+on the post they went out as; closed ones get the result card on the result
+post, which is a different message. Either link finds the round, so it does not
+matter which of the two you paste. It answers `{"repaired":true}`, or a reason
 why not.
 
 ## Behaviour notes
@@ -500,8 +538,9 @@ why not.
   full-size landscapes take seconds to rasterize where a pair of phone photos
   takes under one. A card is a megabyte or two, and at two or three a day that
   is a couple of gigabytes a year against R2's 10 GB free tier: `cards/` will
-  want sweeping eventually. Nothing reads a matchup card once its result card
-  has replaced it.
+  want sweeping eventually — but a sweep cannot simply drop the matchup cards
+  once the result cards exist, because the post people voted on keeps its card
+  and stays in the channel as the pointer at the result.
 - **A matchup with no card still posts.** If all three render attempts fail,
   the round goes out as jump links and vote buttons with no embed at all,
   rather than an embed pointing at nothing. It stays playable, the logs
@@ -521,11 +560,32 @@ why not.
   to stop bandwagoning, closing the round ends the reason for it, and who
   picked what is the part people actually want to argue about. Names rather
   than mentions, so nothing pings, and markdown in a username is escaped.
-- **The vote log rides on the edit that was already happening.** It is an embed
-  on the same message rather than a follow-up post or a thread, which costs no
-  extra API call, no extra permission and no second message in the channel. It
-  also means `/admin/repair-card` has to rebuild it: a PATCH replaces the
-  embeds it names, so sending only the card would quietly delete the log.
+- **The result goes out as a new message, not as an edit.** A vote window is a
+  day long, so by the time a round shuts, the card people voted on is a day of
+  channel traffic above the fold — and Discord shows nothing at all for an
+  edit. The reveal used to land silently in the middle of the backlog, and only
+  the people who thought to scroll up ever saw who won. The result now gets a
+  post of its own, replying to the card, and the card is edited down to a line
+  pointing at it: the reply header jumps up to the photographs, the pointer
+  jumps back down to the result. Every format does it — matchups, ranking
+  rounds, and the caption contest, which needed it most because its ballot was
+  already the second of two buried posts.
+  The post goes out before the edit. The row is closed by the time either runs
+  and cron does not retry, so a failure has to fall on the signposting rather
+  than on the reveal; the vote buttons the edit strips are inert anyway,
+  because a click is checked against the row and not the message. A round
+  nobody voted in is the one exception — it is edited in place and gets no
+  post, since there is nothing to reveal and a new message to say so would be
+  the loudest thing the bot did all day.
+- **The vote log rides on the result post.** It is a second embed under the
+  result card rather than a follow-up or a thread, which costs no extra API
+  call and no second message. It also means `/admin/repair-card` has to rebuild
+  it: a PATCH replaces the embeds it names, so sending only the card would
+  quietly delete the log.
+- **A closed round lives on two messages**, which is why `matchups`, `rounds`
+  and `contests` all carry a `result_message_id` (migration 0007). Repair edits
+  whichever one is currently showing the card, and falls back to the original
+  for rounds that closed before the result got a post of its own.
 - **The cursor advances only after a batch commits**, so a failed tick replays
   cleanly on the next hour. Cron does not retry.
 - **A matchup closes when the next one is due**, not a fixed span after it went
@@ -570,12 +630,13 @@ why not.
 
   The number is a decision about the backlog, and it is worth restating why.
   577 food photographs, 539 of which have never been on the board, refilling at
-  about one a day. Two matchups a day spends four and gains one — a five-month
-  runway before anything repeats. Three makes it three and a half months. That
-  is a real cost and worth paying: at two a day a photograph gets 1.6 outings a
-  year, and a rating built on that is noise. Nothing here runs out — the draw
-  orders by `matches_played`, so an empty backlog simply means a second lap —
-  and the second lap is where the standings start to mean something.
+  about one a day. The Wednesday five comes out of the same pool, so two
+  matchups a day spends 4.7 photographs and gains one — a runway of about five
+  months before anything repeats. Three spends 6.7 and makes it three months.
+  That is a real cost and worth paying: at two a day a photograph gets 1.9
+  outings a year, and a rating built on that is noise. Nothing here runs out —
+  the draw orders by `matches_played`, so an empty backlog simply means a second
+  lap — and the second lap is where the standings start to mean something.
 
   Turnout is the thing to watch rather than the catalog. Eight people vote,
   matchups average six votes each, and on 30 August six went up in one day and
@@ -673,7 +734,57 @@ why not.
   one match played, not four — the rotation counts rounds.
 - **Places do not count toward chef standings**, and neither do people. They
   earn an Elo like any other photo, but averaging a holiday snap or a group
-  shot into someone's cooking record would rate them on the wrong thing.
+  shot into someone's cooking record would rate them on the wrong thing. The
+  themed food and drink rounds are the other way about: those *are* the
+  categories the standings average, so winning one moves a cook up the table
+  exactly as winning a matchup does.
+- **Kinds: what a photograph is, one level below the category.** `category`
+  answers what a photo may play against — food with food, drink with drink —
+  and that is all a pair needs, because a pair can be drawn to be comparable.
+  Five cannot. An ungrouped five drawn from food at large is a lasagne, a
+  fry-up, a cheeseboard, a taco and a bowl of ramen, and what people rank there
+  is which meal they fancy rather than which plate is better.
+
+  So the classifier writes a `kind` alongside the category, in the same call,
+  and the weekly fives are built around one of them: five pastas, five steaks,
+  five beers. The list is closed and deliberately coarse — twenty-one kinds of
+  food, seven of drink, and `other` — because a free-text kind fragments on
+  contact with a channel. "Pasta", "spaghetti", "pasta bake" and "carbonara"
+  are four groups of one, and a themed round needs three of something. See
+  `kinds.ts`, which is also where the classifier's prompt for them is built,
+  so the enum and the description it is chosen from cannot drift apart.
+
+  Only food and drink have kinds. A pet or a receipt is only ever a caption
+  prompt, and bucketing those would be labelling something nothing will draw on.
+- **A kind is eligible when it can fill a card by itself.** Three photographs
+  that are not already live, from at least two people — which are the ballot
+  draw's own rules stated one step ahead of it rather than new ones, so a kind
+  that qualifies always yields a postable round and never has to be tried and
+  discarded. The per-poster cap is why the second condition is there: a kind
+  that is one person's collection can only ever put two on the card however
+  deep it goes.
+
+  Among the eligible, the pick is the rotation the rest of the game runs on —
+  the kind holding the least-played photographs goes first, which early on,
+  when everything is unplayed, quietly favours the kinds deep enough to fill
+  all five slots.
+- **A themed round falls back to a mixed one rather than skipping the week.**
+  A slot that fires only once the catalog is deep enough is a weekly post that
+  does not appear for months, and the mixed five is what the place round has
+  always been. The card says which it got: "rank the pasta" when it found a
+  theme, "rank the plates" when it did not.
+- **Kinds are backfilled by the classifier, not by a migration.** Every
+  photograph already in the catalog has a category and no kind, so the pending
+  query takes "labelled, but not to this depth" as work — and sorts it behind
+  the photographs that have no category at all, which are the ones that cannot
+  play until they are labelled. Twenty an hour drains a thousand-dish backlog
+  in a couple of days, during which the themed rounds have progressively more
+  to choose from and the rest of the game is untouched.
+
+  The write is a `COALESCE` rather than an assignment, for the rows that are
+  only there for the kind: overwriting a category under an open matchup is a
+  pair that no longer shares one, and overwriting a name is a photograph the
+  channel has already seen renaming itself.
 - **The draw is a rotation.** Both halves of a pair come off the least-played
   end of the pool, in every category, so the whole catalog plays once before
   anything plays twice and then again before anything plays three times. Within

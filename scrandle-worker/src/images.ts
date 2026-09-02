@@ -79,15 +79,22 @@ export function resultImageUrl(
 /**
  * The ranking card: up to five photographs, numbered to match the buttons.
  * `t` is the classifier's name for each, and may be blank.
+ *
+ * `h` is the header — "Rank the pasta" on a themed round, "Rank the places" on
+ * a mixed one. Optional in the payload rather than required, so the render
+ * endpoint can ship before or after this does: an older endpoint ignores it
+ * and draws the header it always drew.
  */
 export function ballotImageUrl(
   env: Env,
   roundId: number,
   entries: Dish[],
+  title: string,
   attempt = 0
 ): Promise<string> {
   return signedUrl(env, `ballot/${roundId}`, {
     n: roundId,
+    h: title,
     items: entries.map((dish) => ({
       u: dishUrl(env, dish),
       t: dish.name ?? "",

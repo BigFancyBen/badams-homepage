@@ -12,6 +12,8 @@ import {
 } from "./matchups";
 import {
   closeDueRounds,
+  postDrinkRoundIfDue,
+  postFoodRoundIfDue,
   postPlaceRoundIfDue,
   repairRoundCard,
 } from "./rounds";
@@ -77,70 +79,94 @@ export default {
 
     // Posts a matchup immediately, ignoring the cadence floor. There is no way
     // to trigger a cron by hand, and waiting an hour to test a change is not a
-    // workable loop. Refuses if a matchup is already open unless `overlap=1`,
-    // which puts a bonus matchup up beside the running one. A bonus post never
+    // workable loop. Refuses once the slot's matchups are all open unless
+    // `overlap=1`, which puts a bonus matchup up beside the running ones.
+    // `count=` overrides MATCHUPS_PER_SLOT for the one call. A bonus post never
     // claims the hour's slot, so the schedule carries on untouched.
     if (url.pathname === "/admin/post-matchup") {
       if (url.searchParams.get("secret") !== env.BACKFILL_SECRET) {
         return new Response("Nope", { status: 403 });
       }
       try {
-        // `place=1` / `person=1` / `drink=1` post that slot on demand: that
-        // category only, running beside whatever is open, on a flat window. A
-        // bonus always overlaps. `place=1` posts the five-photograph ranking
-        // round, which is what the place bonus became.
-        const place = url.searchParams.get("place") === "1";
-        const person = url.searchParams.get("person") === "1";
-        const drink = url.searchParams.get("drink") === "1";
-        const caption = url.searchParams.get("caption") === "1";
+        // Each bonus posts its own slot on demand: that category only, running
+        // beside whatever is open, on a flat window. A bonus always overlaps.
+        //
+        // A table rather than a chain of ternaries. There are six of these now
+        // and each one used to appear three times — the call, the label and
+        // the reason — in three separately-nested conditionals that had to
+        // stay in the same order to keep saying the same thing.
+        const bonuses = [
+          {
+            flag: "place",
+            label: "place round",
+            post: () => postPlaceRoundIfDue(env, Date.now(), { force: true }),
+            reason:
+              "fewer than three places available to rank, or too many of them one person's",
+          },
+          {
+            flag: "foodround",
+            label: "food round",
+            post: () => postFoodRoundIfDue(env, Date.now(), { force: true }),
+            reason:
+              "fewer than three plates available to rank, or too many of them one person's",
+          },
+          {
+            flag: "drinkround",
+            label: "drink round",
+            post: () => postDrinkRoundIfDue(env, Date.now(), { force: true }),
+            reason:
+              "fewer than three drinks available to rank, or too many of them one person's",
+          },
+          {
+            flag: "person",
+            label: "person",
+            post: () => postPersonMatchupIfDue(env, Date.now(), { force: true }),
+            reason:
+              "fewer than two people in the catalog, only one person's photographs, or both are already live",
+          },
+          {
+            flag: "drink",
+            label: "drink",
+            post: () => postDrinkMatchupIfDue(env, Date.now(), { force: true }),
+            reason:
+              "fewer than two drinks in the catalog, only one person's drinks, or both are already live",
+          },
+          {
+            flag: "caption",
+            label: "caption contest",
+            post: () => postCaptionContestIfDue(env, Date.now(), { force: true }),
+            reason:
+              "a contest is already live, or there is nothing in the ingredient/pet/document/screenshot/other categories to draw",
+          },
+        ];
+
+        const bonus = bonuses.find(
+          (candidate) => url.searchParams.get(candidate.flag) === "1"
+        );
         const overlap =
-          place ||
-          person ||
-          drink ||
-          caption ||
-          url.searchParams.get("overlap") === "1";
-        const posted = place
-          ? await postPlaceRoundIfDue(env, Date.now(), { force: true })
-          : person
-            ? await postPersonMatchupIfDue(env, Date.now(), { force: true })
-            : drink
-              ? await postDrinkMatchupIfDue(env, Date.now(), { force: true })
-              : caption
-                ? await postCaptionContestIfDue(env, Date.now(), { force: true })
-                : await postMatchupIfDue(env, Date.now(), {
-                    force: true,
-                    overlap,
-                    // How many everyday matchups to put up, overriding
-                    // MATCHUPS_PER_SLOT. The simulation suite drives the draw
-                    // one matchup at a time and the batch three at a time, and
-                    // neither can restart the worker to change a var.
-                    count: batchCount(url.searchParams.get("count")),
-                  });
-        const kind = place
-          ? "place round"
-          : person
-            ? "person"
-            : drink
-              ? "drink"
-              : caption
-                ? "caption contest"
-                : "matchup";
+          Boolean(bonus) || url.searchParams.get("overlap") === "1";
+
+        const posted = bonus
+          ? await bonus.post()
+          : await postMatchupIfDue(env, Date.now(), {
+              force: true,
+              overlap,
+              // How many everyday matchups to put up, overriding
+              // MATCHUPS_PER_SLOT. The simulation suite drives the draw one
+              // matchup at a time and the batch three at a time, and neither
+              // can restart the worker to change a var.
+              count: batchCount(url.searchParams.get("count")),
+            });
+
         return Response.json({
           posted,
-          kind,
+          kind: bonus?.label ?? "matchup",
           reason: posted
             ? null
-            : place
-              ? "fewer than three places available to rank, or too many of them one person's"
-              : person
-                ? "fewer than two people in the catalog, only one person's photographs, or both are already live"
-                : drink
-                  ? "fewer than two drinks in the catalog, only one person's drinks, or both are already live"
-                  : caption
-                    ? "a contest is already live, or there is nothing in the ingredient/pet/document/screenshot/other categories to draw"
-                    : overlap
-                      ? "no pair could be drawn"
-                      : "the slot's matchups are already open, or no pair could be drawn",
+            : (bonus?.reason ??
+              (overlap
+                ? "no pair could be drawn"
+                : "the slot's matchups are already open, or no pair could be drawn")),
         });
       } catch (error) {
         const reason = error instanceof Error ? error.message : String(error);
@@ -330,6 +356,21 @@ export default {
       await postPlaceRoundIfDue(env, now);
     } catch (error) {
       await logToDiscord(env, `Place round failed: ${String(error)}`);
+    }
+
+    // The themed fives. Same machinery as the place round and the same
+    // reason they are separate calls: one that cannot draw a card must not
+    // stop the others trying.
+    try {
+      await postFoodRoundIfDue(env, now);
+    } catch (error) {
+      await logToDiscord(env, `Food round failed: ${String(error)}`);
+    }
+
+    try {
+      await postDrinkRoundIfDue(env, now);
+    } catch (error) {
+      await logToDiscord(env, `Drink round failed: ${String(error)}`);
     }
 
     try {

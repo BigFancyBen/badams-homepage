@@ -96,11 +96,38 @@ export async function editMessage(
 /**
  * Only ever allow the Tasters role to be pinged. A dish caption containing
  * `@everyone` gets carried into our own message text otherwise.
+ *
+ * `replied_user` is here for the result posts, which reply to the round they
+ * are the result of. Discord treats a reply as a mention of the author it
+ * replies to, and every one of those is the bot replying to itself — harmless,
+ * but it puts a mention chip on a message that has no business carrying one.
  */
 export function allowedMentions(env: Env) {
   return env.TASTER_ROLE_ID
-    ? { parse: [], roles: [env.TASTER_ROLE_ID] }
-    : { parse: [] };
+    ? { parse: [], roles: [env.TASTER_ROLE_ID], replied_user: false }
+    : { parse: [], replied_user: false };
+}
+
+/** Jump link to any message in the game's channel. */
+export function messageUrl(env: Env, messageId: string): string {
+  return `https://discord.com/channels/${env.DISCORD_GUILD_ID}/${env.DISCORD_CHANNEL_ID}/${messageId}`;
+}
+
+/**
+ * Posts a message as a reply to another one. Spread into a postMessage payload.
+ *
+ * The result of a round replies to the card it is the result of, which is how
+ * the two stay tied together once they are separate messages: Discord draws the
+ * quoted line above the reply and makes it a jump link, so the way back up to
+ * the photographs costs nothing to build and nothing to maintain.
+ *
+ * `fail_if_not_exists` is off because a deleted card must not take the result
+ * down with it — without it Discord rejects the whole post.
+ */
+export function replyTo(messageId: string | null | undefined) {
+  return messageId
+    ? { message_reference: { message_id: messageId, fail_if_not_exists: false } }
+    : {};
 }
 
 /**
@@ -109,7 +136,7 @@ export function allowedMentions(env: Env) {
  * cooked it.
  */
 export function sourceLink(env: Env, dish: Dish, label: string): string {
-  return `[${label}](https://discord.com/channels/${env.DISCORD_GUILD_ID}/${env.DISCORD_CHANNEL_ID}/${dish.discord_message_id})`;
+  return `[${label}](${messageUrl(env, dish.discord_message_id)})`;
 }
 
 /**
@@ -131,10 +158,9 @@ const MAX_LOG_LENGTH = 3800;
 /**
  * Who voted for what, as a second embed under the result card.
  *
- * It goes on the same message the close path already edits, which is why it is
- * an embed and not a follow-up post or a thread: no extra API call, no extra
- * permission, no second message in the channel, and it renders below the card
- * so the card stays the headline.
+ * It rides on the result post rather than getting one of its own — an embed
+ * below the card, so the card stays the headline and the argument is one scroll
+ * under it. The close already sends that message; the log costs nothing extra.
  *
  * This is a deliberate reversal of the secrecy the vote buttons were chosen
  * for. That was about the tally being invisible *while a round runs*, so
