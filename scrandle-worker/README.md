@@ -11,10 +11,10 @@ voter ranks them, in `rounds.ts` — its own tables, its own close path, the
 same Elo underneath. The caption contest is in `contests.ts` and is the odd
 one out: players write rather than judge, and nothing gets a rating.
 
-Seven slots. Cooking twice a day at 9am and 9pm, drinks at happy hour as often
-as there is drink to post, places ranked on Monday, people on Tuesday, five of
-one kind of plate on Wednesday, five of one kind of drink on Friday, and the
-caption contest across the weekend on everything left over.
+Seven slots. Cooking three matchups at 9am, all open for a full day, drinks at
+happy hour as often as there is drink to post, places ranked on Monday, people
+on Tuesday, five of one kind of plate on Wednesday, five of one kind of drink
+on Friday, and the caption contest across the weekend on everything left over.
 
 The two Wednesday-and-Friday fives are *themed*: five pastas, five steaks,
 five beers. Ranking five things asks a question a pair does not, and it only
@@ -282,11 +282,30 @@ npm run dev:local
 npm run test:matchups 25
 ```
 
+If you have more than one worktree of this repo — and you probably do — the
+ports collide, and the failure is quiet rather than loud: the second checkout's
+requests go to the first one's worker, which is running different code against
+a different database, and you spend an hour reading a diff that was never the
+problem. Both ends override:
+
+```bash
+MOCK_DISCORD_PORT=9931 npm run mock:discord
+npx wrangler dev --local --config wrangler.test.toml --port 8842
+SCRANDLE_WORKER_URL=http://127.0.0.1:8842 npm run test:matchups 25
+```
+
+with `DISCORD_API_BASE` in `.dev.vars` pointed at the mock's port. `wrangler
+dev` also leaves `workerd.exe` running after the parent is killed, so check
+nothing is still holding the port before blaming the code.
+
 It drives each round through `/admin/post-matchup` and `/admin/close-matchup`
 rather than the cron, so it needs `BACKFILL_SECRET` in `.dev.vars` (the value
 from `.dev.vars.example` is what it assumes). Forcing is deliberate: the cron
 only posts on a named hour, so a cron-driven run posts nothing at all unless
-you happen to start it at 15:00 or 03:00 UTC. The posting schedule has its own
+you happen to start it at 15:00 UTC. It drives the draw with `?count=1` and the
+batch with `?count=3`, which override `MATCHUPS_PER_SLOT` for that one call —
+the suite cannot restart the worker to change a var, and the draw invariants
+want one matchup a round. The posting schedule has its own
 suite — `npm run test:schedule`, which also covers the drink cadence — and this
 one is about the draw. Ingest has a third, `npm run test:ingest`, covering the
 batching rule that keeps the cursor on a message boundary and the D1 write
@@ -581,24 +600,49 @@ why not.
   elapsed time. An elapsed-time floor has the same cycle-skipping failure: set
   near the cadence, it blocks the scheduled post whenever the previous one was
   early.
-- **Cron hours are UTC and ignore DST.** `POST_HOURS_UTC = "15,3"` is 9am/9pm
-  Mountain under MDT and 8am/8pm under MST — shift to `"16,4"` in November.
+- **Cron hours are UTC and ignore DST.** `POST_HOURS_UTC = "15"` is 9am
+  Mountain under MDT and 8am under MST — shift to `"16"` in November.
   `PLACE_HOUR_UTC`, `PERSON_HOUR_UTC`, `DRINK_HOUR_UTC` and `CAPTION_HOUR_UTC`
   are the same story and need shifting with it. The clock lives entirely in these vars: the cron stays broad and
   UTC. It ticks on the hour and at `:11`, and `:11` is the only reason the
   second entry exists — the person bonus fires at 11:11am, and an hourly cron
   cannot reach that minute on its own.
-- **One matchup at a time**, with a single exception. Posting refuses while
-  anything is open, even when forced, because two live matchups split the
-  vote. The exception is a bonus: `?overlap=1` on `/admin/post-matchup`, and
-  the place, person and drink slots, which are meant to run beside the
-  ordinary one. Closing already handles more than one being open, and a vote
-  carries its matchup id on the button, so nothing else needs to know.
-  "Open" here means an open *food* matchup, and that word is load-bearing:
-  while it counted drinks, a live drink matchup stood in front of the next
-  cooking slot and skipped it — the same cycle-skipping bug that closing on
-  the schedule was written to fix, arriving from a new direction.
-- **The 9am and 9pm posts are cooking, and only cooking.** The everyday draw
+- **`MATCHUPS_PER_SLOT` matchups at a time**, with a single exception. The
+  slot posts that many together and then refuses, even when forced, because a
+  fourth live matchup on a slot of three splits the vote the same way a second
+  did on a slot of one. The cap counts what is open rather than what was
+  posted, so a batch that could not close — a failed tick, a D1 blip — is
+  topped back up to three next time instead of being stacked on.
+
+  The exception is a bonus: `?overlap=1` on `/admin/post-matchup`, and the
+  place, person and drink slots, which are meant to run beside the ordinary
+  ones. Closing already handles several being open, and a vote carries its
+  matchup id on the button, so nothing else needs to know. "Open" here means an
+  open *food* matchup, and that word is load-bearing: while it counted drinks,
+  a live drink matchup stood in front of the next cooking slot and skipped it —
+  the same cycle-skipping bug that closing on the schedule was written to fix,
+  arriving from a new direction.
+- **The batch is one hour, not one an hour.** Three matchups go up together at
+  9am rather than at three times of day, because a matchup closes when the next
+  posting hour comes round: spreading them would cut every window to a third of
+  a day and make voting a matter of being in the channel at the right moment.
+  Together on one hour, each of the three stays open until 9am tomorrow.
+
+  The number is a decision about the backlog, and it is worth restating why.
+  577 food photographs, 539 of which have never been on the board, refilling at
+  about one a day. The Wednesday five comes out of the same pool, so two
+  matchups a day spends 4.7 photographs and gains one — a runway of about five
+  months before anything repeats. Three spends 6.7 and makes it three months.
+  That is a real cost and worth paying: at two a day a photograph gets 1.9
+  outings a year, and a rating built on that is noise. Nothing here runs out —
+  the draw orders by `matches_played`, so an empty backlog simply means a second
+  lap — and the second lap is where the standings start to mean something.
+
+  Turnout is the thing to watch rather than the catalog. Eight people vote,
+  matchups average six votes each, and on 30 August six went up in one day and
+  every one of them still took seven votes. If that average starts sliding,
+  this is the number to turn down.
+- **The 9am posts are cooking, and only cooking.** The everyday draw
   is fixed to `food`. Everything else the classifier labels — `drink`,
   `place`, `person` — is drawn on a slot of its own: a five-photo place
   ranking round on `PLACE_WEEKDAY` (Monday noon by default), person against

@@ -12,6 +12,8 @@ export interface Env {
   VOTE_WINDOW_HOURS: string;
   /** Comma-separated UTC hours to post on. Empty means any hour. */
   POST_HOURS_UTC: string;
+  /** Everyday matchups posted per named hour. Clamped to 1-10; default 1. */
+  MATCHUPS_PER_SLOT: string;
   STANDINGS_WEEKDAY: string;
   STANDINGS_HOUR_UTC: string;
   /** Weekdays for the place round, comma-separated, 0 = Sunday. Empty/-1 off. */

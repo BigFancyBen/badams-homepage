@@ -27,6 +27,26 @@ export function parseWeekdays(raw: string | undefined): number[] {
 }
 
 /**
+ * How many everyday matchups one posting slot puts up.
+ *
+ * The slot used to mean one matchup by definition, and the cadence was changed
+ * by adding hours to POST_HOURS_UTC. That stops working once you want more
+ * cooking on the board than there are sensible hours to put it at: the pool is
+ * hundreds deep and only refills at about one photograph a day, so the useful
+ * range is three or four a day, and spreading those across the evening buys
+ * nothing but shorter vote windows. Posting them together at one hour keeps the
+ * window a full day and gives people one thing to sit down to.
+ *
+ * Clamped to at least one, and to at most ten — a guard against a typo rather
+ * than a policy. Ten a day would sweep the entire food catalog inside a month.
+ */
+export function parsePerSlot(raw: string | undefined): number {
+  const perSlot = Number((raw || "").trim());
+  if (!Number.isInteger(perSlot) || perSlot < 1) return 1;
+  return Math.min(perSlot, 10);
+}
+
+/**
  * The next scheduled posting time strictly after `now`.
  *
  * This is what a matchup closes on, rather than `now + VOTE_WINDOW_HOURS`.

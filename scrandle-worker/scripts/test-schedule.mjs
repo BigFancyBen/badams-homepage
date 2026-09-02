@@ -16,6 +16,7 @@ import { readFileSync } from "node:fs";
 import {
   drinkCadence,
   nextPostTime,
+  parsePerSlot,
   parsePostHours,
   parseWeekdays,
   postSlotKey,
@@ -46,6 +47,35 @@ check("sorts and dedupes", HOURS, [3, 15]);
 check("drops junk and out-of-range", parsePostHours("15, x, 99, -1, 3, 3"), [3, 15]);
 check("empty string", parsePostHours(""), []);
 check("undefined", parsePostHours(undefined), []);
+
+console.log("\nparsePerSlot");
+check("the configured batch", parsePerSlot("3"), 3);
+check("one is one", parsePerSlot("1"), 1);
+check("unset means the old behaviour", parsePerSlot(undefined), 1);
+check("empty means the old behaviour", parsePerSlot(""), 1);
+check("whitespace is trimmed", parsePerSlot(" 3 "), 3);
+check("junk means the old behaviour", parsePerSlot("three"), 1);
+check("zero would post nothing, so it does not", parsePerSlot("0"), 1);
+check("negatives likewise", parsePerSlot("-2"), 1);
+check("a fraction is not a count", parsePerSlot("2.5"), 1);
+check("a typo cannot empty the catalog", parsePerSlot("300"), 10);
+
+// The live schedule: one named hour, three matchups on it, each open until the
+// same hour tomorrow. The point of moving the cadence off POST_HOURS_UTC is
+// that adding matchups no longer shortens the window, so that is what to
+// assert — under the old two-hour schedule these would have been 12 apart.
+console.log("\nthe 9am batch");
+const NINE_AM = parsePostHours("15");
+check("one named hour a day", NINE_AM, [15]);
+const posted = Date.parse("2026-09-02T15:00:00.4Z");
+const batchCloses = nextPostTime(NINE_AM, posted, FALLBACK);
+check("the batch closes on tomorrow's slot", iso(batchCloses), "2026-09-03T15:00:00Z");
+check("which is a full day of voting", Math.round((batchCloses - posted) / HOUR), 24);
+check(
+  "three matchups posted together are one slot, not three",
+  new Set([1, 2, 3].map((i) => postSlotKey(posted + i))).size,
+  1
+);
 
 console.log("\nnextPostTime");
 check(

@@ -335,7 +335,7 @@ export const PHASES: Phase[] = [
     blocks: [
       {
         kind: "p",
-        text: "Same hourly tick. Posts only when nothing is open and the current UTC hour is one of `POST_HOURS_UTC`, at most once per hour. A matchup closes when the next one is due rather than a fixed span after it went up, so a post made off-schedule still hands its slot back on time. **Pair selection:**",
+        text: "Same hourly tick. On a named hour from `POST_HOURS_UTC` the slot posts `MATCHUPS_PER_SLOT` matchups together — three, at 9am — and then refuses until they close. A matchup closes when the next posting hour comes round rather than a fixed span after it went up, so with one hour a day that is a full day of voting, and a post made off-schedule still hands its slot back on time. The cap counts what is open rather than what went out, so a batch that failed to close is topped back up rather than stacked on. **Pair selection:**",
       },
       {
         kind: "ol",
@@ -357,7 +357,11 @@ export const PHASES: Phase[] = [
       },
       {
         kind: "p",
-        text: "The two daily posts are cooking and nothing else. Drinks used to share them, and because both halves of a pair have to match category, that meant the 9am post was a food matchup only when the draw happened to land on food — at a rate nobody chose. Drinks, places and people each got a slot of their own instead.",
+        text: "The morning's posts are cooking and nothing else. Drinks used to share them, and because both halves of a pair have to match category, that meant the 9am post was a food matchup only when the draw happened to land on food — at a rate nobody chose. Drinks, places and people each got a slot of their own instead.",
+      },
+      {
+        kind: "p",
+        text: "Three a morning rather than two a day is a decision about the backlog. 577 food photographs, 539 never on the board, refilling at about one a day — and the Wednesday five comes out of the same pool. Two matchups a day spends 4.7 photographs and gains one, so the unplayed pile lasts about five months; three spends 6.7 and makes it three. Worth paying — at two a day a photograph gets 1.9 outings a year and a rating built on that is noise. Nothing runs out either way, because the draw orders by play count and an empty backlog just means a second lap.",
       },
       {
         kind: "p",
@@ -501,6 +505,7 @@ export const PLAIN_VARS = [
   "R2_PUBLIC_BASE",
   "VOTE_WINDOW_HOURS",
   "POST_HOURS_UTC",
+  "MATCHUPS_PER_SLOT",
   "STANDINGS_WEEKDAY",
   "STANDINGS_HOUR_UTC",
 ];
