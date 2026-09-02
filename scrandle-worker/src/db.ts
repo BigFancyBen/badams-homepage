@@ -683,3 +683,74 @@ export async function getContestBallots(
   }
   return [...byVoter.values()];
 }
+
+// ── ephemeral replies ──────────────────────────────────────────────
+// Where somebody's private reply to a message's buttons is, so the next click
+// on those buttons can edit it instead of posting another one. See migration
+// 0009 for why the token has to be stored at all.
+
+export interface EphemeralReply {
+  application_id: string;
+  token: string;
+  created_at: number;
+}
+
+export async function getEphemeralReply(
+  env: Env,
+  messageId: string,
+  userId: string
+): Promise<EphemeralReply | null> {
+  const row = await env.DB.prepare(
+    "SELECT application_id, token, created_at FROM ephemeral_replies " +
+      "WHERE message_id = ? AND user_discord_id = ?"
+  )
+    .bind(messageId, userId)
+    .first<EphemeralReply>();
+  return row ?? null;
+}
+
+/**
+ * Records the reply we are about to send as the one to edit next time.
+ *
+ * Retried: an upsert of a known value. One row per person per message, so a
+ * second reply on the same buttons replaces the address of the first — which
+ * is right, because by then the first is the one that got edited or the one
+ * that went away.
+ */
+export async function rememberEphemeralReply(
+  env: Env,
+  messageId: string,
+  userId: string,
+  applicationId: string,
+  token: string,
+  now: number
+): Promise<void> {
+  await retryWrite(() =>
+    env.DB.prepare(
+      "INSERT INTO ephemeral_replies " +
+        "(message_id, user_discord_id, application_id, token, created_at) " +
+        "VALUES (?, ?, ?, ?, ?) " +
+        "ON CONFLICT (message_id, user_discord_id) DO UPDATE SET " +
+        "application_id = excluded.application_id, " +
+        "token = excluded.token, created_at = excluded.created_at"
+    )
+      .bind(messageId, userId, applicationId, token, now)
+      .run()
+  );
+}
+
+/**
+ * Drops the tokens that have aged out. Discord stops honouring one fifteen
+ * minutes after the interaction, so a row older than that is dead weight and a
+ * stored credential nobody needs any more.
+ */
+export async function forgetStaleEphemeralReplies(
+  env: Env,
+  before: number
+): Promise<void> {
+  await retryWrite(() =>
+    env.DB.prepare("DELETE FROM ephemeral_replies WHERE created_at < ?")
+      .bind(before)
+      .run()
+  );
+}
