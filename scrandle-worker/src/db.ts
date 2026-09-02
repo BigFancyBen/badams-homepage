@@ -109,12 +109,21 @@ export async function getDish(env: Env, id: number): Promise<Dish | null> {
  * the lot: an open drink matchup would have stood in front of the next cooking
  * matchup and skipped it.
  */
-export async function getOpenStandardMatchup(env: Env): Promise<Matchup | null> {
-  return env.DB.prepare(
-    "SELECT m.* FROM matchups m JOIN dishes d ON d.id = m.dish_a_id " +
-      "WHERE m.status = 'open' AND d.category = 'food' " +
-      "ORDER BY m.created_at ASC LIMIT 1"
-  ).first<Matchup>();
+/**
+ * How many everyday matchups are open right now.
+ *
+ * A count rather than the first row, because the slot posts several at once and
+ * the question the caller asks is "how many more should go up", not "is one
+ * running". Food category is what makes a matchup an everyday one: the drink,
+ * person and place slots draw categories of their own and are meant to run
+ * alongside, so they are not in here.
+ */
+export async function countOpenStandardMatchups(env: Env): Promise<number> {
+  const row = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM matchups m JOIN dishes d ON d.id = m.dish_a_id " +
+      "WHERE m.status = 'open' AND d.category = 'food'"
+  ).first<{ n: number }>();
+  return row?.n ?? 0;
 }
 
 /**

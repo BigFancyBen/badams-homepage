@@ -13,9 +13,10 @@
  *
  *   npm run test:contests
  */
-const API = "http://127.0.0.1:8787/cdn-cgi/local/explorer/api";
 const DB = "00000000-0000-0000-0000-000000000000";
-const WORKER = "http://127.0.0.1:8787";
+// Overridable for the same reason as the mock's port: parallel worktrees.
+const WORKER = process.env.SCRANDLE_WORKER_URL ?? "http://127.0.0.1:8787";
+const API = `${WORKER}/cdn-cgi/local/explorer/api`;
 // From .dev.vars — see the local testing section of the README.
 const SECRET = process.env.BACKFILL_SECRET ?? "dev-only-backfill-secret";
 

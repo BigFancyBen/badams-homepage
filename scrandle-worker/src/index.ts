@@ -23,6 +23,16 @@ import {
 import type { Env, Interaction } from "./types";
 import { verifyDiscordRequest } from "./verify";
 
+/**
+ * `?count=` on the manual post route: a positive integer, or undefined to let
+ * MATCHUPS_PER_SLOT decide. Junk is ignored rather than rejected — this is a
+ * hand-driven route, and the useful answer to a typo is the configured batch.
+ */
+function batchCount(raw: string | null): number | undefined {
+  const count = Number(raw);
+  return raw !== null && Number.isInteger(count) && count > 0 ? count : undefined;
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -97,7 +107,15 @@ export default {
               ? await postDrinkMatchupIfDue(env, Date.now(), { force: true })
               : caption
                 ? await postCaptionContestIfDue(env, Date.now(), { force: true })
-                : await postMatchupIfDue(env, Date.now(), { force: true, overlap });
+                : await postMatchupIfDue(env, Date.now(), {
+                    force: true,
+                    overlap,
+                    // How many everyday matchups to put up, overriding
+                    // MATCHUPS_PER_SLOT. The simulation suite drives the draw
+                    // one matchup at a time and the batch three at a time, and
+                    // neither can restart the worker to change a var.
+                    count: batchCount(url.searchParams.get("count")),
+                  });
         const kind = place
           ? "place round"
           : person
@@ -122,7 +140,7 @@ export default {
                     ? "a contest is already live, or there is nothing in the ingredient/pet/document/screenshot/other categories to draw"
                     : overlap
                       ? "no pair could be drawn"
-                      : "a matchup is already open, or no pair could be drawn",
+                      : "the slot's matchups are already open, or no pair could be drawn",
         });
       } catch (error) {
         const reason = error instanceof Error ? error.message : String(error);

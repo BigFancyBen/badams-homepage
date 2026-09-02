@@ -11,12 +11,12 @@ import {
 } from "./discord";
 import {
   chefStandings,
+  countOpenStandardMatchups,
   drinkPool,
   getDish,
   getDueMatchups,
   getMatchup,
   getMatchupByMessage,
-  getOpenStandardMatchup,
   getOpenMatchups,
   getState,
   heldDishIds,
@@ -37,6 +37,7 @@ import { pickPair } from "./matchmaking";
 import {
   drinkCadence,
   nextPostTime,
+  parsePerSlot,
   parsePostHours,
   parseWeekdays,
   postSlotKey,
@@ -119,74 +120,130 @@ ${links}` : links,
 }
 
 /**
- * Posts at most one matchup per tick, and only when nothing is still open.
- * Deliberately does not ping the Tasters role: a ping tied to a matchup would
- * correlate with new dishes entering the pool, which is a tell.
+ * Posts the slot's everyday matchups: `MATCHUPS_PER_SLOT` of them, together, on
+ * a named hour. Deliberately does not ping the Tasters role — a ping tied to a
+ * matchup would correlate with new dishes entering the pool, which is a tell.
+ *
+ * Several at once rather than several times a day. A matchup closes when the
+ * next posting hour comes round, so spreading the day's cooking across three
+ * hours would cut every vote window to a third; posting the three together at
+ * one hour leaves each of them open until the same hour tomorrow. Nobody has to
+ * be in the channel at the right moment to get a vote in.
  */
 export async function postMatchupIfDue(
   env: Env,
   now: number,
-  { force = false, overlap = false }: { force?: boolean; overlap?: boolean } = {}
+  {
+    force = false,
+    overlap = false,
+    count,
+  }: { force?: boolean; overlap?: boolean; count?: number } = {}
 ): Promise<boolean> {
-  // Never post over an everyday matchup that is still open, even when forced —
-  // two live everyday matchups split the vote. `overlap` is the single
-  // deliberate exception: an admin-triggered bonus running beside the scheduled
-  // one. The close path already iterates every open matchup and votes are keyed
-  // to a matchup id on the button, so the only cost is the split attention.
-  //
-  // A bonus deliberately does not count here. It is posted to run alongside the
-  // everyday matchup, and its window is a flat 24 hours rather than the next
-  // posting hour — so blocking on it skipped every ordinary slot for the whole
-  // day after each bonus, in both directions of a rule meant to apply in one.
-  //
-  // Excluding live photographs is now unconditional. It used to be done only on
-  // the overlap path, which was safe only because returning early was the sole
-  // other way past this point. Now that a bonus can be open here, the draw has
-  // to skip what the bonus is holding — ranking rounds and caption contests
-  // alike. Nothing pairs the pools today — they are disjoint categories — but
-  // that is a property of the current pools, not a rule anything enforces, and
-  // it costs one read an hour to not rely on it.
-  const liveDishIds: number[] = await heldDishIds(env);
-  for (const live of await getOpenMatchups(env)) {
-    liveDishIds.push(live.dish_a_id, live.dish_b_id);
-  }
-
-  if (!overlap && (await getOpenStandardMatchup(env))) return false;
-
   const hours = parsePostHours(env.POST_HOURS_UTC);
 
   if (!force) {
     // Post on named hours rather than "N hours since the last one". Elapsed
     // time drifts: one late post pushes every post after it, and within days
     // the matchup is landing at an arbitrary hour. Fixed hours stay put.
+    //
+    // Checked before anything reads the database, so the twenty-three ticks a
+    // day that are not a posting hour cost nothing.
     if (hours.length > 0 && !hours.includes(new Date(now).getUTCHours())) {
       return false;
     }
 
-    // One post per named hour, so a retry inside the same hour cannot
+    // One batch per named hour, so a retry inside the same hour cannot
     // double-post. Deliberately not an elapsed-time floor — see postSlotKey.
     if ((await getState(env, "last_matchup_slot")) === postSlotKey(now)) {
       return false;
     }
   }
 
-  const pair = await pickPair(env, { exclude: liveDishIds });
-  if (!pair) return false;
+  // What the slot owes, less what is somehow still open. The old rule was
+  // "never post over an open everyday matchup", which is this rule with a slot
+  // of one: two live everyday matchups split the vote, and three do not so long
+  // as three is the number that was meant to be there. Yesterday's batch closes
+  // earlier in the same tick, so in the ordinary case this subtracts nothing —
+  // it matters when a close failed, and then it posts the shortfall rather than
+  // stacking a fresh batch on top of a stuck one.
+  //
+  // A bonus is one matchup and ignores the cap outright: it is posted by hand
+  // to run beside the scheduled batch, and its window is a flat span rather
+  // than the next posting hour, so counting it in would have the day's slot
+  // shrink by one every time somebody exercised the admin route.
+  //
+  // `count` is the admin route asking for a batch size of its own. It replaces
+  // the configured one but not the cap, so a hand-driven post still cannot
+  // stack matchups on top of a full slot.
+  const perSlot = count ?? parsePerSlot(env.MATCHUPS_PER_SLOT);
+  const wanted = overlap ? 1 : perSlot - (await countOpenStandardMatchups(env));
+  if (wanted < 1) return false;
 
-  // Closes when the next matchup is due, not a fixed span from right now. A
-  // forced post at an odd hour therefore gets a short window rather than one
-  // that runs past the next scheduled slot and blocks it.
+  // Every matchup in a batch closes at the same moment: the next posting hour,
+  // not a fixed span from right now. With one hour a day that is a full day of
+  // voting, and a forced post at an odd hour still hands its slot back on time
+  // rather than running past the next scheduled one and blocking it.
   const closesAt = nextPostTime(
     hours,
     now,
     Number(env.VOTE_WINDOW_HOURS || "24") * HOUR
   );
 
-  await createAndPost(env, pair, now, closesAt);
+  // Excluding live photographs is unconditional, and the list grows as the
+  // batch is drawn — the same photograph in two of this morning's three
+  // matchups would be as indefensible as it appearing twice across two days.
+  // Ranking rounds and caption contests are in here for the same reason.
+  const liveDishIds: number[] = await heldDishIds(env);
+  for (const live of await getOpenMatchups(env)) {
+    liveDishIds.push(live.dish_a_id, live.dish_b_id);
+  }
+
+  let posted = 0;
+  let failure: unknown = null;
+
+  for (let i = 0; i < wanted; i++) {
+    const pair = await pickPair(env, { exclude: liveDishIds });
+    // No pair left to draw — a thin category, or the batch has already taken
+    // everything it could pair. Whatever went up stays up.
+    if (!pair) break;
+
+    try {
+      await createAndPost(env, pair, now, closesAt);
+    } catch (error) {
+      // Stop rather than carry on. Whatever broke this one — Discord refusing
+      // the message, D1 refusing the row — will break the next as well, and
+      // three copies of the same failure help nobody.
+      failure = error;
+      break;
+    }
+
+    liveDishIds.push(pair.a.id, pair.b.id);
+    posted++;
+  }
+
+  // A batch that got part of the way is worth keeping: the matchups that went
+  // out are live and votable, so the slot is spent and the shortfall is a log
+  // line rather than a reason to throw away what worked.
+  if (posted > 0 && failure) {
+    await logToDiscord(
+      env,
+      `Posted ${posted} of ${wanted} matchups; the rest failed: ${String(failure)}`
+    );
+  }
+
+  // Nothing went out at all. If something broke, say so — swallowing it here
+  // would report an empty slot as "no pair could be drawn" and hide a Discord
+  // or D1 outage behind a quiet day. Otherwise the draw simply came up empty,
+  // and the slot is not spent: leave the marker alone so a later tick on the
+  // same named hour can try again.
+  if (posted === 0) {
+    if (failure) throw failure;
+    return false;
+  }
 
   // A bonus matchup does not claim the hour's slot. Marking it would make an
   // overlapping post fired during a named hour swallow that hour's scheduled
-  // matchup, which is the exact cycle-skipping this flag exists to avoid.
+  // batch, which is the exact cycle-skipping this flag exists to avoid.
   if (!overlap) await setState(env, "last_matchup_slot", postSlotKey(now));
 
   return true;

@@ -6,6 +6,11 @@ import { writeFileSync } from "node:fs";
 const sent = [];
 let nextId = 1000;
 
+// Port is overridable so two worktrees can run the harness at once — several
+// checkouts of this repo on one machine is the normal case, and a hardcoded
+// port means the second one silently talks to the first one's mock.
+const PORT = Number(process.env.MOCK_DISCORD_PORT ?? 9911);
+
 createServer((req, res) => {
   let body = "";
   req.on("data", (c) => (body += c));
@@ -28,4 +33,4 @@ createServer((req, res) => {
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end("[]");
   });
-}).listen(9911, () => console.log("mock discord on :9911"));
+}).listen(PORT, () => console.log(`mock discord on :${PORT}`));
