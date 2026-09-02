@@ -6,7 +6,9 @@ import {
   editMessage,
   escapeMarkdown,
   logToDiscord,
+  messageUrl,
   postMessage,
+  replyTo,
   sourceLink,
 } from "./discord";
 import {
@@ -374,9 +376,11 @@ async function closeOne(env: Env, matchup: Matchup, now: number): Promise<void> 
   if (votes.a + votes.b === 0) {
     await closeMatchup.run();
 
-    // Still strip the buttons. Leaving them live on a closed matchup means the
-    // card looks votable forever, and anyone who clicks gets told voting has
-    // closed by a message that gives no sign of it.
+    // Edited in place, and no result post: there is nothing here to reveal,
+    // and a fresh message in the channel to announce that nobody voted would
+    // be the loudest thing the bot did all day. Still strip the buttons — left
+    // live on a closed matchup the card looks votable forever, and anyone who
+    // clicks gets told voting has closed by a message that gives no sign of it.
     if (matchup.message_id) {
       await editMessage(env, matchup.message_id, {
         content: `**Matchup #${matchup.id} — closed.** Nobody voted.`,
@@ -437,25 +441,69 @@ async function closeOne(env: Env, matchup: Matchup, now: number): Promise<void> 
 
   const log = await voteLog(env, matchup, dishA, dishB);
 
-  if (matchup.message_id) {
-    await editMessage(env, matchup.message_id, {
-      content:
-        `**Matchup #${matchup.id} — closed.** ${winner}\n` +
-        `${total} ${total === 1 ? "vote" : "votes"}.\n` +
-        `${sourceLink(env, dishA, "#1")} · ${sourceLink(env, dishB, "#2")}`,
-      embeds: [
-        ...(image ? [{ color: WIN, image: { url: image } }] : []),
-        log,
-      ],
-      components: [],
-      allowed_mentions: allowedMentions(env),
-    });
-  }
+  await postResult(env, matchup, {
+    content:
+      `**Matchup #${matchup.id} — the result.** ${winner}\n` +
+      `${total} ${total === 1 ? "vote" : "votes"}.\n` +
+      `${sourceLink(env, dishA, "#1")} · ${sourceLink(env, dishB, "#2")}`,
+    embeds: [...(image ? [{ color: WIN, image: { url: image } }] : []), log],
+  });
+}
+
+/**
+ * Sends the reveal as a message of its own and turns the card above it into a
+ * pointer at it.
+ *
+ * The result used to be an edit to the card people had voted on. A vote window
+ * is a day long, so by the time one shuts, that card is a day of channel
+ * traffic above the fold — and Discord shows nothing at all for an edit. The
+ * reveal landed silently in the middle of the backlog, and only the people who
+ * thought to scroll up ever saw who won. A new post is the only thing Discord
+ * will actually put in front of anybody.
+ *
+ * It replies to the card, which is what keeps the two tied together in both
+ * directions: Discord's reply header jumps up to the photographs, and the edit
+ * below jumps back down to the result.
+ *
+ * The order matters. The row is closed by the time this runs and cron does not
+ * retry, so a failure here is a result nobody ever sees — the post goes first
+ * for that reason. The edit is signposting, and the buttons it strips are
+ * already inert: a click on a closed matchup is turned away by the interaction
+ * handler, which reads the row rather than the message.
+ */
+async function postResult(
+  env: Env,
+  matchup: Matchup,
+  body: { content: string; embeds: unknown[] }
+): Promise<void> {
+  const result = await postMessage(env, {
+    ...body,
+    allowed_mentions: allowedMentions(env),
+    ...replyTo(matchup.message_id),
+  });
+
+  await env.DB.prepare("UPDATE matchups SET result_message_id = ? WHERE id = ?")
+    .bind(result.id, matchup.id)
+    .run();
+
+  if (!matchup.message_id) return;
+
+  // Content and components only. A PATCH leaves out what it does not name, so
+  // the matchup card itself stays where it is — the result post carries its own
+  // card, and blanking this one would leave a bare line of text where the
+  // photographs people are being pointed away from used to be.
+  await editMessage(env, matchup.message_id, {
+    content:
+      `**Matchup #${matchup.id} — closed.** ` +
+      `[The result is in.](${messageUrl(env, result.id)})`,
+    components: [],
+    allowed_mentions: allowedMentions(env),
+  });
 }
 
 /**
  * The two sides of a closed matchup with the names behind them, as an embed
- * that rides along on the close edit. Names rather than mentions: a mention
+ * that rides along on the result post. Names rather than mentions: a mention
  * chip in a list of twenty is noise, and it would put the burden of not
  * pinging anyone entirely on allowed_mentions.
  */
@@ -554,7 +602,8 @@ export async function postStandingsIfDue(
 
 /**
  * Re-renders a matchup's card and puts it back on the message. Open matchups
- * get the matchup card, closed ones the result card.
+ * get the matchup card on the card post, closed ones the result card on the
+ * result post — two different messages since the reveal stopped being an edit.
  *
  * Every card now goes out proven, so this is for the ones that went out before
  * that was true — and for the rare round posted with no card at all. The
@@ -575,6 +624,11 @@ export async function repairCard(
   }
 
   const matchupId = matchup.id;
+
+  // Whichever message is currently showing the card. Closed matchups that
+  // predate the result post have no result message, and their card is still
+  // where it always was.
+  const cardMessage = matchup.result_message_id ?? matchup.message_id;
 
   const [dishA, dishB] = await Promise.all([
     getDish(env, matchup.dish_a_id),
@@ -631,7 +685,7 @@ export async function repairCard(
   // the vote buttons stay exactly as they are — but it *replaces* the embeds it
   // does name, so a closed matchup has to have its vote log rebuilt alongside
   // the card or the repair would quietly delete it.
-  await editMessage(env, matchup.message_id, {
+  await editMessage(env, cardMessage, {
     embeds: [
       { color: open ? ACCENT : WIN, image: { url: image } },
       ...(open ? [] : [await voteLog(env, matchup, dishA, dishB)]),

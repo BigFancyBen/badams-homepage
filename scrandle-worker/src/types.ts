@@ -80,6 +80,12 @@ export interface Matchup {
   dish_b_id: number;
   status: "open" | "closed";
   message_id: string | null;
+  /**
+   * The message the result went out as, which is a different one — see
+   * migration 0007. Null while the matchup is open, and on everything that
+   * closed before the result got a post of its own.
+   */
+  result_message_id: string | null;
   created_at: number;
   closes_at: number;
   closed_at: number | null;
@@ -100,6 +106,8 @@ export interface Round {
   category: string;
   status: "open" | "closed";
   message_id: string | null;
+  /** The message the result went out as. See `Matchup.result_message_id`. */
+  result_message_id: string | null;
   created_at: number;
   closes_at: number;
   closed_at: number | null;
@@ -136,6 +144,8 @@ export interface Contest {
   status: "writing" | "voting" | "closed";
   submit_message_id: string | null;
   vote_message_id: string | null;
+  /** The message the result went out as. See `Matchup.result_message_id`. */
+  result_message_id: string | null;
   created_at: number;
   writing_closes_at: number;
   voting_closes_at: number | null;

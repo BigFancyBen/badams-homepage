@@ -434,8 +434,10 @@ have to know which kind you are looking at.
 Puts a card back on a matchup that went out without one — or one posted before
 cards were proven, where Discord holds a failure it will never re-fetch. It
 re-renders, writes the copy under a stamped key, and edits only the embed, so
-the text and the vote buttons are untouched. Open matchups get the matchup
-card, closed ones the result card. It answers `{"repaired":true}`, or a reason
+the text and the vote buttons are untouched. Open matchups get the matchup card
+on the post they went out as; closed ones get the result card on the result
+post, which is a different message. Either link finds the round, so it does not
+matter which of the two you paste. It answers `{"repaired":true}`, or a reason
 why not.
 
 ## Behaviour notes
@@ -481,8 +483,9 @@ why not.
   full-size landscapes take seconds to rasterize where a pair of phone photos
   takes under one. A card is a megabyte or two, and at two or three a day that
   is a couple of gigabytes a year against R2's 10 GB free tier: `cards/` will
-  want sweeping eventually. Nothing reads a matchup card once its result card
-  has replaced it.
+  want sweeping eventually — but a sweep cannot simply drop the matchup cards
+  once the result cards exist, because the post people voted on keeps its card
+  and stays in the channel as the pointer at the result.
 - **A matchup with no card still posts.** If all three render attempts fail,
   the round goes out as jump links and vote buttons with no embed at all,
   rather than an embed pointing at nothing. It stays playable, the logs
@@ -502,11 +505,32 @@ why not.
   to stop bandwagoning, closing the round ends the reason for it, and who
   picked what is the part people actually want to argue about. Names rather
   than mentions, so nothing pings, and markdown in a username is escaped.
-- **The vote log rides on the edit that was already happening.** It is an embed
-  on the same message rather than a follow-up post or a thread, which costs no
-  extra API call, no extra permission and no second message in the channel. It
-  also means `/admin/repair-card` has to rebuild it: a PATCH replaces the
-  embeds it names, so sending only the card would quietly delete the log.
+- **The result goes out as a new message, not as an edit.** A vote window is a
+  day long, so by the time a round shuts, the card people voted on is a day of
+  channel traffic above the fold — and Discord shows nothing at all for an
+  edit. The reveal used to land silently in the middle of the backlog, and only
+  the people who thought to scroll up ever saw who won. The result now gets a
+  post of its own, replying to the card, and the card is edited down to a line
+  pointing at it: the reply header jumps up to the photographs, the pointer
+  jumps back down to the result. Every format does it — matchups, ranking
+  rounds, and the caption contest, which needed it most because its ballot was
+  already the second of two buried posts.
+  The post goes out before the edit. The row is closed by the time either runs
+  and cron does not retry, so a failure has to fall on the signposting rather
+  than on the reveal; the vote buttons the edit strips are inert anyway,
+  because a click is checked against the row and not the message. A round
+  nobody voted in is the one exception — it is edited in place and gets no
+  post, since there is nothing to reveal and a new message to say so would be
+  the loudest thing the bot did all day.
+- **The vote log rides on the result post.** It is a second embed under the
+  result card rather than a follow-up or a thread, which costs no extra API
+  call and no second message. It also means `/admin/repair-card` has to rebuild
+  it: a PATCH replaces the embeds it names, so sending only the card would
+  quietly delete the log.
+- **A closed round lives on two messages**, which is why `matchups`, `rounds`
+  and `contests` all carry a `result_message_id` (migration 0007). Repair edits
+  whichever one is currently showing the card, and falls back to the original
+  for rounds that closed before the result got a post of its own.
 - **The cursor advances only after a batch commits**, so a failed tick replays
   cleanly on the next hour. Cron does not retry.
 - **A matchup closes when the next one is due**, not a fixed span after it went

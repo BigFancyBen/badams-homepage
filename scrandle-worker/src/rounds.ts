@@ -6,7 +6,9 @@ import {
   editMessage,
   escapeMarkdown,
   logToDiscord,
+  messageUrl,
   postMessage,
+  replyTo,
   sourceLink,
 } from "./discord";
 import {
@@ -234,7 +236,9 @@ async function closeOne(env: Env, round: Round, now: number): Promise<void> {
 
   // A round nobody ranked is not a round played, for the same reason an
   // unvoted matchup is not: it would burn every photograph's unplayed status
-  // and skew the rotation with no rating information to show for it.
+  // and skew the rotation with no rating information to show for it. It gets
+  // no result post either — there is nothing to reveal, and a new message to
+  // say so would be louder than anything the round managed while it was open.
   if (ballots.length === 0) {
     await env.DB.prepare(
       "UPDATE rounds SET status = 'closed', closed_at = ? WHERE id = ?"
@@ -304,20 +308,34 @@ async function closeOne(env: Env, round: Round, now: number): Promise<void> {
     ballotLines(ballots, slotOf)
   );
 
+  const count = ballots.length;
+
+  // A message of its own rather than an edit to the ballot, for the reason
+  // spelled out over postResult in matchups.ts: a day-old card is a day of
+  // channel traffic above the fold, and Discord shows nothing for an edit.
+  const result = await postMessage(env, {
+    content:
+      `**Round #${round.id} — the result.** ` +
+      `${chef ? `**${escapeMarkdown(chef)}** takes it.` : "It is decided."}\n` +
+      `${count} ${count === 1 ? "ballot" : "ballots"}.\n` +
+      entries
+        .map((entry) => sourceLink(env, entry, `#${entry.slot}`))
+        .join(" · "),
+    embeds: [...(image ? [{ color: WIN, image: { url: image } }] : []), log],
+    allowed_mentions: allowedMentions(env),
+    ...replyTo(round.message_id),
+  });
+
+  await env.DB.prepare("UPDATE rounds SET result_message_id = ? WHERE id = ?")
+    .bind(result.id, round.id)
+    .run();
+
   if (round.message_id) {
-    const count = ballots.length;
+    // Content and components only, so the ballot card stays under the pointer.
     await editMessage(env, round.message_id, {
       content:
         `**Round #${round.id} — closed.** ` +
-        `${chef ? `**${escapeMarkdown(chef)}** takes it.` : "It is decided."}\n` +
-        `${count} ${count === 1 ? "ballot" : "ballots"}.\n` +
-        entries
-          .map((entry) => sourceLink(env, entry, `#${entry.slot}`))
-          .join(" · "),
-      embeds: [
-        ...(image ? [{ color: WIN, image: { url: image } }] : []),
-        log,
-      ],
+        `[The result is in.](${messageUrl(env, result.id)})`,
       components: [],
       allowed_mentions: allowedMentions(env),
     });
@@ -370,7 +388,8 @@ export async function closeDueRounds(
  * Re-renders a round's card and puts it back on the message. Same reasoning as
  * repairCard on the pair side, including the stamp: the replacement has to
  * arrive at a URL Discord has never seen, or its proxy answers from whatever
- * it cached the first time.
+ * it cached the first time. And, as there, a closed round is repaired on its
+ * result post rather than on the ballot — they are two messages now.
  *
  * A closed round gets its ballot log rebuilt alongside the card. A PATCH
  * replaces the embeds it names wholesale, so sending only the image would
@@ -446,7 +465,9 @@ export async function repairRoundCard(
   }
 
   const slotOf = new Map(entries.map((entry) => [entry.id, entry.slot]));
-  await editMessage(env, round.message_id, {
+  // Rounds closed before the reveal got a post of its own still carry their
+  // result card on the ballot message.
+  await editMessage(env, round.result_message_id ?? round.message_id, {
     embeds: [
       { color: WIN, image: { url: image } },
       ballotEmbed("How everyone ranked them", ballotLines(ballots, slotOf)),
