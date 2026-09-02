@@ -1,3 +1,4 @@
+import { OTHER_KIND } from "./kinds";
 import type { Dish, Env } from "./types";
 
 /**
@@ -234,19 +235,29 @@ export async function pickBallot(
     size = 5,
     categories = DEFAULT_CATEGORIES,
     exclude = [],
-  }: { size?: number; categories?: Category[]; exclude?: number[] } = {}
+    kind,
+  }: {
+    size?: number;
+    categories?: Category[];
+    exclude?: number[];
+    /** Narrows the draw to one kind — five pastas rather than five plates. */
+    kind?: string;
+  } = {}
 ): Promise<Dish[] | null> {
   const notOpen = excludeClause("id", exclude);
   const inCategory = `category IN (${categoryList(categories)})`;
+  // Bound rather than inlined: unlike the category list this is a value read
+  // back out of the database, not one of a handful of constants we control.
+  const ofKind = kind ? " AND kind = ?" : "";
 
   // Deliberate headroom. The per-poster cap can skip a long run of one
   // person's photographs, and a candidate list exactly `size` long would come
   // up short on a pool that could have filled the card comfortably.
   const candidates = await env.DB.prepare(
-    `SELECT * FROM dishes WHERE ${inCategory}${notOpen} ` +
+    `SELECT * FROM dishes WHERE ${inCategory}${notOpen}${ofKind} ` +
       `ORDER BY matches_played ASC, RANDOM() LIMIT ?`
   )
-    .bind(Math.max(1, size) * 5)
+    .bind(...(kind ? [kind] : []), Math.max(1, size) * 5)
     .all<Dish>();
 
   const chosen: Dish[] = [];
@@ -273,6 +284,75 @@ export async function pickBallot(
   }
 
   return chosen;
+}
+
+/**
+ * The kind a themed round should be built around, or null when the catalog
+ * cannot fill a card with any one of them.
+ *
+ * Two conditions make a kind eligible, and both are the ballot draw's own
+ * rules stated in advance rather than new ones. It needs BALLOT_MIN
+ * photographs that are not already live, and it needs two people — the
+ * per-poster cap means a kind that is one person's collection can only ever
+ * put two on the card, and three is the floor. Together those two guarantee
+ * the draw that follows comes back with a postable round, so a qualifying
+ * kind never has to be tried and discarded.
+ *
+ * Among the eligible, the choice is the rotation the rest of the game runs on:
+ * the kind holding the least-played photographs goes first. MIN sorts the
+ * kinds with something unplayed in them ahead of the rest, and AVG breaks the
+ * tie — which early on, when everything is unplayed and every MIN is zero,
+ * quietly favours the kinds deep enough to fill all five slots.
+ *
+ * `other` is never themed on. It is the bucket for what fits nowhere, so a
+ * round of five would be five unrelated plates wearing a theme's clothes —
+ * exactly the card themed rounds exist to stop going out.
+ */
+async function pickKind(
+  env: Env,
+  categories: Category[],
+  exclude: number[],
+  minimum: number
+): Promise<string | null> {
+  const row = await env.DB.prepare(
+    `SELECT kind FROM dishes WHERE category IN (${categoryList(categories)}) ` +
+      `AND kind IS NOT NULL AND kind != ?${excludeClause("id", exclude)} ` +
+      "GROUP BY kind " +
+      "HAVING COUNT(*) >= ? AND COUNT(DISTINCT poster_discord_id) >= 2 " +
+      "ORDER BY MIN(matches_played) ASC, AVG(matches_played) ASC, RANDOM() " +
+      "LIMIT 1"
+  )
+    .bind(OTHER_KIND, minimum)
+    .first<{ kind: string }>();
+  return row?.kind ?? null;
+}
+
+/**
+ * A ballot of one kind — five pastas, five steaks, five beers — falling back
+ * to a mixed one when no kind can fill a card.
+ *
+ * The fallback is the point of the null in the return. A themed round is
+ * better, but a slot that refuses to fire because the catalog is thin is a
+ * weekly post that never appears, and the mixed five is what the place round
+ * has always been. The caller reads the kind to decide what to call the card.
+ */
+export async function pickThemedBallot(
+  env: Env,
+  {
+    size = 5,
+    categories = DEFAULT_CATEGORIES,
+    exclude = [],
+  }: { size?: number; categories?: Category[]; exclude?: number[] } = {}
+): Promise<{ kind: string | null; dishes: Dish[] } | null> {
+  const kind = await pickKind(env, categories, exclude, BALLOT_MIN);
+
+  if (kind) {
+    const dishes = await pickBallot(env, { size, categories, exclude, kind });
+    if (dishes) return { kind, dishes };
+  }
+
+  const dishes = await pickBallot(env, { size, categories, exclude });
+  return dishes ? { kind: null, dishes } : null;
 }
 
 /**

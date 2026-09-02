@@ -6,15 +6,21 @@ The whole game. One Cloudflare Worker, one hourly cron, no frontend.
 - `fetch()` — `POST /interactions` for button clicks, plus `/backfill` and `/health`
 
 Three shapes of round. The everyday matchup is a pair with a button each, in
-`matchups.ts`. The weekly place round puts five photographs on one card and
-each voter ranks them, in `rounds.ts` — its own tables, its own close path,
-the same Elo underneath. The caption contest is in `contests.ts` and is the
-odd one out: players write rather than judge, and nothing gets a rating.
+`matchups.ts`. The ranking round puts five photographs on one card and each
+voter ranks them, in `rounds.ts` — its own tables, its own close path, the
+same Elo underneath. The caption contest is in `contests.ts` and is the odd
+one out: players write rather than judge, and nothing gets a rating.
 
-Five slots, each drawing categories nothing else touches. Cooking twice a day
-at 9am and 9pm, drinks at happy hour as often as there is drink to post,
-places on Monday, people on Tuesday, and the caption contest across the
-weekend on everything left over.
+Seven slots. Cooking twice a day at 9am and 9pm, drinks at happy hour as often
+as there is drink to post, places ranked on Monday, people on Tuesday, five of
+one kind of plate on Wednesday, five of one kind of drink on Friday, and the
+caption contest across the weekend on everything left over.
+
+The two Wednesday-and-Friday fives are *themed*: five pastas, five steaks,
+five beers. Ranking five things asks a question a pair does not, and it only
+works when the five are comparable — so the classifier labels every dish and
+drink with a `kind` as well as a category, and the round is built around one
+of them. See **Kinds** below.
 
 Rendering lives in the Next app (`app/api/scrandle/*`) because Workers Free
 allows 10ms of CPU per invocation, which cannot rasterize an image. The Worker
@@ -382,6 +388,16 @@ is the ballot most people will actually cast, and it checks that a single click
 still scores, still beats the four it did not rank, and still leaves those four
 unscored against each other.
 
+Two more cover the themed food round, which is the same machinery pointed at a
+pool that has kinds in it. The **themed catalog** holds four kinds deep enough
+to fill a card, a handful of `other`, and a fifth kind that is one person's
+entire collection: it checks that every round is all one kind, that `other` is
+never themed on, that a kind nobody can field a card from is not drawn, and
+that the kinds rotate rather than the draw landing on burgers every week. The
+**unthemeable catalog** is six plates and six kinds, and checks the fallback —
+a week where nothing can be themed still gets a round, and that round is
+honestly a mixed one.
+
 ### Forcing a post by hand
 
 There is no way to fire a cron on demand, so three admin routes stand in. All
@@ -401,16 +417,22 @@ curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECR
 curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&person=1"
 curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&drink=1"
 curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&caption=1"
+curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&foodround=1"
+curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&drinkround=1"
 ```
 
 Posts one of the other slots on demand — `place=1` for the five-photo place
-ranking round, `person=1` for person-vs-person, `drink=1` for drink-vs-drink
-— the same thing the scheduled cron does. Always overlaps, always gets that
-slot's flat window. `place=1` answers `{"posted":false}` when fewer than three
+ranking round, `person=1` for person-vs-person, `drink=1` for
+drink-vs-drink, `foodround=1` and `drinkround=1` for the themed fives — the
+same thing the scheduled cron does. Always overlaps, always gets that slot's
+flat window. `place=1` answers `{"posted":false}` when fewer than three
 places are available to rank, or when the per-poster cap leaves it short;
 `drink=1` answers the same when the catalog holds fewer than two drinks or
 they are all one person's. Forcing ignores the cadence entirely, so `drink=1`
 posts on a day the slot would not have fired on.
+
+The flags are read in the order they are listed in `index.ts`, and the first
+one set wins — passing two is a request nobody meant to make, not two posts.
 
 `caption=1` opens a caption contest. It refuses while another is live —
 forced or not, because two open contests would ask people to write and to
@@ -668,7 +690,57 @@ why not.
   one match played, not four — the rotation counts rounds.
 - **Places do not count toward chef standings**, and neither do people. They
   earn an Elo like any other photo, but averaging a holiday snap or a group
-  shot into someone's cooking record would rate them on the wrong thing.
+  shot into someone's cooking record would rate them on the wrong thing. The
+  themed food and drink rounds are the other way about: those *are* the
+  categories the standings average, so winning one moves a cook up the table
+  exactly as winning a matchup does.
+- **Kinds: what a photograph is, one level below the category.** `category`
+  answers what a photo may play against — food with food, drink with drink —
+  and that is all a pair needs, because a pair can be drawn to be comparable.
+  Five cannot. An ungrouped five drawn from food at large is a lasagne, a
+  fry-up, a cheeseboard, a taco and a bowl of ramen, and what people rank there
+  is which meal they fancy rather than which plate is better.
+
+  So the classifier writes a `kind` alongside the category, in the same call,
+  and the weekly fives are built around one of them: five pastas, five steaks,
+  five beers. The list is closed and deliberately coarse — twenty-one kinds of
+  food, seven of drink, and `other` — because a free-text kind fragments on
+  contact with a channel. "Pasta", "spaghetti", "pasta bake" and "carbonara"
+  are four groups of one, and a themed round needs three of something. See
+  `kinds.ts`, which is also where the classifier's prompt for them is built,
+  so the enum and the description it is chosen from cannot drift apart.
+
+  Only food and drink have kinds. A pet or a receipt is only ever a caption
+  prompt, and bucketing those would be labelling something nothing will draw on.
+- **A kind is eligible when it can fill a card by itself.** Three photographs
+  that are not already live, from at least two people — which are the ballot
+  draw's own rules stated one step ahead of it rather than new ones, so a kind
+  that qualifies always yields a postable round and never has to be tried and
+  discarded. The per-poster cap is why the second condition is there: a kind
+  that is one person's collection can only ever put two on the card however
+  deep it goes.
+
+  Among the eligible, the pick is the rotation the rest of the game runs on —
+  the kind holding the least-played photographs goes first, which early on,
+  when everything is unplayed, quietly favours the kinds deep enough to fill
+  all five slots.
+- **A themed round falls back to a mixed one rather than skipping the week.**
+  A slot that fires only once the catalog is deep enough is a weekly post that
+  does not appear for months, and the mixed five is what the place round has
+  always been. The card says which it got: "rank the pasta" when it found a
+  theme, "rank the plates" when it did not.
+- **Kinds are backfilled by the classifier, not by a migration.** Every
+  photograph already in the catalog has a category and no kind, so the pending
+  query takes "labelled, but not to this depth" as work — and sorts it behind
+  the photographs that have no category at all, which are the ones that cannot
+  play until they are labelled. Twenty an hour drains a thousand-dish backlog
+  in a couple of days, during which the themed rounds have progressively more
+  to choose from and the rest of the game is untouched.
+
+  The write is a `COALESCE` rather than an assignment, for the rows that are
+  only there for the kind: overwriting a category under an open matchup is a
+  pair that no longer shares one, and overwriting a name is a photograph the
+  channel has already seen renaming itself.
 - **The draw is a rotation.** Both halves of a pair come off the least-played
   end of the pool, in every category, so the whole catalog plays once before
   anything plays twice and then again before anything plays three times. Within

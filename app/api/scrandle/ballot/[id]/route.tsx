@@ -12,9 +12,16 @@ import {
 /**
  * `items` is the round's photographs in slot order — `u` the public image URL,
  * `t` the classifier's name for it. `n` is the round number.
+ *
+ * `h` is the header the Worker wants on the card: "Rank the pasta" on a themed
+ * round, "Rank the places" on a mixed one. Optional, because the Worker and
+ * this endpoint deploy separately and neither can wait on the other — a
+ * payload without it gets the header the card carried before rounds had
+ * themes.
  */
 interface BallotPayload {
   n: number;
+  h?: string;
   items: { u: string; t?: string }[];
   /** Retry counter. Only there to make a re-render a different URL. */
   r?: number;
@@ -33,7 +40,7 @@ export async function GET(request: Request) {
     return new Response(result.error, { status: result.status });
   }
 
-  const { n, items } = result.payload;
+  const { n, h, items } = result.payload;
   const rows = ballotRows(items);
 
   return new ImageResponse(
@@ -48,7 +55,7 @@ export async function GET(request: Request) {
         }}
       >
         <BallotHeader
-          title="Rank them"
+          title={h || "Rank them"}
           titleColor={THEME.accent}
           trailing={`#${n}`}
         />
