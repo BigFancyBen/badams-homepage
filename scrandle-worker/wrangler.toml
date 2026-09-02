@@ -46,6 +46,34 @@ PLACE_WINDOW_HOURS = "24"
 # the round refuses to post.
 PLACE_BALLOT_SIZE = "5"
 
+# The weekly themed fives: five of one kind of plate on Wednesday, five of
+# one kind of drink on Friday. Same machinery as the place round above — its
+# own day, its own hour, a flat window, posted alongside whatever is open.
+#
+# What is different is the draw. A five drawn from food at large is a lasagne
+# against a fry-up against a cheeseboard, and what people rank there is which
+# meal they fancy rather than which plate is better. So the round is built
+# around one kind — five pastas, five steaks, five burgers — using the kind the
+# classifier writes beside the category. When no kind can fill a card the round
+# falls back to a mixed five rather than skipping the week.
+#
+# 3 = Wednesday, 18:00 UTC = noon Mountain while MDT is in effect (shift to 19
+# in November with the rest). Clear of the Monday place round, the Tuesday
+# person bonus and both cooking slots. Set FOOD_ROUND_WEEKDAY to -1 to disable.
+FOOD_ROUND_WEEKDAY = "3"
+FOOD_ROUND_HOUR_UTC = "18"
+FOOD_ROUND_WINDOW_HOURS = "24"
+FOOD_ROUND_BALLOT_SIZE = "5"
+
+# 5 = Friday, 22:00 UTC = 4pm Mountain while MDT is in effect (shift to 23 in
+# November). An hour before the happy-hour drink matchup rather than on top of
+# it: the two share a pool, and a round and a pair landing in the same minute
+# reads as one post that went out twice.
+DRINK_ROUND_WEEKDAY = "5"
+DRINK_ROUND_HOUR_UTC = "22"
+DRINK_ROUND_WINDOW_HOURS = "24"
+DRINK_ROUND_BALLOT_SIZE = "5"
+
 # Person-vs-person bonus, same machinery as the place bonus. 2 = Tuesday, at
 # 11:11am Mountain — 17:11 UTC while MDT is in effect (shift to 18 in November).
 # The :11 needs the minute-11 cron above. Set PERSON_WEEKDAY to -1 to disable.

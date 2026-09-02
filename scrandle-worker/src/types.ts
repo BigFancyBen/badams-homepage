@@ -21,6 +21,20 @@ export interface Env {
   PLACE_WINDOW_HOURS: string;
   /** How many photographs the weekly place round puts on one card. */
   PLACE_BALLOT_SIZE: string;
+  /**
+   * The weekly themed food round: five of one kind of plate, ranked. Same
+   * shape as the place round — weekdays, an hour, a flat window and a card
+   * size — and disabled the same way, with -1 or an empty list.
+   */
+  FOOD_ROUND_WEEKDAY: string;
+  FOOD_ROUND_HOUR_UTC: string;
+  FOOD_ROUND_WINDOW_HOURS: string;
+  FOOD_ROUND_BALLOT_SIZE: string;
+  /** The same round for drink — five beers, five cocktails, five coffees. */
+  DRINK_ROUND_WEEKDAY: string;
+  DRINK_ROUND_HOUR_UTC: string;
+  DRINK_ROUND_WINDOW_HOURS: string;
+  DRINK_ROUND_BALLOT_SIZE: string;
   /** Weekdays for the person bonus, comma-separated, 0 = Sunday. Empty/-1 off. */
   PERSON_WEEKDAY: string;
   PERSON_HOUR_UTC: string;
@@ -71,6 +85,12 @@ export interface Dish {
   matches_played: number;
   first_matchup_id: number | null;
   category: string | null;
+  /**
+   * What it is, one level below the category — "pasta", "steak", "beer". Null
+   * until the classifier's kind pass reaches it, and null forever for the
+   * categories that have none. See kinds.ts.
+   */
+  kind: string | null;
   name: string | null;
 }
 
