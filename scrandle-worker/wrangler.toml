@@ -46,6 +46,26 @@ PLACE_WINDOW_HOURS = "24"
 # the round refuses to post.
 PLACE_BALLOT_SIZE = "5"
 
+# The placement round: this week's new cooking, ranked so it arrives with a
+# rating instead of the opening one. 4 = Thursday, 19:00 UTC = 1pm Mountain
+# *while MDT is in effect* — shift to 20 in November with the rest. Set
+# PLACEMENT_WEEKDAY to -1 (or empty) to disable.
+#
+# Thursday because it is the one day nothing else runs, and because a week's
+# cooking is mostly in by then. It draws only food nobody has voted on yet,
+# posted inside PLACEMENT_RECENT_DAYS — a fortnight rather than a week, so a
+# card that overflowed one Thursday can still seed the leftovers the next.
+#
+# Below three new photographs it posts a pair instead: the two of them if they
+# came from different people, otherwise the newest against the catalog. Below
+# one it posts nothing and does not claim the slot, so a week with nothing new
+# in it simply passes.
+PLACEMENT_WEEKDAY = "4"
+PLACEMENT_HOUR_UTC = "19"
+PLACEMENT_WINDOW_HOURS = "24"
+PLACEMENT_BALLOT_SIZE = "5"
+PLACEMENT_RECENT_DAYS = "14"
+
 # Person-vs-person bonus, same machinery as the place bonus. 2 = Tuesday, at
 # 11:11am Mountain — 17:11 UTC while MDT is in effect (shift to 18 in November).
 # The :11 needs the minute-11 cron above. Set PERSON_WEEKDAY to -1 to disable.

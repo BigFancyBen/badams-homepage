@@ -99,20 +99,23 @@ export async function getDish(env: Env, id: number): Promise<Dish | null> {
  * own, so counting it blacked out every ordinary slot for a full day after each
  * one — with bonuses on Monday, Tuesday and Wednesday that is most of the week.
  *
- * `matchups` has no column saying which is which, and does not need one. The
- * everyday draw is fixed to DEFAULT_CATEGORIES and both dishes in a matchup
- * always share a category, so a matchup holding anything else can only have
- * come from a bonus. Joining dish A is enough to tell them apart.
+ * `matchups.bonus` says which is which. It used to be inferred from the
+ * category — the everyday draw is fixed to DEFAULT_CATEGORIES and both dishes
+ * in a matchup share one, so a matchup holding anything else could only have
+ * come from a bonus — and that held until the placement slot, which draws food
+ * and falls back to a pair when a week is too thin to fill a card. Such a pair
+ * is a bonus wearing the everyday category, and under the old inference it
+ * would have stood in front of the next cooking matchup and skipped it: the
+ * exact blackout this rule exists to prevent, from the other direction.
  *
- * Food only, now that drinks have a slot of their own. Leaving drinks in here
- * would have been the exact blackout described above, on the busiest bonus of
- * the lot: an open drink matchup would have stood in front of the next cooking
- * matchup and skipped it.
+ * Still food only. A drink matchup is a bonus and carries the flag, but the
+ * category check is what makes that true of every row written before the flag
+ * existed as well.
  */
 export async function getOpenStandardMatchup(env: Env): Promise<Matchup | null> {
   return env.DB.prepare(
     "SELECT m.* FROM matchups m JOIN dishes d ON d.id = m.dish_a_id " +
-      "WHERE m.status = 'open' AND d.category = 'food' " +
+      "WHERE m.status = 'open' AND m.bonus = 0 AND d.category = 'food' " +
       "ORDER BY m.created_at ASC LIMIT 1"
   ).first<Matchup>();
 }

@@ -6,15 +6,21 @@ The whole game. One Cloudflare Worker, one hourly cron, no frontend.
 - `fetch()` — `POST /interactions` for button clicks, plus `/backfill` and `/health`
 
 Three shapes of round. The everyday matchup is a pair with a button each, in
-`matchups.ts`. The weekly place round puts five photographs on one card and
-each voter ranks them, in `rounds.ts` — its own tables, its own close path,
-the same Elo underneath. The caption contest is in `contests.ts` and is the
-odd one out: players write rather than judge, and nothing gets a rating.
+`matchups.ts`. A ranking round puts up to five photographs on one card and each
+voter ranks them, in `rounds.ts` — its own tables, its own close path, the same
+ratings underneath. The caption contest is in `contests.ts` and is the odd one
+out: players write rather than judge, and nothing gets a rating.
 
-Five slots, each drawing categories nothing else touches. Cooking twice a day
-at 9am and 9pm, drinks at happy hour as often as there is drink to post,
-places on Monday, people on Tuesday, and the caption contest across the
-weekend on everything left over.
+Six slots, each drawing something nothing else touches. Cooking twice a day at
+9am and 9pm, drinks at happy hour as often as there is drink to post, places on
+Monday, people on Tuesday, the placement round on Thursday, and the caption
+contest across the weekend on everything left over.
+
+Ratings are Glicko rather than plain Elo: every photograph carries a deviation
+alongside its rating, so a photograph nobody has voted on moves a long way on
+its first result and a photograph with a history behind it barely moves at all.
+See **Ratings carry a deviation** below — at a fixed K, on a catalog this deep
+and a cadence this slow, nothing ever converged.
 
 Rendering lives in the Next app (`app/api/scrandle/*`) because Workers Free
 allows 10ms of CPU per invocation, which cannot rasterize an image. The Worker
@@ -320,7 +326,16 @@ one-at-a-time rule fails the middle two and nothing else, which is exactly the
 bug: the drink slot looks like it works and quietly eats a cooking slot a day.
 
 The small and backlog catalogs are also checked for pair repeats inside the
-20-matchup recency window, and the small one for Elo staying zero-sum.
+20-matchup recency window, and the small one for a settled catalog's total
+barely moving and for no deviation ever widening.
+
+A fifth is the rating change itself: one photograph on the opening deviation
+among eleven settled ones, all on the same rating, with every voter picking the
+newcomer every time. It has to climb past 1650 in six games where a fixed `K`
+of 24 would have reached about 1544, it has to move further than the settled
+dish it beat drops in every one of those matchups, and its deviation has to
+come well in from where it started. That asymmetry is the thing a fixed `K`
+could not express.
 
 ### Testing caption contests
 
@@ -366,21 +381,76 @@ nothing — posts each round through `/admin/post-matchup?place=1`, writes
 ballots straight into `round_votes`, and closes through
 `/admin/close-matchup`.
 
-Three catalogs again. A **deep** one of 40 places across 8 people, with six
-voters ranking in six different orders, covers the rotation, the two-per-person
-cap, Elo staying zero-sum, and the rule that a round is one match played rather
-than one per comparison. A **unanimous** one, where five voters submit the same
-order, is the only place the arithmetic is legible: it checks that the photo
-everyone put first wins, that the finishing order is the ranked order, and that
-a clean sweep of a five-way round moves a rating exactly as far as a clean
-sweep of a matchup would — which is the whole point of dividing K by `n-1`.
-The deep catalog cannot show that last one, because six voters disagreeing
-split every pair near even and nothing moves more than a point.
+Four catalogs. A **deep** one of 40 places across 8 people, with six voters
+ranking in six different orders, covers the rotation, the two-per-person cap,
+and the rule that a round is one match played rather than one per comparison.
+A **unanimous** one, where five voters submit the same order, is the only place
+the arithmetic is legible: it checks that the photo everyone put first wins,
+that the finishing order is the ranked order, and that a clean sweep of a
+five-way round is worth a little under four matchup shutouts — which is what
+Glicko's prior does in place of dividing K by `n-1`. The deep catalog cannot
+show that, because six voters disagreeing split every pair near even and
+nothing moves more than a point.
 
 The third is the one worth having: **nobody ranks more than one photo**. That
 is the ballot most people will actually cast, and it checks that a single click
 still scores, still beats the four it did not rank, and still leaves those four
-unscored against each other.
+unscored against each other. It is seeded unrated, because that is also the
+common case — a one-click ballot on a card of newcomers is exactly what the
+placement round collects — and because it is where the deviation stops being an
+accounting detail. Slots 1 and 2 are judged four times, slots 3 to 5 twice, so
+the round knows more about the top of the card than the bottom and the
+movements deliberately do not cancel.
+
+The fourth is a **placement round**: the same unanimous ballots on five
+photographs nobody has ever voted on. One card spreads them across 500 rating
+points, where the identical card on settled ratings spreads them across 73 —
+which is the entire reason the placement slot exists, and the thing a fixed K
+could not do.
+
+### Testing the placement round
+
+```bash
+npm run test:placement
+```
+
+Same mock and dev server as the others. The placement slot is a *draw* before
+it is a round, and what this covers is which of four shapes a week arrives in:
+
+- **A full week** — eight new photographs across three people, on top of a
+  played backlog. The card is five, all of them new and unplayed, and no more
+  than two from one kitchen while there is a choice.
+- **One person's week** — five photographs from one person and nobody else
+  cooking. The card still fills. The two-per-poster rule is a preference here
+  and not the place round's hard cap, because refusing to rank somebody's
+  Saturday is refusing to seed any of it.
+- **Nothing new** — unplayed but old, and recent but already played, which are
+  the two ways the filter could be got wrong. Nothing posts, and the slot is
+  deliberately not marked used, so the next tick tries again.
+- **Too few for a card** — two newcomers from two kitchens meet each other; two
+  from one kitchen never can, so the newest goes up against the catalog
+  instead; and a lone newcomer whose category holds nobody else posts nothing
+  rather than bending the rule that two of your own never meet.
+
+The sharp one is that a placement pair is marked a bonus. It is a food pair,
+and food is what the everyday matchup draws, so under the old
+work-it-out-from-the-category rule it would have counted as the day's cooking
+matchup and blacked out the next slot. The suite checks the flag is set and
+that the everyday matchup can still post beside it.
+
+### Running two worktrees at once
+
+`npm run dev:local` binds port 8787, and two checkouts of this repo cannot both
+have it — the second silently fails to bind and every request goes to the
+first, which is a confusing way to spend twenty minutes. Start the second on a
+port of its own and point the harnesses at it:
+
+```bash
+npx wrangler dev --local --config wrangler.test.toml --port 8798
+```
+```bash
+SCRANDLE_WORKER_URL=http://127.0.0.1:8798 npm run test:placement
+```
 
 ### Forcing a post by hand
 
@@ -398,19 +468,22 @@ appears in two matchups at once, and it does not claim the hour's slot.
 
 ```bash
 curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&place=1"
+curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&placement=1"
 curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&person=1"
 curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&drink=1"
 curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&caption=1"
 ```
 
 Posts one of the other slots on demand — `place=1` for the five-photo place
-ranking round, `person=1` for person-vs-person, `drink=1` for drink-vs-drink
-— the same thing the scheduled cron does. Always overlaps, always gets that
-slot's flat window. `place=1` answers `{"posted":false}` when fewer than three
-places are available to rank, or when the per-poster cap leaves it short;
-`drink=1` answers the same when the catalog holds fewer than two drinks or
-they are all one person's. Forcing ignores the cadence entirely, so `drink=1`
-posts on a day the slot would not have fired on.
+ranking round, `placement=1` for the week's new cooking, `person=1` for
+person-vs-person, `drink=1` for drink-vs-drink — the same thing the scheduled
+cron does. Always overlaps, always gets that slot's flat window. `place=1`
+answers `{"posted":false}` when fewer than three places are available to rank,
+or when the per-poster cap leaves it short; `drink=1` answers the same when the
+catalog holds fewer than two drinks or they are all one person's;
+`placement=1` when there is no new cooking inside the window at all, or its one
+new photograph has no legal opponent. Forcing ignores the cadence entirely, so
+`drink=1` posts on a day the slot would not have fired on.
 
 `caption=1` opens a caption contest. It refuses while another is live —
 forced or not, because two open contests would ask people to write and to
@@ -659,13 +732,85 @@ why not.
   ballot; there is deliberately no undo of a single pick, because what that
   should do to the picks after it is a worse interface than starting again.
 - **A ranking round is scored as the round-robin it already is.** Every pair
-  inside it is an ordinary matchup with its own vote split, resolved by the
-  same vote-share Elo, against the ratings as they stood when the round opened
-  — summed and applied once, so the answer cannot depend on the order the pairs
-  are walked in. Each comparison carries `K/(n-1)`: a photo in a five-way round
-  is judged four times, and at full `K` one bonus round would move a rating as
-  far as four matchups and the weekly bonus would outweigh the week. A round is
-  one match played, not four — the rotation counts rounds.
+  inside it is an ordinary matchup with its own vote split, against the ratings
+  as they stood when the round opened, and a photograph's whole card is one
+  Glicko rating period — the four comparisons it appears in, resolved together
+  and applied once, so the answer cannot depend on the order the pairs are
+  walked in. A round is one match played, not four; the rotation counts rounds.
+
+  Four comparisons do not move a rating four times as far as one. The prior
+  term damps them to about three and a half, and the round leaves the
+  photograph on a tighter deviation so the round after moves it less. That is
+  what replaced dividing `K` by `n-1` — the same worry, that one weekly bonus
+  would outweigh the week it sits in, answered by the arithmetic rather than by
+  hand.
+- **Ratings carry a deviation.** Every photograph has an `rd` alongside its
+  `elo`: how unsure the game is of that rating, in rating points. It opens at
+  250, narrows as results come in, and floors at 60.
+
+  The fixed `K` of 24 it replaced could not work here, and the numbers say so
+  plainly. The catalog is about a thousand photographs and the everyday slot
+  plays four a day, so a sweep takes the better part of a year. At `K` 24 a
+  photograph that belongs 300 points above the opening rating gains about eight
+  points the first time it wins — thirty-five games to arrive, at one game a
+  sweep. Every rating in the table was 1500 plus a coin toss and would have
+  stayed that way. Under Glicko the same photograph is at 1685 after six.
+
+  The floor is picked so that two settled photographs meeting produce an
+  effective `K` near 20, which is close enough to the old 24 that nothing with
+  a history behind it behaves differently. The change is meant to be felt at
+  the new end of the catalog and nowhere else.
+
+  Two departures from Glicko as written. There is no volatility term — that is
+  Glicko-2, and it models a competitor's true strength drifting over time,
+  which a photograph's does not; it is the same photograph. And the deviation
+  is never inflated back between games for the same reason: a photograph that
+  last played eight months ago is exactly as well understood as it was then.
+  Inflating it would be ruinous at this cadence anyway, since everything is
+  inactive almost all of the time, and it would hand back the noise this
+  replaced.
+
+  One consequence worth knowing: ratings are no longer zero-sum. The side with
+  the wider deviation moves further, which is the whole point — a newcomer
+  beating a veteran teaches us far more about the newcomer than the veteran.
+  Across a settled catalog the movements still cancel to within rounding, and
+  the harnesses check that rather than an identity that no longer holds.
+- **The placement round seeds the week's new cooking.** Thursday, up to five
+  photographs posted in the last fortnight that nobody has voted on yet, ranked
+  on one card.
+
+  The everyday rotation does already put unplayed photographs first, and that
+  is not the same thing as putting *new* ones first. There are hundreds of
+  unplayed photographs and the pick among them is random, so something posted
+  on Tuesday joins the back of a queue that takes most of a year to clear. The
+  fresh slot fires on one primary in four and helps, but it draws one
+  photograph at a time; this draws the week, and a card is four comparisons per
+  photograph rather than one.
+
+  It is the deviation that makes it worth doing. Five newcomers at their widest
+  deviation judged against each other means one card can separate them by 500
+  rating points; the identical card on settled ratings moves them 73. Under the
+  fixed `K` it was worth twelve points a head and everything stayed at 1500.
+
+  Below three new photographs it posts a pair instead — the two of them if they
+  came from different people, otherwise the newest against the catalog — and
+  below one it posts nothing and does not claim the slot. A quiet week is the
+  normal case, not the edge one.
+
+  The per-poster rule here is a preference rather than the place round's hard
+  cap. The place round draws from the whole catalog and always has more to
+  reach for; a week's new cooking might be four dishes from one person who had
+  people over on Saturday, and refusing to rank those is refusing to seed them
+  at all.
+- **A placement pair is marked a bonus, in a column.** Which matchups are
+  bonuses used to be worked out from the category: the everyday draw is food
+  and nothing else, so a matchup holding anything else could only have been a
+  bonus. The placement slot breaks that — it draws food, and falls back to a
+  pair. Such a pair would have counted as the day's cooking matchup and blacked
+  out the next slot for a full day, which is the exact cycle-skipping the
+  one-at-a-time rule exists to prevent. Migration 0008 adds `matchups.bonus`
+  and backfills it from the category, so the inference it replaces still holds
+  for every row written before it.
 - **Places do not count toward chef standings**, and neither do people. They
   earn an Elo like any other photo, but averaging a holiday snap or a group
   shot into someone's cooking record would rate them on the wrong thing.

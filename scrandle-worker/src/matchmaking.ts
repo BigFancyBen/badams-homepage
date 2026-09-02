@@ -204,6 +204,33 @@ async function pickOpponent(
 }
 
 /**
+ * An opponent for a photograph the caller has already chosen.
+ *
+ * The placement slot's fallback: a week that produced exactly one new
+ * photograph has no card to fill and no second newcomer to pair it with, so it
+ * is pitted against the catalog instead. Every other rule still applies — same
+ * category, never the same poster, nothing paired again inside the recency
+ * window — and it comes back null when none of that can be satisfied.
+ *
+ * Never the wide-gap draw. That exists to stage the occasional lopsided
+ * matchup because upsets make the best results, and it is the opposite of what
+ * a placement wants: a photograph learns most about itself from an opponent it
+ * might plausibly lose to.
+ */
+export async function pickOpponentFor(
+  env: Env,
+  primary: Dish,
+  exclude: number[] = []
+): Promise<Dish | null> {
+  const latest = await env.DB.prepare(
+    "SELECT COALESCE(MAX(id), 0) AS id FROM matchups"
+  ).first<{ id: number }>();
+  const recentCutoff = Math.max(0, (latest?.id ?? 0) - RECENT_PAIR_WINDOW);
+
+  return pickOpponent(env, primary, recentCutoff, false, exclude);
+}
+
+/**
  * `exclude` keeps dishes that are already live out of the draw — the same
  * photograph appearing in two simultaneous matchups would be indefensible.
  * `categories` narrows the pool: the drink, place and person slots each draw
@@ -214,7 +241,7 @@ async function pickOpponent(
  * primary's poster.
  */
 /** A ranking round wants five, and is not worth posting below three. */
-const BALLOT_MIN = 3;
+export const BALLOT_MIN = 3;
 /** At most this many from one person, so a round is nobody's photo album. */
 const BALLOT_PER_POSTER = 2;
 
@@ -332,4 +359,94 @@ export async function pickPair(
   return Math.random() < 0.5
     ? { a: primary, b: opponent }
     : { a: opponent, b: primary };
+}
+
+/** How far back "new" reaches when the placement slot draws, in days. */
+const PLACEMENT_WINDOW_DAYS = 14;
+
+/**
+ * How many of one person's photographs a placement card takes, given a choice.
+ * A preference rather than the cap the place round enforces — see below.
+ */
+const PLACEMENT_PER_POSTER = 2;
+
+/**
+ * The placement draw: cooking posted recently that nobody has voted on yet.
+ *
+ * The everyday rotation already puts unplayed photographs first, which sounds
+ * like it should cover this and does not. There are hundreds of unplayed
+ * photographs and the pick among them is random, so a new one joins the back
+ * of a backlog that takes months to clear — it is unplayed alongside a
+ * thousand others, not ahead of them. The fresh slot fires on one primary in
+ * four and helps, but it draws one photograph at a time. This draws the week.
+ *
+ * Returns however many it found, up to `size`, and leaves the caller to decide
+ * what that is worth: a card, a pair, or nothing. Ordering the query by
+ * `posted_at DESC` means a week that overflowed the card is trimmed from the
+ * old end, and the result is shuffled before it goes back for the same reason
+ * the pair draw randomizes sides — otherwise slot 1 is always the newest
+ * photograph and people would learn to read the slot instead of the food.
+ *
+ * The per-poster preference is a preference and not the place round's hard
+ * cap, because the pools are in different situations. The place round draws
+ * from the whole catalog, so a cap that skips somebody's run of photographs
+ * always has more to reach for. A week's new cooking might be four dishes from
+ * one person who had people over on Saturday, and refusing to rank those is
+ * refusing to seed them at all.
+ */
+export async function pickPlacement(
+  env: Env,
+  {
+    size = 5,
+    days = PLACEMENT_WINDOW_DAYS,
+    exclude = [],
+    now = Date.now(),
+  }: {
+    size?: number;
+    days?: number;
+    exclude?: number[];
+    now?: number;
+  } = {}
+): Promise<Dish[]> {
+  const cutoff = now - days * 24 * 60 * 60 * 1000;
+  const inCategory = `category IN (${categoryList(DEFAULT_CATEGORIES)})`;
+
+  const candidates = await env.DB.prepare(
+    `SELECT * FROM dishes WHERE ${inCategory} AND matches_played = 0 ` +
+      `AND posted_at > ?${excludeClause("id", exclude)} ` +
+      "ORDER BY posted_at DESC LIMIT ?"
+  )
+    .bind(cutoff, Math.max(1, size) * 5)
+    .all<Dish>();
+
+  const pool = candidates.results ?? [];
+  const chosen: Dish[] = [];
+  const perPoster = new Map<string, number>();
+
+  for (const dish of pool) {
+    if (chosen.length >= size) break;
+    const already = perPoster.get(dish.poster_discord_id) ?? 0;
+    if (already >= PLACEMENT_PER_POSTER) continue;
+    perPoster.set(dish.poster_discord_id, already + 1);
+    chosen.push(dish);
+  }
+
+  // Fill back past the preference rather than post a thinner card. A week that
+  // was one person cooking is still a week worth ranking, and a three-card
+  // padded out to five from the same kitchen seeds five photographs instead of
+  // three.
+  if (chosen.length < size) {
+    const taken = new Set(chosen.map((dish) => dish.id));
+    for (const dish of pool) {
+      if (chosen.length >= size) break;
+      if (!taken.has(dish.id)) chosen.push(dish);
+    }
+  }
+
+  for (let i = chosen.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [chosen[i], chosen[j]] = [chosen[j], chosen[i]];
+  }
+
+  return chosen;
 }

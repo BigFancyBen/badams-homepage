@@ -5,7 +5,8 @@
  *     less
  *   - no pair repeats inside the recency window
  *   - the wide-gap rule fires on the expected cadence
- *   - Elo stays zero-sum across the catalog
+ *   - the deviation only ever narrows, and never past its floor
+ *   - a settled catalog's ratings stay where a fixed K would have kept them
  *   - a steady trickle of new photographs does not take over the board
  *
  * Three catalogs, because no one of them can show all of that. A small catalog
@@ -15,13 +16,22 @@
  * way to see the fresh slot: it needs new arrivals to keep arriving, and a
  * fixed seed can only ever run it dry.
  */
-const API = "http://127.0.0.1:8787/cdn-cgi/local/explorer/api";
 const DB = "00000000-0000-0000-0000-000000000000";
-const WORKER = "http://127.0.0.1:8787";
+/**
+ * The dev server, overridable so a second worktree can run its own on another
+ * port — `npm run dev:local` binds 8787, and two checkouts of this repo cannot
+ * both have it.
+ */
+const WORKER = process.env.SCRANDLE_WORKER_URL ?? "http://127.0.0.1:8787";
+const API = `${WORKER}/cdn-cgi/local/explorer/api`;
 const ROUNDS = Number(process.argv[2] ?? 25);
 // From .dev.vars — see the local testing section of the README.
 const SECRET = process.env.BACKFILL_SECRET ?? "dev-only-backfill-secret";
 const RECENCY_WINDOW = 20;
+/** Matches RD_MIN in src/elo.ts: the deviation a settled photograph sits on. */
+const RD_MIN = 60;
+/** Matches RD_START. The deviation a photograph nobody has voted on carries. */
+const RD_START = 250;
 
 async function sql(statement) {
   const response = await fetch(`${API}/d1/database/${DB}/raw`, {
@@ -43,7 +53,13 @@ const check = (name, ok, detail) => {
 };
 
 /**
- * `dishes` is a list of `{ chef, elo, played, postedAt?, category? }`.
+ * `dishes` is a list of `{ chef, elo, played, rd?, postedAt?, category? }`.
+ *
+ * `rd` is the Glicko deviation and defaults to the settled floor rather than
+ * the opening 250. A seed is a catalog with a history behind it, and leaving
+ * every dish at maximum uncertainty would make the first result of every
+ * scenario swing a couple of hundred points — which is correct behaviour for a
+ * photograph nobody has voted on and useless for testing the draw.
  * Categories matter: the everyday draw only ever reaches food, so a seed
  * without any leaves every query empty and the whole suite passes vacuously.
  * Food is the default and the first three scenarios use nothing else, because
@@ -62,11 +78,12 @@ function dishRow(d) {
   const tag = nextTag++;
   const at = d.postedAt ?? 1700000000000 + tag * 1000;
   const category = d.category ?? "food";
-  return `('m${tag}','a${tag}','user_${d.chef}','dishes/h${tag}.jpg','h${tag}','d${tag}',${at},${at},${d.elo},${d.played},'${category}')`;
+  const rd = d.rd ?? RD_MIN;
+  return `('m${tag}','a${tag}','user_${d.chef}','dishes/h${tag}.jpg','h${tag}','d${tag}',${at},${at},${d.elo},${rd},${d.played},'${category}')`;
 }
 
 const DISH_COLUMNS =
-  "discord_message_id, attachment_id, poster_discord_id, r2_key, sha256, caption, posted_at, ingested_at, elo, matches_played, category";
+  "discord_message_id, attachment_id, poster_discord_id, r2_key, sha256, caption, posted_at, ingested_at, elo, rd, matches_played, category";
 
 async function seed(dishes) {
   // Every table holding a foreign key into `dishes` first, and in dependency
@@ -91,7 +108,7 @@ async function addDish(dish) {
   await sql(`INSERT INTO dishes (${DISH_COLUMNS}) VALUES ${dishRow(dish)};`);
 }
 
-async function playRounds(rounds, beforeRound) {
+async function playRounds(rounds, beforeRound, unanimousFor) {
   for (let round = 0; round < rounds; round++) {
     if (beforeRound) await beforeRound(round);
     // Force the post rather than running the cron: the scheduled path only
@@ -110,8 +127,19 @@ async function playRounds(rounds, beforeRound) {
     }
     const { id, dish_a_id, dish_b_id } = open[0];
 
-    // Random-ish but deterministic split so Elo actually moves.
-    const votesForA = (round % 5) + 1;
+    // Random-ish but deterministic split so Elo actually moves. A scenario
+    // that cares which side wins passes `unanimousFor` and gets six votes for
+    // whichever dish it names — the split above is fine for exercising the
+    // draw and useless for asking how far a rating travels, because it hands
+    // every dish roughly as many wins as losses.
+    const favourite = unanimousFor
+      ? unanimousFor(dish_a_id, dish_b_id)
+      : null;
+    const votesForA = favourite
+      ? favourite === dish_a_id
+        ? 6
+        : 0
+      : (round % 5) + 1;
     const votesForB = 6 - votesForA;
     const rows = [];
     for (let v = 0; v < votesForA; v++) rows.push(`(${id},'voter_a${v}',${dish_a_id},0)`);
@@ -182,6 +210,7 @@ await playRounds(ROUNDS);
 let matchups = await sql("SELECT id, dish_a_id, dish_b_id, elo_a_before, elo_b_before FROM matchups WHERE status='closed' ORDER BY id");
 let dishes = await sql("SELECT id, ROUND(elo,1) AS elo, matches_played FROM dishes ORDER BY matches_played, id");
 const endingTotal = (await sql("SELECT SUM(elo) AS total FROM dishes"))[0].total;
+const deviations = await sql("SELECT id, rd, matches_played FROM dishes");
 
 console.log(`\nsmall catalog: ${matchups.length} matchups over ${ROUNDS} rounds\n`);
 
@@ -191,9 +220,27 @@ check(`no pair repeats within ${RECENCY_WINDOW} matchups`, repeats.length === 0,
 const spills = rotationViolations(matchups, smallStart);
 check("the rotation holds", spills.length === 0, spills.join("; "));
 
-// Elo is zero-sum: the catalog total never moves.
+// Glicko is deliberately not zero-sum — the side with the wider deviation
+// moves further, which is the whole reason for carrying a deviation at all. On
+// a catalog that starts settled there is nothing to be uncertain about, so the
+// two sides move together and the total barely stirs. It is checked as a bound
+// rather than an identity: a run that drifted hundreds of points across a
+// settled pool would mean the deviation was not doing its job.
 const drift = Math.abs(endingTotal - startingTotal);
-check("Elo total conserved", drift < 0.01, `drift ${drift}`);
+check(
+  "a settled catalog's total barely moves",
+  drift < 1,
+  `drift ${drift.toFixed(2)} over ${matchups.length} matchups`
+);
+
+// The deviation is a measure of ignorance and results only ever reduce it.
+// Nothing here inflates it back — see the note over RD_START in src/elo.ts.
+const loosened = deviations.filter((d) => d.rd > RD_MIN + 0.01);
+check(
+  "the deviation never widens, and never falls past its floor",
+  loosened.length === 0 && deviations.every((d) => d.rd >= RD_MIN - 0.01),
+  deviations.map((d) => `#${d.id}:${d.rd.toFixed(1)}`).join(" ")
+);
 
 // The wide-gap rule fires — some pairing spans a big rating gap. It looks for
 // that gap inside the least-played group, so this catalog is the one that can
@@ -444,6 +491,106 @@ const drinksUnplayed = (
   await sql("SELECT COUNT(*) AS n FROM dishes WHERE category='drink' AND matches_played = 0")
 )[0].n;
 check("and leaves them for it", drinksUnplayed === 10, `${drinksUnplayed} of 10 still unplayed`);
+
+// ── scenario 4: an unrated photograph among settled ones ───────────
+// The reason the deviation exists, stated as an experiment. One photograph on
+// the opening deviation among three settled ones, all on the same rating, and
+// every voter always picks the newcomer.
+//
+// A four-dish catalog rather than a deep one, because the rotation is what
+// decides how often the newcomer plays: a sweep of four is two matchups, so it
+// is drawn about every other round. On twelve dishes it would play once in six
+// rounds and there would be no curve to look at.
+await seed([
+  { chef: "ben", elo: 1500, played: 0, rd: RD_START },
+  { chef: "sarah", elo: 1500, played: 0, rd: RD_MIN },
+  { chef: "mike", elo: 1500, played: 0, rd: RD_MIN },
+  { chef: "dana", elo: 1500, played: 0, rd: RD_MIN },
+]);
+
+const newcomerId = (await sql("SELECT MIN(id) AS id FROM dishes"))[0].id;
+
+await playRounds(12, undefined, () => newcomerId);
+
+const newcomer = (
+  await sql(`SELECT elo, rd, matches_played FROM dishes WHERE id=${newcomerId}`)
+)[0];
+
+// Only the matchups it actually played. The rotation gives the other three
+// games of their own, and reading a movement off one of those would be reading
+// a photograph that was not in it.
+const played = await sql(
+  "SELECT elo_a_before, elo_a_after, elo_b_before, elo_b_after, dish_a_id " +
+    `FROM matchups WHERE status='closed' AND (dish_a_id=${newcomerId} ` +
+    `OR dish_b_id=${newcomerId}) ORDER BY id`
+);
+
+/** Where a fixed K of 24 would have put it after the same n unanimous wins. */
+function underFixedK(games) {
+  let elo = 1500;
+  for (let i = 0; i < games; i++) {
+    const expected = 1 / (1 + Math.pow(10, (1500 - elo) / 400));
+    elo += 24 * (1 - expected);
+  }
+  return elo;
+}
+
+const fixedK = underFixedK(newcomer.matches_played);
+
+console.log(
+  `
+newcomer after ${newcomer.matches_played} unanimous wins: ` +
+    `${newcomer.elo.toFixed(0)} (rd ${newcomer.rd.toFixed(0)}) — ` +
+    `a fixed K of 24 would have reached ${fixedK.toFixed(0)}`
+);
+
+// The scenario is only worth reading if the rotation actually gave it games.
+check(
+  "the newcomer got a run of matchups",
+  newcomer.matches_played >= 3,
+  `played ${newcomer.matches_played} of 12 rounds`
+);
+
+check(
+  "an unrated photograph converges far faster than a fixed K allows",
+  newcomer.elo - 1500 > (fixedK - 1500) * 3,
+  `reached ${newcomer.elo.toFixed(0)} against ${fixedK.toFixed(0)} in ` +
+    `${newcomer.matches_played} games`
+);
+
+// The asymmetry itself. In every matchup the newcomer played it moved further
+// than its opponent did — the same result taught us far more about the side
+// nobody had voted on.
+const lopsided = played.map((m) => {
+  const newIsA = m.dish_a_id === newcomerId;
+  const mine = Math.abs(
+    (newIsA ? m.elo_a_after : m.elo_b_after) -
+      (newIsA ? m.elo_a_before : m.elo_b_before)
+  );
+  const theirs = Math.abs(
+    (newIsA ? m.elo_b_after : m.elo_a_after) -
+      (newIsA ? m.elo_b_before : m.elo_a_before)
+  );
+  return { mine, theirs };
+});
+check(
+  "the uncertain side moves further than the settled one",
+  lopsided.length > 0 && lopsided.every((m) => m.mine > m.theirs),
+  lopsided.map((m) => `${m.mine.toFixed(1)} vs ${m.theirs.toFixed(1)}`).join(" ")
+);
+
+// And it stops being uncertain, which is what makes the fast start safe: each
+// result narrows the deviation, so the next one moves it less.
+check(
+  "and stops moving so far once it is known",
+  newcomer.rd < RD_START && newcomer.rd >= RD_MIN,
+  `deviation went ${RD_START} to ${newcomer.rd.toFixed(0)}`
+);
+check(
+  "its later matchups move it less than its first did",
+  lopsided.length < 2 || lopsided[lopsided.length - 1].mine < lopsided[0].mine,
+  lopsided.map((m) => m.mine.toFixed(1)).join(" > ")
+);
 
 console.log(failures === 0 ? "\nall invariants held" : `\n${failures} invariant(s) violated`);
 process.exit(failures === 0 ? 0 : 1);

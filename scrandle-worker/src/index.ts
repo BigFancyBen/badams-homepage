@@ -13,6 +13,7 @@ import {
 import {
   closeDueRounds,
   postPlaceRoundIfDue,
+  postPlacementRoundIfDue,
   repairRoundCard,
 } from "./rounds";
 import {
@@ -75,54 +76,66 @@ export default {
         return new Response("Nope", { status: 403 });
       }
       try {
-        // `place=1` / `person=1` / `drink=1` post that slot on demand: that
-        // category only, running beside whatever is open, on a flat window. A
-        // bonus always overlaps. `place=1` posts the five-photograph ranking
-        // round, which is what the place bonus became.
-        const place = url.searchParams.get("place") === "1";
-        const person = url.searchParams.get("person") === "1";
-        const drink = url.searchParams.get("drink") === "1";
-        const caption = url.searchParams.get("caption") === "1";
-        const overlap =
-          place ||
-          person ||
-          drink ||
-          caption ||
-          url.searchParams.get("overlap") === "1";
-        const posted = place
-          ? await postPlaceRoundIfDue(env, Date.now(), { force: true })
-          : person
-            ? await postPersonMatchupIfDue(env, Date.now(), { force: true })
-            : drink
-              ? await postDrinkMatchupIfDue(env, Date.now(), { force: true })
-              : caption
-                ? await postCaptionContestIfDue(env, Date.now(), { force: true })
-                : await postMatchupIfDue(env, Date.now(), { force: true, overlap });
-        const kind = place
-          ? "place round"
-          : person
-            ? "person"
-            : drink
-              ? "drink"
-              : caption
-                ? "caption contest"
-                : "matchup";
+        // One slot per flag: that category only, running beside whatever is
+        // open, on a flat window. A forced bonus always overlaps.
+        //
+        // A table rather than a ternary chain. There are six of these now, each
+        // wanting a name, a poster and a sentence explaining an empty answer,
+        // and nested conditionals across three values stopped being readable
+        // several slots ago.
+        const slots: Record<
+          string,
+          { post: () => Promise<boolean>; reason: string }
+        > = {
+          place: {
+            post: () => postPlaceRoundIfDue(env, Date.now(), { force: true }),
+            reason:
+              "fewer than three places available to rank, or too many of them one person's",
+          },
+          placement: {
+            post: () => postPlacementRoundIfDue(env, Date.now(), { force: true }),
+            reason:
+              "no new cooking inside the window, or its one new photograph has no legal opponent",
+          },
+          person: {
+            post: () => postPersonMatchupIfDue(env, Date.now(), { force: true }),
+            reason:
+              "fewer than two people in the catalog, only one person's photographs, or both are already live",
+          },
+          drink: {
+            post: () => postDrinkMatchupIfDue(env, Date.now(), { force: true }),
+            reason:
+              "fewer than two drinks in the catalog, only one person's drinks, or both are already live",
+          },
+          caption: {
+            post: () => postCaptionContestIfDue(env, Date.now(), { force: true }),
+            reason:
+              "a contest is already live, or there is nothing in the ingredient/pet/document/screenshot/other categories to draw",
+          },
+        };
+
+        const kind = Object.keys(slots).find(
+          (name) => url.searchParams.get(name) === "1"
+        );
+        const slot = kind ? slots[kind] : undefined;
+
+        // A named slot is a bonus and always overlaps; the everyday matchup
+        // needs asking for.
+        const overlap = Boolean(slot) || url.searchParams.get("overlap") === "1";
+
+        const posted = slot
+          ? await slot.post()
+          : await postMatchupIfDue(env, Date.now(), { force: true, overlap });
+
         return Response.json({
           posted,
-          kind,
+          kind: kind ?? "matchup",
           reason: posted
             ? null
-            : place
-              ? "fewer than three places available to rank, or too many of them one person's"
-              : person
-                ? "fewer than two people in the catalog, only one person's photographs, or both are already live"
-                : drink
-                  ? "fewer than two drinks in the catalog, only one person's drinks, or both are already live"
-                  : caption
-                    ? "a contest is already live, or there is nothing in the ingredient/pet/document/screenshot/other categories to draw"
-                    : overlap
-                      ? "no pair could be drawn"
-                      : "a matchup is already open, or no pair could be drawn",
+            : (slot?.reason ??
+              (overlap
+                ? "no pair could be drawn"
+                : "a matchup is already open, or no pair could be drawn")),
         });
       } catch (error) {
         const reason = error instanceof Error ? error.message : String(error);
@@ -312,6 +325,12 @@ export default {
       await postPlaceRoundIfDue(env, now);
     } catch (error) {
       await logToDiscord(env, `Place round failed: ${String(error)}`);
+    }
+
+    try {
+      await postPlacementRoundIfDue(env, now);
+    } catch (error) {
+      await logToDiscord(env, `Placement round failed: ${String(error)}`);
     }
 
     try {
