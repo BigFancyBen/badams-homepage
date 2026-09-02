@@ -271,13 +271,15 @@ reordering anything, a slot that is not in the round is turned away, `Start
 over` clears it, and the next click begins a fresh ballot. Leave the second
 argument off and those are skipped.
 
-The last few checks in that block cover the running reply — that the first
-click on a card sends a message and the ones after it come back as
-`DEFERRED_UPDATE_MESSAGE`, having edited it, and that the reply is keyed by
-person and by card rather than shared. Editing is a real call to Discord, so
-those need the mock running (below) with `DISCORD_API_BASE` pointed at it;
-without it they are skipped, and the worker correctly falls back to sending a
-fresh message every time.
+Two blocks cover the running reply. The vote block checks that a second vote
+cast from a different card comes back as `DEFERRED_UPDATE_MESSAGE`, having
+edited the first one's reply — the 9am batch is five matchups on five messages
+and gets one reply between them — and that somebody else's first vote is still
+their own message. The ranking block checks the same thing one card at a time:
+the first click sends, the ones after it edit, and another card is another
+conversation. Editing is a real call to Discord, so both need the mock running
+(below) with `DISCORD_API_BASE` pointed at it; without it they are skipped, and
+the worker correctly falls back to sending a fresh message every time.
 
 ### Testing matchmaking
 
@@ -639,7 +641,7 @@ why not.
   to stop bandwagoning, closing the round ends the reason for it, and who
   picked what is the part people actually want to argue about. Names rather
   than mentions, so nothing pings, and markdown in a username is escaped.
-- **One private reply per person per card, edited in place.** Ranking five
+- **One private reply per person per scope, edited in place.** Ranking five
   photographs is five clicks, and every click used to answer with its own
   ephemeral message — the card scrolled away above a stack of five
   near-identical "Your order:" lines, four of them already wrong, each needing
@@ -647,15 +649,30 @@ why not.
   it edits that one.
   Discord has no id for an ephemeral message, so the only way to edit one is
   through the token of the interaction that created it, which is why migration
-  0009 stores that token keyed by (message, person). It is good for fifteen
-  minutes; past that, or if they dismissed the reply, the edit fails and the
-  click falls back to a fresh message whose token becomes the one to edit.
-  The click itself is answered with `DEFERRED_UPDATE_MESSAGE` — the buttons are
-  on a public card that must not change, and the reply is somewhere else. The
-  key is the message rather than the round, so this works the same for the pair
-  vote, the ranking round and the caption ballot without knowing what any of
-  them are. The hourly tick sweeps rows past the fifteen minutes, since a dead
-  token is a stored credential that no longer means anything.
+  0009 stores that token, keyed by the person and by whatever the click belongs
+  to. It is good for fifteen minutes; past that, or if they dismissed the
+  reply, the edit fails and the click falls back to a fresh message whose token
+  becomes the one to edit. The click itself is answered with
+  `DEFERRED_UPDATE_MESSAGE` — the buttons are on a public card that must not
+  change, and the reply is somewhere else. The hourly tick sweeps rows past the
+  fifteen minutes, since a dead token is a stored credential that no longer
+  means anything.
+  What a click belongs to is a scope string rather than the round or the
+  contest, so the ranking round and the caption ballot get this without the
+  code knowing what either of them is: their scope is the message their buttons
+  are on, and one card is one conversation. The pair vote is the exception, and
+  migration 0010 is why the key stopped being the message outright. Five
+  cooking matchups at 9am are five messages with one button pair each, so
+  keying their replies by message handed a voter five of them — the same stack,
+  rearranged rather than avoided. Every pair vote shares one scope instead, and
+  the line follows them down the board.
+- **The vote reply reads back the whole board.** One message being rewritten
+  can only say things that stay true of the lines it replaces, so "Voted 2."
+  had to go: it is true of the click and wrong about the four votes before it.
+  The reply is now every open matchup this person has voted on and what they
+  picked — `Voted: #341 → 2 · #342 → 1. Three still open.` — in the numbers
+  printed on the cards and the buttons, which is all a voter has to go on. Only
+  their own picks, mind; the channel still sees nothing until the round closes.
 - **The result goes out as a new message, not as an edit.** A vote window is a
   day long, so by the time a round shuts, the card people voted on is a day of
   channel traffic above the fold — and Discord shows nothing at all for an

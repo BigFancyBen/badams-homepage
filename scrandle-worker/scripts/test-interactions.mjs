@@ -80,7 +80,8 @@ const vote = await post({
 });
 check(
   "vote accepted",
-  vote.status === 200 && /Voted 1\./.test(vote.body?.data?.content ?? ""),
+  vote.status === 200 &&
+    (vote.body?.data?.content ?? "").includes(`#${matchupId} → 1`),
   vote
 );
 
@@ -93,7 +94,12 @@ const change = await post({
   data: { custom_id: `v:${matchupId}:b` },
   member: { user: { id: "user_tester", username: "tester" } },
 });
-check("vote changed", change.status === 200, change);
+check(
+  "vote changed",
+  change.status === 200 &&
+    (change.body?.data?.content ?? "").includes(`#${matchupId} → 2`),
+  change
+);
 
 // 5. Another server must not be able to vote, even with a valid signature.
 //    The signature proves the request came from Discord, not from here.
@@ -121,6 +127,65 @@ const junk = await post({
   member: { user: { id: "user_tester", username: "tester" } },
 });
 check("unknown custom_id rejected", /not one of mine/.test(junk.body?.data?.content ?? ""), junk);
+
+// ── one reply across the whole board ───────────────────────────────
+// Editing is a real call to Discord, so every check that turns on it needs the
+// mock running and DISCORD_API_BASE in .dev.vars pointed at it. Without that
+// the worker correctly falls back to a fresh message every time, which is the
+// right behaviour and not what these checks are about.
+const mockPort = Number(process.env.MOCK_DISCORD_PORT ?? 9911);
+const mockUp = await fetch(`http://127.0.0.1:${mockPort}/`)
+  .then(() => true)
+  .catch(() => false);
+
+if (mockUp) {
+  // A voter nobody has used, so a re-run inside the fifteen minutes a token
+  // lives for does not find the last run's reply and open at an edit. A vote
+  // reply is keyed by the person and the board, and there is no card in that
+  // key to vary instead — which is exactly what the second check is about.
+  const voter = { user: { id: `user_voter_${Date.now()}`, username: "voter" } };
+
+  const voteFrom = (messageId, side, seq, member = voter) =>
+    post({
+      type: 3,
+      id: `bd${seq}`,
+      token: `board_token_${seq}`,
+      application_id: "app_scrandle",
+      guild_id: GUILD,
+      channel_id: CHANNEL,
+      message: { id: messageId },
+      data: { custom_id: `v:${matchupId}:${side}` },
+      member,
+    });
+
+  const firstVote = await voteFrom("card_one", "a", 1);
+  check(
+    "the first vote sends a reply",
+    firstVote.body?.type === 4 &&
+      (firstVote.body?.data?.content ?? "").includes(`#${matchupId} → 1`),
+    firstVote
+  );
+
+  // The 9am batch is five matchups on five messages. This vote arrives from a
+  // different card and must still edit the first one's reply — keyed by the
+  // message, it would open a second, and the stack is back with vote lines in
+  // it.
+  const secondVote = await voteFrom("card_two", "b", 2);
+  check(
+    "a vote from another card edits it rather than sending another",
+    secondVote.body?.type === 6,
+    secondVote
+  );
+
+  // The board is shared; the reply is not.
+  const other = { user: { id: `user_voter_two_${Date.now()}`, username: "voter two" } };
+  const theirVote = await voteFrom("card_two", "a", 3, other);
+  check("somebody else voting gets their own reply", theirVote.body?.type === 4, theirVote);
+} else {
+  console.log(
+    `SKIP  one reply across the board (start the mock: MOCK_DISCORD_PORT=${mockPort} npm run mock:discord)`
+  );
+}
 
 // ── ranking rounds ─────────────────────────────────────────────────
 // Only run when a round id is given, because every one of these needs a round
@@ -187,20 +252,12 @@ if (Number.isInteger(roundId) && roundId > 0) {
   check("an unknown round is turned away", /round is gone/.test(gone.body?.data?.content ?? ""), gone);
 
   // ── one running reply, not one per click ─────────────────────────
-  // Five clicks used to leave five ephemeral messages stacked under the card.
-  // Now the first click sends one and the rest edit it, which means the reply
-  // to every click after the first is DEFERRED_UPDATE_MESSAGE — "nothing to
-  // say about the message you clicked" — with the text going out as an edit.
-  //
-  // The edit is a real call to Discord, so this needs the mock running and
-  // DISCORD_API_BASE in .dev.vars pointed at it. Without that the worker
-  // correctly falls back to a fresh message every time, which is the right
-  // behaviour and not what these checks are about.
-  const mockPort = Number(process.env.MOCK_DISCORD_PORT ?? 9911);
-  const mockUp = await fetch(`http://127.0.0.1:${mockPort}/`)
-    .then(() => true)
-    .catch(() => false);
-
+  // Five clicks on one card used to leave five ephemeral messages stacked
+  // under it. Now the first click sends one and the rest edit it, which means
+  // the reply to every click after the first is DEFERRED_UPDATE_MESSAGE —
+  // "nothing to say about the message you clicked" — with the text going out
+  // as an edit. A ranking round is scoped to its card, so these also check
+  // that another card is another conversation.
   if (mockUp) {
     // A card id nothing else has used, so a re-run inside the fifteen minutes
     // a token lives for does not find the last run's reply and start at an
@@ -258,7 +315,7 @@ if (Number.isInteger(roundId) && roundId > 0) {
     );
   } else {
     console.log(
-      `SKIP  editing one reply (start the mock: MOCK_DISCORD_PORT=${mockPort} npm run mock:discord)`
+      `SKIP  editing one reply per card (start the mock: MOCK_DISCORD_PORT=${mockPort} npm run mock:discord)`
     );
   }
 } else {
