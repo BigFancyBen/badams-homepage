@@ -330,12 +330,18 @@ The small and backlog catalogs are also checked for pair repeats inside the
 barely moving and for no deviation ever widening.
 
 A fifth is the rating change itself: one photograph on the opening deviation
-among eleven settled ones, all on the same rating, with every voter picking the
-newcomer every time. It has to climb past 1650 in six games where a fixed `K`
-of 24 would have reached about 1544, it has to move further than the settled
-dish it beat drops in every one of those matchups, and its deviation has to
-come well in from where it started. That asymmetry is the thing a fixed `K`
-could not express.
+among three settled ones, all on the same rating, with every voter picking the
+newcomer every time. Four dishes rather than a deep catalog because the
+rotation decides how often it plays — a sweep of four is two matchups, so it is
+drawn about every other round, where on twelve it would play once in six and
+there would be no curve to look at.
+
+It reaches 1790 in six games against the 1566 a fixed `K` of 24 would have
+managed, and the suite checks the gap rather than the number, so the assertion
+survives the rotation handing it a different run. It also has to move further
+than the settled dish it beat drops in every one of those matchups, and its
+last matchup has to move it less than its first did. That asymmetry, and that
+slowing down, are the two things a fixed `K` could not express.
 
 ### Testing caption contests
 
