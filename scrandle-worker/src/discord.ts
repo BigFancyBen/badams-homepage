@@ -94,6 +94,40 @@ export async function editMessage(
 }
 
 /**
+ * Edits the reply already showing for an earlier interaction.
+ *
+ * The only way to change an ephemeral message. It has no channel of its own —
+ * only the person who clicked can see it — so the bot token and a message id
+ * are no use here; the interaction's own token is the address, and Discord
+ * honours it for fifteen minutes and then forgets the whole thing.
+ *
+ * Answers false rather than throwing. Every way this fails is a way somebody
+ * ends up with no reply at all if it is treated as fatal — the token aged out,
+ * they dismissed the message, Discord had a moment — and the caller's answer
+ * to all three is the same: send a fresh one instead.
+ */
+export async function editInteractionReply(
+  env: Env,
+  applicationId: string,
+  token: string,
+  payload: unknown
+): Promise<boolean> {
+  try {
+    const response = await fetch(
+      `${apiBase(env)}/webhooks/${applicationId}/${token}/messages/@original`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }
+    );
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Only ever allow the Tasters role to be pinged. A dish caption containing
  * `@everyone` gets carried into our own message text otherwise.
  *

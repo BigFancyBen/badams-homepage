@@ -8,14 +8,17 @@ import {
   getContestBallot,
   getContestEntries,
   getEntryByAuthor,
+  getEphemeralReply,
   getMatchup,
   getRound,
   getRoundEntries,
   humanEntryCount,
   recordVote,
+  rememberEphemeralReply,
   upsertEntry,
   upsertPlayer,
 } from "./db";
+import { editInteractionReply } from "./discord";
 import {
   MAX_CAPTION_LENGTH,
   MAX_HUMAN_ENTRIES,
@@ -30,11 +33,94 @@ import {
   type InteractionComponent,
 } from "./types";
 
-function reply(content: string) {
-  return Response.json({
+/**
+ * A line of text for the person who clicked, before it has been decided
+ * whether to send it or edit it over the last one. Handlers answer with this
+ * rather than a finished Response so that decision is made in one place — see
+ * deliver.
+ */
+interface Ephemeral {
+  content: string;
+}
+
+type Answer = Ephemeral | Response;
+
+function reply(content: string): Ephemeral {
+  return { content };
+}
+
+/**
+ * How long a stored token is worth trying. Discord honours an interaction
+ * token for fifteen minutes; the minute of slack is for the gap between the
+ * click that stored it and the request that would use it.
+ */
+const EDIT_WINDOW = 14 * 60 * 1000;
+
+/**
+ * One running reply per person per card, rather than one message per click.
+ *
+ * Ranking five photographs is five clicks, and answering each with its own
+ * ephemeral message buried the card under a stack of near-identical "Your
+ * order:" lines — four of them already out of date, every one of them needing
+ * dismissing by hand. So the first click gets a message and every click after
+ * it edits that message.
+ *
+ * Discord has no way to say "edit my last ephemeral": an ephemeral message has
+ * no id anyone can address it by, only the token of the interaction that
+ * created it. So that token is kept, and reused until it stops working — which
+ * it eventually always does, at which point this falls back to what it used to
+ * do. A fresh message, whose token becomes the one to edit.
+ *
+ * The click being answered is acknowledged with DEFERRED_UPDATE_MESSAGE, which
+ * is Discord's way of saying "nothing to add about the message you clicked":
+ * the card is public and must not change, and the reply is somewhere else.
+ */
+async function deliver(
+  env: Env,
+  now: number,
+  interaction: Interaction,
+  content: string
+): Promise<Response> {
+  const fresh = Response.json({
     type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
     data: { content, flags: EPHEMERAL },
   });
+
+  const userId = (interaction.member?.user ?? interaction.user)?.id;
+  const messageId = interaction.message?.id;
+  // Nothing to key on means nothing to edit and nothing worth keeping: a
+  // modal submitted from outside a message, or the test harness, which sends
+  // neither a message nor a token.
+  if (!userId || !messageId || !interaction.token || !interaction.application_id) {
+    return fresh;
+  }
+
+  const existing = await getEphemeralReply(env, messageId, userId);
+  if (existing && now - existing.created_at < EDIT_WINDOW) {
+    const edited = await editInteractionReply(
+      env,
+      existing.application_id,
+      existing.token,
+      { content }
+    );
+    if (edited) {
+      return Response.json({
+        type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE,
+      });
+    }
+    // Fall through: the reply is gone — dismissed, or the token died early —
+    // so this click gets a new one, and that becomes the one to edit.
+  }
+
+  await rememberEphemeralReply(
+    env,
+    messageId,
+    userId,
+    interaction.application_id,
+    interaction.token,
+    now
+  );
+  return fresh;
 }
 
 /**
@@ -50,6 +136,19 @@ export async function handleInteraction(
   env: Env,
   interaction: Interaction
 ): Promise<Response> {
+  const now = Date.now();
+  const answer = await route(env, interaction, now);
+  return answer instanceof Response
+    ? answer
+    : deliver(env, now, interaction, answer.content);
+}
+
+/** What to say. Whether that is a new message or an edit is deliver's problem. */
+async function route(
+  env: Env,
+  interaction: Interaction,
+  now: number
+): Promise<Answer> {
   if (interaction.type === InteractionType.PING) {
     return Response.json({ type: InteractionResponseType.PONG });
   }
@@ -78,7 +177,6 @@ export async function handleInteraction(
 
   const customId = interaction.data?.custom_id ?? "";
   const [prefix, rawId, rawSlot] = customId.split(":");
-  const now = Date.now();
 
   if (prefix === "v") {
     return handleVote(env, Number(rawId), rawSlot, user, now);
@@ -129,7 +227,7 @@ async function handleVote(
   side: string,
   user: { id: string; username: string },
   now: number
-): Promise<Response> {
+): Promise<Answer> {
   if (side !== "a" && side !== "b") return reply("That button is not one of mine.");
 
   const matchup = await getMatchup(env, matchupId);
@@ -175,7 +273,7 @@ async function handleBallot(
   slot: number | null,
   user: { id: string; username: string },
   now: number
-): Promise<Response> {
+): Promise<Answer> {
   const round = await getRound(env, roundId);
   if (!round) return reply("That round is gone.");
 
@@ -240,7 +338,7 @@ async function openCaptionModal(
   contestId: number,
   user: { id: string; username: string },
   now: number
-): Promise<Response> {
+): Promise<Answer> {
   const contest = await getContest(env, contestId);
   if (!contest) return reply("That contest is gone.");
   if (contest.status !== "writing" || contest.writing_closes_at <= now) {
@@ -296,7 +394,7 @@ async function submitCaption(
   raw: string | null,
   user: { id: string; username: string },
   now: number
-): Promise<Response> {
+): Promise<Answer> {
   const contest = await getContest(env, contestId);
   if (!contest) return reply("That contest is gone.");
   if (contest.status !== "writing" || contest.writing_closes_at <= now) {
@@ -357,7 +455,7 @@ async function handleCaptionBallot(
   slot: number | null,
   user: { id: string; username: string },
   now: number
-): Promise<Response> {
+): Promise<Answer> {
   const contest = await getContest(env, contestId);
   if (!contest) return reply("That contest is gone.");
   if (

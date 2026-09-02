@@ -185,6 +185,82 @@ if (Number.isInteger(roundId) && roundId > 0) {
 
   const gone = await click(`b:999999:1`);
   check("an unknown round is turned away", /round is gone/.test(gone.body?.data?.content ?? ""), gone);
+
+  // ── one running reply, not one per click ─────────────────────────
+  // Five clicks used to leave five ephemeral messages stacked under the card.
+  // Now the first click sends one and the rest edit it, which means the reply
+  // to every click after the first is DEFERRED_UPDATE_MESSAGE — "nothing to
+  // say about the message you clicked" — with the text going out as an edit.
+  //
+  // The edit is a real call to Discord, so this needs the mock running and
+  // DISCORD_API_BASE in .dev.vars pointed at it. Without that the worker
+  // correctly falls back to a fresh message every time, which is the right
+  // behaviour and not what these checks are about.
+  const mockPort = Number(process.env.MOCK_DISCORD_PORT ?? 9911);
+  const mockUp = await fetch(`http://127.0.0.1:${mockPort}/`)
+    .then(() => true)
+    .catch(() => false);
+
+  if (mockUp) {
+    // A card id nothing else has used, so a re-run inside the fifteen minutes
+    // a token lives for does not find the last run's reply and start at an
+    // edit. Everything here is keyed by (message, person).
+    const card = `card_${Date.now()}`;
+    const editor = { user: { id: "user_editor", username: "editor" } };
+
+    const onCard = (customId, seq, member = editor, messageId = card) =>
+      post({
+        type: 3,
+        id: `e${seq}`,
+        token: `token_${seq}`,
+        application_id: "app_scrandle",
+        guild_id: GUILD,
+        channel_id: CHANNEL,
+        message: { id: messageId },
+        data: { custom_id: customId },
+        member,
+      });
+
+    const opened = await onCard(`bx:${roundId}`, 1);
+    check(
+      "the first click on a card sends a reply",
+      opened.body?.type === 4 && /Cleared/.test(opened.body?.data?.content ?? ""),
+      opened
+    );
+
+    const secondClick = await onCard(`b:${roundId}:1`, 2);
+    check(
+      "the second click edits it rather than sending another",
+      secondClick.body?.type === 6,
+      secondClick
+    );
+
+    const thirdClick = await onCard(`b:${roundId}:2`, 3);
+    check("and so does the third", thirdClick.body?.type === 6, thirdClick);
+
+    // The reply belongs to one person, not to the card. Somebody else's first
+    // click must not land as an edit of a message they cannot see.
+    const other = { user: { id: "user_editor_two", username: "editor two" } };
+    const theirs = await onCard(`b:${roundId}:1`, 4, other);
+    check(
+      "somebody else on the same card gets their own reply",
+      theirs.body?.type === 4,
+      theirs
+    );
+
+    // And it belongs to one card. A click on the next round is a new
+    // conversation, not more of the last one.
+    const elsewhere = await onCard(`b:${roundId}:3`, 5, editor, `${card}_b`);
+    check(
+      "the same person on another card gets a new reply",
+      elsewhere.body?.type === 4,
+      elsewhere
+    );
+  } else {
+    console.log(
+      `SKIP  editing one reply (start the mock: MOCK_DISCORD_PORT=${mockPort} npm run mock:discord)`
+    );
+  }
 } else {
   console.log("SKIP  ranking rounds (pass an open round id as the second argument)");
 }

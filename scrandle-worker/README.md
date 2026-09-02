@@ -271,6 +271,14 @@ reordering anything, a slot that is not in the round is turned away, `Start
 over` clears it, and the next click begins a fresh ballot. Leave the second
 argument off and those are skipped.
 
+The last few checks in that block cover the running reply — that the first
+click on a card sends a message and the ones after it come back as
+`DEFERRED_UPDATE_MESSAGE`, having edited it, and that the reply is keyed by
+person and by card rather than shared. Editing is a real call to Discord, so
+those need the mock running (below) with `DISCORD_API_BASE` pointed at it;
+without it they are skipped, and the worker correctly falls back to sending a
+fresh message every time.
+
 ### Testing matchmaking
 
 Pair selection is the hardest part to reason about, and a single round tells
@@ -631,6 +639,23 @@ why not.
   to stop bandwagoning, closing the round ends the reason for it, and who
   picked what is the part people actually want to argue about. Names rather
   than mentions, so nothing pings, and markdown in a username is escaped.
+- **One private reply per person per card, edited in place.** Ranking five
+  photographs is five clicks, and every click used to answer with its own
+  ephemeral message — the card scrolled away above a stack of five
+  near-identical "Your order:" lines, four of them already wrong, each needing
+  dismissing by hand. The first click now sends a message and every click after
+  it edits that one.
+  Discord has no id for an ephemeral message, so the only way to edit one is
+  through the token of the interaction that created it, which is why migration
+  0009 stores that token keyed by (message, person). It is good for fifteen
+  minutes; past that, or if they dismissed the reply, the edit fails and the
+  click falls back to a fresh message whose token becomes the one to edit.
+  The click itself is answered with `DEFERRED_UPDATE_MESSAGE` — the buttons are
+  on a public card that must not change, and the reply is somewhere else. The
+  key is the message rather than the round, so this works the same for the pair
+  vote, the ranking round and the caption ballot without knowing what any of
+  them are. The hourly tick sweeps rows past the fifteen minutes, since a dead
+  token is a stored credential that no longer means anything.
 - **The result goes out as a new message, not as an edit.** A vote window is a
   day long, so by the time a round shuts, the card people voted on is a day of
   channel traffic above the fold — and Discord shows nothing at all for an

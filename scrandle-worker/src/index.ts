@@ -1,5 +1,6 @@
 import { logToDiscord } from "./discord";
 import { classify } from "./classify";
+import { forgetStaleEphemeralReplies } from "./db";
 import { backfill, ingest } from "./ingest";
 import { handleInteraction } from "./interactions";
 import {
@@ -427,6 +428,16 @@ export default {
       await postStandingsIfDue(env, now);
     } catch (error) {
       await logToDiscord(env, `Standings failed: ${String(error)}`);
+    }
+
+    // Housekeeping, last because nothing waits on it. The tokens that let a
+    // click edit the reply the last click sent are dead a quarter of an hour
+    // after they are written, and there is no point keeping a credential past
+    // the moment it stops meaning anything.
+    try {
+      await forgetStaleEphemeralReplies(env, now - 15 * 60 * 1000);
+    } catch (error) {
+      await logToDiscord(env, `Ephemeral sweep failed: ${String(error)}`);
     }
   },
 };

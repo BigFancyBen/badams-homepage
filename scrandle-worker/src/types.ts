@@ -266,9 +266,22 @@ export interface InteractionComponent {
 export interface Interaction {
   type: number;
   id: string;
+  /**
+   * The half of the address an ephemeral reply is edited through, along with
+   * `application_id`. Good for fifteen minutes from the click and then gone —
+   * see editInteractionReply.
+   */
+  token: string;
+  application_id: string;
   guild_id?: string;
   channel_id?: string;
   data?: { custom_id?: string; components?: InteractionComponent[] };
+  /**
+   * The message the button is on. Present on component clicks, and on a modal
+   * that a component opened. It is what one person's running reply is keyed
+   * by, so all of somebody's clicks on one card land in one place.
+   */
+  message?: { id: string };
   member?: { user: { id: string; username: string } };
   user?: { id: string; username: string };
 }
