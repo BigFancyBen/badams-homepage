@@ -3,12 +3,13 @@
  * not the size of the moves — it is that the size never depends on how much is
  * already known.
  *
- * The catalog is around a thousand photographs and four of them go on the
- * board a day, so a sweep takes most of a year. At K = 24 a photograph that
+ * The everyday pool is 577 photographs and about 6.7 of them go on the board a
+ * day, counting the weekly five — so a sweep takes roughly three months and a
+ * photograph gets about four outings a year. At K = 24 a photograph that
  * belongs 300 points above the opening rating gains about eight points the
- * first time it wins: thirty-five games to arrive, at one game a sweep. Every
- * rating in the table was therefore 1500 plus a coin toss, and would have
- * stayed that way.
+ * first time it wins: thirty-five games to arrive, which at four a year is the
+ * better part of a decade. Every rating in the table was therefore 1500 plus a
+ * coin toss, and would have stayed that way.
  *
  * Glicko carries a second number, the rating deviation, which is how unsure we
  * are of a rating in rating points. It starts wide and narrows as results
@@ -24,7 +25,7 @@
  * For the same reason there is no deviation inflation between games. Glicko
  * widens an inactive competitor's deviation because they may have got better
  * or worse while away, and here nothing has: a photograph that last played
- * eight months ago is exactly as well understood as it was then. Inflating it
+ * three months ago is exactly as well understood as it was then. Inflating it
  * would also be ruinous at this cadence — every photograph is inactive almost
  * all of the time, so it would push the whole catalog back to maximum
  * uncertainty permanently and hand back the noise this replaced.

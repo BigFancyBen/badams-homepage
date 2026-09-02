@@ -92,32 +92,30 @@ export async function getDish(env: Env, id: number): Promise<Dish | null> {
 }
 
 /**
- * The oldest open *everyday* matchup, ignoring bonus rounds.
+ * How many everyday matchups are open right now.
  *
- * Only the one-at-a-time rule uses this, and a bonus must not trip it. A bonus
- * is posted to run beside the everyday matchup and holds a flat window of its
- * own, so counting it blacked out every ordinary slot for a full day after each
- * one — with bonuses on Monday, Tuesday and Wednesday that is most of the week.
+ * A count rather than the first row, because the slot posts several at once and
+ * the question the caller asks is "how many more should go up", not "is one
+ * running". Bonuses are not in here: they are posted to run alongside the
+ * everyday matchups and hold flat windows of their own, so counting them would
+ * black out an ordinary slot for a full day after each one.
  *
- * `matchups.bonus` says which is which. It used to be inferred from the
- * category — the everyday draw is fixed to DEFAULT_CATEGORIES and both dishes
- * in a matchup share one, so a matchup holding anything else could only have
- * come from a bonus — and that held until the placement slot, which draws food
- * and falls back to a pair when a week is too thin to fill a card. Such a pair
- * is a bonus wearing the everyday category, and under the old inference it
- * would have stood in front of the next cooking matchup and skipped it: the
- * exact blackout this rule exists to prevent, from the other direction.
+ * `bonus` says which is which. It used to be inferred from the category — the
+ * everyday draw is food and nothing else, so a matchup holding anything else
+ * could only have been a bonus — and that held until the placement slot, which
+ * draws food and falls back to a pair when a week is too thin to fill a card.
+ * Such a pair is a bonus wearing the everyday category, and under the old
+ * inference it would have eaten one of the day's cooking matchups.
  *
- * Still food only. A drink matchup is a bonus and carries the flag, but the
- * category check is what makes that true of every row written before the flag
- * existed as well.
+ * The category check stays alongside it, because it is what makes the flag
+ * true of every row written before the flag existed.
  */
-export async function getOpenStandardMatchup(env: Env): Promise<Matchup | null> {
-  return env.DB.prepare(
-    "SELECT m.* FROM matchups m JOIN dishes d ON d.id = m.dish_a_id " +
-      "WHERE m.status = 'open' AND m.bonus = 0 AND d.category = 'food' " +
-      "ORDER BY m.created_at ASC LIMIT 1"
-  ).first<Matchup>();
+export async function countOpenStandardMatchups(env: Env): Promise<number> {
+  const row = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM matchups m JOIN dishes d ON d.id = m.dish_a_id " +
+      "WHERE m.status = 'open' AND m.bonus = 0 AND d.category = 'food'"
+  ).first<{ n: number }>();
+  return row?.n ?? 0;
 }
 
 /**

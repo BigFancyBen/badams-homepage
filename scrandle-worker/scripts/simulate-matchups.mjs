@@ -17,11 +17,7 @@
  * fixed seed can only ever run it dry.
  */
 const DB = "00000000-0000-0000-0000-000000000000";
-/**
- * The dev server, overridable so a second worktree can run its own on another
- * port — `npm run dev:local` binds 8787, and two checkouts of this repo cannot
- * both have it.
- */
+// Overridable for the same reason as the mock's port: parallel worktrees.
 const WORKER = process.env.SCRANDLE_WORKER_URL ?? "http://127.0.0.1:8787";
 const API = `${WORKER}/cdn-cgi/local/explorer/api`;
 const ROUNDS = Number(process.argv[2] ?? 25);
@@ -113,10 +109,16 @@ async function playRounds(rounds, beforeRound, unanimousFor) {
     if (beforeRound) await beforeRound(round);
     // Force the post rather than running the cron: the scheduled path only
     // fires on a named hour, so a cron-driven simulation posts nothing at all
-    // unless it happens to be run at 15:00 or 03:00 UTC. The posting schedule
-    // has its own suite (test:schedule); what this one is about is the draw.
+    // unless it happens to be run at 15:00 UTC. The posting schedule has its
+    // own suite (test:schedule); what this one is about is the draw.
+    //
+    // count=1 pins the batch at one matchup a round whatever MATCHUPS_PER_SLOT
+    // says. The rotation and recency invariants below are counted per matchup,
+    // so they hold either way — but a round that posts three and votes on one
+    // would close the other two on no votes, and every Elo assertion here would
+    // then be measuring the harness rather than the draw.
     const posted = await fetch(
-      `${WORKER}/admin/post-matchup?secret=${encodeURIComponent(SECRET)}`
+      `${WORKER}/admin/post-matchup?secret=${encodeURIComponent(SECRET)}&count=1`
     );
     if (!posted.ok) throw new Error(`tick failed: ${posted.status}`);
 
@@ -436,7 +438,7 @@ check(
 // The regression. No overlap flag: this is the ordinary scheduled post, asked
 // for while a drink matchup is open.
 const foodPost = await fetch(
-  `${WORKER}/admin/post-matchup?secret=${encodeURIComponent(SECRET)}`
+  `${WORKER}/admin/post-matchup?secret=${encodeURIComponent(SECRET)}&count=1`
 );
 const foodBody = await foodPost.json();
 check(
@@ -454,17 +456,75 @@ check(
   JSON.stringify(liveFood)
 );
 
-// The other half of the one-at-a-time rule still holds: a second everyday
-// matchup on top of an open one is still refused. Narrowing the query to food
-// must not have turned the rule off along with it.
+// The other half of the rule still holds: a slot of one will not post over its
+// own open matchup. The cap generalised from "never two" to "never more than
+// the slot asked for", and the drink query narrowing to food must not have
+// turned it off along the way.
 const second = await fetch(
-  `${WORKER}/admin/post-matchup?secret=${encodeURIComponent(SECRET)}`
+  `${WORKER}/admin/post-matchup?secret=${encodeURIComponent(SECRET)}&count=1`
 );
 const secondBody = await second.json();
 check(
-  "a second cooking matchup is still refused while one is open",
+  "a slot of one is not posted over while its matchup is open",
   secondBody.posted === false,
   JSON.stringify(secondBody)
+);
+
+// The 9am batch: three matchups posted together, and the thing that makes it a
+// batch rather than three posts is that the draw has to see its own output. A
+// photograph in two of the morning's three would be as indefensible as the same
+// one appearing twice in a day, and nothing but the growing exclude list stops
+// it — the database has no open matchup to consult until the row is written.
+await sql("DELETE FROM votes; DELETE FROM matchups; UPDATE dishes SET matches_played = 0, first_matchup_id = NULL, elo = 1500;");
+
+const batchPost = await fetch(
+  `${WORKER}/admin/post-matchup?secret=${encodeURIComponent(SECRET)}&count=3`
+);
+const batchBody = await batchPost.json();
+check("the batch posts", batchBody.posted === true, JSON.stringify(batchBody));
+
+const batchOpen = await sql(
+  "SELECT id, dish_a_id, dish_b_id, closes_at FROM matchups WHERE status='open' ORDER BY id"
+);
+check("three matchups go up", batchOpen.length === 3, `${batchOpen.length} open`);
+
+const batchDishes = batchOpen.flatMap((m) => [m.dish_a_id, m.dish_b_id]);
+check(
+  "on six different photographs",
+  new Set(batchDishes).size === batchDishes.length,
+  JSON.stringify(batchDishes)
+);
+
+check(
+  "all closing at the same moment",
+  new Set(batchOpen.map((m) => m.closes_at)).size === 1,
+  JSON.stringify(batchOpen.map((m) => m.closes_at))
+);
+
+// The cap counts what is open, so a second batch asked for while the first is
+// still up posts the shortfall — which here is none of it.
+const fourth = await fetch(
+  `${WORKER}/admin/post-matchup?secret=${encodeURIComponent(SECRET)}&count=3`
+);
+const fourthBody = await fourth.json();
+check(
+  "and a full slot posts nothing more",
+  fourthBody.posted === false,
+  JSON.stringify(fourthBody)
+);
+
+// Close one and the slot is one short, so the next tick tops it back up rather
+// than starting a fresh batch of three on top of the two still running.
+await sql(`UPDATE matchups SET status='closed', closed_at=1 WHERE id = ${batchOpen[0].id};`);
+const topUp = await fetch(
+  `${WORKER}/admin/post-matchup?secret=${encodeURIComponent(SECRET)}&count=3`
+);
+check("a short slot is topped up", (await topUp.json()).posted === true, "");
+const afterTopUp = await sql("SELECT COUNT(*) AS n FROM matchups WHERE status='open'");
+check(
+  "back to three open, not five",
+  afterTopUp[0].n === 3,
+  `${afterTopUp[0].n} open`
 );
 
 // Clear the board, then run the everyday draw properly. Over a long run not

@@ -32,11 +32,13 @@ import {
   dishUrl,
   renderCard,
 } from "./images";
+import { kindLabel } from "./kinds";
 import {
   BALLOT_MIN,
   pickBallot,
   pickOpponentFor,
   pickPlacement,
+  pickThemedBallot,
   type Category,
 } from "./matchmaking";
 import { postDrawnPair } from "./matchups";
@@ -60,6 +62,32 @@ const HOUR = 60 * 60 * 1000;
  * demanded five clicks from everybody would collect fewer opinions than the
  * one-click matchup it replaced, not more.
  */
+
+/**
+ * What to call a card that is not all one thing. A themed round names its kind
+ * — "rank the pasta" — and falls back to this when the catalog could not fill
+ * a card with any single kind.
+ */
+const MIXED_LABEL: Record<string, string> = {
+  place: "the places",
+  food: "the plates",
+  drink: "the drinks",
+};
+
+/**
+ * How a round is announced, on the card and in the message above it.
+ *
+ * Read off the entries rather than stored on the round: the kind lives on the
+ * photographs, they either all share one or they do not, and a column saying
+ * so is a second copy that a re-draw or a repair could disagree with. Place
+ * rounds land here too — every place has a null kind, which is one shared
+ * value and correctly reads as "no theme".
+ */
+function roundLabel(category: string, entries: RoundDish[]): string {
+  const kinds = new Set(entries.map((entry) => entry.kind));
+  const shared = kinds.size === 1 ? entries[0].kind : null;
+  return kindLabel(shared, MIXED_LABEL[category] ?? "them");
+}
 
 /** Position labels, for the result card. Beyond five it falls back to "6th". */
 const ORDINALS = ["1st", "2nd", "3rd", "4th", "5th"];
@@ -105,7 +133,7 @@ async function createAndPost(
   dishes: { id: number }[],
   now: number,
   closesAt: number,
-  preamble: string
+  opener: string
 ): Promise<void> {
   const inserted = await env.DB.prepare(
     "INSERT INTO rounds (category, created_at, closes_at) VALUES (?, ?, ?) " +
@@ -128,9 +156,12 @@ async function createAndPost(
   );
 
   const entries = await getRoundEntries(env, roundId);
+  // Named after the draw rather than the slot: a food round is "the pasta" on
+  // a week the draw found five, and "the plates" on a week it did not.
+  const label = roundLabel(category, entries);
 
   const image = await renderCard(env, cardKey("ballot", roundId), (attempt) =>
-    ballotImageUrl(env, roundId, entries, attempt)
+    ballotImageUrl(env, roundId, entries, `Rank ${label}`, attempt)
   );
 
   if (!image) {
@@ -147,7 +178,9 @@ async function createAndPost(
       .join(" · ");
 
     const message = await postMessage(env, {
-      content: `${preamble}\n${links}`,
+      content:
+        `${opener} — rank ${label}. ` +
+        `Click them best first; you can stop whenever.\n${links}`,
       embeds: image ? [{ color: ACCENT, image: { url: image } }] : [],
       components: ballotButtons(roundId, entries),
       allowed_mentions: allowedMentions(env),
@@ -165,30 +198,49 @@ async function createAndPost(
   }
 }
 
+interface RoundSchedule {
+  /** The one category the card is drawn from. A round never mixes them. */
+  category: Category;
+  /** Weekdays it fires on, 0 = Sunday. Empty disables the slot. */
+  weekdays: number[];
+  hourUtc: number;
+  size: number;
+  windowHours: number;
+  /** State key for the once-per-slot guard. Each round keeps its own. */
+  slotState: string;
+  /** The words before the dash: "Bonus round — rank the places." */
+  opener: string;
+  /**
+   * Whether to build the card around a single kind. Places have no kinds, so
+   * theming one is a query that can only ever come back empty; food and drink
+   * do, and five unrelated plates is the card theming exists to prevent.
+   */
+  themed: boolean;
+}
+
 /**
- * The weekly place round. Runs on the weekdays listed in PLACE_WEEKDAY at
- * PLACE_HOUR_UTC, keeps its own slot key so it never claims the food schedule's
- * hour, and takes a flat window rather than closing on a posting hour — it is
- * not part of the food cadence and must not hand its slot to it.
+ * A weekly ranking round.
  *
- * Places are drawn nowhere else. The everyday matchup filters them out.
+ * Runs on the weekdays listed in its own var at its own hour, keeps its own
+ * slot key so it never claims the food schedule's hour, and takes a flat
+ * window rather than closing on a posting hour — it is not part of the food
+ * cadence and must not hand its slot to it.
+ *
+ * It overlaps whatever is open, like every other bonus. What it does not
+ * overlap is the photographs: everything already live is kept out of the draw,
+ * so a plate cannot be in a matchup and on a ballot at the same time.
  */
-export async function postPlaceRoundIfDue(
+async function postRoundIfDue(
   env: Env,
   now: number,
-  { force = false }: { force?: boolean } = {}
+  schedule: RoundSchedule,
+  force: boolean
 ): Promise<boolean> {
-  const weekdays = parseWeekdays(env.PLACE_WEEKDAY);
-
   if (!force) {
-    const due = weeklySlotDue(now, {
-      weekdays,
-      hourUtc: Number(env.PLACE_HOUR_UTC || "18"),
-    });
-    if (!due) return false;
+    if (!weeklySlotDue(now, schedule)) return false;
 
     // One per named slot, so an hourly retry cannot double-post.
-    if ((await getState(env, "last_place_slot")) === postSlotKey(now)) {
+    if ((await getState(env, schedule.slotState)) === postSlotKey(now)) {
       return false;
     }
   }
@@ -200,61 +252,169 @@ export async function postPlaceRoundIfDue(
     live.push(matchup.dish_a_id, matchup.dish_b_id);
   }
 
-  const dishes = await pickBallot(env, {
-    size: Number(env.PLACE_BALLOT_SIZE || "5"),
-    categories: ["place"],
-    exclude: live,
-  });
-  // Too few places in the catalog, or too many of them one person's.
-  if (!dishes) return false;
+  const draw = schedule.themed
+    ? await pickThemedBallot(env, {
+        size: schedule.size,
+        categories: [schedule.category],
+        exclude: live,
+      })
+    : await pickBallot(env, {
+        size: schedule.size,
+        categories: [schedule.category],
+        exclude: live,
+      }).then((dishes) => (dishes ? { kind: null, dishes } : null));
+
+  // Too few in the catalog, or too many of them one person's.
+  if (!draw) return false;
 
   await createAndPost(
     env,
-    "place",
-    dishes,
+    schedule.category,
+    draw.dishes,
     now,
-    now + Number(env.PLACE_WINDOW_HOURS || "24") * HOUR,
-    "Bonus round — rank the places. Click them best first; you can stop whenever."
+    now + schedule.windowHours * HOUR,
+    schedule.opener
   );
 
-  await setState(env, "last_place_slot", postSlotKey(now));
+  await setState(env, schedule.slotState, postSlotKey(now));
 
   return true;
+}
+
+/**
+ * The weekly place round. Places are drawn nowhere else — the everyday matchup
+ * filters them out — and they are the one pool with no kinds to theme on: a
+ * beach, a bar and a mountain do not sort into buckets anybody would want five
+ * of. So this one stays the mixed five it has always been.
+ */
+export function postPlaceRoundIfDue(
+  env: Env,
+  now: number,
+  { force = false }: { force?: boolean } = {}
+): Promise<boolean> {
+  return postRoundIfDue(
+    env,
+    now,
+    {
+      category: "place",
+      weekdays: parseWeekdays(env.PLACE_WEEKDAY),
+      hourUtc: Number(env.PLACE_HOUR_UTC || "18"),
+      size: Number(env.PLACE_BALLOT_SIZE || "5"),
+      windowHours: Number(env.PLACE_WINDOW_HOURS || "24"),
+      slotState: "last_place_slot",
+      opener: "Bonus round",
+      themed: false,
+    },
+    force
+  );
+}
+
+/**
+ * The weekly plate round: five of one thing, ranked.
+ *
+ * The everyday matchup asks which of two plates is better, and that is a fair
+ * question because a pair can be drawn to be comparable. Five cannot — an
+ * ungrouped draw hands back a lasagne, a fry-up, a cheeseboard, a taco and a
+ * bowl of ramen, and what people rank is which meal they fancy. So this round
+ * groups on the kind the classifier wrote: five pastas, five steaks, five
+ * burgers.
+ *
+ * It falls back to a mixed five when no kind can fill a card, rather than
+ * skipping the week. A slot that fires only once the catalog is deep enough is
+ * a weekly post that does not appear for months.
+ *
+ * Unlike the place and person rounds, this one counts twice over: food is what
+ * chef standings are averaged from, so a plate that wins here moves its cook
+ * up the table exactly as a matchup win would.
+ */
+export function postFoodRoundIfDue(
+  env: Env,
+  now: number,
+  { force = false }: { force?: boolean } = {}
+): Promise<boolean> {
+  return postRoundIfDue(
+    env,
+    now,
+    {
+      category: "food",
+      weekdays: parseWeekdays(env.FOOD_ROUND_WEEKDAY),
+      hourUtc: Number(env.FOOD_ROUND_HOUR_UTC || "18"),
+      size: Number(env.FOOD_ROUND_BALLOT_SIZE || "5"),
+      windowHours: Number(env.FOOD_ROUND_WINDOW_HOURS || "24"),
+      slotState: "last_food_round_slot",
+      opener: "The weekly five",
+      themed: true,
+    },
+    force
+  );
+}
+
+/**
+ * The same round for drink — five beers, five cocktails, five coffees.
+ *
+ * It shares the drink pool with the happy-hour matchup and coordinates with it
+ * no further than the live-photograph exclusion, which is enough: the pair
+ * draw cannot reach anything sitting on an open ballot, and both run the same
+ * rotation, so a drink that appears here goes to the back of the queue for the
+ * other. On a thin catalog this simply comes back empty and the slot passes.
+ */
+export function postDrinkRoundIfDue(
+  env: Env,
+  now: number,
+  { force = false }: { force?: boolean } = {}
+): Promise<boolean> {
+  return postRoundIfDue(
+    env,
+    now,
+    {
+      category: "drink",
+      weekdays: parseWeekdays(env.DRINK_ROUND_WEEKDAY),
+      hourUtc: Number(env.DRINK_ROUND_HOUR_UTC || "22"),
+      size: Number(env.DRINK_ROUND_BALLOT_SIZE || "5"),
+      windowHours: Number(env.DRINK_ROUND_WINDOW_HOURS || "24"),
+      slotState: "last_drink_round_slot",
+      opener: "The weekly five",
+      themed: true,
+    },
+    force
+  );
 }
 
 /**
  * The placement round: the week's new cooking, ranked so it arrives with a
  * rating instead of the opening one.
  *
- * The everyday rotation does put unplayed photographs first, and that is not
- * the same thing as putting *new* photographs first. There are hundreds of
- * unplayed photographs and the pick among them is random, so something posted
- * on Tuesday joins the back of a backlog that takes the better part of a year
- * to clear. The fresh slot fires on one primary in four and helps, but it
- * draws one photograph at a time; this draws the week, five at once, and the
- * card is four comparisons per photograph rather than one.
+ * Its own function rather than another `RoundSchedule`, because the schedule
+ * is the only thing it shares with the other three. Those draw a category — or
+ * a kind inside one — from the whole catalog; this draws on recency and on
+ * never having played, which is a different question and has a different
+ * answer when the week comes up thin.
  *
- * Together with the rating deviation that is the whole point of the slot. A
- * card of newcomers is five photographs at their widest deviation judged
- * against each other, so one round can move each of them a long way — where
- * under a fixed K the same card was worth a couple of points a head and
+ * The everyday rotation does put unplayed photographs first, and that is not
+ * the same thing as putting *new* ones first. 539 of the 577 have never played
+ * and the pick among them is random, so something posted on Tuesday joins the
+ * back of a queue about three months deep. The fresh slot fires on one primary
+ * in four and helps, but it draws one photograph at a time; this draws the
+ * week.
+ *
+ * The deviation is what makes it worth a slot of its own. Five newcomers at
+ * their widest deviation judged against each other is a card that can separate
+ * them by 500 rating points, where the same card on settled ratings moves them
+ * 73. Under the fixed K this replaced it was worth twelve points a head and
  * everything stayed at 1500.
  *
- * It falls back to a pair, and then to a pair against the catalog, because a
- * quiet week is the normal case rather than the edge one: three is the fewest
- * that is a ranking rather than a matchup wearing an unfamiliar card, and a
- * week with two new photographs in it still has something worth asking.
+ * Deliberately unthemed. A themed round waits for five of one kind and falls
+ * back to a mixed card when it cannot find them; the point here is to seed
+ * *this week*, and what was cooked this week is whatever was cooked this week.
  */
 export async function postPlacementRoundIfDue(
   env: Env,
   now: number,
   { force = false }: { force?: boolean } = {}
 ): Promise<boolean> {
-  const weekdays = parseWeekdays(env.PLACEMENT_WEEKDAY);
-
   if (!force) {
     const due = weeklySlotDue(now, {
-      weekdays,
+      weekdays: parseWeekdays(env.PLACEMENT_WEEKDAY),
       hourUtc: Number(env.PLACEMENT_HOUR_UTC || "19"),
     });
     if (!due) return false;
@@ -278,11 +438,15 @@ export async function postPlacementRoundIfDue(
     exclude: live,
     now,
   });
-  // Nothing new this week, or the everyday draw already has it.
+  // Nothing new this week, or whatever is live already holds it.
   if (fresh.length === 0) return false;
 
   const closesAt = now + Number(env.PLACEMENT_WINDOW_HOURS || "24") * HOUR;
 
+  // Three is the fewest that is a ranking rather than a matchup wearing an
+  // unfamiliar card. Below it there is still a question worth asking, so a
+  // quiet week gets a pair rather than nothing — and a quiet week is the
+  // normal case here, not the edge one.
   const posted =
     fresh.length >= BALLOT_MIN
       ? await postPlacementCard(env, fresh, now, closesAt)
@@ -302,26 +466,18 @@ async function postPlacementCard(
   now: number,
   closesAt: number
 ): Promise<boolean> {
-  await createAndPost(
-    env,
-    "food",
-    fresh,
-    now,
-    closesAt,
-    "Placement round — this week's cooking, on the board for the first time. " +
-      "Rank them best first; you can stop whenever."
-  );
+  await createAndPost(env, "food", fresh, now, closesAt, "Placement round");
   return true;
 }
 
 /**
  * Too few new photographs for a card. Two from different people is a matchup
- * on its own terms; anything else — one photograph, or two from the same
- * kitchen, which never meet — goes up against the catalog instead.
+ * on its own terms; anything else — one photograph, or two from one kitchen,
+ * which never meet — goes up against the catalog instead.
  *
  * The second case is the one that earns its keep. A single new photograph
- * would otherwise wait on the fresh slot to notice it, and the fresh slot
- * fires once every four matchups and picks at random from a fortnight's worth.
+ * would otherwise wait on the fresh slot to notice it, and that fires once
+ * every four matchups and picks at random from a fortnight's worth.
  */
 async function postPlacementPair(
   env: Env,
@@ -351,9 +507,7 @@ async function postPlacementPair(
 
   await postDrawnPair(
     env,
-    Math.random() < 0.5
-      ? { a: first, b: opponent }
-      : { a: opponent, b: first },
+    Math.random() < 0.5 ? { a: first, b: opponent } : { a: opponent, b: first },
     now,
     closesAt,
     "Placement — something new against the catalog."
@@ -575,7 +729,14 @@ export async function repairRoundCard(
     const image = await renderCard(
       env,
       cardKey("ballot", round.id, stamp),
-      (attempt) => ballotImageUrl(env, round.id, entries, attempt)
+      (attempt) =>
+        ballotImageUrl(
+          env,
+          round.id,
+          entries,
+          `Rank ${roundLabel(round.category, entries)}`,
+          attempt
+        )
     );
     if (!image) {
       return {

@@ -1,11 +1,12 @@
 -- Ratings gain a deviation, and K stops being a constant.
 --
--- The catalog is about a thousand photographs and the everyday slot plays four
--- of them a day, so a full sweep takes the better part of a year. At a fixed
--- K of 24 a photograph that truly belongs 300 points above the opening rating
--- gains about eight points the first time it wins, which is thirty-five games
--- to get where it belongs — thirty-five games it will never get. Plain Elo at
--- this throughput does not converge slowly; it does not converge.
+-- The everyday pool is 577 photographs and about 6.7 of them go on the board a
+-- day counting the weekly five, so a sweep takes roughly three months and a
+-- photograph gets about four outings a year. At a fixed K of 24 a photograph
+-- that truly belongs 300 points above the opening rating gains about eight
+-- points the first time it wins, which is thirty-five games to get where it
+-- belongs — the better part of a decade at that rate. Plain Elo at this
+-- throughput does not converge slowly; it does not converge.
 --
 -- Glicko fixes the part that is actually wrong, which is that K encodes a
 -- fixed confidence. `rd` is how unsure we are of a photograph's rating, in

@@ -11,16 +11,28 @@ voter ranks them, in `rounds.ts` — its own tables, its own close path, the sam
 ratings underneath. The caption contest is in `contests.ts` and is the odd one
 out: players write rather than judge, and nothing gets a rating.
 
-Six slots, each drawing something nothing else touches. Cooking twice a day at
-9am and 9pm, drinks at happy hour as often as there is drink to post, places on
-Monday, people on Tuesday, the placement round on Thursday, and the caption
-contest across the weekend on everything left over.
+Eight slots. Cooking three matchups at 9am, all open for a full day, drinks at
+happy hour as often as there is drink to post, places ranked on Monday, people
+on Tuesday, five of one kind of plate on Wednesday, the week's new cooking on
+Thursday, five of one kind of drink on Friday, and the caption contest across
+the weekend on everything left over.
+
+The Wednesday and Friday fives are *themed*: five pastas, five steaks, five
+beers. Ranking five things asks a question a pair does not, and it only works
+when the five are comparable — so the classifier labels every dish and drink
+with a `kind` as well as a category, and the round is built around one of them.
+See **Kinds** below.
+
+Thursday's five is the other kind of round, grouped on recency instead: the
+week's new cooking, deliberately unthemed, so a photograph arrives with a
+rating rather than the opening one. See **The placement round seeds the week's
+new cooking**.
 
 Ratings are Glicko rather than plain Elo: every photograph carries a deviation
 alongside its rating, so a photograph nobody has voted on moves a long way on
 its first result and a photograph with a history behind it barely moves at all.
-See **Ratings carry a deviation** below — at a fixed K, on a catalog this deep
-and a cadence this slow, nothing ever converged.
+See **Ratings carry a deviation** — at a fixed K, on a catalog this deep and a
+cadence this slow, nothing ever converged.
 
 Rendering lives in the Next app (`app/api/scrandle/*`) because Workers Free
 allows 10ms of CPU per invocation, which cannot rasterize an image. The Worker
@@ -282,11 +294,30 @@ npm run dev:local
 npm run test:matchups 25
 ```
 
+If you have more than one worktree of this repo — and you probably do — the
+ports collide, and the failure is quiet rather than loud: the second checkout's
+requests go to the first one's worker, which is running different code against
+a different database, and you spend an hour reading a diff that was never the
+problem. Both ends override:
+
+```bash
+MOCK_DISCORD_PORT=9931 npm run mock:discord
+npx wrangler dev --local --config wrangler.test.toml --port 8842
+SCRANDLE_WORKER_URL=http://127.0.0.1:8842 npm run test:matchups 25
+```
+
+with `DISCORD_API_BASE` in `.dev.vars` pointed at the mock's port. `wrangler
+dev` also leaves `workerd.exe` running after the parent is killed, so check
+nothing is still holding the port before blaming the code.
+
 It drives each round through `/admin/post-matchup` and `/admin/close-matchup`
 rather than the cron, so it needs `BACKFILL_SECRET` in `.dev.vars` (the value
 from `.dev.vars.example` is what it assumes). Forcing is deliberate: the cron
 only posts on a named hour, so a cron-driven run posts nothing at all unless
-you happen to start it at 15:00 or 03:00 UTC. The posting schedule has its own
+you happen to start it at 15:00 UTC. It drives the draw with `?count=1` and the
+batch with `?count=3`, which override `MATCHUPS_PER_SLOT` for that one call —
+the suite cannot restart the worker to change a var, and the draw invariants
+want one matchup a round. The posting schedule has its own
 suite — `npm run test:schedule`, which also covers the drink cadence — and this
 one is about the draw. Ingest has a third, `npm run test:ingest`, covering the
 batching rule that keeps the cursor on a message boundary and the D1 write
@@ -387,7 +418,7 @@ nothing — posts each round through `/admin/post-matchup?place=1`, writes
 ballots straight into `round_votes`, and closes through
 `/admin/close-matchup`.
 
-Four catalogs. A **deep** one of 40 places across 8 people, with six voters
+Six catalogs. A **deep** one of 40 places across 8 people, with six voters
 ranking in six different orders, covers the rotation, the two-per-person cap,
 and the rule that a round is one match played rather than one per comparison.
 A **unanimous** one, where five voters submit the same order, is the only place
@@ -413,6 +444,16 @@ photographs nobody has ever voted on. One card spreads them across 500 rating
 points, where the identical card on settled ratings spreads them across 73 —
 which is the entire reason the placement slot exists, and the thing a fixed K
 could not do.
+
+Two more cover the themed food round, which is the same machinery pointed at a
+pool that has kinds in it. The **themed catalog** holds four kinds deep enough
+to fill a card, a handful of `other`, and a fifth kind that is one person's
+entire collection: it checks that every round is all one kind, that `other` is
+never themed on, that a kind nobody can field a card from is not drawn, and
+that the kinds rotate rather than the draw landing on burgers every week. The
+**unthemeable catalog** is six plates and six kinds, and checks the fallback —
+a week where nothing can be themed still gets a round, and that round is
+honestly a mixed one.
 
 ### Testing the placement round
 
@@ -444,20 +485,6 @@ work-it-out-from-the-category rule it would have counted as the day's cooking
 matchup and blacked out the next slot. The suite checks the flag is set and
 that the everyday matchup can still post beside it.
 
-### Running two worktrees at once
-
-`npm run dev:local` binds port 8787, and two checkouts of this repo cannot both
-have it — the second silently fails to bind and every request goes to the
-first, which is a confusing way to spend twenty minutes. Start the second on a
-port of its own and point the harnesses at it:
-
-```bash
-npx wrangler dev --local --config wrangler.test.toml --port 8798
-```
-```bash
-SCRANDLE_WORKER_URL=http://127.0.0.1:8798 npm run test:placement
-```
-
 ### Forcing a post by hand
 
 There is no way to fire a cron on demand, so three admin routes stand in. All
@@ -478,18 +505,24 @@ curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECR
 curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&person=1"
 curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&drink=1"
 curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&caption=1"
+curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&foodround=1"
+curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&drinkround=1"
 ```
 
 Posts one of the other slots on demand — `place=1` for the five-photo place
-ranking round, `placement=1` for the week's new cooking, `person=1` for
-person-vs-person, `drink=1` for drink-vs-drink — the same thing the scheduled
-cron does. Always overlaps, always gets that slot's flat window. `place=1`
-answers `{"posted":false}` when fewer than three places are available to rank,
-or when the per-poster cap leaves it short; `drink=1` answers the same when the
-catalog holds fewer than two drinks or they are all one person's;
-`placement=1` when there is no new cooking inside the window at all, or its one
-new photograph has no legal opponent. Forcing ignores the cadence entirely, so
-`drink=1` posts on a day the slot would not have fired on.
+ranking round, `person=1` for person-vs-person, `drink=1` for drink-vs-drink,
+`foodround=1` and `drinkround=1` for the themed fives, `placement=1` for the
+week's new cooking — the same thing the scheduled cron does. Always overlaps,
+always gets that slot's flat window. `place=1` answers `{"posted":false}` when
+fewer than three places are available to rank, or when the per-poster cap
+leaves it short; `drink=1` answers the same when the catalog holds fewer than
+two drinks or they are all one person's; `placement=1` when there is no new
+cooking inside the window at all, or its one new photograph has no legal
+opponent. Forcing ignores the cadence entirely, so `drink=1` posts on a day the
+slot would not have fired on.
+
+The flags are read in the order they are listed in `index.ts`, and the first
+one set wins — passing two is a request nobody meant to make, not two posts.
 
 `caption=1` opens a caption contest. It refuses while another is live —
 forced or not, because two open contests would ask people to write and to
@@ -638,24 +671,49 @@ why not.
   elapsed time. An elapsed-time floor has the same cycle-skipping failure: set
   near the cadence, it blocks the scheduled post whenever the previous one was
   early.
-- **Cron hours are UTC and ignore DST.** `POST_HOURS_UTC = "15,3"` is 9am/9pm
-  Mountain under MDT and 8am/8pm under MST — shift to `"16,4"` in November.
+- **Cron hours are UTC and ignore DST.** `POST_HOURS_UTC = "15"` is 9am
+  Mountain under MDT and 8am under MST — shift to `"16"` in November.
   `PLACE_HOUR_UTC`, `PERSON_HOUR_UTC`, `DRINK_HOUR_UTC` and `CAPTION_HOUR_UTC`
   are the same story and need shifting with it. The clock lives entirely in these vars: the cron stays broad and
   UTC. It ticks on the hour and at `:11`, and `:11` is the only reason the
   second entry exists — the person bonus fires at 11:11am, and an hourly cron
   cannot reach that minute on its own.
-- **One matchup at a time**, with a single exception. Posting refuses while
-  anything is open, even when forced, because two live matchups split the
-  vote. The exception is a bonus: `?overlap=1` on `/admin/post-matchup`, and
-  the place, person and drink slots, which are meant to run beside the
-  ordinary one. Closing already handles more than one being open, and a vote
-  carries its matchup id on the button, so nothing else needs to know.
-  "Open" here means an open *food* matchup, and that word is load-bearing:
-  while it counted drinks, a live drink matchup stood in front of the next
-  cooking slot and skipped it — the same cycle-skipping bug that closing on
-  the schedule was written to fix, arriving from a new direction.
-- **The 9am and 9pm posts are cooking, and only cooking.** The everyday draw
+- **`MATCHUPS_PER_SLOT` matchups at a time**, with a single exception. The
+  slot posts that many together and then refuses, even when forced, because a
+  fourth live matchup on a slot of three splits the vote the same way a second
+  did on a slot of one. The cap counts what is open rather than what was
+  posted, so a batch that could not close — a failed tick, a D1 blip — is
+  topped back up to three next time instead of being stacked on.
+
+  The exception is a bonus: `?overlap=1` on `/admin/post-matchup`, and the
+  place, person and drink slots, which are meant to run beside the ordinary
+  ones. Closing already handles several being open, and a vote carries its
+  matchup id on the button, so nothing else needs to know. "Open" here means an
+  open *food* matchup, and that word is load-bearing: while it counted drinks,
+  a live drink matchup stood in front of the next cooking slot and skipped it —
+  the same cycle-skipping bug that closing on the schedule was written to fix,
+  arriving from a new direction.
+- **The batch is one hour, not one an hour.** Three matchups go up together at
+  9am rather than at three times of day, because a matchup closes when the next
+  posting hour comes round: spreading them would cut every window to a third of
+  a day and make voting a matter of being in the channel at the right moment.
+  Together on one hour, each of the three stays open until 9am tomorrow.
+
+  The number is a decision about the backlog, and it is worth restating why.
+  577 food photographs, 539 of which have never been on the board, refilling at
+  about one a day. The Wednesday five comes out of the same pool, so two
+  matchups a day spends 4.7 photographs and gains one — a runway of about five
+  months before anything repeats. Three spends 6.7 and makes it three months.
+  That is a real cost and worth paying: at two a day a photograph gets 1.9
+  outings a year, and a rating built on that is noise. Nothing here runs out —
+  the draw orders by `matches_played`, so an empty backlog simply means a second
+  lap — and the second lap is where the standings start to mean something.
+
+  Turnout is the thing to watch rather than the catalog. Eight people vote,
+  matchups average six votes each, and on 30 August six went up in one day and
+  every one of them still took seven votes. If that average starts sliding,
+  this is the number to turn down.
+- **The 9am posts are cooking, and only cooking.** The everyday draw
   is fixed to `food`. Everything else the classifier labels — `drink`,
   `place`, `person` — is drawn on a slot of its own: a five-photo place
   ranking round on `PLACE_WEEKDAY` (Monday noon by default), person against
@@ -755,12 +813,14 @@ why not.
   250, narrows as results come in, and floors at 60.
 
   The fixed `K` of 24 it replaced could not work here, and the numbers say so
-  plainly. The catalog is about a thousand photographs and the everyday slot
-  plays four a day, so a sweep takes the better part of a year. At `K` 24 a
-  photograph that belongs 300 points above the opening rating gains about eight
-  points the first time it wins — thirty-five games to arrive, at one game a
-  sweep. Every rating in the table was 1500 plus a coin toss and would have
-  stayed that way. Under Glicko the same photograph is at 1685 after six.
+  plainly. The everyday pool is 577 photographs and about 6.7 go on the board a
+  day counting the weekly five, so a sweep takes roughly three months and a
+  photograph gets about four outings a year. At `K` 24 a photograph that
+  belongs 300 points above the opening rating gains about eight points the
+  first time it wins — thirty-five games to arrive, which at four a year is the
+  better part of a decade. Every rating in the table was 1500 plus a coin toss
+  and would have stayed that way. Under Glicko the same photograph is where it
+  belongs inside a handful of games.
 
   The floor is picked so that two settled photographs meeting produce an
   effective `K` near 20, which is close enough to the old 24 that nothing with
@@ -771,7 +831,7 @@ why not.
   Glicko-2, and it models a competitor's true strength drifting over time,
   which a photograph's does not; it is the same photograph. And the deviation
   is never inflated back between games for the same reason: a photograph that
-  last played eight months ago is exactly as well understood as it was then.
+  last played three months ago is exactly as well understood as it was then.
   Inflating it would be ruinous at this cadence anyway, since everything is
   inactive almost all of the time, and it would hand back the noise this
   replaced.
@@ -786,12 +846,12 @@ why not.
   on one card.
 
   The everyday rotation does already put unplayed photographs first, and that
-  is not the same thing as putting *new* ones first. There are hundreds of
-  unplayed photographs and the pick among them is random, so something posted
-  on Tuesday joins the back of a queue that takes most of a year to clear. The
-  fresh slot fires on one primary in four and helps, but it draws one
-  photograph at a time; this draws the week, and a card is four comparisons per
-  photograph rather than one.
+  is not the same thing as putting *new* ones first. 539 of the 577 in the pool
+  have never played and the pick among them is random, so something posted on
+  Tuesday joins the back of a queue about three months deep. The fresh slot
+  fires on one primary in four and helps, but it draws one photograph at a
+  time; this draws the week, and a card is four comparisons per photograph
+  rather than one.
 
   It is the deviation that makes it worth doing. Five newcomers at their widest
   deviation judged against each other means one card can separate them by 500
@@ -819,7 +879,57 @@ why not.
   for every row written before it.
 - **Places do not count toward chef standings**, and neither do people. They
   earn an Elo like any other photo, but averaging a holiday snap or a group
-  shot into someone's cooking record would rate them on the wrong thing.
+  shot into someone's cooking record would rate them on the wrong thing. The
+  themed food and drink rounds are the other way about: those *are* the
+  categories the standings average, so winning one moves a cook up the table
+  exactly as winning a matchup does.
+- **Kinds: what a photograph is, one level below the category.** `category`
+  answers what a photo may play against — food with food, drink with drink —
+  and that is all a pair needs, because a pair can be drawn to be comparable.
+  Five cannot. An ungrouped five drawn from food at large is a lasagne, a
+  fry-up, a cheeseboard, a taco and a bowl of ramen, and what people rank there
+  is which meal they fancy rather than which plate is better.
+
+  So the classifier writes a `kind` alongside the category, in the same call,
+  and the weekly fives are built around one of them: five pastas, five steaks,
+  five beers. The list is closed and deliberately coarse — twenty-one kinds of
+  food, seven of drink, and `other` — because a free-text kind fragments on
+  contact with a channel. "Pasta", "spaghetti", "pasta bake" and "carbonara"
+  are four groups of one, and a themed round needs three of something. See
+  `kinds.ts`, which is also where the classifier's prompt for them is built,
+  so the enum and the description it is chosen from cannot drift apart.
+
+  Only food and drink have kinds. A pet or a receipt is only ever a caption
+  prompt, and bucketing those would be labelling something nothing will draw on.
+- **A kind is eligible when it can fill a card by itself.** Three photographs
+  that are not already live, from at least two people — which are the ballot
+  draw's own rules stated one step ahead of it rather than new ones, so a kind
+  that qualifies always yields a postable round and never has to be tried and
+  discarded. The per-poster cap is why the second condition is there: a kind
+  that is one person's collection can only ever put two on the card however
+  deep it goes.
+
+  Among the eligible, the pick is the rotation the rest of the game runs on —
+  the kind holding the least-played photographs goes first, which early on,
+  when everything is unplayed, quietly favours the kinds deep enough to fill
+  all five slots.
+- **A themed round falls back to a mixed one rather than skipping the week.**
+  A slot that fires only once the catalog is deep enough is a weekly post that
+  does not appear for months, and the mixed five is what the place round has
+  always been. The card says which it got: "rank the pasta" when it found a
+  theme, "rank the plates" when it did not.
+- **Kinds are backfilled by the classifier, not by a migration.** Every
+  photograph already in the catalog has a category and no kind, so the pending
+  query takes "labelled, but not to this depth" as work — and sorts it behind
+  the photographs that have no category at all, which are the ones that cannot
+  play until they are labelled. Twenty an hour drains a thousand-dish backlog
+  in a couple of days, during which the themed rounds have progressively more
+  to choose from and the rest of the game is untouched.
+
+  The write is a `COALESCE` rather than an assignment, for the rows that are
+  only there for the kind: overwriting a category under an open matchup is a
+  pair that no longer shares one, and overwriting a name is a photograph the
+  channel has already seen renaming itself.
 - **The draw is a rotation.** Both halves of a pair come off the least-played
   end of the pool, in every category, so the whole catalog plays once before
   anything plays twice and then again before anything plays three times. Within

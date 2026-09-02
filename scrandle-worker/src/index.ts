@@ -12,6 +12,8 @@ import {
 } from "./matchups";
 import {
   closeDueRounds,
+  postDrinkRoundIfDue,
+  postFoodRoundIfDue,
   postPlaceRoundIfDue,
   postPlacementRoundIfDue,
   repairRoundCard,
@@ -23,6 +25,16 @@ import {
 } from "./contests";
 import type { Env, Interaction } from "./types";
 import { verifyDiscordRequest } from "./verify";
+
+/**
+ * `?count=` on the manual post route: a positive integer, or undefined to let
+ * MATCHUPS_PER_SLOT decide. Junk is ignored rather than rejected — this is a
+ * hand-driven route, and the useful answer to a typo is the configured batch.
+ */
+function batchCount(raw: string | null): number | undefined {
+  const count = Number(raw);
+  return raw !== null && Number.isInteger(count) && count > 0 ? count : undefined;
+}
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -68,74 +80,101 @@ export default {
 
     // Posts a matchup immediately, ignoring the cadence floor. There is no way
     // to trigger a cron by hand, and waiting an hour to test a change is not a
-    // workable loop. Refuses if a matchup is already open unless `overlap=1`,
-    // which puts a bonus matchup up beside the running one. A bonus post never
+    // workable loop. Refuses once the slot's matchups are all open unless
+    // `overlap=1`, which puts a bonus matchup up beside the running ones.
+    // `count=` overrides MATCHUPS_PER_SLOT for the one call. A bonus post never
     // claims the hour's slot, so the schedule carries on untouched.
     if (url.pathname === "/admin/post-matchup") {
       if (url.searchParams.get("secret") !== env.BACKFILL_SECRET) {
         return new Response("Nope", { status: 403 });
       }
       try {
-        // One slot per flag: that category only, running beside whatever is
-        // open, on a flat window. A forced bonus always overlaps.
+        // Each bonus posts its own slot on demand: that category only, running
+        // beside whatever is open, on a flat window. A bonus always overlaps.
         //
-        // A table rather than a ternary chain. There are six of these now, each
-        // wanting a name, a poster and a sentence explaining an empty answer,
-        // and nested conditionals across three values stopped being readable
-        // several slots ago.
-        const slots: Record<
-          string,
-          { post: () => Promise<boolean>; reason: string }
-        > = {
-          place: {
+        // A table rather than a chain of ternaries. There are six of these now
+        // and each one used to appear three times — the call, the label and
+        // the reason — in three separately-nested conditionals that had to
+        // stay in the same order to keep saying the same thing.
+        const bonuses = [
+          {
+            flag: "place",
+            label: "place round",
             post: () => postPlaceRoundIfDue(env, Date.now(), { force: true }),
             reason:
               "fewer than three places available to rank, or too many of them one person's",
           },
-          placement: {
+          {
+            flag: "foodround",
+            label: "food round",
+            post: () => postFoodRoundIfDue(env, Date.now(), { force: true }),
+            reason:
+              "fewer than three plates available to rank, or too many of them one person's",
+          },
+          {
+            flag: "drinkround",
+            label: "drink round",
+            post: () => postDrinkRoundIfDue(env, Date.now(), { force: true }),
+            reason:
+              "fewer than three drinks available to rank, or too many of them one person's",
+          },
+          {
+            flag: "placement",
+            label: "placement round",
             post: () => postPlacementRoundIfDue(env, Date.now(), { force: true }),
             reason:
               "no new cooking inside the window, or its one new photograph has no legal opponent",
           },
-          person: {
+          {
+            flag: "person",
+            label: "person",
             post: () => postPersonMatchupIfDue(env, Date.now(), { force: true }),
             reason:
               "fewer than two people in the catalog, only one person's photographs, or both are already live",
           },
-          drink: {
+          {
+            flag: "drink",
+            label: "drink",
             post: () => postDrinkMatchupIfDue(env, Date.now(), { force: true }),
             reason:
               "fewer than two drinks in the catalog, only one person's drinks, or both are already live",
           },
-          caption: {
+          {
+            flag: "caption",
+            label: "caption contest",
             post: () => postCaptionContestIfDue(env, Date.now(), { force: true }),
             reason:
               "a contest is already live, or there is nothing in the ingredient/pet/document/screenshot/other categories to draw",
           },
-        };
+        ];
 
-        const kind = Object.keys(slots).find(
-          (name) => url.searchParams.get(name) === "1"
+        const bonus = bonuses.find(
+          (candidate) => url.searchParams.get(candidate.flag) === "1"
         );
-        const slot = kind ? slots[kind] : undefined;
+        const overlap =
+          Boolean(bonus) || url.searchParams.get("overlap") === "1";
 
-        // A named slot is a bonus and always overlaps; the everyday matchup
-        // needs asking for.
-        const overlap = Boolean(slot) || url.searchParams.get("overlap") === "1";
-
-        const posted = slot
-          ? await slot.post()
-          : await postMatchupIfDue(env, Date.now(), { force: true, overlap });
+        const posted = bonus
+          ? await bonus.post()
+          : await postMatchupIfDue(env, Date.now(), {
+              force: true,
+              overlap,
+              // How many everyday matchups to put up, overriding
+              // MATCHUPS_PER_SLOT. The simulation suite drives the draw one
+              // matchup at a time and the batch three at a time, and neither
+              // can restart the worker to change a var.
+              count: batchCount(url.searchParams.get("count")),
+            });
 
         return Response.json({
           posted,
-          kind: kind ?? "matchup",
+          kind: bonus?.label ?? "matchup",
           reason: posted
             ? null
-            : (slot?.reason ??
+            : (bonus?.reason ??
               (overlap
                 ? "no pair could be drawn"
-                : "a matchup is already open, or no pair could be drawn")),
+                : "the slot's matchups are already open, or no pair could be drawn")),
         });
       } catch (error) {
         const reason = error instanceof Error ? error.message : String(error);
@@ -327,6 +366,23 @@ export default {
       await logToDiscord(env, `Place round failed: ${String(error)}`);
     }
 
+    // The themed fives. Same machinery as the place round and the same
+    // reason they are separate calls: one that cannot draw a card must not
+    // stop the others trying.
+    try {
+      await postFoodRoundIfDue(env, now);
+    } catch (error) {
+      await logToDiscord(env, `Food round failed: ${String(error)}`);
+    }
+
+    try {
+      await postDrinkRoundIfDue(env, now);
+    } catch (error) {
+      await logToDiscord(env, `Drink round failed: ${String(error)}`);
+    }
+
+    // The placement round, which is a draw rather than a theme: the week's new
+    // cooking, so it arrives with a rating instead of the opening one.
     try {
       await postPlacementRoundIfDue(env, now);
     } catch (error) {

@@ -12,10 +12,13 @@
  * no build step and no test dependency.
  */
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   drinkCadence,
   nextPostTime,
+  parsePerSlot,
   parsePostHours,
+  parseWeekdays,
   postSlotKey,
 } from "../src/schedule.ts";
 
@@ -44,6 +47,35 @@ check("sorts and dedupes", HOURS, [3, 15]);
 check("drops junk and out-of-range", parsePostHours("15, x, 99, -1, 3, 3"), [3, 15]);
 check("empty string", parsePostHours(""), []);
 check("undefined", parsePostHours(undefined), []);
+
+console.log("\nparsePerSlot");
+check("the configured batch", parsePerSlot("3"), 3);
+check("one is one", parsePerSlot("1"), 1);
+check("unset means the old behaviour", parsePerSlot(undefined), 1);
+check("empty means the old behaviour", parsePerSlot(""), 1);
+check("whitespace is trimmed", parsePerSlot(" 3 "), 3);
+check("junk means the old behaviour", parsePerSlot("three"), 1);
+check("zero would post nothing, so it does not", parsePerSlot("0"), 1);
+check("negatives likewise", parsePerSlot("-2"), 1);
+check("a fraction is not a count", parsePerSlot("2.5"), 1);
+check("a typo cannot empty the catalog", parsePerSlot("300"), 10);
+
+// The live schedule: one named hour, three matchups on it, each open until the
+// same hour tomorrow. The point of moving the cadence off POST_HOURS_UTC is
+// that adding matchups no longer shortens the window, so that is what to
+// assert — under the old two-hour schedule these would have been 12 apart.
+console.log("\nthe 9am batch");
+const NINE_AM = parsePostHours("15");
+check("one named hour a day", NINE_AM, [15]);
+const posted = Date.parse("2026-09-02T15:00:00.4Z");
+const batchCloses = nextPostTime(NINE_AM, posted, FALLBACK);
+check("the batch closes on tomorrow's slot", iso(batchCloses), "2026-09-03T15:00:00Z");
+check("which is a full day of voting", Math.round((batchCloses - posted) / HOUR), 24);
+check(
+  "three matchups posted together are one slot, not three",
+  new Set([1, 2, 3].map((i) => postSlotKey(posted + i))).size,
+  1
+);
 
 console.log("\nnextPostTime");
 check(
@@ -203,6 +235,60 @@ check("no day is listed twice", duplicated, []);
 // The drink slot has an hour to itself. Sharing one with the food posts would
 // put a cocktail right beside the cooking matchup it was moved out of.
 check("23:00 is clear of the food hours", HOURS.includes(23), false);
+
+// ── the weekly slots, as actually configured ───────────────────────
+// Six weekly posts share one channel now, and every one of them is a pair of
+// numbers in wrangler.toml that somebody has to shift twice a year when the
+// clocks change. Two landing on the same day and hour is not an error anything
+// would report — both would simply go up in the same minute, and the second
+// would read as the first having posted twice.
+//
+// Only the fixed slots are here. The drink matchup computes its days from the
+// catalog, and the caption contest occupies the two days after the one it is
+// configured for, so neither can be checked against a constant.
+console.log("\nthe configured weekly slots");
+
+const config = readFileSync("wrangler.toml", "utf-8");
+const setting = (name) =>
+  config.match(new RegExp(`^${name} = "([^"]*)"`, "m"))?.[1] ?? "";
+
+const weekly = [
+  ["standings", "STANDINGS_WEEKDAY", "STANDINGS_HOUR_UTC"],
+  ["place round", "PLACE_WEEKDAY", "PLACE_HOUR_UTC"],
+  ["person bonus", "PERSON_WEEKDAY", "PERSON_HOUR_UTC"],
+  ["food round", "FOOD_ROUND_WEEKDAY", "FOOD_ROUND_HOUR_UTC"],
+  ["drink round", "DRINK_ROUND_WEEKDAY", "DRINK_ROUND_HOUR_UTC"],
+  ["caption contest", "CAPTION_WEEKDAY", "CAPTION_HOUR_UTC"],
+].map(([name, weekday, hour]) => ({
+  name,
+  days: parseWeekdays(setting(weekday)),
+  hour: Number(setting(hour)),
+}));
+
+check(
+  "every weekly slot has a day and an hour",
+  weekly.filter((slot) => slot.days.length === 0 || !Number.isInteger(slot.hour))
+    .map((slot) => slot.name),
+  []
+);
+
+const taken = new Map();
+const clashes = [];
+for (const slot of weekly) {
+  for (const day of slot.days) {
+    const key = `${day}@${slot.hour}`;
+    if (taken.has(key)) clashes.push(`${slot.name} and ${taken.get(key)} both on ${key}`);
+    taken.set(key, slot.name);
+  }
+}
+check("no two weekly slots share a day and an hour", clashes, []);
+
+// A bonus is meant to run beside the cooking matchup, not on top of it.
+check(
+  "no weekly slot lands on a cooking hour",
+  weekly.filter((slot) => HOURS.includes(slot.hour)).map((slot) => slot.name),
+  []
+);
 
 console.log(failures === 0 ? "\nAll passed." : `\n${failures} failed.`);
 process.exit(failures === 0 ? 0 : 1);
