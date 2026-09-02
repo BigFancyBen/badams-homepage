@@ -5,7 +5,9 @@ import {
   ballotEmbed,
   editMessage,
   escapeMarkdown,
+  messageUrl,
   postMessage,
+  replyTo,
   sourceLink,
 } from "./discord";
 import {
@@ -46,9 +48,11 @@ const HOUR = 60 * 60 * 1000;
  * alongside the human ones with nothing marking it, and where it placed is
  * announced with the result.
  *
- * Two phases, two messages. Voting cannot be posted until the writing is over,
- * and editing the first message into a ballot would bury the vote under a day
- * of channel traffic, so the vote gets a post of its own.
+ * Two phases and a result, so three messages. Voting cannot be posted until the
+ * writing is over, and editing the first message into a ballot would bury the
+ * vote under a day of channel traffic; the same is true of the result a day
+ * after that. Each gets a post of its own, replying to the one before it, and
+ * each older post is edited down to a link forward.
  */
 
 /** The pool. Everything the rest of the game has no question to ask of. */
@@ -294,6 +298,7 @@ async function openVoting(env: Env, contest: Contest, now: number): Promise<void
     embeds: [{ color: ACCENT, image: { url: dishUrl(env, dish) } }],
     components: ballotButtons(contest.id, numbered),
     allowed_mentions: allowedMentions(env),
+    ...replyTo(contest.submit_message_id),
   });
 
   await env.DB.prepare("UPDATE contests SET vote_message_id = ? WHERE id = ?")
@@ -301,12 +306,15 @@ async function openVoting(env: Env, contest: Contest, now: number): Promise<void
     .run();
 
   // Point the writing post at the vote and take its button away, so a contest
-  // does not sit in the channel looking like it is still open.
+  // does not sit in the channel looking like it is still open. A link rather
+  // than "below": a day of writing means a day of channel traffic between the
+  // two, and "below" is only true for whoever was reading at the time.
   if (contest.submit_message_id) {
     await editMessage(env, contest.submit_message_id, {
       content:
         `**Caption contest #${contest.id} — writing is closed.** ` +
-        `${numbered.length} captions went in. The vote is below.`,
+        `${numbered.length} captions went in. ` +
+        `[The vote is here.](${messageUrl(env, message.id)})`,
       components: [],
       allowed_mentions: allowedMentions(env),
     });
@@ -442,6 +450,8 @@ async function closeOne(env: Env, contest: Contest, now: number): Promise<void> 
     ),
   ]);
 
+  // No ballot means the contest never got past writing, which in turn means
+  // nobody has anything to be shown the result of.
   if (!contest.vote_message_id) return;
 
   const dish = await getDish(env, contest.dish_id);
@@ -466,11 +476,11 @@ async function closeOne(env: Env, contest: Contest, now: number): Promise<void> 
     : [];
 
   if (ballots.length === 0) {
-    await editMessage(env, contest.vote_message_id, {
+    // Still a reveal, unlike an unvoted matchup: nobody has seen who wrote
+    // which caption, and that is most of what a contest is for.
+    await postResult(env, contest, {
       content: `**Caption contest #${contest.id} — closed.** Nobody voted.`,
       embeds: [...photo, table],
-      components: [],
-      allowed_mentions: allowedMentions(env),
     });
     return;
   }
@@ -501,12 +511,48 @@ async function closeOne(env: Env, contest: Contest, now: number): Promise<void> 
     })
   );
 
-  await editMessage(env, contest.vote_message_id, {
+  await postResult(env, contest, {
     content:
-      `**Caption contest #${contest.id} — closed.** ` +
+      `**Caption contest #${contest.id} — the result.** ` +
       `**${escapeMarkdown(winnerName)}** takes it.\n` +
       `${ballots.length} ${ballots.length === 1 ? "ballot" : "ballots"}.${botLine}`,
     embeds: [...photo, table, log],
+  });
+}
+
+/**
+ * The reveal as its own message, replying to the ballot, with the ballot edited
+ * down to a pointer at it. The same move the matchups and the ranking rounds
+ * make, and for the same reason — see postResult in matchups.ts.
+ *
+ * It matters more here than anywhere else. A contest runs for two days across
+ * two posts, so by the time the winner is announced the ballot is the older of
+ * two things already buried, and an edit to it is the one thing in the whole
+ * game nobody would ever find.
+ */
+async function postResult(
+  env: Env,
+  contest: Contest,
+  body: { content: string; embeds: unknown[] }
+): Promise<void> {
+  const result = await postMessage(env, {
+    ...body,
+    allowed_mentions: allowedMentions(env),
+    ...replyTo(contest.vote_message_id),
+  });
+
+  await env.DB.prepare("UPDATE contests SET result_message_id = ? WHERE id = ?")
+    .bind(result.id, contest.id)
+    .run();
+
+  if (!contest.vote_message_id) return;
+
+  // Content and components only, so the photograph stays on the ballot and the
+  // numbered captions the buttons referred to stay readable underneath it.
+  await editMessage(env, contest.vote_message_id, {
+    content:
+      `**Caption contest #${contest.id} — voting is closed.** ` +
+      `[The result is here.](${messageUrl(env, result.id)})`,
     components: [],
     allowed_mentions: allowedMentions(env),
   });

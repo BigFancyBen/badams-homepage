@@ -165,17 +165,22 @@ export async function getMatchup(
 }
 
 /**
- * By the Discord message it was posted as. A matchup that went out without a
- * card carries its id nowhere a reader can see — not in the text, only in the
- * vote buttons — so a repair has to be reachable from the message link, which
- * is the one thing anyone looking at a broken round actually has.
+ * By the Discord message it was posted as — or the one its result went out as,
+ * since a closed matchup now has two. A matchup that went out without a card
+ * carries its id nowhere a reader can see — not in the text, only in the vote
+ * buttons — so a repair has to be reachable from the message link, which is the
+ * one thing anyone looking at a broken round actually has. Either link works,
+ * because which of the two somebody pastes depends only on which one they were
+ * looking at when they noticed.
  */
 export async function getMatchupByMessage(
   env: Env,
   messageId: string
 ): Promise<Matchup | null> {
-  return env.DB.prepare("SELECT * FROM matchups WHERE message_id = ?")
-    .bind(messageId)
+  return env.DB.prepare(
+    "SELECT * FROM matchups WHERE message_id = ? OR result_message_id = ?"
+  )
+    .bind(messageId, messageId)
     .first<Matchup>();
 }
 
@@ -246,12 +251,15 @@ export async function getRound(env: Env, id: number): Promise<Round | null> {
     .first<Round>();
 }
 
+/** By the ballot message or the result message — see getMatchupByMessage. */
 export async function getRoundByMessage(
   env: Env,
   messageId: string
 ): Promise<Round | null> {
-  return env.DB.prepare("SELECT * FROM rounds WHERE message_id = ?")
-    .bind(messageId)
+  return env.DB.prepare(
+    "SELECT * FROM rounds WHERE message_id = ? OR result_message_id = ?"
+  )
+    .bind(messageId, messageId)
     .first<Round>();
 }
 
