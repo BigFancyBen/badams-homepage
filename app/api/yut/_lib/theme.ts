@@ -32,6 +32,22 @@ export function tierColor(tier: string): string {
   return TIER_COLOR[tier] ?? RS.border;
 }
 
+/** Shop-bought sheet trims: the colour of the inner frame line. */
+export const TRIM_COLOR: Record<string, string> = {
+  gold: "#c9a227",
+  silver: "#c0c0c0",
+  obsidian: "#2b2b2b",
+  "third-age": "#e8dcae",
+};
+
+/** Obsidian is near-black on a dark panel, so it gets a glow line beside it. */
+export const OBSIDIAN_GLOW = "#7a5cff";
+
+/** null for no trim or an unknown one: the sheet then draws no inner line. */
+export function trimColor(trim: string | undefined): string | null {
+  return trim ? (TRIM_COLOR[trim] ?? null) : null;
+}
+
 /** A 3x3 grid read row by row, in the spirit of the stats tab. */
 export const SKILL_ORDER = [
   "attack",

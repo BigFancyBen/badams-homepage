@@ -4,12 +4,14 @@ import { yutFonts } from "../../_lib/fonts";
 import { iconDataUrl } from "../../_lib/icons";
 import {
   FONT,
+  OBSIDIAN_GLOW,
   RS,
   SHEET_HEIGHT,
   SHEET_WIDTH,
   SKILL_ORDER,
   skillLabel,
   tierColor,
+  trimColor,
 } from "../../_lib/theme";
 
 interface SheetSkill {
@@ -49,12 +51,26 @@ interface SheetPayload {
   ti?: string;
   /** Act number */
   a: number;
+  /**
+   * Equipped shop cosmetics. Known keys: `trim` (gold | silver | obsidian |
+   * third-age), `pet` (e.g. "Baby Mole"), `cape` (e.g. "Act 2 cape (Varrock)").
+   * Anything else is ignored.
+   */
+  eq?: Record<string, string>;
+  /** Boss heads: raids won */
+  bh?: number;
+  /** Bingo points */
+  bp?: number;
   /** Retry counter. Only there to make a re-render a different URL. */
   r?: number;
 }
 
 const FRAME = 6;
-const PAD = 20;
+/** Gap between the tier frame and the trim line, then the trim line itself. */
+const TRIM_GAP = 4;
+const TRIM_LINE = 2;
+/** Inner padding, sized so the content box is the same width as before trims. */
+const PAD = 14;
 const CELL_WIDTH = 270;
 const CELL_HEIGHT = 110;
 const CELL_GAP = 12;
@@ -62,6 +78,19 @@ const CELL_GAP = 12;
 function clampPct(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return Math.max(0, Math.min(100, value));
+}
+
+/** A non-empty string from the cosmetics bag, or undefined. */
+function cosmetic(eq: Record<string, string> | undefined, key: string): string | undefined {
+  const value = eq?.[key];
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+/** A finite, non-negative count, or undefined when the Worker sent nothing usable. */
+function count(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? Math.floor(value)
+    : undefined;
 }
 
 /**
@@ -89,10 +118,17 @@ export async function GET(request: Request) {
     return new Response(result.error, { status: result.status });
   }
 
-  const { n, s, t, tier, tn, d7, fw, rg, lm, cl, log, ti, a } = result.payload;
+  const { n, s, t, tier, tn, d7, fw, rg, lm, cl, log, ti, a, eq, bh, bp } = result.payload;
   const frame = tierColor(tier);
   const skills = orderedSkills(Array.isArray(s) ? s : []);
   const days = (d7 ?? "").padEnd(7, ".").slice(0, 7).split("");
+
+  const trimKey = cosmetic(eq, "trim");
+  const trim = trimColor(trimKey);
+  const pet = cosmetic(eq, "pet");
+  const cape = cosmetic(eq, "cape");
+  const bossHeads = count(bh);
+  const bingoPoints = count(bp);
 
   const footer: string[] = [
     `Form weeks ${fw}`,
@@ -102,19 +138,47 @@ export async function GET(request: Request) {
   if (cl) footer.push(`Clue ${cl.tier} ${cl.step}/${cl.of}`);
   footer.push(`Log ${log}/90`, `Act ${a}`);
 
+  /** Right-hand footer group. A zero head count is left off; a dragon beside a 0 reads oddly. */
+  const trophies: string[] = [];
+  if (bossHeads) trophies.push(`🐲 ${bossHeads}`);
+  if (bingoPoints !== undefined) trophies.push(`🎯 ${bingoPoints} pts`);
+
   return new ImageResponse(
     (
       <div
         style={{
           display: "flex",
-          flexDirection: "column",
           width: "100%",
           height: "100%",
           backgroundColor: RS.panel,
           border: `${FRAME}px solid ${frame}`,
-          padding: PAD,
+          padding: TRIM_GAP,
           fontFamily: FONT.body,
           color: RS.parchment,
+        }}
+      >
+      {/*
+        Inner frame line. Always drawn so the content box never moves; without
+        a trim it is transparent. Obsidian is near-black, so it gets a violet
+        glow line just inside it.
+      */}
+      <div
+        style={{
+          display: "flex",
+          flex: 1,
+          border: `${TRIM_LINE}px solid ${trim ?? "transparent"}`,
+          // Satori throws on an undefined boxShadow, hence the spread.
+          ...(trimKey === "obsidian"
+            ? { boxShadow: `inset 0 0 0 ${TRIM_LINE}px ${OBSIDIAN_GLOW}` }
+            : {}),
+        }}
+      >
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          flex: 1,
+          padding: PAD,
         }}
       >
         {/* Header */}
@@ -123,35 +187,65 @@ export async function GET(request: Request) {
             display: "flex",
             alignItems: "flex-end",
             justifyContent: "space-between",
-            height: 64,
-            paddingBottom: 10,
+            paddingBottom: 8,
             borderBottom: `2px solid ${RS.border}`,
           }}
         >
-          <div style={{ display: "flex", alignItems: "baseline" }}>
-            <div
-              style={{
-                display: "flex",
-                fontFamily: FONT.bold,
-                fontSize: 44,
-                color: RS.yellow,
-                textShadow: RS.shadow,
-              }}
-            >
-              {n}
-            </div>
-            {ti ? (
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            <div style={{ display: "flex", alignItems: "baseline", height: 52 }}>
               <div
                 style={{
                   display: "flex",
-                  marginLeft: 16,
-                  fontFamily: FONT.chat,
-                  fontSize: 26,
-                  color: RS.orange,
+                  fontFamily: FONT.bold,
+                  fontSize: 44,
+                  color: RS.yellow,
                   textShadow: RS.shadow,
                 }}
               >
-                {ti}
+                {n}
+              </div>
+              {ti ? (
+                <div
+                  style={{
+                    display: "flex",
+                    marginLeft: 16,
+                    fontFamily: FONT.chat,
+                    fontSize: 26,
+                    color: RS.orange,
+                    textShadow: RS.shadow,
+                  }}
+                >
+                  {ti}
+                </div>
+              ) : null}
+              {pet ? (
+                <div
+                  style={{
+                    display: "flex",
+                    marginLeft: 16,
+                    fontFamily: FONT.chat,
+                    fontSize: 20,
+                    color: RS.parchment,
+                    textShadow: RS.shadow,
+                  }}
+                >
+                  {`🐾 ${pet}`}
+                </div>
+              ) : null}
+            </div>
+            {cape ? (
+              <div
+                style={{
+                  display: "flex",
+                  height: 22,
+                  fontFamily: FONT.chat,
+                  fontSize: 20,
+                  lineHeight: 1,
+                  color: RS.parchment,
+                  textShadow: RS.shadow,
+                }}
+              >
+                {cape}
               </div>
             ) : null}
           </div>
@@ -292,12 +386,12 @@ export async function GET(request: Request) {
             paddingTop: 10,
             borderTop: `2px solid ${RS.border}`,
             fontFamily: FONT.chat,
-            fontSize: 22,
+            fontSize: 20,
             color: RS.parchment,
             textShadow: RS.shadow,
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", marginRight: 22 }}>
+          <div style={{ display: "flex", alignItems: "center", marginRight: 18, flexShrink: 0 }}>
             {days.map((day, i) => (
               <div
                 key={i}
@@ -314,11 +408,22 @@ export async function GET(request: Request) {
             ))}
           </div>
           {footer.map((text) => (
-            <div key={text} style={{ display: "flex", marginRight: 22 }}>
+            <div key={text} style={{ display: "flex", marginRight: 18, flexShrink: 0 }}>
               {text}
             </div>
           ))}
+          {trophies.length ? (
+            <div style={{ display: "flex", marginLeft: "auto", flexShrink: 0 }}>
+              {trophies.map((text, i) => (
+                <div key={text} style={{ display: "flex", marginLeft: i === 0 ? 0 : 18 }}>
+                  {text}
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
+      </div>
+      </div>
       </div>
     ),
     { width: SHEET_WIDTH, height: SHEET_HEIGHT, fonts: await yutFonts() }
