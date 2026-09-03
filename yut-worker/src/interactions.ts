@@ -217,6 +217,29 @@ export async function handleInteraction(
 }
 
 /**
+ * A slash command that is a button in disguise: `/lamp` is the Lamp button.
+ * Route it as the button, but hand the answer back so the command's own
+ * delivery sends it. Running the forged button through deliver() answered
+ * with a running-reply edit (a button-only ack) whenever the person had a
+ * recent receipt, and Discord shows "didn't respond in time" when a slash
+ * command gets that.
+ */
+export function routeAsButton(
+  env: Env,
+  ctx: ExecutionContext,
+  interaction: Interaction,
+  customId: string,
+  now: number
+): Promise<Answer> {
+  return route(
+    env,
+    ctx,
+    { ...interaction, type: InteractionType.MESSAGE_COMPONENT, data: { custom_id: customId, name: interaction.data?.name } },
+    now
+  );
+}
+
+/**
  * Discord gives an interaction three seconds, network included, and a cold
  * D1 can spend most of that on its own — the first `/join` after a deploy
  * came back "didn't respond in time". So: run the handler, and if it has not
