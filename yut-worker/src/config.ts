@@ -46,14 +46,19 @@ export function isSkill(key: string): key is SkillKey {
   return (SKILLS as string[]).includes(key);
 }
 
-/** RuneScape's curve, divided by this. 99 needs ~6,500 baseline check-ins. */
-export const XP_DIVISOR = 10;
+/**
+ * RuneScape's experience table, exactly — level 99 is 13,034,431 XP and every
+ * unlock sits at its RuneScape level. Awards are sized so a check-in is worth
+ * about two thousand, which puts a two-a-week player at Dragon (Hitpoints
+ * 60, 273,742 XP) by the finale. 99 is unreachable by design.
+ */
+export const XP_DIVISOR = 1;
 export const LEVEL_CAP = 99;
 
 /** Hitpoints per check-in, before the weight. */
-export const HP_XP = 200;
+export const HP_XP = 2000;
 /** Combat XP per check-in, before the weight, split by combat style. */
-export const COMBAT_XP = 200;
+export const COMBAT_XP = 2000;
 
 export type CombatStyle = "accurate" | "aggressive" | "defensive" | "controlled";
 
@@ -91,13 +96,13 @@ export const STYLE_LABEL: Record<CombatStyle, string> = Object.fromEntries(
 export const ORDINAL_WEIGHTS = [1.0, 1.0, 0.5, 0.5, 0.2, 0.2, 0.2];
 
 /** Slayer for the author of a verified check-in, before the weight. */
-export const VERIFIED_AUTHOR_SLAYER = 100;
+export const VERIFIED_AUTHOR_SLAYER = 1000;
 /** Combat XP multiplier once a check-in is verified. */
 export const VERIFIED_MULTIPLIER = 1.5;
 /** Slayer for pressing Verify, paid on the verifier's own next check-in. */
-export const VERIFIER_SLAYER = 25;
+export const VERIFIER_SLAYER = 250;
 /** Extra Slayer to the author for each verification past the first, up to this many. */
-export const EXTRA_VERIFICATION_SLAYER = 10;
+export const EXTRA_VERIFICATION_SLAYER = 100;
 export const MAX_COUNTED_VERIFICATIONS = 3;
 /** How long the Verify button stays live. */
 export const VERIFY_WINDOW_HOURS = 72;
@@ -107,12 +112,12 @@ export const VERIFIER_PAY_WINDOW_DAYS = 7;
 export const VERIFIER_DAILY_CAP = 3;
 
 /** Prayer for a Form week, and the bonus for three or more that week. */
-export const PRAYER_FORM_WEEK = 150;
-export const PRAYER_THREE_PLUS_BONUS = 100;
+export const PRAYER_FORM_WEEK = 1500;
+export const PRAYER_THREE_PLUS_BONUS = 1000;
 
 /** Gathering XP per resource delivered, and the cap per check-in. */
-export const GATHER_XP_PER_UNIT = 0.2;
-export const GATHER_XP_CAP = 150;
+export const GATHER_XP_PER_UNIT = 2;
+export const GATHER_XP_CAP = 1500;
 
 // ── Roster ─────────────────────────────────────────────────────────
 
@@ -150,14 +155,14 @@ export const EARLY_RING_WEEK_TO = 4;
 export const RECOVERY_SILENT_DAYS = 14;
 export const RECOVERY_WINDOW_DAYS = 14;
 export const RECOVERY_CHECKINS = 3;
-export const RECOVERY_LAMP_XP = 500;
+export const RECOVERY_LAMP_XP = 5000;
 
 // ── Lamps ──────────────────────────────────────────────────────────
 
-/** A genie lamp is 10 × the chosen skill's level, clamped. */
-export const LAMP_PER_LEVEL = 10;
-export const LAMP_MIN = 100;
-export const LAMP_MAX = 600;
+/** A genie lamp is 100 × the chosen skill's level, clamped. */
+export const LAMP_PER_LEVEL = 100;
+export const LAMP_MIN = 1000;
+export const LAMP_MAX = 6000;
 /** Unrubbed lamps go into Hitpoints after this long. */
 export const LAMP_AUTO_RUB_DAYS = 14;
 
@@ -193,17 +198,17 @@ export const EVENT_TABLE: { key: EventKey; weight: number; label: string }[] = [
   { key: "prison_pete", weight: 2, label: "Prison Pete" },
 ];
 
-export const EVIL_CHICKEN_DEFENCE = 150;
-export const SANDWICH_LADY_HP = 150;
+export const EVIL_CHICKEN_DEFENCE = 1500;
+export const SANDWICH_LADY_HP = 1500;
 export const OLD_MAN_RESOURCE = 150;
 export const DRUNKEN_DWARF_COINS = 200;
-export const QUIZ_RIGHT_XP = 200;
+export const QUIZ_RIGHT_XP = 2000;
 export const QUIZ_WRONG_COINS = 50;
 export const FORESTER_REPAIR = 30;
 export const BEEKEEPER_HOURS = 24;
 export const BEEKEEPER_BONUS = 0.25;
 export const DRILL_DEMON_DAYS = 3;
-export const DRILL_DEMON_LAMP = 400;
+export const DRILL_DEMON_LAMP = 4000;
 
 /** Three-button trivia. The right answer is index `a`. */
 export const QUIZ_BANK: { q: string; o: [string, string, string]; a: number }[] = [
@@ -340,9 +345,9 @@ export const RECRUIT_COST_PER_OWNED = 300;
 export const RIVALRY_FROM_WEEK = 3;
 export const RIVALRY_MIN_ROSTER = 4;
 export const RIVALRY_RECENCY_WEEKS = 3;
-export const RIVALRY_LAMP_PER_HP = 10;
-export const RIVALRY_LAMP_MIN = 150;
-export const RIVALRY_LAMP_MAX = 400;
+export const RIVALRY_LAMP_PER_HP = 100;
+export const RIVALRY_LAMP_MIN = 1500;
+export const RIVALRY_LAMP_MAX = 4000;
 /** A tie only counts as a shared win at or above this many units. */
 export const RIVALRY_TIE_FLOOR = 2.0;
 export const DUELLIST_WINS = 3;
@@ -366,15 +371,15 @@ export interface ClueTier {
 }
 
 export const CLUE_TIERS: ClueTier[] = [
-  { key: "easy", name: "Easy", hp: 1, steps: 2, xp: 150, coins: 100, uniqueChance: 3, verifiedSteps: 0,
+  { key: "easy", name: "Easy", hp: 1, steps: 2, xp: 1500, coins: 100, uniqueChance: 3, verifiedSteps: 0,
     uniques: ["Bob shirt (red)", "Bob shirt (blue)", "Bob shirt (green)", "Highwayman mask", "Team cape", "Wooden shield (g)"] },
-  { key: "medium", name: "Medium", hp: 20, steps: 3, xp: 300, coins: 200, uniqueChance: 4, verifiedSteps: 0,
+  { key: "medium", name: "Medium", hp: 20, steps: 3, xp: 3000, coins: 200, uniqueChance: 4, verifiedSteps: 0,
     uniques: ["Ranger boots", "Wizard boots", "Black cavalier", "Cat mask", "Amulet of glory (t)", "Rune helm (h1)"] },
-  { key: "hard", name: "Hard", hp: 40, steps: 4, xp: 450, coins: 400, uniqueChance: 5, verifiedSteps: 1,
+  { key: "hard", name: "Hard", hp: 40, steps: 4, xp: 4500, coins: 400, uniqueChance: 5, verifiedSteps: 1,
     uniques: ["Robin hood hat", "Rune (g) set", "Rune (t) set", "Zamorak cloak", "Saradomin cloak"] },
-  { key: "elite", name: "Elite", hp: 55, steps: 5, xp: 600, coins: 700, uniqueChance: 6, verifiedSteps: 1,
+  { key: "elite", name: "Elite", hp: 55, steps: 5, xp: 6000, coins: 700, uniqueChance: 6, verifiedSteps: 1,
     uniques: ["Dragon full helm ornament", "Gilded scimitar", "Third-age amulet", "Ring of coins"] },
-  { key: "master", name: "Master", hp: 60, steps: 6, xp: 800, coins: 1000, uniqueChance: 8, verifiedSteps: 2,
+  { key: "master", name: "Master", hp: 60, steps: 6, xp: 8000, coins: 1000, uniqueChance: 8, verifiedSteps: 2,
     uniques: ["Third-age full helm", "Third-age cloak", "Bloodhound"] },
 ];
 
@@ -431,7 +436,7 @@ export const ACTS = [
   { number: 3, name: "The Wilderness" },
   { number: 4, name: "Dragon Slayer" },
 ];
-export const FOUNDING_LAMP_XP = 500;
+export const FOUNDING_LAMP_XP = 5000;
 export const FOUNDING_FORM_WEEKS = 6;
 
 /**
@@ -465,7 +470,7 @@ export const CAMPAIGN_EVENTS: { week: number; key: string; post: string; effect?
 // ── Shop ───────────────────────────────────────────────────────────
 
 export const SHOP: { key: string; name: string; points: number }[] = [
-  { key: "small_lamp", name: "Small lamp (200 XP)", points: 15 },
+  { key: "small_lamp", name: "Small lamp (2,000 XP)", points: 15 },
   { key: "title", name: "A title", points: 25 },
   { key: "trim", name: "Sheet trim skin", points: 30 },
   { key: "worker_name", name: "Name or skin a worker", points: 10 },
@@ -512,7 +517,7 @@ export const BUILDINGS: Building[] = [
   { key: "dock", name: "Fishing Dock", cost: { logs: 150, coins: 200, ore: 50 }, from: 2, effect: "Fish +25% per level", maxLevel: 3 },
   { key: "mill", name: "Lumber Mill", cost: { logs: 150, coins: 200, ore: 50 }, from: 2, effect: "Logs +25% per level", maxLevel: 3 },
   { key: "cart", name: "Mine Cart", cost: { logs: 150, coins: 200, ore: 50 }, from: 2, effect: "Ore +25% per level", maxLevel: 3 },
-  { key: "chapel", name: "Chapel", cost: { logs: 200, coins: 300 }, from: 2, effect: "Prayer +50 per Form week per level", maxLevel: 3 },
+  { key: "chapel", name: "Chapel", cost: { logs: 200, coins: 300 }, from: 2, effect: "Prayer +500 per Form week per level", maxLevel: 3 },
   { key: "tavern", name: "Tavern", cost: { logs: 250, coins: 400 }, from: 2, effect: "Random events 1 in 6 → 1 in 5 → 1 in 4", maxLevel: 2 },
   { key: "barracks", name: "Barracks", cost: { logs: 300, coins: 600, ore: 100 }, from: 3, effect: "Raid damage +10% per level", maxLevel: 3 },
   { key: "walls", name: "Walls", cost: { logs: 300, coins: 600, ore: 100 }, from: 3, effect: "Raid heals −5 per miss per level", maxLevel: 3 },
@@ -524,7 +529,7 @@ export const BUILDING_LEVEL_COST_MULTIPLIER = [1, 2.5, 6, 12];
 export const BUILDING_HALF_AT = 50;
 export const BANK_HOURS_PER_LEVEL = 24;
 export const GATHER_BUILDING_BONUS = 0.25;
-export const CHAPEL_PRAYER_PER_LEVEL = 50;
+export const CHAPEL_PRAYER_PER_LEVEL = 500;
 export const TAVERN_EVENT_CHANCE = [6, 5, 4];
 export const BARRACKS_DAMAGE_PER_LEVEL = 0.1;
 export const WALLS_HEAL_REDUCTION_PER_LEVEL = 5;
@@ -585,8 +590,8 @@ export const RAID_DAMAGE_BASE = 100;
 export const RAID_DAMAGE_PER_HP = 2;
 export const RAID_HEAL_PER_MISS = 20;
 export const RAID_HEAL_CAP_PER_DAY = 80;
-export const RAID_SUCCESS_LAMP_PER_HP = 10;
-export const RAID_SUCCESS_LAMP_MIN = 200;
+export const RAID_SUCCESS_LAMP_PER_HP = 100;
+export const RAID_SUCCESS_LAMP_MIN = 2000;
 export const RAID_SUCCESS_COINS = 1000;
 export const RAID_SUCCESS_BARS = 200;
 export const RAID_FAIL_STORE_LOSS = 0.15;
@@ -602,3 +607,54 @@ export const BOSSES: { key: string; name: string; hp: number; days: number; heal
   { key: "corporeal_beast", name: "Corporeal Beast", hp: 1.2, days: 7, healMultiplier: 1, from: 3 },
   { key: "elvarg", name: "Elvarg", hp: 2, days: 14, healMultiplier: 0.5, from: 4 },
 ];
+
+// ── Bingo ──────────────────────────────────────────────────────────
+
+/** Points for a completed line and for the whole grid. */
+export const BINGO_LINE_POINTS = 5;
+export const BINGO_BLACKOUT_POINTS = 40;
+/** When every active player has a line, the town gets this many coins. */
+export const BINGO_GROUP_CRATE = 500;
+
+/**
+ * Twenty-five task keys per act, row-major. The checks live in bingo.ts;
+ * every cell is claimed by the game from check-in data — there is no
+ * self-claim. Acts 2–4 swap in worker, raid and Dragon cells.
+ */
+export const BINGO_GRIDS: Record<number, string[]> = {
+  1: [
+    "first_checkin", "two_in_week", "verified_checkin", "early_checkin", "reach_mithril",
+    "note", "saturday", "verify_3", "two_in_a_row", "form_3",
+    "late_checkin", "rub_lamp", "checkins_10", "sunday", "same_day_3",
+    "monday", "reach_adamant", "verify_video", "two_verified_week", "four_weekdays",
+    "note_pr", "quiz_win", "skill_30", "form_6", "reach_rune",
+  ],
+  2: [
+    "recruit_worker", "worker_black", "deliver_500_week", "repair_building", "build_something",
+    "checkins_25", "verified_checkin", "form_4", "early_checkin", "sunday",
+    "note", "two_in_a_row", "rub_lamp", "same_day_3", "monday",
+    "verify_3", "skill_40", "reach_rune", "worker_mithril", "sacks_10",
+    "four_weekdays", "late_checkin", "quiz_win", "verify_video", "cast_ballot",
+  ],
+  3: [
+    "raid_damage_1000", "raid_checkin_verified", "raid_survivor", "raid_win", "checkins_50",
+    "verified_checkin", "form_6", "two_in_a_row", "rub_lamp", "same_day_3",
+    "worker_rune", "deliver_500_week", "repair_building", "build_something", "cast_ballot",
+    "monday", "sunday", "early_checkin", "late_checkin", "note",
+    "verify_3", "four_weekdays", "skill_50", "reach_rune_g", "quiz_win",
+  ],
+  4: [
+    "worker_dragon", "hp_55", "checkins_100", "reach_dragon", "raid_win",
+    "verified_checkin", "form_8", "two_in_a_row", "rub_lamp", "same_day_3",
+    "deliver_500_week", "repair_building", "build_something", "cast_ballot", "monday",
+    "sunday", "early_checkin", "late_checkin", "note", "verify_3",
+    "four_weekdays", "skill_60", "quiz_win", "verify_video", "casket",
+  ],
+};
+
+// ── Shop choices ───────────────────────────────────────────────────
+
+export const SHOP_TITLES = ["of Lumbridge", "the Relentless", "Ironman", "of the Wilderness", "the Early Riser"];
+export const SHOP_TRIMS = ["gold", "silver", "obsidian", "third-age"];
+export const SHOP_PETS = ["Baby Mole", "Chompy chick"];
+export const WORKER_NAMES = ["Bob", "Hans", "Zeke", "Gertrude", "Wise Old Man", "Doric", "Duke Horacio", "Aggie", "Father Aereck", "Cook"];

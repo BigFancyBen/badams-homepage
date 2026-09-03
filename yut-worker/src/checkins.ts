@@ -82,6 +82,7 @@ import {
 } from "./town.ts";
 import { getRelics } from "./relics.ts";
 import { activeRaidFor, raidHit } from "./raids.ts";
+import { bingoLines, evaluateBingo } from "./bingo.ts";
 import { TRICKSTER_POINTS, XERIC_WEIGHT } from "./config.ts";
 import { buttonRow, type Button, type Checkin, type Env, type Player } from "./types.ts";
 import {
@@ -570,9 +571,17 @@ export async function performCheckin(
   // ── Raid ───────────────────────────────────────────────────────
   const hit = await raidHit(env, player, hpAfter, weight, day, now, relics);
   if (hit) {
-    receipt.push(hit);
-    publicBits.push(hit);
+    receipt.push(hit.line);
+    publicBits.push(hit.line);
+    await env.DB.batch([
+      logEventStatement(env, player.discord_id, day, checkinId, "raid_hit", { damage: hit.damage }, now),
+    ]);
   }
+
+  // ── Bingo ──────────────────────────────────────────────────────
+  const bingo = bingoLines(await evaluateBingo(env, { ...player, last_active_day: day }, day, act, now), player.username);
+  if (bingo.receipt) receipt.push(bingo.receipt);
+  if (bingo.publicBit) publicBits.push(bingo.publicBit);
 
   await updatePlayer(env, player.discord_id, {
     last_active_day: day,
@@ -689,8 +698,11 @@ export async function hubButtons(env: Env, player: Player, day: string): Promise
   if (lamps.length > 0) buttons.push({ label: `Lamp (${lamps.length})`, custom_id: "lamp", style: 3, emoji: "🧞" });
   if (clue) buttons.push({ label: "Clue", custom_id: "clue", emoji: "📜" });
   buttons.push({ label: "Sheet", custom_id: `sheet:${day}`, emoji: "📋" });
-  buttons.push({ label: "Camp", custom_id: "town", emoji: "🏕️" });
+  buttons.push({ label: "Town", custom_id: "town", emoji: "🏘️" });
   buttons.push({ label: "Log", custom_id: "log", emoji: "📗" });
+  buttons.push({ label: "Bingo", custom_id: "bingo", emoji: "🎯" });
+  buttons.push({ label: "Shop", custom_id: "shop", emoji: "🛒" });
+  buttons.push({ label: "Votes", custom_id: "vote", emoji: "🗳️" });
   return buttons;
 }
 

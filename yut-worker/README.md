@@ -33,13 +33,15 @@ src/
   clues.ts        clue scrolls.
   rivalries.ts    the weekly head-to-head.
   streaks.ts      resolveWeek() — pure.
-  xp.ts           the curve (RuneScape ÷ 10), the weight, tiers — pure.
+  xp.ts           the curve (RuneScape's table, exactly), the weight, tiers — pure.
   config.ts       every number in the game. Edit this and nothing else.
   digest.ts       the morning post. board.ts the pinned board.
   sheet.ts        signed render URLs and R2 mirroring. images.ts attachment mirroring.
-  town.ts         the camp's stores and the quiet-day rule.
+  town.ts         stores, workers and sacks, buildings, upkeep, the quiet-day rule, Foundings.
+  votes.ts        group votes (build, relic, raid). relics.ts the relics. raids.ts raid weeks.
+  actions.ts      the town buttons and vote handlers. bingo.ts the grids. shop.ts the shop.
   db.ts           every D1 query. discord.ts the REST client. roles.ts the opt-in ping role.
-migrations/       0001 the game, 0002 the town. One number per file, forever.
+migrations/       0001 the game, 0002 the town, 0003 votes and raids, 0004 bingo and shop. One number per file, forever.
 scripts/          the harness (below).
 config/choices.json  option lists shared by the runtime and the registration script.
 ```
@@ -135,6 +137,11 @@ with a synthetic clock (`daily=1`, `post=1`, `lastcall=1` force a phase),
   a stamp and a retry mints a different signed URL.
 - **Attachment URLs expire** within a day; a photo is mirrored into R2 before
   the check-in line goes out and only the key is kept.
-- **Workers, buildings, votes and raids** are designed (see the plan) and have
-  their tables in `0002_town.sql`, but the hourly sack tick and the vote
-  machinery are the next phase. Until Founding I the camp is stores only.
+- **Until Founding I the camp is stores only.** Workers, buildings and the
+  Monday build vote arrive at week 13; relics and raids at Act 3 (week 27);
+  Dragon workers and the statue at Act 4. The tables are there from the start
+  (`0002_town.sql`, `0003_votes_raids.sql`, `0004_bingo_shop.sql`); the
+  campaign calendar in `config.ts` decides when each system wakes up.
+- **The experience table is RuneScape's, exactly.** Level 99 is 13,034,431 XP
+  and every unlock sits at its RuneScape level; a check-in is worth about two
+  thousand so the pace lands a two-a-week player at Dragon by the finale.

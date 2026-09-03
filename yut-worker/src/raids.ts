@@ -261,7 +261,7 @@ export async function raidHit(
   day: string,
   now: number,
   relics: Set<RelicKey>
-): Promise<string | null> {
+): Promise<{ line: string; damage: number } | null> {
   const raid = await activeRaidFor(env, player.discord_id);
   if (!raid) return null;
   const buildings = await getBuildings(env);
@@ -281,10 +281,10 @@ export async function raidHit(
   const updated = { ...raid, hp };
   if (hp <= 0) {
     await resolveRaid(env, updated, "won", day, now);
-    return `⚔️ ${damage} to ${bossDef(raid.boss).name} — and it falls!`;
+    return { line: `⚔️ ${damage} to ${bossDef(raid.boss).name} — and it falls!`, damage };
   }
   await refreshRaidCard(env, updated, `Day ${Math.min(bossDef(raid.boss).days, daysInto(raid, day))}.`);
-  return `⚔️ ${damage} to ${bossDef(raid.boss).name} (${Math.max(0, hp).toLocaleString("en-US")} left).`;
+  return { line: `⚔️ ${damage} to ${bossDef(raid.boss).name} (${Math.max(0, hp).toLocaleString("en-US")} left).`, damage };
 }
 
 function daysInto(raid: RaidRow, day: string): number {

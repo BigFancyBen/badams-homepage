@@ -29,7 +29,7 @@ function check(name, condition, detail) {
 }
 
 // ── The curve ──────────────────────────────────────────────────────
-const anchors = { 2: 8, 10: 115, 20: 447, 30: 1336, 40: 3722, 50: 10133, 60: 27374, 70: 73762, 92: 651725, 99: 1303443 };
+const anchors = { 2: 83, 10: 1154, 20: 4470, 30: 13363, 40: 37224, 50: 101333, 60: 273742, 70: 737627, 92: 6517253, 99: 13034431 };
 for (const [level, xp] of Object.entries(anchors)) {
   check(`xpForLevel(${level}) = ${xp}`, xpForLevel(Number(level)) === xp, xpForLevel(Number(level)));
 }
@@ -42,7 +42,7 @@ for (let level = 1; level <= 99; level++) {
 }
 check("table is strictly increasing", monotonic);
 check("levelForXp(xpForLevel(L)) === L for 1..99, and one XP short is L-1", roundTrip);
-check("levelForXp never exceeds 99", levelForXp(10_000_000) === 99);
+check("levelForXp never exceeds 99", levelForXp(100_000_000) === 99);
 check("xpToNext at 99 is 0", xpToNext(xpForLevel(99)) === 0);
 check("levelProgress halfway through level 10 is ~50", Math.abs(levelProgress(Math.floor((xpForLevel(10) + xpForLevel(11)) / 2)) - 50) <= 1);
 
@@ -53,9 +53,9 @@ check("an eighth check-in still weighs .2", ordinalWeight(8) === 0.2);
 const weekUnits = [1, 2, 3, 4, 5, 6, 7].reduce((sum, n) => sum + ordinalWeight(n), 0);
 check("seven a week is 3.6 units (1.8× two a week)", Math.abs(weekUnits - 3.6) < 1e-9, weekUnits);
 const controlled = checkinXp(1, "controlled");
-check("controlled splits combat three ways", controlled.combat.attack === 66 && controlled.combat.strength === 66 && controlled.combat.defence === 66, controlled);
-check("aggressive puts it all in Strength", checkinXp(0.5, "aggressive").combat.strength === 100);
-check("bootstrap doubles Hitpoints only", checkinXp(1, "accurate", 2).hp === 400 && checkinXp(1, "accurate", 2).combatTotal === 200);
+check("controlled splits combat three ways", controlled.combat.attack === 666 && controlled.combat.strength === 666 && controlled.combat.defence === 666, controlled);
+check("aggressive puts it all in Strength", checkinXp(0.5, "aggressive").combat.strength === 1000);
+check("bootstrap doubles Hitpoints only", checkinXp(1, "accurate", 2).hp === 4000 && checkinXp(1, "accurate", 2).combatTotal === 2000);
 
 // ── Tiers ──────────────────────────────────────────────────────────
 let gapFree = true;
@@ -94,14 +94,14 @@ let uniques = 0;
 for (let i = 0; i < 30000; i++) if (openCasket(seededRng(`c:${i}`), CLUE_TIERS[0], new Set()).unique) uniques++;
 check("easy casket holds a unique about one time in three", Math.abs(uniques / 30000 - 1 / 3) < 0.02, uniques / 30000);
 const dup = openCasket(seededRng("dup"), CLUE_TIERS[4], new Set(CLUE_TIERS[4].uniques));
-check("a duplicate becomes extra XP", dup.unique === null && (dup.duplicate ? dup.xp === 1200 : dup.xp === 800), dup);
+check("a duplicate becomes extra XP", dup.unique === null && (dup.duplicate ? dup.xp === 12000 : dup.xp === 8000), dup);
 
 // ── The week boundary ──────────────────────────────────────────────
 const base = { formWeeks: 4, rings: 1, ringProgress: 1, playerWeek: 10, graduated: false, paused: false, ringEveryWeek: false, chapelBonus: 0 };
 const form = resolveWeek({ ...base, checkins: 2 });
 check("two check-ins: form, streak +1, ring earned at 1 per 2 from week 9", form.outcome === "form" && form.formWeeks === 5 && form.rings === 2 && form.ringEarned, form);
 const three = resolveWeek({ ...base, checkins: 3, ringProgress: 0 });
-check("three check-ins pays the Prayer bonus", three.prayerXp === 250, three);
+check("three check-ins pays the Prayer bonus", three.prayerXp === 2500, three);
 const held = resolveWeek({ ...base, checkins: 1 });
 check("one check-in with a ring: held, ring spent, streak kept", held.outcome === "held" && held.rings === 0 && held.formWeeks === 4, held);
 const broke = resolveWeek({ ...base, checkins: 1, rings: 0 });

@@ -52,7 +52,9 @@ import {
   upgradeMenu,
   votesView,
 } from "./actions.ts";
-import { freshAction, playerAction } from "./interactions.ts";
+import { actOf, freshAction, playerAction } from "./interactions.ts";
+import { bingoView } from "./bingo.ts";
+import { shopMenu } from "./shop.ts";
 import { addDays, daysBetween, gameWeek } from "./schedule.ts";
 import { runTick } from "./tick.ts";
 import {
@@ -153,6 +155,10 @@ export async function runCommand(
       return playerAction(env, user, day, (p) => votesView(env, p));
     case "relics":
       return playerAction(env, user, day, () => relicsView(env));
+    case "bingo":
+      return playerAction(env, user, day, async (p) => ({ content: await bingoView(env, p, actOf(env, day)) }));
+    case "shop":
+      return playerAction(env, user, day, async (p) => shopMenu(p));
     case "raid": {
       const sub = subcommand(interaction);
       if (sub === "propose") return freshAction(env, user, day, (p) => raidPropose(env, p, day, now));

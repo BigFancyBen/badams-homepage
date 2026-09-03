@@ -28,6 +28,7 @@ import { autoRubLamps, resolveWeekFor } from "./weekly.ts";
 import { getRelics } from "./relics.ts";
 import { applyRaidVote, raidDailyClose, startDueRaids } from "./raids.ts";
 import { closeDueVotes } from "./votes.ts";
+import { composeMonthlyLog } from "./monthly.ts";
 import { ACTS, ACT_WEEKS } from "./config.ts";
 import { actForWeek, campaignWeek } from "./schedule.ts";
 
@@ -136,6 +137,26 @@ export async function runTick(env: Env, now: number, force: { daily?: boolean; p
   } catch (error) {
     await logToDiscord(env, `Morning post failed: ${String(error)}`);
     report.postError = String(error);
+  }
+
+  // ── The campaign log, on the first of the month ────────────────
+  try {
+    const month = today.slice(0, 7);
+    const postHour = parseHour(env.DAILY_POST_HOUR_UTC);
+    const hour = new Date(now).getUTCHours();
+    if (
+      today.endsWith("-01") &&
+      postHour !== null &&
+      hour >= postHour &&
+      campaignWeek(today, env.CAMPAIGN_START) >= 1 &&
+      (await getState(env, "last_monthly_log")) !== month
+    ) {
+      await setState(env, "last_monthly_log", month);
+      await postMessage(env, await composeMonthlyLog(env, today));
+      report.monthly = month;
+    }
+  } catch (error) {
+    await logToDiscord(env, `Monthly log failed: ${String(error)}`);
   }
 
   // ── Sunday last call ───────────────────────────────────────────

@@ -140,7 +140,7 @@ if (DAYS >= 365) {
   check("two a week is within reach of Dragon by the finale (≥ 55 without Founding lamps rubbed)", D >= 55, D);
   check("one a week is Rune-ish, not Dragon", E >= 40 && E < 60, E);
 }
-const above = await sql("SELECT COUNT(*) AS n FROM skill_xp WHERE xp > 1303443");
+const above = await sql("SELECT COUNT(*) AS n FROM skill_xp WHERE xp > 13034431");
 check("no skill above 99", above[0]?.n === 0, above);
 const dupes = await sql("SELECT player_id, day, COUNT(*) AS n FROM checkins GROUP BY player_id, day HAVING n > 1");
 check("no duplicate (player, day)", dupes.length === 0, dupes);

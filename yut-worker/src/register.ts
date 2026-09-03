@@ -115,6 +115,8 @@ export const COMMANDS = [
     options: [{ type: 3, name: "building", description: "Which", choices: BUILDING_CHOICES }],
   },
   { name: "vote", description: "Open votes" },
+  { name: "bingo", description: "Your bingo card for this act" },
+  { name: "shop", description: "Spend bingo points" },
   { name: "relics", description: "The relics the group holds" },
   {
     name: "raid",

@@ -11,6 +11,7 @@ import {
   STYLE_LABEL,
   VERIFIED_AUTHOR_SLAYER,
   VERIFIED_MULTIPLIER,
+  VERIFIER_SLAYER,
   VERIFY_WINDOW_HOURS,
   isCombatStyle,
   isSkill,
@@ -81,7 +82,14 @@ import {
   type Line,
 } from "./actions.ts";
 import { getRelics } from "./relics.ts";
-import { TREASURE_SEEKER_MULTIPLIER } from "./config.ts";
+import { ACTS, ACT_WEEKS, TREASURE_SEEKER_MULTIPLIER } from "./config.ts";
+import { bingoLines, bingoView, evaluateBingo } from "./bingo.ts";
+import { shopMenu, shopPress } from "./shop.ts";
+import { actForWeek, campaignWeek } from "./schedule.ts";
+
+export function actOf(env: Env, day: string): number {
+  return actForWeek(campaignWeek(day, env.CAMPAIGN_START), ACT_WEEKS, ACTS.length);
+}
 import {
   buttonRow,
   buttonRows,
@@ -248,6 +256,12 @@ async function route(
       return a
         ? freshAction(env, user, day, (p) => doVote(env, p, Number(a), b, now))
         : playerAction(env, user, day, (p) => votesView(env, p));
+    case "bingo":
+      return playerAction(env, user, day, async (p) => ({ content: await bingoView(env, p, actOf(env, day)) }));
+    case "shop":
+      return a
+        ? freshAction(env, user, day, (p) => shopPress(env, p, a, b, day, now, actOf(env, day)))
+        : playerAction(env, user, day, async (p) => shopMenu(p));
     case "log":
       return logReply(env, user, day);
     case "vf":
@@ -341,7 +355,7 @@ export async function runCheckin(
 ): Promise<Ephemeral> {
   const outcome = await performCheckin(env, player, day, now, input);
   if (!outcome.ok) {
-    return reply(outcome.reason, { scope, components: [buttonRow(await hubButtons(env, player, day))] });
+    return reply(outcome.reason, { scope, components: buttonRows(await hubButtons(env, player, day)) });
   }
   ctx.waitUntil(postCheckinLine(env, player, day, outcome, input));
   return receiptReply(env, player, day, outcome);
@@ -355,7 +369,7 @@ export async function receiptReply(
 ): Promise<Ephemeral> {
   const components: unknown[] = [];
   if (outcome.quiz) components.push(quizButtons(outcome.checkinId, outcome.quiz.index));
-  components.push(buttonRow(await hubButtons(env, player, day)));
+  components.push(...buttonRows(await hubButtons(env, player, day)));
   return reply(outcome.receipt.join("\n"), { components, scope: "ci" });
 }
 
@@ -471,7 +485,7 @@ export async function hub(env: Env, user: DiscordUser, day: string): Promise<Eph
   }));
   return reply(lines.join("\n"), {
     scope: "ci",
-    components: [buttonRow(await hubButtons(env, player, day)), buttonRow(styleButtons)],
+    components: [...buttonRows(await hubButtons(env, player, day)), buttonRow(styleButtons)],
   });
 }
 
@@ -631,7 +645,7 @@ async function rubLamp(
     const next = await lampMenu(env, user, day);
     if (!(next instanceof Response)) return { ...next, content: `${line}\n${next.content}` };
   }
-  return reply(line, { scope: "ci", components: [buttonRow(await hubButtons(env, gate.player, day))] });
+  return reply(line, { scope: "ci", components: buttonRows(await hubButtons(env, gate.player, day)) });
 }
 
 // ── Clue ───────────────────────────────────────────────────────────
@@ -753,7 +767,7 @@ async function verify(
     statements.push(
       addXpStatement(env, checkin.player_id, "slayer", Math.floor(VERIFIED_AUTHOR_SLAYER * checkin.weight))
     );
-    lines.push(`Verified. ${escapeMarkdown(author?.username ?? "They")} gets +${bonus} combat XP and Slayer; you get ${25} Slayer on your own next check-in.`);
+    lines.push(`Verified. ${escapeMarkdown(author?.username ?? "They")} gets +${bonus} combat XP and Slayer; you get ${VERIFIER_SLAYER} Slayer on your own next check-in.`);
     await logEntry(env, checkin.player_id, "milestone:first_verified", day);
     // Verified steps on the author's clue.
     const clue = await openClue(env, checkin.player_id);
@@ -771,7 +785,7 @@ async function verify(
     }
   } else if (count <= MAX_COUNTED_VERIFICATIONS) {
     statements.push(addXpStatement(env, checkin.player_id, "slayer", EXTRA_VERIFICATION_SLAYER));
-    lines.push(`Verified (${count}). +${EXTRA_VERIFICATION_SLAYER} Slayer to them; 25 Slayer to you on your next check-in.`);
+    lines.push(`Verified (${count}). +${EXTRA_VERIFICATION_SLAYER} Slayer to them; ${VERIFIER_SLAYER} Slayer to you on your next check-in.`);
   } else {
     lines.push(`Verified (${count}). Nothing more to pay on this one, but it is on the record.`);
   }
@@ -792,6 +806,16 @@ async function verify(
     }
   }
   await logEntry(env, user.id, "milestone:first_verify_given", day);
+
+  // Bingo cells that verification can complete, for both sides.
+  try {
+    const act = actOf(env, day);
+    const mine = bingoLines(await evaluateBingo(env, gate.player, day, act, now), gate.player.username);
+    if (mine.receipt) lines.push(mine.receipt);
+    if (author) await evaluateBingo(env, author, day, act, now);
+  } catch {
+    // Bingo is decoration; the verification stands.
+  }
 
   // The check-in line says who verified it.
   if (checkin.message_id) {
@@ -890,6 +914,6 @@ async function answerQuiz(
     right
       ? `✅ Right: ${question.o[question.a]}. +${QUIZ_RIGHT_XP} combat XP.`
       : `❌ It was "${question.o[question.a]}". The Quiz Master took ${QUIZ_WRONG_COINS} coins for the camp anyway.`,
-    { update: true, components: [buttonRow(await hubButtons(env, gate.player, day))] }
+    { update: true, components: buttonRows(await hubButtons(env, gate.player, day)) }
   );
 }

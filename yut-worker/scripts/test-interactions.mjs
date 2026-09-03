@@ -134,7 +134,7 @@ check("/checkin accepted", /Checked in — 1st this week/.test(content(bobChecki
 // 8. XP landed: one check-in = 200 HP (×2 bootstrap) and 66/66/66 controlled.
 const xp = await sql(`SELECT skill, xp FROM skill_xp WHERE player_id = '${bob.user.id}' ORDER BY skill`);
 const by = Object.fromEntries((xp ?? []).map((r) => [r.skill, r.xp]));
-check("bootstrap Hitpoints 400, controlled 66 each", by.hitpoints === 400 && by.attack === 66 && by.strength === 66 && by.defence === 66, by);
+check("bootstrap Hitpoints 4000, controlled 666 each", by.hitpoints === 4000 && by.attack === 666 && by.strength === 666 && by.defence === 666, by);
 check("the haul paid Woodcutting", by.woodcutting > 0, by);
 
 // 9. The camp got the haul.
@@ -171,7 +171,7 @@ check("bob verifies too", /Verified \(2\)/.test(content(verifyB)), verifyB);
 const verified = (await sql(`SELECT verified_count FROM checkins WHERE id = ${carolCheckin.id}`))[0];
 check("verified_count = 2", verified?.verified_count === 2, verified);
 const carolSlayer = (await sql(`SELECT xp FROM skill_xp WHERE player_id = '${carol}' AND skill = 'slayer'`))[0];
-check("carol got Slayer for the proof", (carolSlayer?.xp ?? 0) >= 100, carolSlayer);
+check("carol got Slayer for the proof", (carolSlayer?.xp ?? 0) >= 1000, carolSlayer);
 
 // 12. Freshness: a player whose last check-in is four days old cannot act.
 const dave = `dave_${stamp}`;

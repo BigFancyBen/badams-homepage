@@ -5,6 +5,7 @@ import {
   countCheckinsTotal,
   getSkills,
   logCount,
+  logEntries,
   openClue,
   unspentLamps,
 } from "./db.ts";
@@ -53,6 +54,15 @@ export interface SheetData {
   checkins: number;
   act: number;
   week: number;
+  bossHeads: number;
+}
+
+function cosmetics(player: Player): Record<string, string> {
+  try {
+    return JSON.parse(player.cosmetics || "{}") as Record<string, string>;
+  } catch {
+    return {};
+  }
 }
 
 export async function gatherSheet(env: Env, player: Player, day: string): Promise<SheetData> {
@@ -83,6 +93,7 @@ export async function gatherSheet(env: Env, player: Player, day: string): Promis
     checkins: await countCheckinsTotal(env, player.discord_id),
     act: actForWeek(week, ACT_WEEKS, ACTS.length),
     week,
+    bossHeads: (await logEntries(env, player.discord_id)).filter((e) => e.startsWith("boss:") && e !== "boss:raid_survivor").length,
   };
 }
 
@@ -109,6 +120,9 @@ export function sheetImageUrl(env: Env, data: SheetData, attempt = 0): Promise<s
     log: data.log,
     ...(data.player.title ? { ti: data.player.title } : {}),
     a: data.act,
+    eq: cosmetics(data.player),
+    bh: data.bossHeads,
+    bp: data.player.bingo_points,
     ...retryField(attempt),
   });
 }

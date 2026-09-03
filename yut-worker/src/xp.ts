@@ -18,7 +18,8 @@ import {
 } from "./config.ts";
 
 /**
- * RuneScape's experience table, divided by XP_DIVISOR.
+ * RuneScape's experience table (XP_DIVISOR is 1; it is kept so the scale can
+ * be revisited in year two without touching the formula).
  *
  *   XP(L) = floor( (1/4) · Σ_{l=1}^{L-1} floor( l + 300 · 2^(l/7) ) )
  *
