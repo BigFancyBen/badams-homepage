@@ -104,7 +104,11 @@ it in. That file is gitignored.
 
 The bot needs **MESSAGE CONTENT INTENT** enabled, or attachments come back
 empty even over REST. Invite it with View Channel, Read Message History, Send
-Messages, and Embed Links.
+Messages, Embed Links, Create Public Threads, Send Messages in Threads and
+Manage Threads. The thread permissions are for the 9am batch, which posts its
+cards and its results into threads rather than onto the channel floor — see
+**The 9am batch lives in two threads** below. Manage Threads is only for
+taking down a thread that opened for a card that then failed to post.
 
 After the first deploy:
 
@@ -263,7 +267,8 @@ The first argument is an open matchup id, the second an open ranking round id.
 
 It checks that a bad signature is rejected with 401, PING answers PONG, a vote
 records, changing a pick upserts rather than duplicates, another guild is
-turned away, and an unknown `custom_id` is ignored.
+turned away, a click from a thread under the game's channel is let in while a
+thread under any other channel is not, and an unknown `custom_id` is ignored.
 
 With a round id it also walks a whole ballot: the first click opens it, the
 second lands after the first, clicking the same photo twice is refused without
@@ -690,6 +695,32 @@ why not.
   nobody voted in is the one exception — it is edited in place and gets no
   post, since there is nothing to reveal and a new message to say so would be
   the loudest thing the bot did all day.
+- **The 9am batch lives in two threads.** Five cards at 9am and five results
+  at 9am the next day is ten bot posts a day in a channel that exists for
+  people to post their dinner in. So the batch goes out as one channel message
+  — "Cooking — Thu 3 Sep", with when voting closes — that opens a thread, and
+  the five cards go inside it. When they close, the first result to go out
+  opens "Results — Thu 3 Sep" the same way and the other four follow it in.
+  The channel sees two posts a day, and each is a door to the rest.
+  Everything else stays on the channel floor: bonuses, ranking rounds and the
+  caption contest are one post each, and a thread for one post is a door with
+  nothing behind it. A matchup's row says where it went (`thread_id`,
+  `result_thread_id`, migration 0012), because every edit to a card and every
+  jump link to it has to name the thread rather than the channel — Discord
+  does not resolve a message through the channel it is nested under. Two
+  consequences. A result in the results thread cannot *reply* to its card,
+  since a reply only works inside one channel, so it carries a "Back to the
+  card" link instead. And a button click inside a thread arrives with the
+  thread's id as `channel_id`, which the config has never heard of; the
+  interaction handler accepts a click whose channel's `parent_id` is the game's
+  channel. The results thread is found rather than remembered — the first close
+  of a batch opens it and writes the id on its own row, the rest read it back
+  from a sibling — so a close that failed half way and reran lands in the same
+  thread. The cooking thread asks Discord for three days on the idle timer
+  rather than one: the timer counts messages only, so a day of button clicks is
+  a day of silence to it, and the cards are edited when they close a day after
+  they went up. The thread names use `LOCAL_TIME_ZONE`, not UTC — a forced
+  post at 10pm Mountain is already tomorrow in UTC.
 - **The vote log rides on the result post.** It is a second embed under the
   result card rather than a follow-up or a thread, which costs no extra API
   call and no second message. It also means `/admin/repair-card` has to rebuild

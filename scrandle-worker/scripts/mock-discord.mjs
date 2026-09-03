@@ -18,6 +18,20 @@ createServer((req, res) => {
     sent.push({ method: req.method, url: req.url, body: body.slice(0, 4000) });
     writeFileSync("mock-discord-log.json", JSON.stringify(sent, null, 2));
 
+    // POST /channels/{id}/messages/{id}/threads — the 9am batch opens one for
+    // its cards and one for its results. Threads get ids of their own so a
+    // simulation can tell a post into one from a post to the channel.
+    if (req.method === "POST" && /\/threads$/.test(req.url)) {
+      const id = `thread_${++nextId}`;
+      res.writeHead(201, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ id, type: 11, name: JSON.parse(body || "{}").name ?? "" }));
+      return;
+    }
+    if (req.method === "DELETE") {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
     if (req.method === "POST" && /\/messages$/.test(req.url)) {
       const id = String(++nextId);
       res.writeHead(200, { "Content-Type": "application/json" });

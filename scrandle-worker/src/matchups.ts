@@ -1,15 +1,20 @@
 import {
   ACCENT,
+  ARCHIVE_AFTER_A_DAY,
+  ARCHIVE_AFTER_THREE_DAYS,
   WIN,
   allowedMentions,
   ballotEmbed,
+  discardThread,
   editMessage,
   escapeMarkdown,
   logToDiscord,
   messageUrl,
+  openThread,
   postMessage,
   replyTo,
   sourceLink,
+  type Thread,
 } from "./discord";
 import {
   chefStandings,
@@ -23,6 +28,7 @@ import {
   getState,
   heldDishIds,
   playerName,
+  resultThreadFor,
   setState,
   tallyVotes,
   voteBreakdown,
@@ -37,6 +43,7 @@ import {
 } from "./images";
 import { pickPair } from "./matchmaking";
 import {
+  dayLabel,
   drinkCadence,
   nextPostTime,
   parsePerSlot,
@@ -63,20 +70,29 @@ function voteButtons(matchupId: number) {
 
 /**
  * Creates the row, renders the card against its id, posts it, and records the
- * message. Shared by the everyday matchup and the Wednesday place bonus.
+ * message. Shared by the everyday matchup and the bonuses.
+ *
+ * `threadId` is where the card goes when it is not the channel: the 9am batch
+ * posts its five into a thread of their own (see postMatchupIfDue). It is
+ * written on the row as well, because every later edit of the card and every
+ * link to it has to know which channel it is actually in.
  */
 async function createAndPost(
   env: Env,
   pair: { a: Dish; b: Dish },
   now: number,
   closesAt: number,
-  { preamble = "", bonus = false }: { preamble?: string; bonus?: boolean } = {}
+  {
+    preamble = "",
+    bonus = false,
+    threadId = null,
+  }: { preamble?: string; bonus?: boolean; threadId?: string | null } = {}
 ): Promise<void> {
   const inserted = await env.DB.prepare(
-    "INSERT INTO matchups (dish_a_id, dish_b_id, created_at, closes_at, bonus) " +
-      "VALUES (?, ?, ?, ?, ?) RETURNING id"
+    "INSERT INTO matchups (dish_a_id, dish_b_id, created_at, closes_at, bonus, thread_id) " +
+      "VALUES (?, ?, ?, ?, ?, ?) RETURNING id"
   )
-    .bind(pair.a.id, pair.b.id, now, closesAt, bonus ? 1 : 0)
+    .bind(pair.a.id, pair.b.id, now, closesAt, bonus ? 1 : 0, threadId)
     .first<{ id: number }>();
 
   if (!inserted) throw new Error("Failed to create matchup row");
@@ -105,13 +121,17 @@ async function createAndPost(
     // question and the matchup number. The place bonus is the exception: it
     // runs beside an ordinary matchup, so it has to say which one it is.
     const links = `${sourceLink(env, pair.a, "#1")} · ${sourceLink(env, pair.b, "#2")}`;
-    const message = await postMessage(env, {
-      content: preamble ? `${preamble}
+    const message = await postMessage(
+      env,
+      {
+        content: preamble ? `${preamble}
 ${links}` : links,
-      embeds: image ? [{ color: ACCENT, image: { url: image } }] : [],
-      components: voteButtons(matchupId),
-      allowed_mentions: allowedMentions(env),
-    });
+        embeds: image ? [{ color: ACCENT, image: { url: image } }] : [],
+        components: voteButtons(matchupId),
+        allowed_mentions: allowedMentions(env),
+      },
+      threadId ?? undefined
+    );
 
     await env.DB.prepare("UPDATE matchups SET message_id = ? WHERE id = ?")
       .bind(message.id, matchupId)
@@ -152,6 +172,19 @@ export function postDrawnPair(
  * hours would cut every vote window to a fifth; posting the five together at
  * one hour leaves each of them open until the same hour tomorrow. Nobody has to
  * be in the channel at the right moment to get a vote in.
+ *
+ * And in a thread rather than on the channel floor. Five cards is five posts,
+ * and a day later their results are five more, in a channel that exists for
+ * people to post their dinner in. So the batch goes out as one message that
+ * opens a thread, and the cards go inside it; the results do the same when
+ * they close (see postResult). The channel sees one post for the day's
+ * cooking and one for its results, and each is a door to the rest.
+ *
+ * The thread is opened on the first pair drawn, not before — a draw that comes
+ * up empty must not leave a headline over nothing — and taken down again if
+ * the first card then fails to post. A bonus (`overlap`) stays on the channel
+ * floor: it is one card running beside the batch, and a thread for one card
+ * is a door with nothing behind it.
  */
 export async function postMatchupIfDue(
   env: Env,
@@ -223,6 +256,7 @@ export async function postMatchupIfDue(
 
   let posted = 0;
   let failure: unknown = null;
+  let thread: Thread | null = null;
 
   for (let i = 0; i < wanted; i++) {
     const pair = await pickPair(env, { exclude: liveDishIds });
@@ -231,10 +265,20 @@ export async function postMatchupIfDue(
     if (!pair) break;
 
     try {
+      // The thread goes up with the first card, once there is a card to put in
+      // it. Inside the try, because the starter post can fail the same way a
+      // card can, and for the same reasons.
+      if (!overlap && !thread) {
+        thread = await openBatchThread(env, now, closesAt);
+      }
+
       // A forced overlap is a bonus — it runs beside the scheduled batch on a
       // window of its own, and `countOpenStandardMatchups` has to keep
       // ignoring it tomorrow as well as today.
-      await createAndPost(env, pair, now, closesAt, { bonus: overlap });
+      await createAndPost(env, pair, now, closesAt, {
+        bonus: overlap,
+        threadId: thread?.id,
+      });
     } catch (error) {
       // Stop rather than carry on. Whatever broke this one — Discord refusing
       // the message, D1 refusing the row — will break the next as well, and
@@ -262,7 +306,13 @@ export async function postMatchupIfDue(
   // or D1 outage behind a quiet day. Otherwise the draw simply came up empty,
   // and the slot is not spent: leave the marker alone so a later tick on the
   // same named hour can try again.
+  //
+  // A thread that opened for a card that never arrived comes down again. Left
+  // up, the channel would carry a headline for the day's cooking with an
+  // empty thread under it, and the retry on the next tick would put up a
+  // second one beside it.
   if (posted === 0) {
+    if (thread) await discardThread(env, thread);
     if (failure) throw failure;
     return false;
   }
@@ -273,6 +323,53 @@ export async function postMatchupIfDue(
   if (!overlap) await setState(env, "last_matchup_slot", postSlotKey(now));
 
   return true;
+}
+
+/**
+ * The thread the day's cards go in, hung off one message in the channel.
+ *
+ * Named for the day, so the sidebar reads as a calendar and the results thread
+ * that follows it a day later pairs up by name. The starter carries the one
+ * thing the cards do not: when they all shut, as a Discord timestamp so it
+ * reads in everyone's own clock. No ping, for the reason the cards never
+ * pinged — see postMatchupIfDue.
+ *
+ * Three days on the idle timer rather than one. The cards are edited when they
+ * close, a day after they went up, and Discord's timer counts messages only —
+ * a day of button clicks is a day of silence to it, and an edit into an
+ * archived thread is refused.
+ */
+function openBatchThread(env: Env, now: number, closesAt: number): Promise<Thread> {
+  const day = dayLabel(now, env.LOCAL_TIME_ZONE);
+  return openThread(
+    env,
+    {
+      content:
+        `**Cooking — ${day}.** The day's matchups are in the thread. ` +
+        `Voting closes <t:${Math.floor(closesAt / 1000)}:f>.`,
+      allowed_mentions: allowedMentions(env),
+    },
+    `Cooking — ${day}`,
+    ARCHIVE_AFTER_THREE_DAYS
+  );
+}
+
+/**
+ * The thread a batch's results go in. Named for the day the cards went up,
+ * not the day they closed — that is the thread it answers, and the two should
+ * read as a pair.
+ */
+function openResultsThread(env: Env, matchup: Matchup): Promise<Thread> {
+  const day = dayLabel(matchup.created_at, env.LOCAL_TIME_ZONE);
+  return openThread(
+    env,
+    {
+      content: `**Results — ${day}.** Who took what is in the thread.`,
+      allowed_mentions: allowedMentions(env),
+    },
+    `Results — ${day}`,
+    ARCHIVE_AFTER_A_DAY
+  );
 }
 
 interface BonusSchedule {
@@ -474,11 +571,16 @@ async function closeOne(env: Env, matchup: Matchup, now: number): Promise<void> 
     // live on a closed matchup the card looks votable forever, and anyone who
     // clicks gets told voting has closed by a message that gives no sign of it.
     if (matchup.message_id) {
-      await editMessage(env, matchup.message_id, {
-        content: `**Matchup #${matchup.id} — closed.** Nobody voted.`,
-        components: [],
-        allowed_mentions: allowedMentions(env),
-      });
+      await editMessage(
+        env,
+        matchup.message_id,
+        {
+          content: `**Matchup #${matchup.id} — closed.** Nobody voted.`,
+          components: [],
+          allowed_mentions: allowedMentions(env),
+        },
+        matchup.thread_id ?? undefined
+      );
     }
     return;
   }
@@ -533,10 +635,19 @@ async function closeOne(env: Env, matchup: Matchup, now: number): Promise<void> 
 
   const log = await voteLog(env, matchup, dishA, dishB);
 
+  // A result in the results thread cannot reply to a card in the cooking
+  // thread — Discord only replies within a channel — so the way back up to the
+  // photographs is a link in the text instead. On the channel floor the reply
+  // header does that job and the link would say it twice.
+  const back =
+    matchup.thread_id && matchup.message_id
+      ? ` [Back to the card.](${messageUrl(env, matchup.message_id, matchup.thread_id)})`
+      : "";
+
   await postResult(env, matchup, {
     content:
       `**Matchup #${matchup.id} — the result.** ${winner}\n` +
-      `${total} ${total === 1 ? "vote" : "votes"}.\n` +
+      `${total} ${total === 1 ? "vote" : "votes"}.${back}\n` +
       `${sourceLink(env, dishA, "#1")} · ${sourceLink(env, dishB, "#2")}`,
     embeds: [...(image ? [{ color: WIN, image: { url: image } }] : []), log],
   });
@@ -562,20 +673,41 @@ async function closeOne(env: Env, matchup: Matchup, now: number): Promise<void> 
  * for that reason. The edit is signposting, and the buttons it strips are
  * already inert: a click on a closed matchup is turned away by the interaction
  * handler, which reads the row rather than the message.
+ *
+ * A matchup that was posted into the batch's thread gets its result in a
+ * results thread rather than on the channel floor — the five of a batch close
+ * in one tick and share one, found through the cards' thread (see
+ * resultThreadFor) and opened by whichever of them closes first. A matchup on
+ * the channel floor, which is every bonus, gets its result there as before,
+ * replying to the card.
  */
 async function postResult(
   env: Env,
   matchup: Matchup,
   body: { content: string; embeds: unknown[] }
 ): Promise<void> {
-  const result = await postMessage(env, {
-    ...body,
-    allowed_mentions: allowedMentions(env),
-    ...replyTo(matchup.message_id),
-  });
+  let resultThreadId: string | null = null;
+  if (matchup.thread_id) {
+    resultThreadId =
+      (await resultThreadFor(env, matchup.thread_id)) ??
+      (await openResultsThread(env, matchup)).id;
+  }
 
-  await env.DB.prepare("UPDATE matchups SET result_message_id = ? WHERE id = ?")
-    .bind(result.id, matchup.id)
+  const result = await postMessage(
+    env,
+    {
+      ...body,
+      allowed_mentions: allowedMentions(env),
+      // A reply only works inside one channel, and the card is in another.
+      ...(resultThreadId ? {} : replyTo(matchup.message_id)),
+    },
+    resultThreadId ?? undefined
+  );
+
+  await env.DB.prepare(
+    "UPDATE matchups SET result_message_id = ?, result_thread_id = ? WHERE id = ?"
+  )
+    .bind(result.id, resultThreadId, matchup.id)
     .run();
 
   if (!matchup.message_id) return;
@@ -584,13 +716,18 @@ async function postResult(
   // the matchup card itself stays where it is — the result post carries its own
   // card, and blanking this one would leave a bare line of text where the
   // photographs people are being pointed away from used to be.
-  await editMessage(env, matchup.message_id, {
-    content:
-      `**Matchup #${matchup.id} — closed.** ` +
-      `[The result is in.](${messageUrl(env, result.id)})`,
-    components: [],
-    allowed_mentions: allowedMentions(env),
-  });
+  await editMessage(
+    env,
+    matchup.message_id,
+    {
+      content:
+        `**Matchup #${matchup.id} — closed.** ` +
+        `[The result is in.](${messageUrl(env, result.id, resultThreadId ?? undefined)})`,
+      components: [],
+      allowed_mentions: allowedMentions(env),
+    },
+    matchup.thread_id ?? undefined
+  );
 }
 
 /**
@@ -719,8 +856,13 @@ export async function repairCard(
 
   // Whichever message is currently showing the card. Closed matchups that
   // predate the result post have no result message, and their card is still
-  // where it always was.
+  // where it always was. The channel goes with the message: a card in the
+  // batch's thread, a result in the results thread, and null for the channel
+  // floor either way.
   const cardMessage = matchup.result_message_id ?? matchup.message_id;
+  const cardChannel = matchup.result_message_id
+    ? matchup.result_thread_id
+    : matchup.thread_id;
 
   const [dishA, dishB] = await Promise.all([
     getDish(env, matchup.dish_a_id),
@@ -777,12 +919,17 @@ export async function repairCard(
   // the vote buttons stay exactly as they are — but it *replaces* the embeds it
   // does name, so a closed matchup has to have its vote log rebuilt alongside
   // the card or the repair would quietly delete it.
-  await editMessage(env, cardMessage, {
-    embeds: [
-      { color: open ? ACCENT : WIN, image: { url: image } },
-      ...(open ? [] : [await voteLog(env, matchup, dishA, dishB)]),
-    ],
-  });
+  await editMessage(
+    env,
+    cardMessage,
+    {
+      embeds: [
+        { color: open ? ACCENT : WIN, image: { url: image } },
+        ...(open ? [] : [await voteLog(env, matchup, dishA, dishB)]),
+      ],
+    },
+    cardChannel ?? undefined
+  );
 
   return { repaired: true, matchup: matchupId };
 }

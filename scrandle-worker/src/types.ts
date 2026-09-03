@@ -14,6 +14,12 @@ export interface Env {
   POST_HOURS_UTC: string;
   /** Everyday matchups posted per named hour. Clamped to 1-10; default 1. */
   MATCHUPS_PER_SLOT: string;
+  /**
+   * The IANA zone the day's threads are named in — "Cooking — Thu 3 Sep" has
+   * to say the day the people in the channel are living, not the UTC one. The
+   * cron itself stays UTC; see wrangler.toml.
+   */
+  LOCAL_TIME_ZONE: string;
   STANDINGS_WEEKDAY: string;
   STANDINGS_HOUR_UTC: string;
   /** Weekdays for the place round, comma-separated, 0 = Sunday. Empty/-1 off. */
@@ -129,6 +135,15 @@ export interface Matchup {
    * closed before the result got a post of its own.
    */
   result_message_id: string | null;
+  /**
+   * The thread the card was posted in, and the one its result went to. Null
+   * for a matchup posted straight to the channel — every bonus, and everything
+   * before migration 0012. The everyday batch lives in threads: the five cards
+   * in one, the five results in another, so the channel sees two posts a day
+   * rather than ten.
+   */
+  thread_id: string | null;
+  result_thread_id: string | null;
   created_at: number;
   closes_at: number;
   closed_at: number | null;
@@ -281,7 +296,14 @@ export interface Interaction {
   token: string;
   application_id: string;
   guild_id?: string;
+  /** The channel the click happened in. Inside a thread, this is the thread. */
   channel_id?: string;
+  /**
+   * The same channel, with its parent. This is how a click inside one of the
+   * batch's threads proves it belongs to the game's channel — `channel_id`
+   * alone names a thread the config has never heard of.
+   */
+  channel?: { id: string; parent_id?: string | null };
   data?: { custom_id?: string; components?: InteractionComponent[] };
   /**
    * The message the button is on. Present on component clicks, and on a modal

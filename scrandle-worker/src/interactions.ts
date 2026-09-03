@@ -177,6 +177,22 @@ export async function handleInteraction(
     : deliver(env, now, interaction, answer);
 }
 
+/**
+ * Whether a click came from the game's channel — or from a thread under it,
+ * which is where the 9am batch's cards are now.
+ *
+ * Inside a thread `channel_id` is the thread's own id, which the config has
+ * never heard of; the `channel` object Discord sends alongside carries the
+ * parent, and that is what is checked. A click with no channel at all is let
+ * through, as it always was: the harness sends none, and the guild check
+ * above it still stands.
+ */
+function inGameChannel(env: Env, interaction: Interaction): boolean {
+  if (interaction.channel_id === undefined) return true;
+  if (interaction.channel_id === env.DISCORD_CHANNEL_ID) return true;
+  return interaction.channel?.parent_id === env.DISCORD_CHANNEL_ID;
+}
+
 /** What to say. Whether that is a new message or an edit is deliver's problem. */
 async function route(
   env: Env,
@@ -200,8 +216,7 @@ async function route(
   // proves a request came from Discord; it does not prove it came from here.
   if (
     interaction.guild_id !== env.DISCORD_GUILD_ID ||
-    (interaction.channel_id !== undefined &&
-      interaction.channel_id !== env.DISCORD_CHANNEL_ID)
+    !inGameChannel(env, interaction)
   ) {
     return reply("This game only runs in its own channel.");
   }

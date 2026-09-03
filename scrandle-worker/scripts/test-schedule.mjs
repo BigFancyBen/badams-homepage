@@ -14,6 +14,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
+  dayLabel,
   drinkCadence,
   nextPostTime,
   parsePerSlot,
@@ -288,6 +289,33 @@ check(
   "no weekly slot lands on a cooking hour",
   weekly.filter((slot) => HOURS.includes(slot.hour)).map((slot) => slot.name),
   []
+);
+
+// ── the day a thread is named for ──────────────────────────────────
+// The 9am batch and its results each go into a thread named for the day, in
+// the channel's own zone. The scheduled slot is 15:00 UTC and the two agree;
+// a forced post late in a Mountain evening is already tomorrow in UTC, and a
+// thread named for the wrong day would be the first thing anyone saw.
+console.log("\nthe day a thread is named for");
+const DENVER = "America/Denver";
+check("the 9am slot", dayLabel(Date.parse("2026-09-03T15:00:00Z"), DENVER), "Thu 3 Sep");
+check(
+  "a late evening post is still today locally",
+  dayLabel(Date.parse("2026-09-04T04:30:00Z"), DENVER),
+  "Thu 3 Sep"
+);
+check("and tomorrow in UTC", dayLabel(Date.parse("2026-09-04T04:30:00Z"), "UTC"), "Fri 4 Sep");
+check("an empty zone falls back to UTC", dayLabel(Date.parse("2026-12-25T12:00:00Z"), ""), "Fri 25 Dec");
+check(
+  "the configured zone is a real one",
+  (() => {
+    try {
+      return dayLabel(Date.now(), setting("LOCAL_TIME_ZONE")).split(" ").length;
+    } catch {
+      return "invalid";
+    }
+  })(),
+  3
 );
 
 console.log(failures === 0 ? "\nAll passed." : `\n${failures} failed.`);

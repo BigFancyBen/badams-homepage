@@ -186,6 +186,29 @@ export async function getMatchupByMessage(
 }
 
 /**
+ * The results thread the rest of a batch has already gone to, if any of it has.
+ *
+ * The five matchups posted into one thread close in one tick and their results
+ * share one thread, which is found rather than remembered: the first close of
+ * the batch opens it and writes the id on its own row, and every close after
+ * reads it back from a sibling. Keying on the cards' thread rather than on a
+ * state row means a close that failed half way and reran next tick still lands
+ * in the same thread, and a batch never leaks into the next day's.
+ */
+export async function resultThreadFor(
+  env: Env,
+  threadId: string
+): Promise<string | null> {
+  const row = await env.DB.prepare(
+    "SELECT result_thread_id FROM matchups " +
+      "WHERE thread_id = ? AND result_thread_id IS NOT NULL LIMIT 1"
+  )
+    .bind(threadId)
+    .first<{ result_thread_id: string }>();
+  return row?.result_thread_id ?? null;
+}
+
+/**
  * Upsert so people can change their pick until close. The UNIQUE constraint on
  * (matchup_id, voter_discord_id) is what actually enforces one vote each.
  */

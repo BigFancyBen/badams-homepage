@@ -94,7 +94,7 @@ export const CHECKLIST: ChecklistGroup[] = [
       },
       {
         id: "app-invite",
-        text: "Generate an install URL with the `bot` scope and permissions **View Channel**, **Read Message History**, **Send Messages**, and **Embed Links**. Invite it to the server.",
+        text: "Generate an install URL with the `bot` scope and permissions **View Channel**, **Read Message History**, **Send Messages**, **Embed Links**, **Create Public Threads**, **Send Messages in Threads**, and **Manage Threads**. Invite it to the server.",
       },
       {
         id: "app-endpoint",
@@ -356,6 +356,10 @@ export const PHASES: Phase[] = [
       {
         kind: "p",
         text: "The row is inserted first so the matchup id can go in the image URL path — that is what makes Discord's proxy treat each card as a new image instead of serving a stale one.",
+      },
+      {
+        kind: "p",
+        text: "The batch lives in two threads. Five cards in the morning and five results the next morning is ten bot posts a day in a channel that exists for people to post their dinner in, so the batch goes out as one message — \"Cooking — Thu 3 Sep\", with when voting closes — that opens a thread with the cards inside, and the results open \"Results — Thu 3 Sep\" the same way a day later. The channel sees two posts a day. Bonuses, ranking rounds and the caption contest are one post each and stay on the channel floor.",
       },
       {
         kind: "note",
