@@ -203,6 +203,15 @@ const style = await click("style:aggressive", bob);
 check("combat style set", /Aggressive/.test(content(style)), style);
 const lamp = await click("lamp", bob);
 check("lamp menu answers", /lamp/i.test(content(lamp)), lamp);
+// /lamp is the Lamp button in disguise. With a running reply on file for bob
+// it used to answer with a running-reply edit (type 6), which Discord only
+// accepts from a button — a slash command shows "didn't respond in time".
+const lampCommand = await command("lamp", [], bob);
+check(
+  "/lamp after a button answers fresh, never with a button-only ack",
+  lampCommand.body?.type === 4 && /lamp/i.test(content(lampCommand)),
+  lampCommand
+);
 
 // 11. Verification: a photo check-in by alice tomorrow is not possible today, so seed one via admin for a third player.
 const carol = `carol_${stamp}`;

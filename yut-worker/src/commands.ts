@@ -33,7 +33,6 @@ import { questLog, questView } from "./quests.ts";
 import {
   deferred,
   finishLater,
-  handleInteraction,
   hub,
   postCheckinLine,
   postMedia,
@@ -41,6 +40,7 @@ import {
   reply,
   requireFresh,
   requirePlayer,
+  routeAsButton,
   runCheckin,
   sheetReply,
   today,
@@ -212,13 +212,9 @@ async function relay(
   interaction: Interaction,
   user: DiscordUser,
   customId: string,
-  _now: number
+  now: number
 ): Promise<Answer> {
-  return handleInteraction(env, ctx, {
-    ...interaction,
-    type: 3,
-    data: { custom_id: customId, name: interaction.data?.name },
-  });
+  return routeAsButton(env, ctx, interaction, customId, now);
 }
 
 // ── Roster ─────────────────────────────────────────────────────────
