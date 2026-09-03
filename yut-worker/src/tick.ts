@@ -2,7 +2,6 @@ import { refreshBoard } from "./board.ts";
 import {
   activeRoster,
   checkinsOn,
-  expireBounties,
   forgetStaleEphemeralReplies,
   getPlayers,
   getState,
@@ -29,6 +28,7 @@ import { getRelics } from "./relics.ts";
 import { applyRaidVote, raidDailyClose, startDueRaids } from "./raids.ts";
 import { closeDueVotes } from "./votes.ts";
 import { composeMonthlyLog } from "./monthly.ts";
+import { expireTasks } from "./slayer.ts";
 import { ACTS, ACT_WEEKS } from "./config.ts";
 import { actForWeek, campaignWeek } from "./schedule.ts";
 
@@ -60,7 +60,7 @@ export async function runTick(env: Env, now: number, force: { daily?: boolean; p
         }
       }
 
-      daily.bountiesExpired = await expireBounties(env, today);
+      daily.tasksExpired = await expireTasks(env, today);
       daily.lampsAutoRubbed = await autoRubLamps(env, today, now);
       daily.town = await dailyTownTick(env, today, now, await getPlayers(env));
       daily.raid = await raidDailyClose(env, yesterday, today, now);

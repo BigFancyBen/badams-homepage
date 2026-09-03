@@ -5,8 +5,7 @@ import {
   BOOTSTRAP_HP_MULTIPLIER,
   BOOTSTRAP_WEEKS,
   CAMPAIGN_EVENTS,
-  DRILL_DEMON_DAYS,
-  DRILL_DEMON_LAMP,
+  DRILL_DEMON_KILLS,
   DRUNKEN_DWARF_COINS,
   EVIL_CHICKEN_DEFENCE,
   FORESTER_REPAIR,
@@ -51,7 +50,6 @@ import {
   countCheckinsTotal,
   getCheckinFor,
   getSkills,
-  grantBountyStatement,
   grantLampStatement,
   insertCheckin,
   insertClue,
@@ -60,11 +58,8 @@ import {
   logEventStatement,
   markClaimed,
   markVerificationsPaid,
-  openBounties,
   openClaims,
   openClue,
-  resolveBounty,
-  rivalriesInWeek,
   unpaidVerifications,
   updatePlayer,
 } from "./db.ts";
@@ -83,6 +78,7 @@ import {
 import { getRelics } from "./relics.ts";
 import { activeRaidFor, raidHit } from "./raids.ts";
 import { bingoLines, evaluateBingo } from "./bingo.ts";
+import { progressTask, taskShort } from "./slayer.ts";
 import { TRICKSTER_POINTS, XERIC_WEIGHT } from "./config.ts";
 import { buttonRow, type Button, type Checkin, type Env, type Player } from "./types.ts";
 import {
@@ -117,6 +113,16 @@ export interface CheckinOutcome {
   quiz: { index: number } | null;
   hasLamp: boolean;
   hasClue: boolean;
+  /** What the check-in produced, as item keys with counts, for the loot card. */
+  loot: { k: string; c: number }[];
+  xpGained: { k: string; x: number }[];
+  task: string | null;
+}
+
+/** Turns a unique's display name into its icon key. */
+export function itemKey(name: string): string {
+  if (name === "Amulet of glory (t)") return "glory_t";
+  return name.toLowerCase().replace(/[()']/g, "").replace(/[\s-]+/g, "_").replace(/_+/g, "_").replace(/_$/, "");
 }
 
 export interface CheckinRefusal {
@@ -207,6 +213,13 @@ export async function performCheckin(
   const receipt: string[] = [];
   const publicBits: string[] = [];
   const statements: D1PreparedStatement[] = [];
+  const loot: { k: string; c: number }[] = [];
+  const addLoot = (key: string, count = 1) => {
+    const existing = loot.find((item) => item.k === key);
+    if (existing) existing.c += count;
+    else loot.push({ k: key, c: count });
+  };
+  for (const [resource, amount] of Object.entries(haul)) if ((amount ?? 0) > 0) addLoot(resource, amount ?? 0);
 
   // ── XP ─────────────────────────────────────────────────────────
   const gains: Partial<Record<SkillKey, number>> = { hitpoints: xp.hp };
@@ -233,7 +246,7 @@ export async function performCheckin(
   await env.DB.batch(statements);
 
   receipt.push(
-    `Checked in — ${ordinalWord(ordinal)} this week, ${weightWord(weight)}${bootstrap ? " (Bootstrap: double Hitpoints)" : ""}.`
+    `**Checked in.** ${ordinalWord(ordinal)} this week, ${weightWord(weight)}${bootstrap ? ". First two weeks: double Hitpoints" : ""}.`
   );
 
   // ── Level-ups and tier ─────────────────────────────────────────
@@ -294,6 +307,7 @@ export async function performCheckin(
   );
   let quiz: { index: number } | null = null;
   let gotLamp = false;
+  let extraKills = 0;
   let rings = player.rings;
   const ringCap = player.graduated_at ? RING_CAP_GRADUATED : RING_CAP;
 
@@ -305,6 +319,7 @@ export async function performCheckin(
       case "genie":
         eventStatements.push(grantLampStatement(env, player.discord_id, 0, "genie", day));
         gotLamp = true;
+        addLoot("lamp");
         line = `🧞 A ${label} appeared — you have a lamp. Rub it from the hub.`;
         publicBits.push(`🧞 ${label === "Genie" ? "A genie appeared" : "The Grim Reaper called"} — ${escapeMarkdown(player.username)} has a lamp.`);
         break;
@@ -314,6 +329,8 @@ export async function performCheckin(
         eventStatements.push(
           ...creditStatements(env, resource, OLD_MAN_RESOURCE, "crate", day, player.discord_id, now)
         );
+        addLoot("crate");
+        addLoot(resource, OLD_MAN_RESOURCE);
         line = `🎩 The Mysterious Old Man left a crate: ${OLD_MAN_RESOURCE} ${resource} for the camp.`;
         publicBits.push(`🎩 The Mysterious Old Man dropped ${OLD_MAN_RESOURCE} ${resource} on the camp.`);
         break;
@@ -321,12 +338,14 @@ export async function performCheckin(
       case "drunken_dwarf":
         if (rings < ringCap) {
           rings++;
+          addLoot("ring");
           line = `🍺 The Drunken Dwarf pressed a Ring of Life into your hand.`;
           publicBits.push(`🍺 The Drunken Dwarf gave ${escapeMarkdown(player.username)} a Ring of Life.`);
         } else {
           eventStatements.push(
             ...creditStatements(env, "coins", DRUNKEN_DWARF_COINS, "crate", day, player.discord_id, now)
           );
+          addLoot("coins", DRUNKEN_DWARF_COINS);
           line = `🍺 The Drunken Dwarf tried to give you a Ring; you are full up, so he left ${DRUNKEN_DWARF_COINS} coins with the camp.`;
           publicBits.push(`🍺 The Drunken Dwarf left ${DRUNKEN_DWARF_COINS} coins.`);
         }
@@ -362,17 +381,16 @@ export async function performCheckin(
           eventStatements.push(
             ...creditStatements(env, "logs", FORESTER_REPAIR * 2, "crate", day, player.discord_id, now)
           );
+          addLoot("logs", FORESTER_REPAIR * 2);
           line = `🌲 The Freaky Forester found nothing to repair and left ${FORESTER_REPAIR * 2} logs.`;
           publicBits.push(`🌲 The Freaky Forester left ${FORESTER_REPAIR * 2} logs.`);
         }
         break;
       }
       case "drill_demon":
-        eventStatements.push(
-          grantBountyStatement(env, player.discord_id, "drill_demon", day, addDays(day, DRILL_DEMON_DAYS))
-        );
-        line = `😈 The Drill Demon: check in again within ${DRILL_DEMON_DAYS} days for a ${DRILL_DEMON_LAMP} XP lamp.`;
-        publicBits.push(`😈 The Drill Demon owes ${escapeMarkdown(player.username)} ${DRILL_DEMON_LAMP} XP if they are back by ${addDays(day, DRILL_DEMON_DAYS)}.`);
+        extraKills = DRILL_DEMON_KILLS;
+        line = `😈 The Drill Demon put you through your paces: +${DRILL_DEMON_KILLS} kill on your Slayer task.`;
+        publicBits.push(`😈 The Drill Demon drilled ${escapeMarkdown(player.username)}.`);
         break;
       case "prison_pete":
         eventStatements.push(
@@ -380,6 +398,7 @@ export async function performCheckin(
           grantLampStatement(env, player.discord_id, 0, "genie", day)
         );
         gotLamp = true;
+        addLoot("lamp", 2);
         line = `🔒 Prison Pete! Two lamps.`;
         publicBits.push(`🔒 PRISON PETE. ${escapeMarkdown(player.username)} has two lamps.`);
         break;
@@ -411,6 +430,14 @@ export async function performCheckin(
     }
   }
 
+  // ── Slayer task ────────────────────────────────────────────────
+  const progress = await progressTask(env, player, hpAfter, day, checkinId, now, extraKills);
+  receipt.push(`🗡️ ${progress.line}`);
+  if (progress.publicBit) publicBits.push(progress.publicBit);
+  if (progress.completed) {
+    await logEntry(env, player.discord_id, "milestone:first_task", day);
+  }
+
   // ── Clue scroll ────────────────────────────────────────────────
   const todays = await checkinsOn(env, day);
   const week1 = campaignWeek(day, env.CAMPAIGN_START);
@@ -421,22 +448,12 @@ export async function performCheckin(
     const remaining = remainingSteps(held);
     if (remaining.length > 0) {
       const yesterday = await getCheckinFor(env, player.discord_id, addDays(day, -1));
-      const lastWeekRivalries = await rivalriesInWeek(env, gameWeek(addDays(day, -1)));
-      const lostYesterday =
-        gameWeek(addDays(day, -1)) !== week &&
-        lastWeekRivalries.some(
-          (r) =>
-            r.resolved === 1 &&
-            (r.player_a === player.discord_id || r.player_b === player.discord_id) &&
-            r.winner_id !== player.discord_id &&
-            r.winner_id !== "both"
-        );
       const ctx: StepContext = {
         checkin: { ...(await getCheckinFor(env, player.discord_id, day))! },
         othersToday: todays.filter((c) => c.player_id !== player.discord_id).length,
         checkedInYesterday: Boolean(yesterday),
         delivered,
-        lostRivalryYesterday: lostYesterday,
+        completedTask: progress.completed,
         sackWasFull: sacks.hadFullSack,
         raidWeek: Boolean(await activeRaidFor(env, player.discord_id)),
       };
@@ -448,6 +465,7 @@ export async function performCheckin(
           receipt.push(opened.receipt);
           publicBits.push(opened.publicBit);
           if (opened.newEntry) publicBits.push(opened.newEntry);
+          for (const item of opened.loot) addLoot(item.k, item.c);
           gotLamp = true;
           held = null;
         } else {
@@ -467,23 +485,11 @@ export async function performCheckin(
       const steps = drawSteps(clueRng, tier, act);
       if (await insertClue(env, player.discord_id, tier.key, steps, day)) {
         hasClue = true;
+        addLoot(`clue_${tier.key}`);
         receipt.push(`📜 A clue scroll (${tier.name.toLowerCase()})! ${steps.length} steps — first: ${stepLabelFor(steps[0])}.`);
         publicBits.push(`📜 ${escapeMarkdown(player.username)} found a ${tier.name.toLowerCase()} clue scroll.`);
       }
     }
-  }
-
-  // ── Bounties ───────────────────────────────────────────────────
-  for (const bounty of await openBounties(env, player.discord_id)) {
-    if (bounty.granted_day >= day || bounty.expires_day < day) continue;
-    await resolveBounty(env, bounty.id, checkinId);
-    await env.DB.batch([
-      grantLampStatement(env, player.discord_id, DRILL_DEMON_LAMP, "bounty", day),
-      logEventStatement(env, player.discord_id, day, checkinId, "bounty_paid", { bounty: bounty.id }, now),
-    ]);
-    gotLamp = true;
-    receipt.push(`😈 The Drill Demon paid up: a ${DRILL_DEMON_LAMP} XP lamp.`);
-    publicBits.push(`😈 The Drill Demon paid ${escapeMarkdown(player.username)}.`);
   }
 
   // ── Verifier Slayer, paid on your own check-in ─────────────────
@@ -516,9 +522,11 @@ export async function performCheckin(
       if (claim.kind === "lamp") {
         claimStatements.push(grantLampStatement(env, player.discord_id, Number(payload.xp ?? 0), payload.source ?? "claim", day));
         gotLamp = true;
+        addLoot("lamp");
         receipt.push(`🎁 Waiting for you: a ${payload.xp} XP lamp (${payload.reason ?? payload.source ?? "reward"}).`);
       } else if (claim.kind === "ring") {
         if (rings < ringCap) rings++;
+        addLoot("ring");
         receipt.push(`🎁 Waiting for you: a Ring of Life (${payload.reason ?? "reward"}).`);
       } else if (claim.kind === "title") {
         await updatePlayer(env, player.discord_id, { title: String(payload.title) });
@@ -540,7 +548,9 @@ export async function performCheckin(
         logEventStatement(env, player.discord_id, day, checkinId, "recovery_complete", null, now),
       ]);
       gotLamp = true;
+      addLoot("lamp");
       if (rings < ringCap) rings++;
+      addLoot("ring");
       recovery = { recovery_started_day: null, recovery_count: 0, form_weeks: Math.max(1, player.form_weeks) };
       receipt.push(`🏃 The Restless Lifter, complete: a ${RECOVERY_LAMP_XP} XP lamp, a Ring, and your form counter is back.`);
       publicBits.push(`🏃 ${escapeMarkdown(player.username)} finished The Restless Lifter.`);
@@ -597,10 +607,13 @@ export async function performCheckin(
   );
 
   const publicLine =
-    `**${escapeMarkdown(player.username)}** checked in — ${ordinalWord(ordinal)} this week, ${weightWord(weight)}. ` +
-    `+${xp.hp} Hitpoints · +${xp.combatTotal} ${styleWord(player.combat_style)}` +
-    (delivered > 0 ? ` · delivered ${haulLine(haul)}` : "") +
-    (publicBits.length > 0 ? ` · ${publicBits.join(" ")}` : "");
+    `**${escapeMarkdown(player.username)}** checked in (${ordinalWord(ordinal)} this week, ${weightWord(weight)}).` +
+    (publicBits.length > 0 ? `\n${publicBits.join("\n")}` : "");
+
+  const xpGained = Object.entries(gains)
+    .filter(([, amount]) => (amount ?? 0) > 0)
+    .map(([skill, amount]) => ({ k: skill, x: amount ?? 0 }));
+  if (progress.xp > 0) xpGained.push({ k: "slayer", x: progress.xp });
 
   return {
     ok: true,
@@ -614,24 +627,14 @@ export async function performCheckin(
     quiz,
     hasLamp: gotLamp,
     hasClue,
+    loot,
+    xpGained,
+    task: taskShort(progress.completed ? progress.next : progress.task),
   };
 }
 
 function checinIdIsNull(id: number | null): id is null {
   return id === null;
-}
-
-function styleWord(style: string): string {
-  switch (style) {
-    case "accurate":
-      return "Attack";
-    case "aggressive":
-      return "Strength";
-    case "defensive":
-      return "Defence";
-    default:
-      return "Attack/Strength/Defence";
-  }
 }
 
 export function haulLine(haul: Partial<Record<ResourceKey, number>>): string {
@@ -661,7 +664,7 @@ export async function finishClue(
   tierKey: string,
   day: string,
   now: number
-): Promise<{ receipt: string; publicBit: string; newEntry: string | null }> {
+): Promise<{ receipt: string; publicBit: string; newEntry: string | null; loot: { k: string; c: number }[]; xp: number }> {
   const tier = clueTier(tierKey);
   const owned = new Set(await logEntries(env, player.discord_id));
   const rng = seededRng(`${player.discord_id}:${clueId}:casket`);
@@ -687,7 +690,9 @@ export async function finishClue(
     `📜 ${escapeMarkdown(player.username)} opened a ${tier.name.toLowerCase()} casket` +
     (loot.unique ? ` — **${loot.unique}**!` : ".") +
     (first ? ` ${logLine("First casket", await logCountFor(env, player.discord_id))}` : "");
-  return { receipt, publicBit, newEntry };
+  const items: { k: string; c: number }[] = [{ k: "casket", c: 1 }, { k: "lamp", c: 1 }, { k: "coins", c: loot.coins }];
+  if (loot.unique) items.push({ k: itemKey(loot.unique), c: 1 });
+  return { receipt, publicBit, newEntry, loot: items, xp: loot.xp };
 }
 
 /** The buttons under a receipt: the play hub. */
@@ -700,6 +705,7 @@ export async function hubButtons(env: Env, player: Player, day: string): Promise
   buttons.push({ label: "Sheet", custom_id: `sheet:${day}`, emoji: "📋" });
   buttons.push({ label: "Town", custom_id: "town", emoji: "🏘️" });
   buttons.push({ label: "Log", custom_id: "log", emoji: "📗" });
+  buttons.push({ label: "Task", custom_id: "task", emoji: "🗡️" });
   buttons.push({ label: "Bingo", custom_id: "bingo", emoji: "🎯" });
   buttons.push({ label: "Shop", custom_id: "shop", emoji: "🛒" });
   buttons.push({ label: "Votes", custom_id: "vote", emoji: "🗳️" });

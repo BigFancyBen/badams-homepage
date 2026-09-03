@@ -10,6 +10,7 @@ import {
   unspentLamps,
 } from "./db.ts";
 import { base64UrlFromString, hmacBase64Url } from "./encoding.ts";
+import { activeTask, taskShort } from "./slayer.ts";
 import { addDays, campaignWeek, actForWeek } from "./schedule.ts";
 import { ACTS, ACT_WEEKS } from "./config.ts";
 import type { Env, Player } from "./types.ts";
@@ -55,6 +56,7 @@ export interface SheetData {
   act: number;
   week: number;
   bossHeads: number;
+  task: string | null;
 }
 
 function cosmetics(player: Player): Record<string, string> {
@@ -94,6 +96,7 @@ export async function gatherSheet(env: Env, player: Player, day: string): Promis
     act: actForWeek(week, ACT_WEEKS, ACTS.length),
     week,
     bossHeads: (await logEntries(env, player.discord_id)).filter((e) => e.startsWith("boss:") && e !== "boss:raid_survivor").length,
+    task: taskShort(await activeTask(env, player.discord_id)),
   };
 }
 
@@ -123,8 +126,34 @@ export function sheetImageUrl(env: Env, data: SheetData, attempt = 0): Promise<s
     eq: cosmetics(data.player),
     bh: data.bossHeads,
     bp: data.player.bingo_points,
+    sp: data.player.slayer_points,
+    ...(data.task ? { task: data.task } : {}),
     ...retryField(attempt),
   });
+}
+
+export interface ReportPayload {
+  n: string;
+  t: string;
+  loot: { k: string; c: number }[];
+  xp: { k: string; x: number }[];
+  lv?: { k: string; l: number }[];
+  task?: string;
+  d: string;
+}
+
+/** The loot card that rides on every check-in line. */
+export function reportImageUrl(env: Env, checkinId: number, payload: ReportPayload, attempt = 0): Promise<string> {
+  return signedUrl(env, `report/${checkinId}`, { ...payload, ...retryField(attempt) });
+}
+
+export function casketImageUrl(
+  env: Env,
+  clueId: number,
+  payload: { n: string; tier: string; loot: { k: string; c: number }[]; xp: number; d: string },
+  attempt = 0
+): Promise<string> {
+  return signedUrl(env, `casket/${clueId}`, { ...payload, ...retryField(attempt) });
 }
 
 export function levelUpImageUrl(
@@ -220,6 +249,7 @@ export function textSheet(data: SheetData): string {
     `Form ${formBar(data.formDots)} (${data.formCount} of 7) · Form weeks ${data.player.form_weeks} · Rings ${data.player.rings} · Lamps ${data.lamps}`
   );
   if (data.clue) lines.push(data.clue);
+  if (data.task) lines.push(`🗡️ ${data.task} · Slayer points ${data.player.slayer_points}`);
   lines.push(`Log ${data.log}/${LOG_TOTAL} · ${data.checkins} check-ins · Act ${data.act}, week ${data.week}`);
   return lines.join("\n");
 }

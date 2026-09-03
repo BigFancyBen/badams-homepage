@@ -1,12 +1,10 @@
-import { ACTS, ACT_WEEKS, CAMPAIGN_EVENTS, DRILL_DEMON_LAMP } from "./config.ts";
+import { ACTS, ACT_WEEKS, CAMPAIGN_EVENTS } from "./config.ts";
 import {
   activeRoster,
   allCheckinsBetween,
   checkinsOn,
   getPlayers,
   getState,
-  openBounties,
-  rivalriesInWeek,
   verifierNames,
 } from "./db.ts";
 import { ACCENT, allowedMentions, escapeMarkdown } from "./discord.ts";
@@ -94,13 +92,6 @@ export async function composeDigest(env: Env, today: string): Promise<DigestPart
       (gainedText ? ` (${gainedText} yesterday` + (lostText ? `; quiet day: ${lostText})` : ")") : lostText ? ` (quiet day: ${lostText})` : "")
   );
 
-  // Bounties, named — a bounty is a promise to somebody, not a miss.
-  for (const bounty of await openBounties(env)) {
-    lines.push(
-      `Bounty: the Drill Demon owes ${name(bounty.player_id)} ${DRILL_DEMON_LAMP} XP if they are back by ${shortDate(bounty.expires_day)}.`
-    );
-  }
-
   const raid = await raidLine(env);
   if (raid) lines.push(raid);
   const votes = await openVotes(env);
@@ -110,27 +101,6 @@ export async function composeDigest(env: Env, today: string): Promise<DigestPart
     );
   }
 
-  // Rivalries, leaders only.
-  const rivalries = await rivalriesInWeek(env, thisWeek);
-  if (rivalries.length > 0 && daysBetween(thisWeek, today) > 0) {
-    const units = new Map<string, number>();
-    for (const c of weekCheckins) units.set(c.player_id, (units.get(c.player_id) ?? 0) + c.weight);
-    const mean = roster.length
-      ? roster.reduce((sum, p) => sum + (units.get(p.discord_id) ?? 0), 0) / roster.length
-      : 0;
-    const bits = rivalries.map((r) => {
-      const a = units.get(r.player_a) ?? 0;
-      if (!r.player_b) {
-        return a >= Math.max(2, mean) ? `${name(r.player_a)} (vs town) on pace` : `${name(r.player_a)} (vs town) behind`;
-      }
-      const b = units.get(r.player_b) ?? 0;
-      if (a === b) return a === 0 ? `${name(r.player_a)}–${name(r.player_b)} not started` : "a dead heat";
-      const leader = a > b ? r.player_a : r.player_b;
-      const gap = Math.abs(a - b);
-      return `${name(leader)} leads${gap >= 1 ? ` by ${gap.toFixed(1)}` : ""}`;
-    });
-    lines.push(`Rivalries: ${bits.join(" · ")}.`);
-  }
 
   // Monday: the week's resolution, and the campaign beat if there is one.
   let imageUrl: string | null = null;

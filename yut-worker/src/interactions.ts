@@ -65,7 +65,16 @@ import {
 import { runCommand } from "./commands.ts";
 import { setPing } from "./roles.ts";
 import { addDays, daysBetween, gameDay, parseHour } from "./schedule.ts";
-import { gatherSheet, levelUpImageUrl, renderCard, sheetImageUrl, textSheet } from "./sheet.ts";
+import { gatherSheet, levelUpImageUrl, renderCard, reportImageUrl, sheetImageUrl, textSheet } from "./sheet.ts";
+import { spendPoints, taskView } from "./slayer.ts";
+
+function ordinalWordFor(n: number): string {
+  return ["1st", "2nd", "3rd", "4th", "5th", "6th", "7th"][n - 1] ?? `${n}th`;
+}
+
+function weightWordFor(weight: number): string {
+  return weight >= 1 ? "full value" : weight >= 0.5 ? "half value" : "a fifth";
+}
 import { creditStatements } from "./town.ts";
 import {
   buildMenu,
@@ -258,6 +267,13 @@ async function route(
         : playerAction(env, user, day, (p) => votesView(env, p));
     case "bingo":
       return playerAction(env, user, day, async (p) => ({ content: await bingoView(env, p, actOf(env, day)) }));
+    case "task":
+      return a
+        ? freshAction(env, user, day, async (p) => {
+            const skills = await getSkills(env, p.discord_id);
+            return { content: await spendPoints(env, p, a, levelForXp(skills.hitpoints ?? 0), day, now) };
+          })
+        : playerAction(env, user, day, (p) => taskView(env, p));
     case "shop":
       return a
         ? freshAction(env, user, day, (p) => shopPress(env, p, a, b, day, now, actOf(env, day)))
@@ -393,8 +409,27 @@ export async function postCheckinLine(
       components.push(buttonRow([{ label: "Verify", custom_id: `vf:${outcome.checkinId}`, style: 3, emoji: "💪" }]));
     }
 
-    // A level-up banner rides on the line when there is no photo to show.
-    if (embeds.length === 0 && outcome.levelUps.length > 0) {
+    // The loot card: what the check-in produced, as OSRS item icons.
+    const report = await renderCard(env, `reports/${outcome.checkinId}.png`, (attempt) =>
+      reportImageUrl(
+        env,
+        outcome.checkinId,
+        {
+          n: player.username,
+          t: `${ordinalWordFor(outcome.ordinal)} check-in this week · ${weightWordFor(outcome.weight)}`,
+          loot: outcome.loot,
+          xp: outcome.xpGained,
+          ...(outcome.levelUps.length > 0 ? { lv: outcome.levelUps.map((up) => ({ k: up.skill, l: up.level })) } : {}),
+          ...(outcome.task ? { task: outcome.task } : {}),
+          d: day,
+        },
+        attempt
+      )
+    );
+    if (report) embeds.push({ color: ACCENT, image: { url: report } });
+
+    // And the level-up banner, when there is one.
+    if (outcome.levelUps.length > 0) {
       const top = outcome.levelUps.reduce((best, up) => (up.level > best.level ? up : best));
       const url = await renderCard(
         env,

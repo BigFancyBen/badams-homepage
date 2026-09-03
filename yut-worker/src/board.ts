@@ -1,14 +1,12 @@
-import { DRILL_DEMON_LAMP } from "./config.ts";
 import {
   activeRoster,
   checkinsBetween,
   getAllSkills,
   getState,
-  openBounties,
   setState,
 } from "./db.ts";
 import { ACCENT, allowedMentions, editMessage, escapeMarkdown, pinMessage, postMessage } from "./discord.ts";
-import { addDays, shortDate } from "./schedule.ts";
+import { addDays } from "./schedule.ts";
 import { formBar } from "./sheet.ts";
 import { getStores, getTown, storesLine } from "./town.ts";
 import { buttonRow, type Env } from "./types.ts";
@@ -16,7 +14,7 @@ import { levelForXp, tierForHp } from "./xp.ts";
 
 /**
  * One pinned message, edited every daily tick. Edits are silent, so this
- * costs the channel nothing; the roster, the camp, the bounties and the two
+ * costs the channel nothing; the roster, the camp and the two
  * buttons that bring people in.
  */
 export async function composeBoard(env: Env, today: string): Promise<string> {
@@ -48,10 +46,6 @@ export async function composeBoard(env: Env, today: string): Promise<string> {
 
   lines.push("");
   lines.push(`${town.level > 0 ? "Town" : "Camp"}: ${storesLine(await getStores(env))}`);
-  for (const bounty of await openBounties(env)) {
-    const holder = roster.find((p) => p.discord_id === bounty.player_id);
-    if (holder) lines.push(`Bounty: ${escapeMarkdown(holder.username)}, ${DRILL_DEMON_LAMP} XP by ${shortDate(bounty.expires_day)}.`);
-  }
   lines.push("");
   lines.push("Two a week is the whole game. `/help` for the rules.");
   return lines.join("\n");

@@ -1,16 +1,10 @@
 import {
   ACTS,
   ACT_WEEKS,
-  DUELLIST_WINS,
   FOUNDING_FORM_WEEKS,
   FOUNDING_LAMP_XP,
   GRADUATION_WEEK,
   LAMP_AUTO_RUB_DAYS,
-  RIVALRY_FROM_WEEK,
-  RIVALRY_LAMP_MAX,
-  RIVALRY_LAMP_MIN,
-  RIVALRY_LAMP_PER_HP,
-  RIVALRY_MIN_ROSTER,
   SKILL_LABEL,
   type SkillKey,
 } from "./config.ts";
@@ -23,14 +17,8 @@ import {
   getPlayingPlayers,
   getPlayers,
   grantClaimStatement,
-  grantLampStatement,
-  insertRivalry,
   logEntry,
   logEventStatement,
-  recentRivalries,
-  resolveRivalry,
-  rivalriesInWeek,
-  rivalryWinsInARow,
   setState,
   spendLamp,
   staleLamps,
@@ -40,7 +28,6 @@ import {
 } from "./db.ts";
 import { escapeMarkdown } from "./discord.ts";
 import { seededRng } from "./events.ts";
-import { drawPairs, judge, weeksBefore } from "./rivalries.ts";
 import { actForWeek, addDays, campaignWeek, daysBetween, gameWeek, weekdayOf } from "./schedule.ts";
 import { renderCard, standingsImageUrl } from "./sheet.ts";
 import { resolveWeek } from "./streaks.ts";
@@ -65,8 +52,6 @@ export interface WeekSummary {
   broke: number;
   ringsEarned: string[];
   graduated: string[];
-  rivalryResults: string[];
-  rivalryDraw: string[];
   standingsUrl: string | null;
   founding: string | null;
 }
@@ -84,8 +69,6 @@ export async function resolveWeekFor(
     broke: 0,
     ringsEarned: [],
     graduated: [],
-    rivalryResults: [],
-    rivalryDraw: [],
     standingsUrl: null,
     founding: null,
   };
@@ -183,66 +166,11 @@ export async function resolveWeekFor(
     ]);
   }
 
-  // ── Rivalries: resolve last week's, draw this week's ───────────
+  // ── Standings ──────────────────────────────────────────────────
   const skills = await getAllSkills(env);
-  const byId = new Map((await getPlayers(env)).map((p) => [p.discord_id, p]));
-  const name = (id: string | null) => (id ? escapeMarkdown(byId.get(id)?.username ?? id) : "the town");
-
   const roster = await activeRoster(env, today);
-  const rosterUnits = roster.map((p) => unitsBy.get(p.discord_id) ?? 0);
-  const meanUnits = rosterUnits.length ? rosterUnits.reduce((a, b) => a + b, 0) / rosterUnits.length : 0;
-
-  for (const rivalry of await rivalriesInWeek(env, closedWeek)) {
-    if (rivalry.resolved) continue;
-    const unitsA = unitsBy.get(rivalry.player_a) ?? 0;
-    const unitsB = rivalry.player_b
-      ? (unitsBy.get(rivalry.player_b) ?? 0)
-      : Math.max(2, Math.round(meanUnits * 10) / 10);
-    const verdict = judge(rivalry.player_a, unitsA, rivalry.player_b, unitsB);
-    await resolveRivalry(env, rivalry.id, unitsA, unitsB, verdict.winner);
-
-    const winners =
-      verdict.winner === "both"
-        ? [rivalry.player_a, rivalry.player_b!]
-        : verdict.winner
-          ? [verdict.winner]
-          : [];
-    for (const winner of winners) {
-      const hp = levelForXp(skills.get(winner)?.hitpoints ?? 0);
-      const xp = Math.max(RIVALRY_LAMP_MIN, Math.min(RIVALRY_LAMP_MAX, RIVALRY_LAMP_PER_HP * hp));
-      await env.DB.batch([grantLampStatement(env, winner, xp, "rivalry", today)]);
-      const units = winner === rivalry.player_a ? unitsA : unitsB;
-      summary.rivalryResults.push(
-        rivalry.player_b
-          ? `${name(winner)} (${units.toFixed(1)})`
-          : `${name(winner)} vs the town (${unitsA.toFixed(1)} to ${unitsB.toFixed(1)})`
-      );
-      if ((await rivalryWinsInARow(env, winner)) >= DUELLIST_WINS) {
-        if (await logEntry(env, winner, "title:duellist", today)) {
-          await env.DB.batch([grantClaimStatement(env, winner, "title", { title: "Duellist" }, today)]);
-        }
-      }
-    }
-    if (winners.length === 0) summary.rivalryResults.push("one dead heat");
-  }
-
   const newWeek = gameWeek(today);
   const newCampaignWeek = campaignWeek(newWeek, env.CAMPAIGN_START);
-  if (newCampaignWeek >= RIVALRY_FROM_WEEK && roster.length >= RIVALRY_MIN_ROSTER) {
-    const recent = await recentRivalries(env, weeksBefore(newWeek));
-    const byeCounts = new Map<string, number>();
-    for (const r of recent) if (!r.player_b) byeCounts.set(r.player_a, (byeCounts.get(r.player_a) ?? 0) + 1);
-    const rng = seededRng(`rivalries:${newWeek}`);
-    const { pairs, bye } = drawPairs(rng, roster.map((p) => p.discord_id), recent, byeCounts);
-    for (const [a, b] of pairs) {
-      await insertRivalry(env, newWeek, a, b);
-      summary.rivalryDraw.push(`${name(a)} vs ${name(b)}`);
-    }
-    if (bye) {
-      await insertRivalry(env, newWeek, bye, null);
-      summary.rivalryDraw.push(`${name(bye)} vs the town`);
-    }
-  }
 
   // ── Standings card ─────────────────────────────────────────────
   const rows = roster
@@ -359,8 +287,6 @@ export function summaryLines(summary: WeekSummary): string[] {
   );
   if (summary.ringsEarned.length > 0) lines.push(`Rings earned: ${summary.ringsEarned.map(escapeMarkdown).join(", ")}.`);
   if (summary.graduated.length > 0) lines.push(`🎓 Graduated: ${summary.graduated.map(escapeMarkdown).join(", ")}.`);
-  if (summary.rivalryResults.length > 0) lines.push(`Rivalries: ${summary.rivalryResults.join(" · ")}.`);
-  if (summary.rivalryDraw.length > 0) lines.push(`This week: ${summary.rivalryDraw.join(" · ")}.`);
   if (summary.founding) lines.push(`🏛️ ${summary.founding}`);
   return lines;
 }

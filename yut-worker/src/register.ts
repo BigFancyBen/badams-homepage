@@ -116,6 +116,16 @@ export const COMMANDS = [
   },
   { name: "vote", description: "Open votes" },
   { name: "bingo", description: "Your bingo card for this act" },
+  {
+    name: "task",
+    description: "Your Slayer task",
+    options: [
+      { type: 1, name: "status", description: "Your task and your Slayer points" },
+      { type: 1, name: "skip", description: "Skip the task for 30 Slayer points" },
+      { type: 1, name: "lamp", description: "A 5,000 XP lamp for 100 Slayer points" },
+      { type: 1, name: "helmet", description: "The Slayer helmet and the title Slayer Master, 400 points" },
+    ],
+  },
   { name: "shop", description: "Spend bingo points" },
   { name: "relics", description: "The relics the group holds" },
   {

@@ -1,14 +1,12 @@
 import { ACTIVE_WINDOW_DAYS, FRESH_WINDOW_DAYS, type SkillKey } from "./config.ts";
 import { addDays } from "./schedule.ts";
 import type {
-  Bounty,
   Checkin,
   Clue,
   Env,
   Lamp,
   PendingClaim,
   Player,
-  Rivalry,
 } from "./types.ts";
 
 /**
@@ -527,53 +525,6 @@ export async function staleLamps(env: Env, beforeDay: string): Promise<Lamp[]> {
   return results;
 }
 
-// ── Bounties ───────────────────────────────────────────────────────
-
-export function grantBountyStatement(
-  env: Env,
-  playerId: string,
-  kind: string,
-  day: string,
-  expiresDay: string
-): D1PreparedStatement {
-  return env.DB.prepare(
-    "INSERT INTO bounties (player_id, kind, granted_day, expires_day) VALUES (?, ?, ?, ?)"
-  ).bind(playerId, kind, day, expiresDay);
-}
-
-export async function openBounties(env: Env, playerId?: string): Promise<Bounty[]> {
-  const query = playerId
-    ? env.DB.prepare(
-        "SELECT * FROM bounties WHERE player_id = ? AND resolved_checkin_id IS NULL AND expired = 0"
-      ).bind(playerId)
-    : env.DB.prepare(
-        "SELECT * FROM bounties WHERE resolved_checkin_id IS NULL AND expired = 0"
-      );
-  const { results } = await query.all<Bounty>();
-  return results;
-}
-
-export async function resolveBounty(
-  env: Env,
-  id: number,
-  checkinId: number
-): Promise<void> {
-  await env.DB.prepare(
-    "UPDATE bounties SET resolved_checkin_id = ? WHERE id = ? AND resolved_checkin_id IS NULL"
-  )
-    .bind(checkinId, id)
-    .run();
-}
-
-export async function expireBounties(env: Env, day: string): Promise<number> {
-  const result = await env.DB.prepare(
-    "UPDATE bounties SET expired = 1 WHERE resolved_checkin_id IS NULL AND expired = 0 AND expires_day < ?"
-  )
-    .bind(day)
-    .run();
-  return result.meta.changes;
-}
-
 // ── Week log ───────────────────────────────────────────────────────
 
 export interface WeekLogRow {
@@ -715,71 +666,6 @@ export async function logCount(env: Env, playerId: string): Promise<number> {
     .bind(playerId)
     .first<{ n: number }>();
   return row?.n ?? 0;
-}
-
-// ── Rivalries ──────────────────────────────────────────────────────
-
-export async function rivalriesInWeek(env: Env, week: string): Promise<Rivalry[]> {
-  const { results } = await env.DB.prepare(
-    "SELECT * FROM rivalries WHERE week = ? ORDER BY id"
-  )
-    .bind(week)
-    .all<Rivalry>();
-  return results;
-}
-
-export async function recentRivalries(env: Env, fromWeek: string): Promise<Rivalry[]> {
-  const { results } = await env.DB.prepare(
-    "SELECT * FROM rivalries WHERE week >= ? ORDER BY week"
-  )
-    .bind(fromWeek)
-    .all<Rivalry>();
-  return results;
-}
-
-export async function insertRivalry(
-  env: Env,
-  week: string,
-  a: string,
-  b: string | null
-): Promise<void> {
-  await retryWrite(() =>
-    env.DB.prepare(
-      "INSERT INTO rivalries (week, player_a, player_b) VALUES (?, ?, ?) " +
-        "ON CONFLICT (week, player_a) DO NOTHING"
-    )
-      .bind(week, a, b)
-      .run()
-  );
-}
-
-export async function resolveRivalry(
-  env: Env,
-  id: number,
-  unitsA: number,
-  unitsB: number,
-  winner: string | null
-): Promise<void> {
-  await env.DB.prepare(
-    "UPDATE rivalries SET units_a = ?, units_b = ?, winner_id = ?, resolved = 1 WHERE id = ?"
-  )
-    .bind(unitsA, unitsB, winner, id)
-    .run();
-}
-
-export async function rivalryWinsInARow(env: Env, playerId: string): Promise<number> {
-  const { results } = await env.DB.prepare(
-    "SELECT winner_id, player_a, player_b FROM rivalries " +
-      "WHERE resolved = 1 AND (player_a = ? OR player_b = ?) ORDER BY week DESC LIMIT 10"
-  )
-    .bind(playerId, playerId)
-    .all<{ winner_id: string | null; player_a: string; player_b: string | null }>();
-  let streak = 0;
-  for (const row of results) {
-    if (row.winner_id === playerId || row.winner_id === "both") streak++;
-    else break;
-  }
-  return streak;
 }
 
 // ── Pending claims ─────────────────────────────────────────────────

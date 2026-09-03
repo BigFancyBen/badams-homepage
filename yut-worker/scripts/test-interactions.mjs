@@ -115,7 +115,7 @@ check("non-player gets a Join button", /not in the campaign/.test(content(strang
 
 // 4. Joining from that button also checks in.
 const joined = await click(`join:${day}`, alice);
-check("join + check-in in one press", /Checked in — 1st this week, full value/.test(content(joined)), joined);
+check("join + check-in in one press", /Checked in\.\*\* 1st this week, full value/.test(content(joined)), joined);
 check("the receipt carries the hub", JSON.stringify(joined.body).includes("sheet:"), joined);
 
 // 5. A second check-in the same day is refused.
@@ -129,7 +129,12 @@ check("yesterday's button refused", /yesterday's button/.test(content(stale)), s
 // 7. /checkin as a slash command for a new player, with a note.
 await command("join", [], bob);
 const bobCheckin = await command("checkin", [{ name: "note", type: 3, value: "Deadlifts, felt strong today and hit a PR" }], bob);
-check("/checkin accepted", /Checked in — 1st this week/.test(content(bobCheckin)), bobCheckin);
+check("/checkin accepted", /Checked in\.\*\* 1st this week/.test(content(bobCheckin)), bobCheckin);
+// The first check-in lands at Hitpoints 18 (double XP for new joiners), so
+// Mazchna is the master, not Turael.
+check("the first check-in gets a Slayer task", /(Turael|Mazchna) assigns you: \d+ [a-z ]+, due \d{4}-\d{2}-\d{2}/.test(content(bobCheckin)), bobCheckin);
+const task = await command("task", [{ name: "status", type: 1 }], bob);
+check("/task shows the task", /Slayer task: .* 1\/\d for (Turael|Mazchna)/.test(content(task)), task);
 
 // 8. XP landed: one check-in = 200 HP (×2 bootstrap) and 66/66/66 controlled.
 const xp = await sql(`SELECT skill, xp FROM skill_xp WHERE player_id = '${bob.user.id}' ORDER BY skill`);

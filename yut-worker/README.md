@@ -31,7 +31,7 @@ src/
   checkins.ts     the check-in transaction and everything a check-in can produce.
   events.ts       random events (seeded on player + day).
   clues.ts        clue scrolls.
-  rivalries.ts    the weekly head-to-head.
+  slayer.ts       Slayer tasks: a master by Hitpoints level, every check-in a kill, points and streaks.
   streaks.ts      resolveWeek() — pure.
   xp.ts           the curve (RuneScape's table, exactly), the weight, tiers — pure.
   config.ts       every number in the game. Edit this and nothing else.
@@ -129,8 +129,19 @@ with a synthetic clock (`daily=1`, `post=1`, `lastcall=1` force a phase),
   recomputed rolls the same event and the same clue.
 - **Every message the bot writes is unmentioning** except the opt-in Players
   role on the morning post and Sunday's last call.
-- **The receipt is the play hub.** Lamps, clues, the sheet, the camp and the
-  log hang off it; a stale player gets "Check in to play" and nothing else.
+- **The receipt is the play hub.** Lamps, clues, the Slayer task, the sheet,
+  the town, the log, bingo, the shop and the votes hang off it; a stale
+  player gets "Check in to play" and nothing else.
+- **Every check-in line carries a loot card**: the check-in's loot (coins,
+  logs, a lamp, a clue, a casket, uniques) as OSRS item icons and the XP it
+  paid, rendered by `app/api/yut/report` in the style of an OSRS progress
+  report. The icons come from the prog-to-img-endpoint item database.
+- **Slayer tasks replace bounties and rivalries.** Every player always holds
+  a task from a master picked by Hitpoints level (Turael 1, Mazchna 10,
+  Vannaka 20, Chaeldar 30, Nieve 40, Duradel 50). Every check-in is a kill.
+  Finishing pays Slayer XP and points and the next task is handed over at
+  once; missing the due day expires the task and resets the streak, nothing
+  more. The 10th, 50th and 100th task in a row pay 5×, 15× and 25× points.
 - **Group rewards wait.** Founding lamps, holiday rings and titles are
   credited to `pending_claims` and surface on the next check-in receipt.
 - **Discord caches an embed image per URL forever**, so every sheet key carries

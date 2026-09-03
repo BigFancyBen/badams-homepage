@@ -17,6 +17,7 @@ import {
   addXp,
   getAllSkills,
   getPlayer,
+  getSkills,
   getPlayers,
   joinPlayer,
   updatePlayer,
@@ -54,6 +55,7 @@ import {
 } from "./actions.ts";
 import { actOf, freshAction, playerAction } from "./interactions.ts";
 import { bingoView } from "./bingo.ts";
+import { spendPoints, taskView } from "./slayer.ts";
 import { shopMenu } from "./shop.ts";
 import { addDays, daysBetween, gameWeek } from "./schedule.ts";
 import { runTick } from "./tick.ts";
@@ -157,6 +159,16 @@ export async function runCommand(
       return playerAction(env, user, day, () => relicsView(env));
     case "bingo":
       return playerAction(env, user, day, async (p) => ({ content: await bingoView(env, p, actOf(env, day)) }));
+    case "task": {
+      const sub = subcommand(interaction);
+      if (sub && sub !== "status") {
+        return freshAction(env, user, day, async (p) => {
+          const skills = await getSkills(env, p.discord_id);
+          return { content: await spendPoints(env, p, sub, levelForXp(skills.hitpoints ?? 0), day, now) };
+        });
+      }
+      return playerAction(env, user, day, (p) => taskView(env, p));
+    }
     case "shop":
       return playerAction(env, user, day, async (p) => shopMenu(p));
     case "raid": {

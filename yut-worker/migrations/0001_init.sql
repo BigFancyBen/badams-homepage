@@ -27,6 +27,9 @@ CREATE TABLE players (
   title TEXT,
   cosmetics TEXT NOT NULL DEFAULT '{}',         -- JSON: equipped slots
   bingo_points INTEGER NOT NULL DEFAULT 0,
+  slayer_points INTEGER NOT NULL DEFAULT 0,
+  slayer_streak INTEGER NOT NULL DEFAULT 0,     -- tasks completed in a row
+  tasks_done INTEGER NOT NULL DEFAULT 0,
   ping_opt_in INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX idx_players_status ON players (status);
@@ -100,24 +103,29 @@ CREATE TABLE lamps (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   player_id TEXT NOT NULL,
   xp INTEGER NOT NULL,
-  source TEXT NOT NULL,                         -- event | bounty | casket | rivalry | raid | founding | shop | quest
+  source TEXT NOT NULL,                         -- genie | casket | raid | founding | shop | quest | slayer
   granted_day TEXT NOT NULL,
   spent_skill TEXT,
   spent_at INTEGER
 );
 CREATE INDEX idx_lamps_unspent ON lamps (player_id, spent_at);
 
--- The Drill Demon's bounty: check in again inside three days for a lamp.
-CREATE TABLE bounties (
+-- Slayer tasks: every player always holds one. "Slay N <monster>" for a
+-- master picked by Hitpoints level; every check-in is a kill; the deadline
+-- expires the task and resets the streak, nothing more.
+CREATE TABLE slayer_tasks (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   player_id TEXT NOT NULL,
-  kind TEXT NOT NULL,
-  granted_day TEXT NOT NULL,
-  expires_day TEXT NOT NULL,
-  resolved_checkin_id INTEGER,
-  expired INTEGER NOT NULL DEFAULT 0
+  master TEXT NOT NULL,
+  monster TEXT NOT NULL,
+  kills_needed INTEGER NOT NULL,
+  kills INTEGER NOT NULL DEFAULT 0,
+  assigned_day TEXT NOT NULL,
+  due_day TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active',        -- active | done | expired | skipped
+  points_awarded INTEGER NOT NULL DEFAULT 0
 );
-CREATE INDEX idx_bounties_open ON bounties (player_id, resolved_checkin_id, expired);
+CREATE INDEX idx_tasks_active ON slayer_tasks (player_id, status);
 
 -- One row per player per game week, written at the Monday resolution.
 CREATE TABLE week_log (
@@ -151,20 +159,6 @@ CREATE TABLE collection_log (
   count INTEGER NOT NULL DEFAULT 1,
   PRIMARY KEY (player_id, entry_key)
 );
-
--- The weekly head-to-head. player_b NULL is "vs the town".
-CREATE TABLE rivalries (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  week TEXT NOT NULL,
-  player_a TEXT NOT NULL,
-  player_b TEXT,
-  units_a REAL,
-  units_b REAL,
-  winner_id TEXT,                               -- 'both' for a shared win
-  resolved INTEGER NOT NULL DEFAULT 0,
-  UNIQUE (week, player_a)
-);
-CREATE INDEX idx_rivalries_pair ON rivalries (player_a, player_b, week);
 
 -- Rewards credited to a player while they were away, surfaced on their next
 -- check-in receipt. Nothing in the game waits for anybody to be online.

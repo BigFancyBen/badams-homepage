@@ -53,6 +53,9 @@ export interface Player {
   title: string | null;
   cosmetics: string;
   bingo_points: number;
+  slayer_points: number;
+  slayer_streak: number;
+  tasks_done: number;
   ping_opt_in: number;
 }
 
@@ -88,16 +91,6 @@ export interface Lamp {
   spent_at: number | null;
 }
 
-export interface Bounty {
-  id: number;
-  player_id: string;
-  kind: string;
-  granted_day: string;
-  expires_day: string;
-  resolved_checkin_id: number | null;
-  expired: number;
-}
-
 export interface Clue {
   id: number;
   player_id: string;
@@ -107,17 +100,6 @@ export interface Clue {
   started_day: string;
   completed_day: string | null;
   loot: string | null;
-}
-
-export interface Rivalry {
-  id: number;
-  week: string;
-  player_a: string;
-  player_b: string | null;
-  units_a: number | null;
-  units_b: number | null;
-  winner_id: string | null;
-  resolved: number;
 }
 
 export interface PendingClaim {

@@ -106,7 +106,7 @@ export interface StepContext {
   othersToday: number;
   checkedInYesterday: boolean;
   delivered: number;
-  lostRivalryYesterday: boolean;
+  completedTask: boolean;
   sackWasFull: boolean;
   raidWeek: boolean;
 }
@@ -134,8 +134,8 @@ export function checkinSatisfies(step: ClueStepKey, ctx: StepContext): boolean {
       return (checkin.note ?? "").trim().split(/\s+/).filter(Boolean).length >= 20;
     case "raid_checkin":
       return ctx.raidWeek;
-    case "after_rivalry_loss":
-      return ctx.lostRivalryYesterday;
+    case "task_complete":
+      return ctx.completedTask;
     case "full_sack":
       return ctx.sackWasFull;
     default:

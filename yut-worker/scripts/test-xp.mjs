@@ -19,7 +19,7 @@ import { EVENT_TABLE, TIERS, CLUE_TIERS } from "../src/config.ts";
 import { resolveWeek } from "../src/streaks.ts";
 import { rollEvent, seededRng, weightedPick } from "../src/events.ts";
 import { drawSteps, openCasket } from "../src/clues.ts";
-import { drawPairs, judge } from "../src/rivalries.ts";
+import { masterFor, streakMultiplier } from "../src/slayer.ts";
 import { addDays, campaignWeek, daysBetween, gameDay, gameWeek, weekdayOf } from "../src/schedule.ts";
 
 let failures = 0;
@@ -117,20 +117,10 @@ check("rings cap at 2 before graduation", capped.rings === 2 && !capped.ringEarn
 const paused = resolveWeek({ ...base, checkins: 0, paused: true });
 check("an expedition week changes nothing", paused.outcome === "paused" && paused.formWeeks === 4, paused);
 
-// ── Rivalries ──────────────────────────────────────────────────────
-const roster = ["a", "b", "c", "d", "e", "f"];
-const recent = [{ id: 1, week: "2026-09-21", player_a: "a", player_b: "b", units_a: null, units_b: null, winner_id: null, resolved: 0 }];
-const draw = drawPairs(seededRng("draw"), roster, recent, new Map());
-check("six players draw three pairs and no bye", draw.pairs.length === 3 && draw.bye === null, draw);
-check("a recent pair is not redrawn", !draw.pairs.some(([x, y]) => (x === "a" && y === "b") || (x === "b" && y === "a")), draw);
-const odd = drawPairs(seededRng("odd"), roster.slice(0, 5), [], new Map());
-check("five players draw two pairs and a bye", odd.pairs.length === 2 && odd.bye !== null, odd);
-const tooFew = drawPairs(seededRng("few"), ["a", "b", "c"], [], new Map());
-check("fewer than four draws nothing", tooFew.pairs.length === 0 && tooFew.bye === null);
-check("judge: more units wins", judge("a", 2.5, "b", 2).winner === "a");
-check("judge: a tie at 2.0 is shared", judge("a", 2, "b", 2).winner === "both");
-check("judge: a tie below 2.0 is nobody", judge("a", 1, "b", 1).winner === null);
-check("judge: vs the town, beat the mean", judge("a", 2.5, null, 2.2).winner === "a" && judge("a", 1, null, 2).winner === null);
+// ── Slayer tasks ───────────────────────────────────────────────────
+check("Turael at Hitpoints 1, Mazchna at 10, Duradel at 50", masterFor(1).key === "turael" && masterFor(10).key === "mazchna" && masterFor(49).key === "nieve" && masterFor(50).key === "duradel");
+check("the 10th task pays 5x, the 50th 15x, the 100th 25x, the rest 1x",
+  streakMultiplier(9) === 1 && streakMultiplier(10) === 5 && streakMultiplier(50) === 15 && streakMultiplier(100) === 25 && streakMultiplier(20) === 5);
 
 // ── Calendar ───────────────────────────────────────────────────────
 check("gameDay before 09:00 UTC is yesterday", gameDay(Date.parse("2026-09-15T08:59:00Z"), 9) === "2026-09-14");

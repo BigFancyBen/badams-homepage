@@ -207,8 +207,8 @@ export const QUIZ_WRONG_COINS = 50;
 export const FORESTER_REPAIR = 30;
 export const BEEKEEPER_HOURS = 24;
 export const BEEKEEPER_BONUS = 0.25;
-export const DRILL_DEMON_DAYS = 3;
-export const DRILL_DEMON_LAMP = 4000;
+/** The Drill Demon puts you through your paces: extra kills on your Slayer task. */
+export const DRILL_DEMON_KILLS = 1;
 
 /** Three-button trivia. The right answer is index `a`. */
 export const QUIZ_BANK: { q: string; o: [string, string, string]; a: number }[] = [
@@ -340,18 +340,6 @@ export const WORKER_TIERS: WorkerTier[] = [
 /** Each further recruit costs this × workers already owned, in coins. */
 export const RECRUIT_COST_PER_OWNED = 300;
 
-// ── Rivalries ──────────────────────────────────────────────────────
-
-export const RIVALRY_FROM_WEEK = 3;
-export const RIVALRY_MIN_ROSTER = 4;
-export const RIVALRY_RECENCY_WEEKS = 3;
-export const RIVALRY_LAMP_PER_HP = 100;
-export const RIVALRY_LAMP_MIN = 1500;
-export const RIVALRY_LAMP_MAX = 4000;
-/** A tie only counts as a shared win at or above this many units. */
-export const RIVALRY_TIE_FLOOR = 2.0;
-export const DUELLIST_WINS = 3;
-
 // ── Clue scrolls ───────────────────────────────────────────────────
 
 export const CLUE_CHANCE = 12;
@@ -396,7 +384,7 @@ export type ClueStepKey =
   | "long_note"
   | "verify_someone"
   | "raid_checkin"
-  | "after_rivalry_loss"
+  | "task_complete"
   | "full_sack";
 
 /**
@@ -417,7 +405,7 @@ export const CLUE_STEPS: { key: ClueStepKey; label: string; verified: boolean; f
   { key: "long_note", label: "a check-in with a note of 20+ words", verified: false },
   { key: "verify_someone", label: "verify somebody else's check-in", verified: false },
   { key: "raid_checkin", label: "a check-in during a raid week", verified: false, from: 99 },
-  { key: "after_rivalry_loss", label: "a check-in the day after losing a rivalry", verified: false },
+  { key: "task_complete", label: "a check-in that completes a Slayer task", verified: false },
   { key: "full_sack", label: "a check-in while holding a full sack", verified: false, from: 99 },
 ];
 
@@ -658,3 +646,40 @@ export const SHOP_TITLES = ["of Lumbridge", "the Relentless", "Ironman", "of the
 export const SHOP_TRIMS = ["gold", "silver", "obsidian", "third-age"];
 export const SHOP_PETS = ["Baby Mole", "Chompy chick"];
 export const WORKER_NAMES = ["Bob", "Hans", "Zeke", "Gertrude", "Wise Old Man", "Doric", "Duke Horacio", "Aggie", "Father Aereck", "Cook"];
+
+// ── Slayer tasks ───────────────────────────────────────────────────
+
+export interface SlayerMaster {
+  key: string;
+  name: string;
+  /** Hitpoints level the master starts assigning at. */
+  hp: number;
+  /** Slayer points per task. */
+  points: number;
+  /** Kills per task, inclusive range. Every check-in is one kill. */
+  kills: [number, number];
+  /** Days to finish. */
+  days: number;
+  xpPerKill: number;
+  monsters: string[];
+}
+
+export const SLAYER_MASTERS: SlayerMaster[] = [
+  { key: "turael", name: "Turael", hp: 1, points: 0, kills: [2, 3], days: 14, xpPerKill: 100, monsters: ["chickens", "cows", "goblins", "rats", "spiders"] },
+  { key: "mazchna", name: "Mazchna", hp: 10, points: 2, kills: [3, 4], days: 14, xpPerKill: 250, monsters: ["hill giants", "skeletons", "zombies", "wolves", "bats"] },
+  { key: "vannaka", name: "Vannaka", hp: 20, points: 4, kills: [4, 5], days: 21, xpPerKill: 500, monsters: ["moss giants", "lesser demons", "ogres", "crocodiles", "jellies"] },
+  { key: "chaeldar", name: "Chaeldar", hp: 30, points: 10, kills: [4, 6], days: 21, xpPerKill: 750, monsters: ["bloodvelds", "fire giants", "turoths", "kalphites", "dust devils"] },
+  { key: "nieve", name: "Nieve", hp: 40, points: 12, kills: [5, 7], days: 21, xpPerKill: 1000, monsters: ["greater demons", "gargoyles", "nechryaels", "black dragons", "abyssal demons"] },
+  { key: "duradel", name: "Duradel", hp: 50, points: 15, kills: [6, 8], days: 28, xpPerKill: 1250, monsters: ["abyssal demons", "dark beasts", "smoke devils", "black demons", "iron dragons"] },
+];
+
+/** The Nth task in a row pays a multiple: the 10th 5×, the 50th 15×, the 100th 25×. */
+export const SLAYER_STREAK_BONUS = [
+  { every: 10, multiplier: 5 },
+  { every: 50, multiplier: 15 },
+  { every: 100, multiplier: 25 },
+];
+export const SLAYER_SKIP_COST = 30;
+export const SLAYER_LAMP_COST = 100;
+export const SLAYER_LAMP_XP = 5000;
+export const SLAYER_TITLE_COST = 400;
