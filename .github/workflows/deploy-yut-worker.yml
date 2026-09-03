@@ -1,0 +1,136 @@
+# Merging to main is the deploy, and the setup too. One run takes the Worker
+# from nothing to answering Discord: it makes sure the D1 database and the R2
+# bucket exist, applies migrations, deploys, pushes whatever secrets the
+# repository holds, registers the slash commands, and points the Discord
+# application's Interactions Endpoint at the new Worker. What it cannot do it
+# writes into the job summary: which repository secrets are still missing, and
+# the invite link if the bot is not in the server yet (only a server admin can
+# add a bot).
+#
+# Repository secrets it uses (Settings → Secrets and variables → Actions):
+#   CLOUDFLARE_API_TOKEN          shared with the scrandle worker
+#   YUT_DISCORD_BOT_TOKEN         Developer Portal → the app → Bot → Reset Token
+#   YUT_IMAGE_SECRET              any long random string; the Next app on Vercel
+#                                 must hold the same value as YUT_IMAGE_SECRET,
+#                                 or this must equal Vercel's SCRANDLE_IMAGE_SECRET
+#                                 (the render routes fall back to it)
+#   YUT_ADMIN_SECRET              optional; gates the /admin/* test seams
+#   YUT_DISCORD_LOG_WEBHOOK_URL   optional; where tick failures are reported
+#
+# Add a secret later and press "Run workflow": every step is idempotent.
+name: Deploy yut worker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "yut-worker/**"
+      - ".github/workflows/deploy-yut-worker.yml"
+  workflow_dispatch:
+
+# Queue rather than cancel: a cancelled run still leaves main undeployed.
+concurrency:
+  group: deploy-yut-worker
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: yut-worker
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      YUT_DISCORD_BOT_TOKEN: ${{ secrets.YUT_DISCORD_BOT_TOKEN }}
+      YUT_IMAGE_SECRET: ${{ secrets.YUT_IMAGE_SECRET }}
+      YUT_ADMIN_SECRET: ${{ secrets.YUT_ADMIN_SECRET }}
+      YUT_DISCORD_LOG_WEBHOOK_URL: ${{ secrets.YUT_DISCORD_LOG_WEBHOOK_URL }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: yut-worker/package-lock.json
+
+      - run: npm ci
+
+      # The pre-commit hook only checks the Next app.
+      - run: npm run type-check
+
+      - run: npm run test:xp
+
+      # Creates the D1 database and the R2 bucket if they are missing and
+      # fills their ids into the checkout's wrangler.toml. A no-op once the
+      # committed file names them, which it does.
+      - name: Cloudflare resources
+        run: node scripts/provision.mjs
+
+      # Migrations first, in their own step: code that reads a new column
+      # must never reach Cloudflare before the column exists. Idempotent —
+      # wrangler skips what the d1_migrations table already records.
+      - name: Migrate
+        run: npx wrangler d1 migrations apply yut-hut --remote
+
+      - name: Deploy
+        id: deploy
+        run: |
+          npx wrangler deploy 2>&1 | tee deploy.log
+          url=$(grep -oE 'https://[a-z0-9-]+\.[a-z0-9-]+\.workers\.dev' deploy.log | head -n 1)
+          test -n "$url"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "## Worker" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Deployed to $url" >> "$GITHUB_STEP_SUMMARY"
+
+      # Pushes every YUT_* secret the repository has; leaves the rest alone.
+      - name: Secrets
+        run: node scripts/push-secrets.mjs
+
+      - name: Slash commands
+        if: env.YUT_DISCORD_BOT_TOKEN != ''
+        run: npm run register
+        env:
+          DISCORD_BOT_TOKEN: ${{ env.YUT_DISCORD_BOT_TOKEN }}
+
+      # Interactions Endpoint URL, and whether the bot is in the server.
+      - name: Discord application
+        if: env.YUT_DISCORD_BOT_TOKEN != ''
+        run: node scripts/discord-setup.mjs
+        env:
+          DISCORD_BOT_TOKEN: ${{ env.YUT_DISCORD_BOT_TOKEN }}
+          WORKER_URL: ${{ steps.deploy.outputs.url }}
+
+      # The Worker signs render URLs with YUT_IMAGE_SECRET and Vercel checks
+      # them. Sign one here and ask Vercel: 200 means the pair matches, 401
+      # means it does not, anything else usually means the site's own deploy
+      # of this merge has not finished. Never fails the job.
+      - name: Vercel image secret
+        if: env.YUT_IMAGE_SECRET != ''
+        run: |
+          url=$(node ../scripts/yut-sign.mjs standings/ci '{"t":"CI","rows":[]}' --base https://www.benadams.dev)
+          code=$(curl -s -o /dev/null -w '%{http_code}' "$url" || echo 000)
+          echo "## Vercel" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          case "$code" in
+            200) echo "- ✅ Vercel accepts URLs signed with YUT_IMAGE_SECRET" >> "$GITHUB_STEP_SUMMARY" ;;
+            401) echo "- ❌ Vercel rejected a URL signed with YUT_IMAGE_SECRET. Set the same value as YUT_IMAGE_SECRET in the Vercel project (or make this secret equal Vercel's SCRANDLE_IMAGE_SECRET) and redeploy the site." >> "$GITHUB_STEP_SUMMARY"
+                 echo "::warning::Vercel image secret does not match YUT_IMAGE_SECRET" ;;
+            *)   echo "- ⚠️ Vercel answered $code; the site deploy for this merge may still be running. Re-run this workflow to check again." >> "$GITHUB_STEP_SUMMARY" ;;
+          esac
+
+      - name: What is still missing
+        if: env.YUT_DISCORD_BOT_TOKEN == '' || env.YUT_IMAGE_SECRET == ''
+        run: |
+          echo "## Repository secrets still to add" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ -z "$YUT_DISCORD_BOT_TOKEN" ]; then
+            echo "- **YUT_DISCORD_BOT_TOKEN** — Developer Portal → the app → Bot → Reset Token. Without it the bot cannot post, and the slash commands and Interactions Endpoint are not set." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -z "$YUT_IMAGE_SECRET" ]; then
+            echo "- **YUT_IMAGE_SECRET** — any long random string, set here and as YUT_IMAGE_SECRET on the Vercel project. Without it the loot cards, sheets and standings do not render." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Then Actions → Deploy yut worker → Run workflow." >> "$GITHUB_STEP_SUMMARY"
+          echo "::warning::Repository secrets missing; see the job summary"

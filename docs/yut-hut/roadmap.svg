@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="520" viewBox="0 0 1200 520" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <!-- Yut Hut: the 52-week campaign and what is built. One week = 20.77px, x = 80 + (week - 1) * 20.77. -->
+  <rect width="1200" height="520" fill="#0a0a0a"/>
+
+  <text x="80" y="42" font-size="22" font-weight="700" fill="#ededed">Yut Hut — the year</text>
+  <text x="80" y="62" font-size="14" fill="#9a9a9a">52 weeks from 14 Sep 2026. Four acts of 13 weeks, each closed by a Founding.</text>
+
+  <!-- Holiday beats, above the band -->
+  <g font-size="14" fill="#7fb347" text-anchor="middle">
+    <line x1="215" y1="98" x2="215" y2="110" stroke="#7fb347" stroke-width="2"/>
+    <text x="215" y="92">Halloween · wk 7</text>
+    <line x1="298" y1="98" x2="298" y2="110" stroke="#7fb347" stroke-width="2"/>
+    <text x="330" y="76">Thanksgiving · wk 11</text>
+    <line x1="371" y1="98" x2="412" y2="98" stroke="#7fb347" stroke-width="2"/>
+    <line x1="371" y1="98" x2="371" y2="110" stroke="#7fb347" stroke-width="2"/>
+    <line x1="412" y1="98" x2="412" y2="110" stroke="#7fb347" stroke-width="2"/>
+    <text x="440" y="92">Christmas · wk 15–16</text>
+    <line x1="527" y1="98" x2="527" y2="110" stroke="#7fb347" stroke-width="2"/>
+    <text x="580" y="76">Valentine's · wk 22</text>
+    <line x1="651" y1="98" x2="651" y2="110" stroke="#7fb347" stroke-width="2"/>
+    <text x="651" y="92">Easter · wk 28</text>
+    <line x1="942" y1="98" x2="942" y2="110" stroke="#7fb347" stroke-width="2"/>
+    <text x="942" y="92">Independence · wk 42</text>
+  </g>
+
+  <!-- Act bands -->
+  <g font-size="16" fill="#ededed" text-anchor="middle">
+    <rect x="80" y="110" width="270" height="50" fill="#1b2a12" stroke="#7fb347" stroke-width="1.5"/>
+    <text x="215" y="131" font-weight="700">Act 1 · Lumbridge</text>
+    <text x="215" y="151" font-size="13" fill="#b9b9b9">weeks 1–13</text>
+
+    <rect x="350" y="110" width="270" height="50" fill="#2a2412" stroke="#c9a227" stroke-width="1.5"/>
+    <text x="485" y="131" font-weight="700">Act 2 · Varrock</text>
+    <text x="485" y="151" font-size="13" fill="#b9b9b9">weeks 14–26</text>
+
+    <rect x="620" y="110" width="270" height="50" fill="#2a1414" stroke="#b04a4a" stroke-width="1.5"/>
+    <text x="755" y="131" font-weight="700">Act 3 · The Wilderness</text>
+    <text x="755" y="151" font-size="13" fill="#b9b9b9">weeks 27–39</text>
+
+    <rect x="890" y="110" width="270" height="50" fill="#33120f" stroke="#d94b2b" stroke-width="1.5"/>
+    <text x="1025" y="131" font-weight="700">Act 4 · Dragon Slayer</text>
+    <text x="1025" y="151" font-size="13" fill="#b9b9b9">weeks 40–52</text>
+  </g>
+
+  <!-- Foundings at the act boundaries -->
+  <g font-size="14" fill="#c9a227" font-weight="700">
+    <line x1="350" y1="160" x2="350" y2="174" stroke="#c9a227" stroke-width="2"/>
+    <text x="350" y="190" text-anchor="middle">Founding I · wk 13</text>
+    <line x1="620" y1="160" x2="620" y2="174" stroke="#c9a227" stroke-width="2"/>
+    <text x="620" y="190" text-anchor="middle">Founding II · wk 26</text>
+    <line x1="890" y1="160" x2="890" y2="174" stroke="#c9a227" stroke-width="2"/>
+    <text x="890" y="190" text-anchor="middle">Founding III · wk 39</text>
+    <line x1="1160" y1="160" x2="1160" y2="174" stroke="#c9a227" stroke-width="2"/>
+    <text x="1160" y="190" text-anchor="end">Founding IV · Finale · wk 52</text>
+  </g>
+
+  <!-- Votes and raids -->
+  <g font-size="14" fill="#ededed">
+    <circle cx="630" cy="214" r="4" fill="#c9a227"/>
+    <text x="640" y="219">wk 27 · Relic vote · Giant Mole raid</text>
+    <circle cx="900" cy="214" r="4" fill="#c9a227"/>
+    <text x="910" y="219">wk 40 · Relic vote</text>
+    <circle cx="1118" cy="238" r="4" fill="#d94b2b"/>
+    <text x="1108" y="243" text-anchor="end">wk 50–51 · Elvarg (14-day raid)</text>
+  </g>
+
+  <line x1="80" y1="262" x2="1160" y2="262" stroke="#2a2a2a" stroke-width="1"/>
+
+  <!-- Built -->
+  <text x="80" y="290" font-size="18" font-weight="700" fill="#7fb347">Built</text>
+  <g font-size="15" fill="#ededed">
+    <text x="80" y="316">✓ Check-ins and the weight</text>
+    <text x="80" y="338">✓ Nine skills on the RuneScape XP table</text>
+    <text x="80" y="360">✓ Tiers from Bronze to Dragon</text>
+    <text x="80" y="382">✓ Random events and lamps</text>
+    <text x="80" y="404">✓ Rings of Life</text>
+    <text x="80" y="426">✓ Clue scrolls</text>
+    <text x="80" y="448">✓ Slayer tasks</text>
+    <text x="80" y="470">✓ Collection log</text>
+    <text x="80" y="492">✓ Verification</text>
+    <text x="80" y="514">✓ Morning post, last call, Monday resolution</text>
+
+    <text x="460" y="316">✓ The town: workers, sacks, buildings, upkeep</text>
+    <text x="460" y="338">✓ Foundings</text>
+    <text x="460" y="360">✓ Votes and relics</text>
+    <text x="460" y="382">✓ Raid weeks</text>
+    <text x="460" y="404">✓ Bingo and the shop</text>
+    <text x="460" y="426">✓ Monthly campaign log</text>
+    <text x="460" y="448">✓ RS-styled sheet, level-up and standings cards</text>
+    <text x="460" y="470">✓ Rules page</text>
+    <text x="460" y="492">✓ Loot cards with OSRS item icons</text>
+  </g>
+
+  <!-- Next -->
+  <text x="860" y="290" font-size="18" font-weight="700" fill="#c9a227">Next</text>
+  <g font-size="15" fill="#ededed">
+    <text x="860" y="316">→ Deploy to Cloudflare and the Discord portal</text>
+    <text x="860" y="338">→ Sheet cosmetics on the render (done in this pass)</text>
+    <text x="860" y="360">→ Year-two rebalance of the divisor</text>
+    <text x="860" y="382">→ More clue steps once sacks exist</text>
+    <text x="860" y="404">→ Dragon Statue finale ceremony</text>
+  </g>
+</svg>

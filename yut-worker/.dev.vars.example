@@ -1,0 +1,12 @@
+# Copy to .dev.vars for `npx wrangler dev`. Never committed — .dev.vars is gitignored.
+# In production these are set with `npx wrangler secret put <NAME>` instead.
+DISCORD_BOT_TOKEN=
+YUT_IMAGE_SECRET=dev-only-yut-secret
+ADMIN_SECRET=dev-only-admin-secret
+DISCORD_LOG_WEBHOOK_URL=
+
+# Local testing only. Point the Discord client at scripts/mock-discord.mjs, and
+# override the public key with the test keypair's so test-interactions.mjs can
+# sign requests. A .dev.vars value overrides the [vars] entry in wrangler.toml.
+# DISCORD_API_BASE=http://127.0.0.1:9912
+# DISCORD_PUBLIC_KEY=<hex from scripts/test-interactions.mjs --keygen>

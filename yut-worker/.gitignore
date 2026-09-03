@@ -1,0 +1,6 @@
+node_modules
+.wrangler
+.dev.vars
+wrangler.test.toml
+.test-key.pem
+mock-discord-log.json
