@@ -22,9 +22,14 @@ import {
   parseWeekday,
   weeklySlotDue,
 } from "./schedule.ts";
-import { quietDayDecay } from "./town.ts";
+import { dailyTownTick, hourlyTownTick, quietDayDecay } from "./town.ts";
 import type { Env } from "./types.ts";
 import { autoRubLamps, resolveWeekFor } from "./weekly.ts";
+import { getRelics } from "./relics.ts";
+import { applyRaidVote, raidDailyClose, startDueRaids } from "./raids.ts";
+import { closeDueVotes } from "./votes.ts";
+import { ACTS, ACT_WEEKS } from "./config.ts";
+import { actForWeek, campaignWeek } from "./schedule.ts";
 
 /**
  * One tick does everything that is due. Each phase is its own try/catch so
@@ -56,6 +61,9 @@ export async function runTick(env: Env, now: number, force: { daily?: boolean; p
 
       daily.bountiesExpired = await expireBounties(env, today);
       daily.lampsAutoRubbed = await autoRubLamps(env, today, now);
+      daily.town = await dailyTownTick(env, today, now, await getPlayers(env));
+      daily.raid = await raidDailyClose(env, yesterday, today, now);
+      daily.raidsStarted = await startDueRaids(env, today);
 
       const roster = await activeRoster(env, yesterday);
       const yesterdays = await checkinsOn(env, yesterday);
@@ -83,6 +91,28 @@ export async function runTick(env: Env, now: number, force: { daily?: boolean; p
   } catch (error) {
     await logToDiscord(env, `Daily resolution failed: ${String(error)}`);
     report.dailyError = String(error);
+  }
+
+  // ── The town's hourly output ───────────────────────────────────
+  try {
+    const slot = hourSlotKey(now);
+    if ((await getState(env, "last_town_tick_slot")) !== slot) {
+      await setState(env, "last_town_tick_slot", slot);
+      report.town = await hourlyTownTick(env, now, today, await getRelics(env));
+    }
+  } catch (error) {
+    await logToDiscord(env, `Town tick failed: ${String(error)}`);
+  }
+
+  // ── Votes that have run their course ───────────────────────────
+  try {
+    const act = actForWeek(campaignWeek(today, env.CAMPAIGN_START), ACT_WEEKS, ACTS.length);
+    const closed = await closeDueVotes(env, now, today, act, (vote, passed, yes) =>
+      applyRaidVote(env, vote, passed, yes, today, now)
+    );
+    if (closed.length > 0) report.votesClosed = closed;
+  } catch (error) {
+    await logToDiscord(env, `Vote close failed: ${String(error)}`);
   }
 
   // ── The morning post ───────────────────────────────────────────

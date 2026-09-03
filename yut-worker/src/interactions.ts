@@ -65,7 +65,23 @@ import { runCommand } from "./commands.ts";
 import { setPing } from "./roles.ts";
 import { addDays, daysBetween, gameDay, parseHour } from "./schedule.ts";
 import { gatherSheet, levelUpImageUrl, renderCard, sheetImageUrl, textSheet } from "./sheet.ts";
-import { creditStatements, getStores, storesLine } from "./town.ts";
+import { creditStatements } from "./town.ts";
+import {
+  buildMenu,
+  doBuild,
+  doRecruit,
+  doRepair,
+  doUpgrade,
+  doVote,
+  recruitMenu,
+  repairMenu,
+  townView,
+  upgradeMenu,
+  votesView,
+  type Line,
+} from "./actions.ts";
+import { getRelics } from "./relics.ts";
+import { TREASURE_SEEKER_MULTIPLIER } from "./config.ts";
 import {
   buttonRow,
   buttonRows,
@@ -219,7 +235,19 @@ async function route(
     case "clue":
       return clueReply(env, user, day);
     case "town":
-      return townReply(env, user, day);
+      return townReply(env, user, day, now);
+    case "recruit":
+      return freshAction(env, user, day, (p) => (a ? doRecruit(env, p, a, day, now) : recruitMenu(env, p, day)));
+    case "upg":
+      return freshAction(env, user, day, (p) => (a ? doUpgrade(env, p, Number(a), day, now) : upgradeMenu(env, p)));
+    case "build":
+      return freshAction(env, user, day, (p) => (a ? doBuild(env, p, a, day, now) : buildMenu(env, day)));
+    case "repair":
+      return freshAction(env, user, day, (p) => (a ? doRepair(env, p, a, day, now) : repairMenu(env)));
+    case "vote":
+      return a
+        ? freshAction(env, user, day, (p) => doVote(env, p, Number(a), b, now))
+        : playerAction(env, user, day, (p) => votesView(env, p));
     case "log":
       return logReply(env, user, day);
     case "vf":
@@ -584,7 +612,8 @@ async function rubLamp(
 
   const skills = await getSkills(env, user.id);
   const before = skills[skill] ?? 0;
-  const xp = lampValue(lamp, levelForXp(before));
+  const relics = await getRelics(env);
+  const xp = Math.floor(lampValue(lamp, levelForXp(before)) * (relics.has("treasure_seeker") ? TREASURE_SEEKER_MULTIPLIER : 1));
   if (!(await spendLamp(env, lampId, skill, now))) return reply("Already rubbed.", { scope: "ci" });
   await addXp(env, user.id, skill, xp);
   await env.DB.batch([logEventStatement(env, user.id, day, null, "lamp_rubbed", { lamp: lampId, skill, xp }, now)]);
@@ -623,14 +652,34 @@ async function clueReply(env: Env, user: DiscordUser, day: string): Promise<Answ
 
 // ── Town ───────────────────────────────────────────────────────────
 
-async function townReply(env: Env, user: DiscordUser, day: string): Promise<Answer> {
+/** A fresh-gated action from actions.ts, answered on the check-in scope. */
+export async function freshAction(
+  env: Env,
+  user: DiscordUser,
+  day: string,
+  run: (player: Player) => Promise<Line>
+): Promise<Answer> {
+  const gate = await requireFresh(env, user, day);
+  if ("refusal" in gate) return gate.refusal;
+  const line = await run(gate.player);
+  return reply(line.content, { scope: "ci", components: line.components });
+}
+
+/** A view any player may open, fresh or not. */
+export async function playerAction(
+  env: Env,
+  user: DiscordUser,
+  day: string,
+  run: (player: Player) => Promise<Line>
+): Promise<Answer> {
   const gate = await requirePlayer(env, user, day);
   if ("refusal" in gate) return gate.refusal;
-  const stores = await getStores(env);
-  return reply(
-    `🏕️ The camp holds ${storesLine(stores)}.\nEvery check-in hauls coins and logs. Workers and buildings arrive at Founding I.`,
-    { scope: "ci" }
-  );
+  const line = await run(gate.player);
+  return reply(line.content, { scope: "ci", components: line.components });
+}
+
+async function townReply(env: Env, user: DiscordUser, day: string, now: number): Promise<Answer> {
+  return playerAction(env, user, day, (player) => townView(env, player, day, now));
 }
 
 // ── Collection log ─────────────────────────────────────────────────

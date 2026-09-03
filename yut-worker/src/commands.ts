@@ -38,6 +38,21 @@ import {
   type Answer,
 } from "./interactions.ts";
 import { setPing } from "./roles.ts";
+import {
+  buildMenu,
+  doBuild,
+  doRecruit,
+  doRepair,
+  raidPropose,
+  raidStatus,
+  recruitMenu,
+  relicsView,
+  repairMenu,
+  townView,
+  upgradeMenu,
+  votesView,
+} from "./actions.ts";
+import { freshAction, playerAction } from "./interactions.ts";
 import { addDays, daysBetween, gameWeek } from "./schedule.ts";
 import { runTick } from "./tick.ts";
 import {
@@ -119,7 +134,31 @@ export async function runCommand(
     case "log":
       return relay(env, ctx, interaction, user, "log", now);
     case "town":
-      return relay(env, ctx, interaction, user, "town", now);
+      return playerAction(env, user, day, (p) => townView(env, p, day, now));
+    case "recruit": {
+      const kind = stringOption(interaction, "kind");
+      return freshAction(env, user, day, (p) => (kind ? doRecruit(env, p, kind, day, now) : recruitMenu(env, p, day)));
+    }
+    case "upgrade":
+      return freshAction(env, user, day, (p) => upgradeMenu(env, p));
+    case "build": {
+      const key = stringOption(interaction, "building");
+      return freshAction(env, user, day, (p) => (key ? doBuild(env, p, key, day, now) : buildMenu(env, day)));
+    }
+    case "repair": {
+      const key = stringOption(interaction, "building");
+      return freshAction(env, user, day, (p) => (key ? doRepair(env, p, key, day, now) : repairMenu(env)));
+    }
+    case "vote":
+      return playerAction(env, user, day, (p) => votesView(env, p));
+    case "relics":
+      return playerAction(env, user, day, () => relicsView(env));
+    case "raid": {
+      const sub = subcommand(interaction);
+      if (sub === "propose") return freshAction(env, user, day, (p) => raidPropose(env, p, day, now));
+      if (sub === "sitout") return playerAction(env, user, day, async () => ({ content: "Sit out from the raid vote itself: press Sit out on the vote post." }));
+      return playerAction(env, user, day, () => raidStatus(env, day));
+    }
     case "freeze":
       return freezeCommand(env, user, day);
     case "standings":

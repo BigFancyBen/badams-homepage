@@ -31,6 +31,8 @@ export interface WeekInput {
   /** Last Recall relic: a ring every Form week. */
   ringEveryWeek: boolean;
   chapelBonus: number;
+  /** Extra ring capacity (Last Recall). */
+  ringCapBonus?: number;
 }
 
 export interface WeekResult {
@@ -44,7 +46,7 @@ export interface WeekResult {
 }
 
 export function resolveWeek(input: WeekInput): WeekResult {
-  const cap = input.graduated ? RING_CAP_GRADUATED : RING_CAP;
+  const cap = (input.graduated ? RING_CAP_GRADUATED : RING_CAP) + (input.ringCapBonus ?? 0);
 
   if (input.paused) {
     return {

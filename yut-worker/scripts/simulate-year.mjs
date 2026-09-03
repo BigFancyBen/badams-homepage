@@ -76,6 +76,12 @@ for (let i = 0; i < DAYS; i++) {
     if (result.ok) checkinsByPlayer[player.id]++;
   }
 
+  // The four regulars vote for the first option on anything open: builds go
+  // up, relics get picked, raids get a yes.
+  if (i % 2 === 0) {
+    for (const player of ROSTER.slice(0, 4)) await admin("ballot", { player: player.id, idx: "0", at: `${day}T19:00:00Z` });
+  }
+
   if ([30, 90, 180, 364].includes(i) || i === DAYS - 1) {
     const rows = await sql(`SELECT player_id, xp FROM skill_xp WHERE skill = 'hitpoints'`);
     milestones[i] = Object.fromEntries(rows.map((r) => [r.player_id, r.xp]));
@@ -112,6 +118,18 @@ const clues = await sql("SELECT COUNT(*) AS n FROM clues");
 console.log(`Clues: ${clues[0]?.n} dropped, ${caskets[0]?.n} caskets opened`);
 const rivalries = await sql("SELECT COUNT(*) AS n, SUM(CASE WHEN winner_id IS NOT NULL THEN 1 ELSE 0 END) AS decided FROM rivalries WHERE resolved = 1");
 console.log(`Rivalries: ${rivalries[0]?.n} resolved, ${rivalries[0]?.decided} with a winner`);
+const workers = await sql("SELECT tier, kind, owner_id IS NULL AS town_owned, COUNT(*) AS n FROM workers GROUP BY tier, kind, town_owned");
+console.log(`Workers: ${workers.map((r) => `${r.n} ${r.tier} ${r.kind}${r.town_owned ? " (town)" : ""}`).join(" · ") || "none"}`);
+const buildingRows = await sql("SELECT key, level, condition FROM buildings WHERE level > 0 ORDER BY key");
+console.log(`Buildings: ${buildingRows.map((r) => `${r.key} L${r.level} ${r.condition}%`).join(" · ") || "none"}`);
+const votes = await sql("SELECT kind, status, COUNT(*) AS n FROM votes GROUP BY kind, status");
+console.log(`Votes: ${votes.map((r) => `${r.n} ${r.kind} ${r.status}`).join(" · ") || "none"}`);
+const raids = await sql("SELECT boss, status, hp, hp_max FROM raids ORDER BY id");
+console.log(`Raids: ${raids.map((r) => `${r.boss} ${r.status} (${r.hp}/${r.hp_max})`).join(" · ") || "none"}`);
+const relics = await sql("SELECT key FROM relics");
+console.log(`Relics: ${relics.map((r) => r.key).join(", ") || "none"}`);
+const ledger = await sql("SELECT kind, SUM(amount) AS total FROM town_ledger GROUP BY kind");
+console.log(`Ledger: ${ledger.map((r) => `${r.kind} ${Math.round(r.total)}`).join(" · ")}`);
 
 // ── Invariants ─────────────────────────────────────────────────────
 if (DAYS >= 365) {
@@ -136,6 +154,28 @@ const negative = await sql("SELECT COUNT(*) AS n FROM town_resources WHERE amoun
 check("no negative stores", negative[0]?.n === 0, negative);
 const foundings = await sql("SELECT level FROM town WHERE id = 1");
 check(`foundings ran (${Math.floor(DAYS / 91)} expected)`, (foundings[0]?.level ?? 0) >= Math.floor(DAYS / 91) - (DAYS >= 365 ? 0 : 1), foundings);
+if (DAYS >= 100) {
+  const workerCount = await sql("SELECT COUNT(*) AS n FROM workers");
+  check("Founding I handed out workers", (workerCount[0]?.n ?? 0) >= 4, workerCount);
+  const sackDeliveries = await sql("SELECT COUNT(*) AS n FROM town_ledger WHERE kind = 'sack'");
+  check("sacks were delivered on check-ins", (sackDeliveries[0]?.n ?? 0) > 0, sackDeliveries);
+  const upkeep = await sql("SELECT COUNT(*) AS n FROM town_ledger WHERE kind = 'upkeep'");
+  check("workers were fed", (upkeep[0]?.n ?? 0) > 0, upkeep);
+  const passedBuilds = await sql("SELECT COUNT(*) AS n FROM votes WHERE kind = 'build' AND status = 'passed'");
+  check("build votes passed with four ballots", (passedBuilds[0]?.n ?? 0) > 0, passedBuilds);
+  const builtRows = await sql("SELECT COUNT(*) AS n FROM buildings WHERE level > 0 AND key != 'town_hall'");
+  check("something got built", (builtRows[0]?.n ?? 0) > 0, builtRows);
+  const decayed = await sql("SELECT COUNT(*) AS n FROM buildings WHERE level > 0 AND condition < 100");
+  check("buildings decay between repairs", (decayed[0]?.n ?? 0) >= 0, decayed);
+}
+if (DAYS >= 200) {
+  const raidRows = await sql("SELECT status FROM raids");
+  check("the bot-proposed Giant Mole raid ran and resolved", raidRows.some((r) => r.status === "won" || r.status === "lost"), raidRows);
+  const relicRows = await sql("SELECT COUNT(*) AS n FROM relics");
+  check("a relic was picked at Act 3", (relicRows[0]?.n ?? 0) >= 1, relicRows);
+  const heals = await sql("SELECT MAX(heal) AS m FROM raid_days");
+  check("raid heals never exceed the daily cap", (heals[0]?.m ?? 0) <= 80, heals);
+}
 
 console.log(failures === 0 ? "\nAll invariants hold." : `\n${failures} invariant(s) failed.`);
 process.exit(failures === 0 ? 0 : 1);

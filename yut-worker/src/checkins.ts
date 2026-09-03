@@ -71,7 +71,18 @@ import {
 import { escapeMarkdown } from "./discord.ts";
 import { eventLabel, pickQuiz, rollEvent, seededRng } from "./events.ts";
 import { actForWeek, addDays, campaignWeek, daysBetween, gameWeek } from "./schedule.ts";
-import { baseHaul, creditStatements, setBeekeeper } from "./town.ts";
+import {
+  baseHaul,
+  creditStatements,
+  deliverSacks,
+  eventChance,
+  getBuildings,
+  repairWorst,
+  setBeekeeper,
+} from "./town.ts";
+import { getRelics } from "./relics.ts";
+import { activeRaidFor, raidHit } from "./raids.ts";
+import { TRICKSTER_POINTS, XERIC_WEIGHT } from "./config.ts";
 import { buttonRow, type Button, type Checkin, type Env, type Player } from "./types.ts";
 import {
   checkinXp,
@@ -144,7 +155,9 @@ export async function performCheckin(
   const week = gameWeek(day);
   const before = await countCheckinsBetween(env, player.discord_id, week, addDays(day, -1));
   const ordinal = before + 1;
-  const weight = ordinalWeight(ordinal);
+  const relics = await getRelics(env);
+  const weight =
+    relics.has("xerics_endurance") && (ordinal === 3 || ordinal === 4) ? XERIC_WEIGHT : ordinalWeight(ordinal);
 
   const playerWeek = Math.floor(daysBetween(player.joined_day, day) / 7) + 1;
   const bootstrap = playerWeek <= BOOTSTRAP_WEEKS;
@@ -156,11 +169,16 @@ export async function performCheckin(
 
   // The haul. Workers and sacks arrive with the town; the base haul is what
   // every check-in delivers regardless.
-  const haul = baseHaul(weight, tierBefore.haul);
+  const haul = baseHaul(weight, tierBefore.haul, relics);
+  // Sacks: what the player's workers gathered since their last check-in.
+  const sacks = await deliverSacks(env, player, day, now, relics);
+  for (const [resource, amount] of Object.entries(sacks.delivered)) {
+    haul[resource as ResourceKey] = (haul[resource as ResourceKey] ?? 0) + (amount ?? 0);
+  }
   const delivered = Object.values(haul).reduce((sum, n) => sum + (n ?? 0), 0);
   const woodcuttingXp = Math.min(
     GATHER_XP_CAP,
-    Math.floor((haul.logs ?? 0) * GATHER_XP_PER_UNIT * 5)
+    Math.floor((baseHaul(weight, tierBefore.haul).logs ?? 0) * GATHER_XP_PER_UNIT * 5) + (sacks.xp.woodcutting ?? 0)
   );
 
   const hourUtc = new Date(now).getUTCHours();
@@ -195,15 +213,19 @@ export async function performCheckin(
     if (amount) gains[skill as SkillKey] = (gains[skill as SkillKey] ?? 0) + amount;
   }
   if (woodcuttingXp > 0) gains.woodcutting = woodcuttingXp;
+  if (sacks.xp.mining) gains.mining = sacks.xp.mining;
+  if (sacks.xp.fishing) gains.fishing = sacks.xp.fishing;
 
   for (const [skill, amount] of Object.entries(gains)) {
     if (amount) statements.push(addXpStatement(env, player.discord_id, skill as SkillKey, amount));
   }
-  for (const [resource, amount] of Object.entries(haul)) {
+  // The base haul is credited here; the sacks carry their own ledger lines.
+  for (const [resource, amount] of Object.entries(baseHaul(weight, tierBefore.haul, relics))) {
     statements.push(
       ...creditStatements(env, resource as ResourceKey, amount ?? 0, "haul", day, player.discord_id, now)
     );
   }
+  statements.push(...sacks.statements);
   statements.push(
     logEventStatement(env, player.discord_id, day, checkinId, "checkin", { ordinal, weight, gains, haul }, now)
   );
@@ -229,7 +251,7 @@ export async function performCheckin(
     if (levelAfter > levelBefore) levelUps.push({ skill, level: levelAfter });
   }
   if (delivered > 0) {
-    receipt.push(`Delivered ${haulLine(haul)} to the camp.`);
+    receipt.push(`Delivered ${haulLine(haul)} to the ${(await getBuildings(env)).size > 0 ? "town" : "camp"}.`);
   }
 
   const hpAfter = levelForXp(skillsAfter.hitpoints ?? 0);
@@ -261,7 +283,14 @@ export async function performCheckin(
   // ── Random event ───────────────────────────────────────────────
   const effect = effectFor(env, day);
   const rng = seededRng(`${player.discord_id}:${day}:event`);
-  const event = rollEvent(rng, player.event_dry_streak, undefined, effect);
+  const buildings = await getBuildings(env);
+  const event = rollEvent(
+    rng,
+    player.event_dry_streak,
+    eventChance(buildings),
+    effect,
+    relics.has("trickster") ? TRICKSTER_POINTS : 0
+  );
   let quiz: { index: number } | null = null;
   let gotLamp = false;
   let rings = player.rings;
@@ -323,14 +352,20 @@ export async function performCheckin(
         publicBits.push(`❓ The Quiz Master cornered ${escapeMarkdown(player.username)}.`);
         break;
       }
-      case "freaky_forester":
-        // Nothing to repair before the town has buildings; he leaves logs.
-        eventStatements.push(
-          ...creditStatements(env, "logs", FORESTER_REPAIR * 2, "crate", day, player.discord_id, now)
-        );
-        line = `🌲 The Freaky Forester found nothing to repair and left ${FORESTER_REPAIR * 2} logs.`;
-        publicBits.push(`🌲 The Freaky Forester left ${FORESTER_REPAIR * 2} logs.`);
+      case "freaky_forester": {
+        const repaired = await repairWorst(env, FORESTER_REPAIR);
+        if (repaired) {
+          line = `🌲 The Freaky Forester patched up the ${repaired} by ${FORESTER_REPAIR}.`;
+          publicBits.push(`🌲 The Freaky Forester patched up the ${repaired}.`);
+        } else {
+          eventStatements.push(
+            ...creditStatements(env, "logs", FORESTER_REPAIR * 2, "crate", day, player.discord_id, now)
+          );
+          line = `🌲 The Freaky Forester found nothing to repair and left ${FORESTER_REPAIR * 2} logs.`;
+          publicBits.push(`🌲 The Freaky Forester left ${FORESTER_REPAIR * 2} logs.`);
+        }
         break;
+      }
       case "drill_demon":
         eventStatements.push(
           grantBountyStatement(env, player.discord_id, "drill_demon", day, addDays(day, DRILL_DEMON_DAYS))
@@ -401,8 +436,8 @@ export async function performCheckin(
         checkedInYesterday: Boolean(yesterday),
         delivered,
         lostRivalryYesterday: lostYesterday,
-        sackWasFull: false,
-        raidWeek: false,
+        sackWasFull: sacks.hadFullSack,
+        raidWeek: Boolean(await activeRaidFor(env, player.discord_id)),
       };
       const hit = remaining.find((step) => checkinSatisfies(step.key, ctx));
       if (hit) {
@@ -531,6 +566,13 @@ export async function performCheckin(
     }
   }
   if (total === 100) await logEntry(env, player.discord_id, "pet:beaver", day);
+
+  // ── Raid ───────────────────────────────────────────────────────
+  const hit = await raidHit(env, player, hpAfter, weight, day, now, relics);
+  if (hit) {
+    receipt.push(hit);
+    publicBits.push(hit);
+  }
 
   await updatePlayer(env, player.discord_id, {
     last_active_day: day,

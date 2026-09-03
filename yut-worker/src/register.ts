@@ -1,5 +1,7 @@
 import choices from "../config/choices.json" with { type: "json" };
-import { EXPEDITION_MAX_WEEKS, EXPEDITION_MIN_WEEKS, MAX_NOTE_LENGTH } from "./config.ts";
+import { BUILDINGS, EXPEDITION_MAX_WEEKS, EXPEDITION_MIN_WEEKS, MAX_NOTE_LENGTH } from "./config.ts";
+
+const BUILDING_CHOICES = BUILDINGS.filter((b) => b.key !== "town_hall").map((b) => ({ name: b.name, value: b.key }));
 
 /**
  * The slash commands, as Discord wants them. Registered per guild with a PUT,
@@ -83,7 +85,45 @@ export const COMMANDS = [
   { name: "lamp", description: "Rub a lamp" },
   { name: "clue", description: "Your clue scroll" },
   { name: "log", description: "Your collection log" },
-  { name: "town", description: "The camp's stores" },
+  { name: "town", description: "The town: stores, buildings, your workers" },
+  {
+    name: "recruit",
+    description: "Recruit a worker (fresh players only)",
+    options: [
+      {
+        type: 3,
+        name: "kind",
+        description: "What it gathers",
+        choices: [
+          { name: "Miner (ore)", value: "miner" },
+          { name: "Woodcutter (logs)", value: "woodcutter" },
+          { name: "Fisher (fish)", value: "fisher" },
+          { name: "Merchant (coins)", value: "merchant" },
+        ],
+      },
+    ],
+  },
+  { name: "upgrade", description: "Upgrade one of your workers" },
+  {
+    name: "build",
+    description: "Build or raise a building with the town's stores",
+    options: [{ type: 3, name: "building", description: "Which", choices: BUILDING_CHOICES }],
+  },
+  {
+    name: "repair",
+    description: "Repair a building with logs",
+    options: [{ type: 3, name: "building", description: "Which", choices: BUILDING_CHOICES }],
+  },
+  { name: "vote", description: "Open votes" },
+  { name: "relics", description: "The relics the group holds" },
+  {
+    name: "raid",
+    description: "Raid weeks",
+    options: [
+      { type: 1, name: "status", description: "The current raid, or why none can start" },
+      { type: 1, name: "propose", description: "Open a raid vote" },
+    ],
+  },
   { name: "freeze", description: "Your Rings of Life and how they work" },
   { name: "standings", description: "The roster by Hitpoints" },
   { name: "help", description: "Rules and commands" },

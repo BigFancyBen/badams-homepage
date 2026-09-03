@@ -51,9 +51,10 @@ export function rollEvent(
   rng: () => number,
   dryStreak: number,
   chance = EVENT_CHANCE,
-  effect?: string
+  effect?: string,
+  bonusPoints = 0
 ): EventKey | null {
-  const hit = dryStreak + 1 >= EVENT_PITY || rng() < 1 / chance;
+  const hit = dryStreak + 1 >= EVENT_PITY || rng() < 1 / chance + bonusPoints / 100;
   if (!hit) return null;
 
   let table = EVENT_TABLE;

@@ -131,6 +131,18 @@ async function admin(env: Env, ctx: ExecutionContext, url: URL): Promise<unknown
     case "register-commands":
       return { ok: true, result: await registerGuildCommands(env, COMMANDS) };
 
+    case "ballot": {
+      // Casts a ballot on every open vote (or one, with vote=) for the harness.
+      const id = url.searchParams.get("player");
+      const idx = Number(url.searchParams.get("idx") ?? "0");
+      if (!id) return { ok: false, error: "player=" };
+      const { castBallot, openVotes } = await import("./votes.ts");
+      const only = url.searchParams.get("vote");
+      const votes = (await openVotes(env)).filter((v) => !only || String(v.id) === only);
+      for (const vote of votes) await castBallot(env, vote.id, id, idx, now);
+      return { ok: true, voted: votes.map((v) => v.id) };
+    }
+
     case "sql": {
       // Read-only, for the harness: SELECT only.
       const query = url.searchParams.get("q") ?? "";

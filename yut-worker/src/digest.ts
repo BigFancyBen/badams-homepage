@@ -14,6 +14,8 @@ import { actForWeek, addDays, campaignWeek, daysBetween, gameWeek, shortDate } f
 import { getStores, getTown, ledgerOn, storesLine } from "./town.ts";
 import { buttonRow, type Env } from "./types.ts";
 import { summaryLines, type WeekSummary } from "./weekly.ts";
+import { raidLine } from "./raids.ts";
+import { openVotes } from "./votes.ts";
 
 /**
  * The morning post. One message a day, and the only scheduled one most days:
@@ -96,6 +98,15 @@ export async function composeDigest(env: Env, today: string): Promise<DigestPart
   for (const bounty of await openBounties(env)) {
     lines.push(
       `Bounty: the Drill Demon owes ${name(bounty.player_id)} ${DRILL_DEMON_LAMP} XP if they are back by ${shortDate(bounty.expires_day)}.`
+    );
+  }
+
+  const raid = await raidLine(env);
+  if (raid) lines.push(raid);
+  const votes = await openVotes(env);
+  if (votes.length > 0) {
+    lines.push(
+      `Votes open: ${votes.map((v) => `${v.title} (closes <t:${Math.floor(v.closes_at / 1000)}:R>)`).join(" · ")}. \`/vote\`.`
     );
   }
 

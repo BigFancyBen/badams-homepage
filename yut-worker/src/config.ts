@@ -477,3 +477,128 @@ export const SHOP: { key: string; name: string; points: number }[] = [
 /** Discord's hard cap on a message. Everything the bot writes stays under it. */
 export const MAX_NOTE_LENGTH = 200;
 export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+
+// ── Buildings ──────────────────────────────────────────────────────
+
+export type BuildingKey =
+  | "town_hall"
+  | "bank"
+  | "furnace"
+  | "dock"
+  | "mill"
+  | "cart"
+  | "chapel"
+  | "tavern"
+  | "barracks"
+  | "walls"
+  | "statue";
+
+export interface Building {
+  key: BuildingKey;
+  name: string;
+  /** Level 1 cost. Level 2 is 2.5×, level 3 is 6×. */
+  cost: Partial<Record<ResourceKey, number>>;
+  /** Act the blueprint arrives in. */
+  from: number;
+  /** One line for the vote card. */
+  effect: string;
+  maxLevel: number;
+}
+
+export const BUILDINGS: Building[] = [
+  { key: "town_hall", name: "Town Hall", cost: {}, from: 2, effect: "Level = Foundings so far; caps every other building", maxLevel: 4 },
+  { key: "bank", name: "Bank", cost: { logs: 150, coins: 200 }, from: 2, effect: "Sacks fill for 24h longer per level", maxLevel: 3 },
+  { key: "furnace", name: "Furnace", cost: { logs: 200, coins: 300 }, from: 2, effect: "Smelts ore into bars; L2 unlocks Rune workers, L3 Dragon", maxLevel: 3 },
+  { key: "dock", name: "Fishing Dock", cost: { logs: 150, coins: 200, ore: 50 }, from: 2, effect: "Fish +25% per level", maxLevel: 3 },
+  { key: "mill", name: "Lumber Mill", cost: { logs: 150, coins: 200, ore: 50 }, from: 2, effect: "Logs +25% per level", maxLevel: 3 },
+  { key: "cart", name: "Mine Cart", cost: { logs: 150, coins: 200, ore: 50 }, from: 2, effect: "Ore +25% per level", maxLevel: 3 },
+  { key: "chapel", name: "Chapel", cost: { logs: 200, coins: 300 }, from: 2, effect: "Prayer +50 per Form week per level", maxLevel: 3 },
+  { key: "tavern", name: "Tavern", cost: { logs: 250, coins: 400 }, from: 2, effect: "Random events 1 in 6 → 1 in 5 → 1 in 4", maxLevel: 2 },
+  { key: "barracks", name: "Barracks", cost: { logs: 300, coins: 600, ore: 100 }, from: 3, effect: "Raid damage +10% per level", maxLevel: 3 },
+  { key: "walls", name: "Walls", cost: { logs: 300, coins: 600, ore: 100 }, from: 3, effect: "Raid heals −5 per miss per level", maxLevel: 3 },
+  { key: "statue", name: "Dragon Statue", cost: { logs: 900, coins: 2000, bars: 100 }, from: 4, effect: "The finale; +10% everything, forever", maxLevel: 1 },
+];
+
+export const BUILDING_LEVEL_COST_MULTIPLIER = [1, 2.5, 6, 12];
+/** Condition below this halves the bonus; at zero it is gone. */
+export const BUILDING_HALF_AT = 50;
+export const BANK_HOURS_PER_LEVEL = 24;
+export const GATHER_BUILDING_BONUS = 0.25;
+export const CHAPEL_PRAYER_PER_LEVEL = 50;
+export const TAVERN_EVENT_CHANCE = [6, 5, 4];
+export const BARRACKS_DAMAGE_PER_LEVEL = 0.1;
+export const WALLS_HEAL_REDUCTION_PER_LEVEL = 5;
+export const STATUE_BONUS = 0.1;
+export const FOUNDING_OUTPUT_BONUS = 0.1;
+/** Delivered ore smelted at the Furnace: this fraction, five to a bar. */
+export const SMELT_FRACTION = 0.2;
+export const ORE_PER_BAR = 5;
+export const QUITTER_SILENT_DAYS = 21;
+
+// ── Relics ─────────────────────────────────────────────────────────
+
+export type RelicKey =
+  | "xerics_endurance"
+  | "trickster"
+  | "fire_sale"
+  | "production_master"
+  | "last_recall"
+  | "berserker"
+  | "treasure_seeker"
+  | "golden_god";
+
+export const RELICS: { key: RelicKey; name: string; effect: string }[] = [
+  { key: "xerics_endurance", name: "Xeric’s Endurance", effect: "The 3rd and 4th check-ins of the week weigh 0.75 instead of 0.5" },
+  { key: "trickster", name: "Trickster", effect: "Random events four points likelier" },
+  { key: "fire_sale", name: "Fire Sale", effect: "Worker upgrades cost 25% less" },
+  { key: "production_master", name: "Production Master", effect: "Worker output +20%" },
+  { key: "last_recall", name: "Last Recall", effect: "Ring cap +1, and a Ring every Form week" },
+  { key: "berserker", name: "Berserker", effect: "Raid damage +25%" },
+  { key: "treasure_seeker", name: "Treasure Seeker", effect: "Lamps worth 1.5×" },
+  { key: "golden_god", name: "Golden God", effect: "Every check-in hauls +20 coins" },
+];
+
+export const XERIC_WEIGHT = 0.75;
+export const TRICKSTER_POINTS = 4;
+export const FIRE_SALE_DISCOUNT = 0.25;
+export const PRODUCTION_MASTER_BONUS = 0.2;
+export const BERSERKER_BONUS = 0.25;
+export const TREASURE_SEEKER_MULTIPLIER = 1.5;
+export const GOLDEN_GOD_COINS = 20;
+
+// ── Votes ──────────────────────────────────────────────────────────
+
+export const VOTE_HOURS: Record<string, number> = { relic: 72, build: 48, raid: 48, finale: 72 };
+export const VOTE_MIN_QUORUM = 2;
+export const BUILD_VOTE_OPTIONS = 4;
+/** A raid needs this share of the active roster saying yes, and at least this many. */
+export const RAID_YES_FRACTION = 0.6;
+export const RAID_MIN_YES = 3;
+export const RAID_PROPOSAL_COOLDOWN_DAYS = 7;
+
+// ── Raids ──────────────────────────────────────────────────────────
+
+export const RAID_DAYS = 7;
+export const RAID_COOLDOWN_WEEKS = 2;
+export const RAID_HP_UNITS_PER_HEAD = 2.4;
+export const RAID_DAMAGE_BASE = 100;
+export const RAID_DAMAGE_PER_HP = 2;
+export const RAID_HEAL_PER_MISS = 20;
+export const RAID_HEAL_CAP_PER_DAY = 80;
+export const RAID_SUCCESS_LAMP_PER_HP = 10;
+export const RAID_SUCCESS_LAMP_MIN = 200;
+export const RAID_SUCCESS_COINS = 1000;
+export const RAID_SUCCESS_BARS = 200;
+export const RAID_FAIL_STORE_LOSS = 0.15;
+export const RAID_FAIL_CONDITION_LOSS = 20;
+export const RAID_LOCK_AFTER_FAILURES = 3;
+export const RAID_LOCK_WEEKS = 4;
+
+export const BOSSES: { key: string; name: string; hp: number; days: number; healMultiplier: number; from: number }[] = [
+  { key: "giant_mole", name: "Giant Mole", hp: 0.8, days: 7, healMultiplier: 1, from: 3 },
+  { key: "kbd", name: "King Black Dragon", hp: 1, days: 7, healMultiplier: 1, from: 3 },
+  { key: "kalphite_queen", name: "Kalphite Queen", hp: 1, days: 7, healMultiplier: 1, from: 3 },
+  { key: "chaos_elemental", name: "Chaos Elemental", hp: 1, days: 7, healMultiplier: 1, from: 3 },
+  { key: "corporeal_beast", name: "Corporeal Beast", hp: 1.2, days: 7, healMultiplier: 1, from: 3 },
+  { key: "elvarg", name: "Elvarg", hp: 2, days: 14, healMultiplier: 0.5, from: 4 },
+];

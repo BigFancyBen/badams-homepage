@@ -46,6 +46,11 @@ import { renderCard, standingsImageUrl } from "./sheet.ts";
 import { resolveWeek } from "./streaks.ts";
 import type { Env, Player } from "./types.ts";
 import { lampXp, levelForXp, tierForHp } from "./xp.ts";
+import { effectiveLevel, founding, getBuildings } from "./town.ts";
+import { drawRelics, getRelics } from "./relics.ts";
+import { openBuildVote, openRelicVote } from "./votes.ts";
+import { proposeRaid } from "./raids.ts";
+import { CHAPEL_PRAYER_PER_LEVEL, TREASURE_SEEKER_MULTIPLIER } from "./config.ts";
 
 /**
  * The Monday boundary. Everything that resolves once a week lives here, and
@@ -96,6 +101,9 @@ export async function resolveWeekFor(
   }
 
   const campaignWk = campaignWeek(closedWeek, env.CAMPAIGN_START);
+  const relics = await getRelics(env);
+  const buildings = await getBuildings(env);
+  const chapelBonus = CHAPEL_PRAYER_PER_LEVEL * effectiveLevel(buildings.get("chapel"));
 
   for (const player of [...players, ...paused]) {
     // A player who joined after the week closed has nothing to resolve.
@@ -109,8 +117,9 @@ export async function resolveWeekFor(
       playerWeek,
       graduated: Boolean(player.graduated_at),
       paused: player.status === "paused",
-      ringEveryWeek: false,
-      chapelBonus: 0,
+      ringEveryWeek: relics.has("last_recall"),
+      chapelBonus,
+      ringCapBonus: relics.has("last_recall") ? 1 : 0,
     });
 
     const fields: Partial<Player> = {
@@ -284,11 +293,37 @@ export async function resolveWeekFor(
       }
     }
     const expired = await expireOpenClues(env, today);
-    await env.DB.batch([
-      env.DB.prepare("UPDATE town SET level = level + 1, name = CASE WHEN level = 0 THEN 'the town' ELSE name END WHERE id = 1"),
-      env.DB.prepare("UPDATE town_resources SET amount = CASE WHEN resource = 'coins' THEN 500 ELSE 200 END"),
-    ]);
-    summary.founding = `Founding ${act}: ${lamps} Founding lamp${lamps === 1 ? "" : "s"} waiting on the next check-in${expired > 0 ? `; ${expired} unfinished clue${expired === 1 ? "" : "s"} lost to the Founding` : ""}.`;
+    const hpLevels = new Map(roster.map((p) => [p.discord_id, levelForXp(skills.get(p.discord_id)?.hitpoints ?? 0)]));
+    const town = await founding(env, roster, hpLevels, today, now);
+    await env.DB.prepare("UPDATE town_resources SET amount = CASE WHEN resource = 'coins' THEN 500 ELSE 200 END").run();
+    summary.founding =
+      `Founding ${act}: Town Hall ${town.level}, ${town.workersGranted} Bronze worker${town.workersGranted === 1 ? "" : "s"} handed out, ` +
+      `${lamps} Founding lamp${lamps === 1 ? "" : "s"} waiting on the next check-in` +
+      (expired > 0 ? `; ${expired} unfinished clue${expired === 1 ? "" : "s"} lost to the Founding` : "") +
+      ".";
+  }
+
+  // ── The new week's group business ──────────────────────────────
+  const newAct = actForWeek(newCampaignWeek, ACT_WEEKS, ACTS.length);
+  try {
+    if (newAct >= 2) await openBuildVote(env, today, now, newAct);
+  } catch {
+    // No vote this week; the next Monday tries again.
+  }
+  if (newCampaignWeek === 27 || newCampaignWeek === 40) {
+    const picks = drawRelics(seededRng(`relics:${newCampaignWeek}`), relics);
+    try {
+      await openRelicVote(env, today, now, picks);
+    } catch {
+      // Same.
+    }
+  }
+  if (newCampaignWeek === 27 || newCampaignWeek === 50) {
+    try {
+      await proposeRaid(env, today, now, newAct, "the campaign");
+    } catch {
+      // Same.
+    }
   }
 
   await setState(env, `week_summary:${closedWeek}`, JSON.stringify(summary));
@@ -301,7 +336,8 @@ export async function autoRubLamps(env: Env, today: string, now: number): Promis
   let rubbed = 0;
   for (const lamp of await staleLamps(env, addDays(today, -LAMP_AUTO_RUB_DAYS))) {
     const hp = levelForXp(skills.get(lamp.player_id)?.hitpoints ?? 0);
-    const xp = lamp.source === "genie" ? lampXp(hp) : lamp.xp;
+    const relicsHeld = await getRelics(env);
+    const xp = Math.floor((lamp.source === "genie" ? lampXp(hp) : lamp.xp) * (relicsHeld.has("treasure_seeker") ? TREASURE_SEEKER_MULTIPLIER : 1));
     if (await spendLamp(env, lamp.id, "hitpoints", now)) {
       await addXp(env, lamp.player_id, "hitpoints", xp);
       await env.DB.batch([
