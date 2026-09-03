@@ -17,7 +17,10 @@
     "test:year": "node scripts/simulate-year.mjs",
     "dev:local": "node scripts/make-test-config.mjs && wrangler dev --local --config wrangler.test.toml --port 8788",
     "db:local": "node scripts/make-test-config.mjs && wrangler d1 execute yut-hut --local --config wrangler.test.toml",
-    "mock:discord": "node scripts/mock-discord.mjs"
+    "mock:discord": "node scripts/mock-discord.mjs",
+    "provision": "node scripts/provision.mjs",
+    "secrets": "node scripts/push-secrets.mjs",
+    "discord:setup": "node scripts/discord-setup.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260821.1",

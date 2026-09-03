@@ -18,7 +18,7 @@ DISCORD_PUBLIC_KEY = "d1a2ff6162e899c7e7a14f0f6262f63a311df2fc1c8d37b0432334049d
 DISCORD_GUILD_ID = "108689961535934464"
 DISCORD_CHANNEL_ID = "1544450389628297216"   # yut-hut
 IMAGE_BASE_URL = "https://www.benadams.dev"   # apex 308-redirects to www; avoid the hop
-R2_PUBLIC_BASE = ""                           # from the bucket's public dev URL
+R2_PUBLIC_BASE = "https://pub-b46e8f71723a46998213a8bc39009368.r2.dev"                           # from the bucket's public dev URL
 
 # The game runs on Mountain time. Cloudflare crons do not follow DST: every
 # hour below is +1 in November and -1 in March, by hand, the same as scrandle.
@@ -41,7 +41,7 @@ TOWN_TICK_ENABLED = "0"
 [[d1_databases]]
 binding = "DB"
 database_name = "yut-hut"
-database_id = ""
+database_id = "d7645204-7bf9-4fcb-baec-648faf13139c"
 
 [[r2_buckets]]
 binding = "BUCKET"

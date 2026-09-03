@@ -66,32 +66,47 @@ config/osrs.json     the wiki's numbers: masters, assignments, monsters, scimita
 
 ## Setup
 
-1. **Cloudflare.** `npx wrangler d1 create yut-hut` and paste the id into
-   `wrangler.toml`. `npx wrangler r2 bucket create yut-hut-images`, enable its
-   public dev URL, and put that in `R2_PUBLIC_BASE`.
-2. **Secrets.** `npx wrangler secret put` each of `DISCORD_BOT_TOKEN`,
-   `YUT_IMAGE_SECRET` (must byte-match the Vercel env of the same name),
-   `ADMIN_SECRET`, and optionally `DISCORD_LOG_WEBHOOK_URL`. The Discord public
-   key and application id are plain vars in `wrangler.toml` — a verification
-   key is not sensitive.
-3. **Vercel.** Add `YUT_IMAGE_SECRET` and redeploy; env changes reach the
-   functions only on a new deploy. `node scripts/yut-sign.mjs` at the repo
-   root hand-signs a render URL to check.
-4. **Deploy.** `npm run migrate && npm run deploy`, or merge to main — the
-   `deploy-yut-worker` workflow applies migrations and deploys.
-5. **Discord portal** (application `1544835406661423185`). Bot → reset token
-   → secret. No privileged intents: attachments arrive on the slash option.
-   Interactions Endpoint URL: `https://yut-hut.<account>.workers.dev/interactions`
-   — deploy first; Discord probes with a bad signature and expects a 401.
-   Invite with scopes `bot applications.commands` and permissions View
-   Channel, Send Messages, Embed Links, Attach Files, Read Message History,
-   Manage Messages (pinning the board), Manage Roles (the opt-in Players role;
-   the bot's own role must sit above it).
-6. **Commands.** `npm run register` with `DISCORD_BOT_TOKEN` in `.dev.vars`,
-   or hit `/admin/register-commands?secret=…`. Guild commands appear at once.
-   Re-run after editing `src/register.ts` or `config/choices.json`.
-7. **Go live.** Ship with `DAILY_POST_HOUR_UTC = "-1"` until the roster has
-   joined, then set it to `14` (8am MDT) and deploy.
+Merging to main is the deploy and the setup. The `deploy-yut-worker`
+workflow creates the D1 database and R2 bucket if they are missing
+(`scripts/provision.mjs`; both exist and are named in `wrangler.toml`),
+applies migrations, deploys, pushes the repository's secrets to the Worker
+(`scripts/push-secrets.mjs`), registers the slash commands, and sets the
+Discord application's Interactions Endpoint URL to the deployed Worker
+(`scripts/discord-setup.mjs`). Every step is idempotent, so "Run workflow"
+on the Actions tab redoes it all after a secret is added.
+
+Three things only a person can do, once:
+
+1. **Two repository secrets** (GitHub → Settings → Secrets and variables →
+   Actions). `YUT_DISCORD_BOT_TOKEN`: Developer Portal → application
+   `1544835406661423185` → Bot → Reset Token. `YUT_IMAGE_SECRET`: any long
+   random string. Optional: `YUT_ADMIN_SECRET` (gates `/admin/*`) and
+   `YUT_DISCORD_LOG_WEBHOOK_URL` (where tick failures are reported).
+   `CLOUDFLARE_API_TOKEN` is already there, shared with scrandle.
+2. **The same image secret on Vercel**, as `YUT_IMAGE_SECRET` on the project
+   (then redeploy the site: env changes reach the functions only on a new
+   deploy). Or skip this by making the repository secret equal Vercel's
+   existing `SCRANDLE_IMAGE_SECRET` — the render routes fall back to it. The
+   workflow signs a URL and asks Vercel, and says in its summary whether the
+   pair matches.
+3. **Invite the bot.** The workflow prints the invite link in its summary
+   when the bot is not in the server (scopes `bot applications.commands`;
+   permissions View Channel, Send Messages, Embed Links, Attach Files, Read
+   Message History, Manage Messages for pinning the board, Manage Roles for
+   the opt-in Players role, whose position must be below the bot's own).
+   A server admin opens it. No privileged intents: attachments arrive on
+   the slash option.
+
+The Discord public key and application id are plain vars in `wrangler.toml`;
+a verification key is not sensitive. The morning post is on from the first
+deploy (`DAILY_POST_HOUR_UTC = "14"`, 8am MDT): before `CAMPAIGN_START` it
+reads "Pre-season" and carries the Join button, which is the launch
+announcement. Set the hour to `-1` to silence it.
+
+By hand, the same steps are `npm run provision`, `npm run migrate`,
+`npm run deploy`, `npm run secrets` (reads `.dev.vars`), `npm run register`,
+and `WORKER_URL=… npm run discord:setup`. `node scripts/yut-sign.mjs` at the
+repo root hand-signs a render URL to check the Vercel side.
 
 ## The clock
 
