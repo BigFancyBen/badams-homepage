@@ -20,6 +20,8 @@ export interface Env {
   /** The Monday the campaign starts, YYYY-MM-DD. */
   CAMPAIGN_START: string;
   TOWN_TICK_ENABLED: string;
+  /** Test only: a command name the Worker holds back past the ack budget. */
+  SLOW_COMMAND?: string;
 
   // Secrets (wrangler secret put)
   DISCORD_BOT_TOKEN: string;

@@ -114,6 +114,23 @@ export async function followUp(
   }
 }
 
+/** Takes down a deferred placeholder that nothing is going to fill. */
+export async function deleteInteractionReply(
+  env: Env,
+  applicationId: string,
+  token: string
+): Promise<boolean> {
+  try {
+    const response = await fetch(
+      `${apiBase(env)}/webhooks/${applicationId}/${token}/messages/@original`,
+      { method: "DELETE" }
+    );
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Nothing the bot writes ever mentions anyone, with one exception: the
  * opt-in Players role, and only on the messages that ask for it. `replied_user`

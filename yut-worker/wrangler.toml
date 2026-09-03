@@ -38,6 +38,11 @@ CAMPAIGN_START = "2026-09-14"
 # The town's hourly tick. Off until the town ships.
 TOWN_TICK_ENABLED = "0"
 
+# Keep invocation logs (duration, outcome, console output) in the dashboard,
+# so a "didn't respond in time" can be read back rather than guessed at.
+[observability]
+enabled = true
+
 [[d1_databases]]
 binding = "DB"
 database_name = "yut-hut"

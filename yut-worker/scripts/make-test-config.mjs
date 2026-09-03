@@ -22,6 +22,8 @@ const PLACEHOLDERS = [
   // never heard of.
   [/database_id = "[^"]*"/, 'database_id = "00000000-0000-0000-0000-000000000000"'],
   [/R2_PUBLIC_BASE = ""/, 'R2_PUBLIC_BASE = "https://images.test.local"'],
+  // Hold /help back past the ack budget so the harness can watch the late path.
+  [/TOWN_TICK_ENABLED = "0"/, 'TOWN_TICK_ENABLED = "0"\nSLOW_COMMAND = "help"'],
 ];
 
 let config;
