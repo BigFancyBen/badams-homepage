@@ -173,11 +173,17 @@ async function deliver(
   const key = answer.scope ?? interaction.data?.name ?? interaction.message?.id;
   if (!userId || !key || !interaction.token || !interaction.application_id) return fresh;
 
-  const existing = await getEphemeralReply(env, key, userId);
-  if (existing && now - existing.created_at < EDIT_WINDOW) {
-    const edited = await editInteractionReply(env, existing.application_id, existing.token, data);
-    if (edited) {
-      return Response.json({ type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE });
+  // Only a button can be answered with DEFERRED_UPDATE_MESSAGE; Discord
+  // rejects it for a slash command and shows "didn't respond in time" — which
+  // is what the second /join of launch night got. A command always answers
+  // fresh, and its reply becomes the running one for the buttons on it.
+  if (interaction.type === InteractionType.MESSAGE_COMPONENT) {
+    const existing = await getEphemeralReply(env, key, userId);
+    if (existing && now - existing.created_at < EDIT_WINDOW) {
+      const edited = await editInteractionReply(env, existing.application_id, existing.token, data);
+      if (edited) {
+        return Response.json({ type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE });
+      }
     }
   }
 

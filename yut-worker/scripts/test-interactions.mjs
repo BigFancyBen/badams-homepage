@@ -243,6 +243,15 @@ for (let i = 0; i < 40 && !lateHelp; i++) {
   } catch {}
 }
 check("the slow answer arrives through the webhook token", Boolean(lateHelp), lateHelp);
+// 16. A repeated slash command must answer fresh: the running-reply edit
+// (type 6) is only legal for buttons, and Discord shows "didn't respond in
+// time" when a command gets it.
+const rejoin = await command("join", [], bob);
+check(
+  "a repeated slash command answers fresh, never with a button-only ack",
+  rejoin.body?.type === 4 && /already in/.test(content(rejoin)),
+  rejoin
+);
 const standings = await command("standings", [], bob);
 check("/standings lists the roster", /alice|bob/.test(content(standings)), standings);
 
