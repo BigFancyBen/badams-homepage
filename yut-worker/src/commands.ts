@@ -29,6 +29,7 @@ import { getState } from "./db.ts";
 import { attachmentKind, mirrorAttachment } from "./images.ts";
 import {
   deferred,
+  finishLater,
   handleInteraction,
   hub,
   postCheckinLine,
@@ -318,26 +319,32 @@ async function checkinCommand(
   if (existing) {
     if (existing.attachment_r2_key) return reply("Today's check-in already carries proof.");
     ctx.waitUntil(
-      (async () => {
+      finishLater(env, interaction, "Attaching proof", async () => {
         const mirrored = await mirrorAttachment(env, user.id, day, attachment);
         if (!mirrored) {
           await editInteractionReply(env, interaction.application_id, interaction.token, { content: "The photo could not be saved." });
           return;
         }
         await attachProof(env, existing.id, mirrored.key, mirrored.url, kind);
-        const message = await postMessage(env, {
+        // The proof is attached either way; the channel line is the part that
+        // can fail (the bot may be locked out of the channel), and it says so.
+        const posted = await postMessage(env, {
           content: `📸 **${escapeMarkdown(user.username)}** added proof to today's check-in.` + (kind === "video" ? `\n${mirrored.url}` : "") + (note ? `\n> ${escapeMarkdown(note)}` : ""),
           embeds: kind === "image" ? [{ color: ACCENT, image: { url: mirrored.url } }] : [],
           components: [buttonRow([{ label: "Verify", custom_id: `vf:${existing.id}`, style: 3, emoji: "💪" }])],
           allowed_mentions: allowedMentions(),
           ...replyTo(await getState(env, `daily_post:${day}`)),
-        });
-        void message;
+        }).then(
+          () => true,
+          () => false
+        );
         await editInteractionReply(env, interaction.application_id, interaction.token, {
-          content: "Proof attached. Friends have 72 hours to press Verify.",
+          content: posted
+            ? "Proof attached. Friends have 72 hours to press Verify."
+            : "Proof attached, but the channel line could not be posted: the bot cannot write to the channel right now.",
           flags: EPHEMERAL,
         });
-      })()
+      })
     );
     return deferred();
   }
@@ -345,7 +352,7 @@ async function checkinCommand(
   // Mirroring the file first is a fetch, and a fetch does not fit inside
   // the three seconds Discord gives an interaction. Defer, then do the work.
   ctx.waitUntil(
-    (async () => {
+    finishLater(env, interaction, "Photo check-in", async () => {
       const mirrored = await mirrorAttachment(env, user.id, day, attachment);
       const input = {
         note,
@@ -363,7 +370,7 @@ async function checkinCommand(
         flags: EPHEMERAL,
       });
       await postCheckinLine(env, player, day, outcome, input);
-    })()
+    })
   );
   return deferred();
 }
