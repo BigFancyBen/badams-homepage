@@ -522,6 +522,16 @@ export async function spendLamp(
   return result.meta.changes > 0;
 }
 
+/** Unspent lamps per player with the oldest grant, for the evening reminders. */
+export async function unspentLampCounts(
+  env: Env
+): Promise<{ player_id: string; n: number; oldest: string }[]> {
+  const { results } = await env.DB.prepare(
+    "SELECT player_id, COUNT(*) AS n, MIN(granted_day) AS oldest FROM lamps WHERE spent_at IS NULL GROUP BY player_id"
+  ).all<{ player_id: string; n: number; oldest: string }>();
+  return results;
+}
+
 export async function staleLamps(env: Env, beforeDay: string): Promise<Lamp[]> {
   const { results } = await env.DB.prepare(
     "SELECT * FROM lamps WHERE spent_at IS NULL AND granted_day < ? ORDER BY id"
@@ -694,6 +704,14 @@ export async function openClaims(env: Env, playerId: string): Promise<PendingCla
   )
     .bind(playerId)
     .all<PendingClaim>();
+  return results;
+}
+
+/** Unclaimed rewards per player, for the evening reminders. */
+export async function openClaimCounts(env: Env): Promise<{ player_id: string; n: number }[]> {
+  const { results } = await env.DB.prepare(
+    "SELECT player_id, COUNT(*) AS n FROM pending_claims WHERE claimed_at IS NULL GROUP BY player_id"
+  ).all<{ player_id: string; n: number }>();
   return results;
 }
 

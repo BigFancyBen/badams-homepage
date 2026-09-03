@@ -16,6 +16,7 @@ import {
   xpForLevel,
   xpToNext,
   lampXp,
+  isLevelMilestone,
 } from "../src/xp.ts";
 import { EVENT_TABLE, TIERS, CLUE_TIERS, LOGS, ORES, FISH, bestResource, ANTIQUE_LAMP } from "../src/config.ts";
 import {
@@ -36,7 +37,9 @@ import { resolveWeek } from "../src/streaks.ts";
 import { rollEvent, seededRng, weightedPick } from "../src/events.ts";
 import { drawSteps, openCasket } from "../src/clues.ts";
 import { streakMultiplier } from "../src/slayer.ts";
-import { addDays, campaignWeek, daysBetween, gameDay, gameWeek, weekdayOf } from "../src/schedule.ts";
+import { addDays, campaignWeek, dailyHourDue, daysBetween, gameDay, gameWeek, weekdayOf } from "../src/schedule.ts";
+import { threadName } from "../src/digest.ts";
+import { goingStale, reminderMessage } from "../src/reminders.ts";
 
 let failures = 0;
 function check(name, condition, detail) {
@@ -190,6 +193,27 @@ check("campaign week 1 starts 14 Sep 2026", campaignWeek("2026-09-14", "2026-09-
 check("week 52 is 6 Sep 2027", campaignWeek("2027-09-06", "2026-09-14") === 52);
 check("addDays crosses months", addDays("2026-09-30", 1) === "2026-10-01" && daysBetween("2026-09-30", "2026-10-01") === 1);
 check("weekdayOf: 2026-09-14 is a Monday", weekdayOf("2026-09-14") === 1);
+// The evening slot is 01:00 UTC, which is the same game day as the 14:00 post before it.
+check("dailyHourDue: 01:00 UTC is due at 01:00 and 03:00, not at 14:00 or 23:00", dailyHourDue(Date.parse("2026-09-16T01:00:00Z"), 1, 9) && dailyHourDue(Date.parse("2026-09-16T03:00:00Z"), 1, 9) && !dailyHourDue(Date.parse("2026-09-15T14:00:00Z"), 1, 9) && !dailyHourDue(Date.parse("2026-09-15T23:00:00Z"), 1, 9));
+check("dailyHourDue: off when the hour is null", !dailyHourDue(Date.parse("2026-09-16T01:00:00Z"), null, 9));
+check("threadName names the day", threadName("2026-09-02") === "Check-ins · Wed 2 Sep", threadName("2026-09-02"));
+
+// ── Level-up scrolls and reminders ─────────────────────────────────
+check("milestones: 10, 20, 60, 65, 70, 91, 99", [10, 20, 60, 65, 70, 91, 99].every(isLevelMilestone));
+check("not milestones: 7, 55, 63, 89", ![7, 55, 63, 89].some(isLevelMilestone));
+check("no reminders, no message", reminderMessage({ nudges: [], goingStale: [] }) === null);
+const reminder = reminderMessage({ nudges: [{ playerId: "1", name: "ben_*", bits: ["2 lamps to rub (one rubs itself tomorrow)", "hasn't voted"] }], goingStale: [] });
+check("a reminder names the player, escapes markdown and pings nobody", /Evening reminders/.test(reminder.content) && reminder.content.includes("• **ben\\_\\*** — 2 lamps to rub (one rubs itself tomorrow) · hasn't voted") && reminder.allowed_mentions.parse.length === 0 && reminder.allowed_mentions.users.length === 0, reminder);
+const roster = [
+  { discord_id: "fresh", username: "fresh", last_active_day: "2026-09-16" },
+  { discord_id: "edge", username: "edge", last_active_day: "2026-09-13" },
+  { discord_id: "gone", username: "gone", last_active_day: "2026-09-12" },
+  { discord_id: "never", username: "never", last_active_day: null },
+];
+const stale = goingStale(roster, "2026-09-16");
+check("goingStale picks exactly the player on their third day", stale.length === 1 && stale[0].discord_id === "edge", stale);
+const shame = reminderMessage({ nudges: [], goingStale: stale });
+check("the stale warning @mentions by id and allows only that mention", shame.content.includes("<@edge>") && /Tomorrow makes four/.test(shame.content) && shame.allowed_mentions.users.join() === "edge", shame);
 
 console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) failed.`);
 process.exit(failures === 0 ? 0 : 1);

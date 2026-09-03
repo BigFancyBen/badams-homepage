@@ -9,7 +9,7 @@ import {
   verifierNames,
 } from "./db.ts";
 import { ACCENT, allowedMentions, editMessage, escapeMarkdown } from "./discord.ts";
-import { actForWeek, addDays, campaignWeek, daysBetween, gameWeek, shortDate } from "./schedule.ts";
+import { WEEKDAY_NAMES, actForWeek, addDays, campaignWeek, daysBetween, gameWeek, shortDate, weekdayOf } from "./schedule.ts";
 import { getStores, getTown, ledgerOn, storesLine } from "./town.ts";
 import { buttonRow, type Env } from "./types.ts";
 import { summaryLines, type WeekSummary } from "./weekly.ts";
@@ -148,6 +148,20 @@ export function digestPayload(
     ],
     allowed_mentions: allowedMentions(roleId),
   };
+}
+
+/** "Check-ins · Wed 3 Sep" — the name of the day's thread. */
+export function threadName(day: string): string {
+  return `Check-ins · ${WEEKDAY_NAMES[weekdayOf(day)].slice(0, 3)} ${shortDate(day)}`;
+}
+
+/**
+ * The day's check-in thread, or null when there is none: creating it failed,
+ * or the post predates threads. Callers fall back to the channel.
+ */
+export async function dailyThread(env: Env, day: string): Promise<string | null> {
+  const id = await getState(env, `daily_thread:${day}`);
+  return id ? id : null;
 }
 
 /** "✅ Ben, Tom · 😴 Alex · 2 still to answer" — roster members only. */

@@ -31,8 +31,10 @@ const workerUrl = process.env.WORKER_URL?.replace(/\/+$/, "");
 
 // View Channel, Send Messages, Manage Messages (pinning the board), Embed
 // Links, Attach Files, Read Message History, Manage Roles (the opt-in ping
-// role; the bot's own role must sit above it).
-const PERMISSIONS = 1024 + 2048 + 8192 + 16384 + 32768 + 65536 + 268435456;
+// role; the bot's own role must sit above it), Create Public Threads and Send
+// Messages in Threads (the day's check-in thread).
+const PERMISSIONS =
+  1024 + 2048 + 8192 + 16384 + 32768 + 65536 + 268435456 + 34359738368 + 274877906944;
 const INVITE =
   `https://discord.com/oauth2/authorize?client_id=${appId}` +
   `&scope=bot%20applications.commands&permissions=${PERMISSIONS}&guild_id=${guildId}`;
@@ -119,7 +121,8 @@ async function main() {
       note(
         `⚠️ In ${guild.json.name} but cannot see channel ${channelId} (${channel.status}). ` +
           `It is private: open the channel → Edit Channel → Permissions → Add members or roles → the bot, ` +
-          `and allow View Channel, Send Messages, Manage Messages, Embed Links, Attach Files, Read Message History.`
+          `and allow View Channel, Send Messages, Manage Messages, Embed Links, Attach Files, Read Message History, ` +
+          `Create Public Threads, Send Messages in Threads.`
       );
     }
   }

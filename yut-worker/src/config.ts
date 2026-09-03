@@ -270,6 +270,8 @@ export const LAMP_MAX = 990;
 export const ANTIQUE_LAMP = { easy: 2500, medium: 7500, hard: 15000, elite: 50000 };
 /** Unrubbed lamps go into Hitpoints after this long. */
 export const LAMP_AUTO_RUB_DAYS = 14;
+/** The evening reminder starts saying so this many days before a lamp rubs itself. */
+export const LAMP_REMINDER_DAYS = 3;
 
 // ── Random events ──────────────────────────────────────────────────
 

@@ -34,6 +34,8 @@ interface LevelUp {
   k: string;
   /** New level */
   l: number;
+  /** The level before, when the worker sends it */
+  f?: number;
 }
 
 /** What one check-in produced, drawn like an OSRS progress report. */
@@ -120,7 +122,12 @@ export async function GET(request: Request) {
                 key={`${up.k}-${i}`}
                 icon={iconDataUrl(up.k)}
                 color={LEVEL_UP}
-                text={`Level up! ${skillLabel(up.k)} ${up.l}`}
+                text={
+                  typeof up.f === "number"
+                    ? // The RuneScape fonts have no arrow glyph; "->" is the closest they draw.
+                      `${skillLabel(up.k)} ${up.f} -> ${up.l}`
+                    : `Level up! ${skillLabel(up.k)} ${up.l}`
+                }
               />
             ))}
             {task ? (

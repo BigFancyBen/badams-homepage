@@ -115,11 +115,13 @@ export interface CheckinOutcome {
   checkinId: number;
   ordinal: number;
   weight: number;
-  /** The ephemeral receipt, line by line. */
+  /** The full session log, line by line. */
   receipt: string[];
-  /** The one line the channel sees. */
+  /** The lines of the receipt only the player can act on — what the ephemeral keeps. */
+  essentials: string[];
+  /** The line the day's thread sees. */
   publicLine: string;
-  levelUps: { skill: SkillKey; level: number }[];
+  levelUps: { skill: SkillKey; level: number; from: number }[];
   tierUp: string | null;
   quiz: { index: number } | null;
   hasLamp: boolean;
@@ -265,6 +267,12 @@ export async function performCheckin(
   }
 
   const receipt: string[] = [];
+  const essentials: string[] = [];
+  /** A receipt line the player must see even though the session moved to the thread. */
+  const keep = (line: string) => {
+    receipt.push(line);
+    essentials.push(line);
+  };
   const publicBits: string[] = [];
   const statements: D1PreparedStatement[] = [];
   const loot: { k: string; c: number }[] = [];
@@ -304,14 +312,15 @@ export async function performCheckin(
 
   receipt.push(`**Checked in.** ${ordinalWord(ordinal)} this week, ${weightWord(weight)}.`);
   receipt.push(sessionLine(session, monsterName));
-  receipt.push(`🗡️ ${progress.line}`);
+  if (assignedNow || progress.completed) keep(`🗡️ ${progress.line}`);
+  else receipt.push(`🗡️ ${progress.line}`);
   publicBits.push(`⚔️ ${session.kills} ${monsterName} slain${progress.completed ? "" : ` (${progress.task.kills}/${progress.task.kills_needed} on task)`}.`);
   if (progress.publicBit) publicBits.push(progress.publicBit);
 
   // ── Level-ups, the weapon, the tier ────────────────────────────
   const skillsAfter = await getSkills(env, player.discord_id);
   const levelsAfter = levelsOf(skillsAfter, levelForXp);
-  const levelUps: { skill: SkillKey; level: number }[] = [];
+  const levelUps: { skill: SkillKey; level: number; from: number }[] = [];
   for (const skill of SKILLS) {
     const gained = gains[skill] ?? 0;
     if (!gained) continue;
@@ -332,7 +341,7 @@ export async function performCheckin(
     receipt.push(
       `${SKILL_LABEL[skill]} ${levelAfter} (+${gained.toLocaleString("en-US")})${detail}${toNext > 0 ? ` · ${toNext.toLocaleString("en-US")} to ${levelAfter + 1}` : " · capped"}`
     );
-    if (levelAfter > levelBefore) levelUps.push({ skill, level: levelAfter });
+    if (levelAfter > levelBefore) levelUps.push({ skill, level: levelAfter, from: levelBefore });
   }
   if (delivered > 0) {
     receipt.push(`Delivered ${haulLine(haul)} to the ${buildings.size > 0 ? "town" : "camp"}.`);
@@ -493,7 +502,9 @@ export async function performCheckin(
       logEventStatement(env, player.discord_id, day, checkinId, `event:${event}`, quiz ? { quiz: quiz.index, answered: false } : null, now)
     );
     await env.DB.batch(eventStatements);
-    receipt.push(line);
+    // A lamp or a quiz needs the player's hand; the rest is news.
+    if (event === "genie" || event === "prison_pete" || event === "quiz_master") keep(line);
+    else receipt.push(line);
     if (await logEntry(env, player.discord_id, `event:${event}`, day)) {
       publicBits.push(logLine(label, await logCountFor(env, player.discord_id)));
     }
@@ -591,7 +602,7 @@ export async function performCheckin(
     ]);
     await markVerificationsPaid(env, player.discord_id, paying.map((v) => v.checkin_id), checkinId);
     gains.slayer = (gains.slayer ?? 0) + slayer;
-    receipt.push(`Slayer +${slayer} for ${paying.length === 1 ? "a check-in you verified" : `${paying.length} check-ins you verified`}.`);
+    keep(`Slayer +${slayer} for ${paying.length === 1 ? "a check-in you verified" : `${paying.length} check-ins you verified`}.`);
   }
 
   // ── Pending claims (rewards credited while you were away) ──────
@@ -604,14 +615,14 @@ export async function performCheckin(
         claimStatements.push(grantLampStatement(env, player.discord_id, Number(payload.xp ?? 0), payload.source ?? "claim", day));
         gotLamp = true;
         addLoot("lamp");
-        receipt.push(`🎁 Waiting for you: a ${Number(payload.xp ?? 0).toLocaleString("en-US")} XP antique lamp (${payload.reason ?? payload.source ?? "reward"}).`);
+        keep(`🎁 Waiting for you: a ${Number(payload.xp ?? 0).toLocaleString("en-US")} XP antique lamp (${payload.reason ?? payload.source ?? "reward"}).`);
       } else if (claim.kind === "ring") {
         if (rings < ringCap) rings++;
         addLoot("ring");
-        receipt.push(`🎁 Waiting for you: a Ring of Life (${payload.reason ?? "reward"}).`);
+        keep(`🎁 Waiting for you: a Ring of Life (${payload.reason ?? "reward"}).`);
       } else if (claim.kind === "title") {
         await updatePlayer(env, player.discord_id, { title: String(payload.title) });
-        receipt.push(`🎁 Title unlocked: ${payload.title}.`);
+        keep(`🎁 Title unlocked: ${payload.title}.`);
       }
     }
     if (claimStatements.length > 0) await env.DB.batch(claimStatements);
@@ -633,18 +644,18 @@ export async function performCheckin(
       if (rings < ringCap) rings++;
       addLoot("ring");
       recovery = { recovery_started_day: null, recovery_count: 0, form_weeks: Math.max(1, player.form_weeks) };
-      receipt.push(`🏃 The Restless Lifter, complete: a ${RECOVERY_LAMP_XP.toLocaleString("en-US")} XP antique lamp, a Ring, and your form counter is back.`);
+      keep(`🏃 The Restless Lifter, complete: a ${RECOVERY_LAMP_XP.toLocaleString("en-US")} XP antique lamp, a Ring, and your form counter is back.`);
       publicBits.push(`🏃 ${escapeMarkdown(player.username)} finished The Restless Lifter.`);
     } else {
       recovery = { recovery_count: count };
-      receipt.push(`🏃 The Restless Lifter: ${count}/${RECOVERY_CHECKINS}.`);
+      keep(`🏃 The Restless Lifter: ${count}/${RECOVERY_CHECKINS}.`);
     }
   } else if (player.recovery_started_day) {
     recovery = { recovery_started_day: null, recovery_count: 0 };
   }
   if (Object.keys(recovery).length === 0 && silentDays >= RECOVERY_SILENT_DAYS) {
     recovery = { recovery_started_day: day, recovery_count: 1 };
-    receipt.push(`🏃 Welcome back. The Restless Lifter is open: ${RECOVERY_CHECKINS} check-ins in ${RECOVERY_WINDOW_DAYS} days for a lamp and a Ring.`);
+    keep(`🏃 Welcome back. The Restless Lifter is open: ${RECOVERY_CHECKINS} check-ins in ${RECOVERY_WINDOW_DAYS} days for a lamp and a Ring.`);
     publicBits.push(`🏃 ${escapeMarkdown(player.username)} is back after ${silentDays} days.`);
   }
 
@@ -705,6 +716,7 @@ export async function performCheckin(
     ordinal,
     weight,
     receipt,
+    essentials,
     publicLine,
     levelUps,
     tierUp,

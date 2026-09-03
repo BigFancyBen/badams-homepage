@@ -92,8 +92,12 @@ Three things only a person can do, once:
 3. **Invite the bot.** The workflow prints the invite link in its summary
    when the bot is not in the server (scopes `bot applications.commands`;
    permissions View Channel, Send Messages, Embed Links, Attach Files, Read
-   Message History, Manage Messages for pinning the board, Manage Roles for
-   the opt-in Players role, whose position must be below the bot's own).
+   Message History, Manage Messages for pinning the board, Create Public
+   Threads and Send Messages in Threads for the day's check-in thread,
+   Manage Roles for the opt-in Players role, whose position must be below
+   the bot's own). A private channel's own permission overwrite for the bot
+   needs the two thread permissions too; until it has them, check-in lines
+   fall back to the channel and the log webhook says so.
    A server admin opens it. No privileged intents: attachments arrive on
    the slash option.
 
@@ -166,7 +170,9 @@ with a synthetic clock (`daily=1`, `post=1`, `lastcall=1` force a phase),
 - **Rolls are seeded** on the player and the day, so a check-in that has to be
   recomputed rolls the same event and the same clue.
 - **Every message the bot writes is unmentioning** except the opt-in Players
-  role on the morning post and Sunday's last call.
+  role on the morning post and Sunday's last call, and the evening
+  reminder's stale warning, which @mentions a player on their third day
+  without a check-in (tomorrow the freshness gate closes on them).
 - **A check-in is a session.** The player fights their Slayer task for a
   fixed stretch with the best scimitar, armour and prayers their levels
   allow; damage pays combat XP (4 per point, 4/3 to Hitpoints), every kill
@@ -177,11 +183,32 @@ with a synthetic clock (`daily=1`, `post=1`, `lastcall=1` force a phase),
   Hitpoints 10.
 - **The receipt is the play hub.** Lamps, clues, the Slayer task, the sheet,
   the town, the log, bingo, the shop and the votes hang off it; a stale
-  player gets "Check in to play" and nothing else.
-- **Every check-in line carries a loot card**: the check-in's loot (coins,
+  player gets "Check in to play" and nothing else. The receipt itself is
+  one line plus whatever only the player can act on (a lamp, a quiz, a
+  reward waiting); the session lives in the day's thread.
+- **The day has a thread.** The morning post starts one ("Check-ins · Wed
+  3 Sep", `daily_thread:<day>` in `state`), and every check-in's line and
+  loot card go into it. The channel itself only hears from a check-in when
+  the player brought a photo, a video or a note: a short post with the
+  media, the quoted note and the Verify button, replying to the morning
+  post. `checkins.message_id` is that media post, the one Verify edits. If
+  the thread cannot be created or refuses a post, the line goes to the
+  channel instead — a check-in line is never lost.
+- **Every check-in carries a loot card**: the check-in's loot (coins,
   logs, a lamp, a clue, a casket, uniques) as OSRS item icons and the XP it
   paid, rendered by `app/api/yut/report` in the style of an OSRS progress
-  report. The icons come from the prog-to-img-endpoint item database.
+  report; a level-up reads `Hitpoints 12 -> 13` (the RuneScape fonts have no
+  arrow glyph). The RuneScape level-up
+  scroll only appears for milestone levels (every tenth, every fifth past
+  60, every level past 90). The icons come from the prog-to-img-endpoint
+  item database.
+- **Evening reminders.** At `REMINDER_HOUR_UTC` the bot posts one message
+  naming roster members with something to claim — lamps to rub (and when
+  one will rub itself), Slayer points that buy a skip, bingo points that
+  buy a lamp, open votes not cast, rewards waiting on a check-in — and
+  @mentions anyone whose last check-in was three days ago, because tomorrow
+  is day four and stale. Nothing at all is posted when nobody qualifies. It
+  is deleted at the next rollover.
 - **Slayer tasks are the game's.** Every player always holds a task from the
   highest master their combat level earns (Turael, Mazchna 20, Vannaka 40,
   Chaeldar 70, Nieve 85, Duradel 100 and 50 Slayer), drawn from that

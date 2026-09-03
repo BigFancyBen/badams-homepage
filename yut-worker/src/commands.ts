@@ -22,6 +22,7 @@ import {
   getSkills,
   getPlayers,
   joinPlayer,
+  setCheckinMessage,
   updatePlayer,
 } from "./db.ts";
 import { ACCENT, allowedMentions, editInteractionReply, escapeMarkdown, postMessage, replyTo } from "./discord.ts";
@@ -32,6 +33,7 @@ import {
   finishLater,
   handleInteraction,
   hub,
+  mediaLineContent,
   postCheckinLine,
   receiptReply,
   reply,
@@ -329,13 +331,21 @@ async function checkinCommand(
         // The proof is attached either way; the channel line is the part that
         // can fail (the bot may be locked out of the channel), and it says so.
         const posted = await postMessage(env, {
-          content: `📸 **${escapeMarkdown(user.username)}** added proof to today's check-in.` + (kind === "video" ? `\n${mirrored.url}` : "") + (note ? `\n> ${escapeMarkdown(note)}` : ""),
+          content: mediaLineContent(
+            `📸 **${escapeMarkdown(user.username)}** added proof to today's check-in.`,
+            { key: mirrored.key, url: mirrored.url, kind },
+            note
+          ),
           embeds: kind === "image" ? [{ color: ACCENT, image: { url: mirrored.url } }] : [],
           components: [buttonRow([{ label: "Verify", custom_id: `vf:${existing.id}`, style: 3, emoji: "💪" }])],
           allowed_mentions: allowedMentions(),
           ...replyTo(await getState(env, `daily_post:${day}`)),
         }).then(
-          () => true,
+          async (message) => {
+            // Verify edits "verified by …" into the message that carries the proof.
+            await setCheckinMessage(env, existing.id, message.id);
+            return true;
+          },
           () => false
         );
         await editInteractionReply(env, interaction.application_id, interaction.token, {

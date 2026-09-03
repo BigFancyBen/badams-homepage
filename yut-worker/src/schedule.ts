@@ -87,6 +87,17 @@ export function dailySlotDue(now: number, hourUtc: number | null): boolean {
   return new Date(now).getUTCHours() === hourUtc;
 }
 
+/**
+ * Whether a daily slot is due — at or past its hour, so a late tick still
+ * fires — measured from the rollover rather than midnight, so a slot after
+ * midnight UTC (an evening in Mountain time) belongs to the game day it is in.
+ */
+export function dailyHourDue(now: number, hourUtc: number | null, rolloverHourUtc: number): boolean {
+  if (hourUtc === null) return false;
+  const since = (hour: number) => (hour - rolloverHourUtc + 24) % 24;
+  return since(new Date(now).getUTCHours()) >= since(hourUtc);
+}
+
 /** Sunday, Monday … for a weekday number. */
 export const WEEKDAY_NAMES = [
   "Sunday",

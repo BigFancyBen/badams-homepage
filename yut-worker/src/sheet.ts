@@ -144,7 +144,8 @@ export interface ReportPayload {
   t: string;
   loot: { k: string; c: number }[];
   xp: { k: string; x: number }[];
-  lv?: { k: string; l: number }[];
+  /** Level-ups: skill, new level, and the level before. */
+  lv?: { k: string; l: number; f?: number }[];
   task?: string;
   /** The session line: "23 hill giants · max hit 4 · 54% to hit · Rune scimitar" */
   s?: string;
