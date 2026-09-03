@@ -25,9 +25,9 @@ import {
   setCheckinMessage,
   updatePlayer,
 } from "./db.ts";
-import { ACCENT, allowedMentions, editInteractionReply, escapeMarkdown, postMessage, replyTo } from "./discord.ts";
+import { allowedMentions, editInteractionReply, escapeMarkdown, postMessage } from "./discord.ts";
 import { getState } from "./db.ts";
-import { attachmentKind, mirrorAttachment } from "./images.ts";
+import { attachmentKind, fetchAttachment } from "./images.ts";
 import { bankView } from "./bank.ts";
 import { questLog, questView } from "./quests.ts";
 import {
@@ -35,8 +35,8 @@ import {
   finishLater,
   handleInteraction,
   hub,
-  mediaLineContent,
   postCheckinLine,
+  postMedia,
   receiptReply,
   reply,
   requireFresh,
@@ -330,28 +330,26 @@ async function checkinCommand(
     if (existing.attachment_r2_key) return reply("Today's check-in already carries proof.");
     ctx.waitUntil(
       finishLater(env, interaction, "Attaching proof", async () => {
-        const mirrored = await mirrorAttachment(env, user.id, day, attachment);
-        if (!mirrored) {
-          await editInteractionReply(env, interaction.application_id, interaction.token, { content: "The photo could not be saved." });
-          return;
-        }
-        await attachProof(env, existing.id, mirrored.key, mirrored.url, kind);
+        // The bytes come down from Discord's CDN once and go back up as the
+        // bot's own attachment on the channel post; Discord keeps the file.
+        const file = await fetchAttachment(user.id, day, attachment);
+        const proof = { key: `discord:${attachment.id}`, url: attachment.url, kind, ...(file ? { file } : {}) };
+        await attachProof(env, existing.id, proof.key, proof.url, kind);
         // The proof is attached either way; the channel line is the part that
         // can fail (the bot may be locked out of the channel), and it says so.
-        const posted = await postMessage(env, {
-          content: mediaLineContent(
-            `📸 **${escapeMarkdown(user.username)}** added proof to today's check-in.`,
-            { key: mirrored.key, url: mirrored.url, kind },
-            note
-          ),
-          embeds: kind === "image" ? [{ color: ACCENT, image: { url: mirrored.url } }] : [],
-          components: [buttonRow([{ label: "Verify", custom_id: `vf:${existing.id}`, style: 3, emoji: "💪" }])],
-          allowed_mentions: allowedMentions(),
-          ...replyTo(await getState(env, `daily_post:${day}`)),
-        }).then(
+        const posted = await postMedia(
+          env,
+          `📸 **${escapeMarkdown(user.username)}** added proof to today's check-in.`,
+          proof,
+          note,
+          [buttonRow([{ label: "Verify", custom_id: `vf:${existing.id}`, style: 3, emoji: "💪" }])],
+          await getState(env, `daily_post:${day}`)
+        ).then(
           async (message) => {
             // Verify edits "verified by …" into the message that carries the proof.
             await setCheckinMessage(env, existing.id, message.id);
+            const url = message.attachments?.[0]?.url;
+            if (url) await attachProof(env, existing.id, proof.key, url, kind);
             return true;
           },
           () => false
@@ -371,10 +369,10 @@ async function checkinCommand(
   // the three seconds Discord gives an interaction. Defer, then do the work.
   ctx.waitUntil(
     finishLater(env, interaction, "Photo check-in", async () => {
-      const mirrored = await mirrorAttachment(env, user.id, day, attachment);
+      const file = await fetchAttachment(user.id, day, attachment);
       const input = {
         note,
-        attachment: mirrored ? { key: mirrored.key, url: mirrored.url, kind } : null,
+        attachment: { key: `discord:${attachment.id}`, url: attachment.url, kind, ...(file ? { file } : {}) },
       };
       const outcome = await performCheckin(env, player, day, now, input);
       if (!outcome.ok) {
@@ -383,7 +381,7 @@ async function checkinCommand(
       }
       const receipt = await receiptReply(env, player, day, outcome);
       await editInteractionReply(env, interaction.application_id, interaction.token, {
-        content: (mirrored ? "" : "The photo could not be saved, so this one carries no proof.\n") + receipt.content,
+        content: (file ? "" : "The photo could not be fetched back from Discord, so it is not re-posted; the proof still counts.\n") + receipt.content,
         components: receipt.components,
         flags: EPHEMERAL,
       });

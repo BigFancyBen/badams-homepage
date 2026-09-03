@@ -119,7 +119,7 @@ async function admin(env: Env, ctx: ExecutionContext, url: URL): Promise<unknown
       const input = {
         note: url.searchParams.get("note"),
         attachment: withPhoto
-          ? { key: `checkins/${id}/${day}-sim.${kind === "video" ? "mp4" : "png"}`, url: `${env.R2_PUBLIC_BASE}/checkins/${id}/${day}-sim.${kind === "video" ? "mp4" : "png"}`, kind }
+          ? { key: `discord:sim-${id}-${day}`, url: `https://cdn.discordapp.test/attachments/sim/${id}-${day}.${kind === "video" ? "mp4" : "png"}`, kind }
           : null,
       };
       const outcome = await performCheckin(env, player, day, now, input);

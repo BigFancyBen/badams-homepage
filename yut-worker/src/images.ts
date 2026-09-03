@@ -1,14 +1,22 @@
 import { downloadAttachment } from "./discord.ts";
-import type { DiscordAttachment, Env } from "./types.ts";
+import type { DiscordAttachment } from "./types.ts";
 
 /**
- * Discord's CDN URLs carry an expiry and die within about a day, so a
- * photo that has to be shown again — on a verify, in a digest — is mirrored
- * into R2 first and only the key is kept.
+ * A check-in's photo or video is Discord's to keep. The slash option hands
+ * the bot a CDN link that dies within about a day, so the bot downloads the
+ * bytes once and re-uploads them as a real attachment on its own channel
+ * post; that attachment lives as long as the message does, shows inline, and
+ * plays inline. Nothing is copied anywhere else.
  */
 
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 const VIDEO_TYPES = ["video/mp4", "video/quicktime", "video/webm"];
+
+export interface AttachmentFile {
+  filename: string;
+  bytes: ArrayBuffer;
+  contentType: string;
+}
 
 export function attachmentKind(
   attachment: DiscordAttachment
@@ -35,30 +43,21 @@ function extensionFor(contentType: string, filename: string): string {
 }
 
 /**
- * Copies an attachment into R2 under `checkins/<player>/<day>-<id>.<ext>`.
- * Returns the key and public URL, or null if the download or the put failed —
- * in which case the check-in still counts, it just carries no proof.
+ * Fetches the attachment's bytes from Discord's CDN while the link is live.
+ * Returns null if the download failed, in which case the check-in still
+ * counts and still carries proof — there is just nothing to re-post.
  */
-export async function mirrorAttachment(
-  env: Env,
+export async function fetchAttachment(
   playerId: string,
   day: string,
   attachment: DiscordAttachment
-): Promise<{ key: string; url: string } | null> {
+): Promise<AttachmentFile | null> {
   const downloaded = await downloadAttachment(attachment.url);
   if (!downloaded || downloaded.bytes.byteLength === 0) return null;
-
   const contentType = attachment.content_type ?? downloaded.contentType;
-  const key = `checkins/${playerId}/${day}-${attachment.id}.${extensionFor(contentType, attachment.filename)}`;
-  try {
-    await env.BUCKET.put(key, downloaded.bytes, {
-      httpMetadata: {
-        contentType,
-        cacheControl: "public, max-age=31536000, immutable",
-      },
-    });
-  } catch {
-    return null;
-  }
-  return { key, url: `${env.R2_PUBLIC_BASE}/${key}` };
+  return {
+    filename: `${playerId}-${day}.${extensionFor(contentType, attachment.filename)}`,
+    bytes: downloaded.bytes,
+    contentType,
+  };
 }

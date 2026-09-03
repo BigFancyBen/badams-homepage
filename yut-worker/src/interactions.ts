@@ -30,6 +30,7 @@ import { clueSteps, doneIndices, remainingSteps, stepLabel, verificationSatisfie
 import {
   addXp,
   addXpStatement,
+  attachProof,
   markStep,
   bumpVerifiedCount,
   countCheckinsBetween,
@@ -67,6 +68,7 @@ import {
   getMessage,
   logToDiscord,
   postMessage,
+  postMessageWithFile,
   replyTo,
 } from "./discord.ts";
 import { runCommand } from "./commands.ts";
@@ -656,17 +658,18 @@ export async function postCheckinLine(
 
   if (input.attachment || input.note) {
     try {
-      const message = await postMessage(env, {
-        content: mediaLineContent(`**${escapeMarkdown(player.username)}** checked in.`, input.attachment, input.note),
-        embeds: input.attachment?.kind === "image" ? [{ color: ACCENT, image: { url: input.attachment.url } }] : [],
-        components: input.attachment
-          ? [buttonRow([{ label: "Verify", custom_id: `vf:${outcome.checkinId}`, style: 3, emoji: "💪" }])]
-          : [],
-        allowed_mentions: allowedMentions(),
-        ...replyTo(dailyPost),
-      });
+      const message = await postMedia(
+        env,
+        `**${escapeMarkdown(player.username)}** checked in.`,
+        input.attachment,
+        input.note,
+        input.attachment ? [buttonRow([{ label: "Verify", custom_id: `vf:${outcome.checkinId}`, style: 3, emoji: "💪" }])] : [],
+        dailyPost
+      );
       // message_id is the message Verify edits, so it is always the one with the media.
       await setCheckinMessage(env, outcome.checkinId, message.id);
+      const posted = message.attachments?.[0]?.url;
+      if (input.attachment && posted) await attachProof(env, outcome.checkinId, input.attachment.key, posted, input.attachment.kind);
     } catch (error) {
       await logToDiscord(env, `Check-in media post failed: ${String(error)}`);
     }
@@ -674,14 +677,44 @@ export async function postCheckinLine(
   await refreshRollCall(env, day);
 }
 
-/** The lead line plus the video link and the quoted note — the same on every media post. */
+/**
+ * The channel post that carries a check-in's photo, video or note. The file
+ * is re-uploaded as a real Discord attachment, so it shows and plays the way
+ * a person's own upload does; if Discord refuses it (too big for the server),
+ * the post goes out with the note and a link instead. Returns the message.
+ */
+export async function postMedia(
+  env: Env,
+  lead: string,
+  attachment: CheckinInput["attachment"],
+  note: string | null,
+  components: unknown[],
+  dailyPost: string | null
+): Promise<{ id: string; attachments?: { url: string }[] }> {
+  const base = { components, allowed_mentions: allowedMentions(), ...replyTo(dailyPost) };
+  if (attachment?.file) {
+    try {
+      return await postMessageWithFile(env, { ...base, content: mediaLineContent(lead, attachment, note, false) }, attachment.file);
+    } catch (error) {
+      await logToDiscord(env, `Attachment upload refused, posting a link instead: ${String(error)}`);
+    }
+  }
+  return postMessage(env, {
+    ...base,
+    content: mediaLineContent(lead, attachment, note, true),
+    embeds: attachment?.kind === "image" ? [{ color: ACCENT, image: { url: attachment.url } }] : [],
+  });
+}
+
+/** The lead line, the quoted note, and — only when the video is not attached — its link. */
 export function mediaLineContent(
   lead: string,
   attachment: CheckinInput["attachment"],
-  note: string | null
+  note: string | null,
+  linkVideo: boolean
 ): string {
   let content = lead;
-  if (attachment?.kind === "video") content += `\n${attachment.url}`;
+  if (linkVideo && attachment?.kind === "video") content += `\n${attachment.url}`;
   if (note) content += `\n> ${escapeMarkdown(note).slice(0, 200)}`;
   return content;
 }
@@ -1029,7 +1062,7 @@ export async function verify(
   const checkin = await getCheckin(env, checkinId);
   if (!checkin) return reply("That check-in is gone.");
   if (checkin.player_id === user.id) return reply("You cannot verify your own.");
-  if (!checkin.attachment_r2_key) return reply("Nothing to verify — no photo or video on that one.");
+  if (!checkin.attachment_kind) return reply("Nothing to verify — no photo or video on that one.");
   if (now - checkin.created_at > VERIFY_WINDOW_HOURS * 60 * 60 * 1000) {
     return reply("That one is past verifying — the window is 72 hours.");
   }
