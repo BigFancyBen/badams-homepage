@@ -1,11 +1,13 @@
 import { ImageResponse } from "next/og";
+import { cropTo, type Focus } from "../../_lib/crop";
 import { readSignedPayload } from "../../_lib/signing";
 import { CARD_HEIGHT, CARD_WIDTH, THEME } from "../../_lib/theme";
 
 /**
- * `{ a, b }` are public image URLs, `n` is the matchup number, and `na`/`nb`
- * are the classifier's names for each dish. Names are optional so URLs signed
- * before they existed still render.
+ * `{ a, b }` are public image URLs, `n` is the matchup number, `na`/`nb`
+ * are the classifier's names for each dish and `fa`/`fb` its focal points,
+ * which the crop is centred on. Names and focal points are optional so URLs
+ * signed before they existed still render.
  */
 interface MatchupPayload {
   a: string;
@@ -13,6 +15,8 @@ interface MatchupPayload {
   n: number;
   na?: string;
   nb?: string;
+  fa?: Focus;
+  fb?: Focus;
   /** Retry counter. Only there to make a re-render a different URL. */
   r?: number;
 }
@@ -115,7 +119,11 @@ export async function GET(request: Request) {
     return new Response(result.error, { status: result.status });
   }
 
-  const { a, b, n, na, nb } = result.payload;
+  const { a, b, n, na, nb, fa, fb } = result.payload;
+  const [srcA, srcB] = await Promise.all([
+    cropTo(a, PLATE_WIDTH, IMAGE_HEIGHT, fa),
+    cropTo(b, PLATE_WIDTH, IMAGE_HEIGHT, fb),
+  ]);
 
   return new ImageResponse(
     (
@@ -148,8 +156,8 @@ export async function GET(request: Request) {
             backgroundColor: THEME.hairline,
           }}
         >
-          <Plate src={a} name={na} />
-          <Plate src={b} name={nb} />
+          <Plate src={srcA} name={na} />
+          <Plate src={srcB} name={nb} />
         </div>
       </div>
     ),

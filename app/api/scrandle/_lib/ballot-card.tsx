@@ -98,6 +98,11 @@ export function Tile({
           height: `${TILE_IMAGE_HEIGHT}px`,
         }}
       >
+        {/*
+          `src` arrives already cut to the tile's size — see crop.ts — so
+          `cover` here only does anything when the crop fell back to the
+          original photograph.
+        */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={src}

@@ -1,22 +1,25 @@
 import { ImageResponse } from "next/og";
 import { BallotHeader, Tile } from "../../_lib/ballot-card";
+import { cropTo, type Focus } from "../../_lib/crop";
 import { readSignedPayload } from "../../_lib/signing";
 import {
   BALLOT_WIDTH,
   GAP,
   THEME,
+  TILE_IMAGE_HEIGHT,
   ballotHeight,
   ballotRows,
 } from "../../_lib/theme";
 
 /**
  * The reveal. `items` arrives already in finishing order — `p` is the position
- * label, `d` the rounded rating movement, `b` the number of ballots cast.
+ * label, `d` the rounded rating movement, `f` the focal point the crop is
+ * centred on, `b` the number of ballots cast.
  */
 interface BallotResultPayload {
   n: number;
   b: number;
-  items: { u: string; t?: string; p: string; d: number }[];
+  items: { u: string; t?: string; p: string; d: number; f?: Focus }[];
   /** Retry counter. Only there to make a re-render a different URL. */
   r?: number;
 }
@@ -38,6 +41,16 @@ export async function GET(request: Request) {
 
   const { n, b, items } = result.payload;
   const rows = ballotRows(items);
+  // Tile widths come from the layout, so the crops are cut once it is known.
+  const sources = await Promise.all(
+    rows.map((row) =>
+      Promise.all(
+        row.map(({ item, width }) =>
+          cropTo(item.u, width, TILE_IMAGE_HEIGHT, item.f)
+        )
+      )
+    )
+  );
 
   return new ImageResponse(
     (
@@ -66,13 +79,13 @@ export async function GET(request: Request) {
               backgroundColor: THEME.hairline,
             }}
           >
-            {row.map(({ item, width, index }) => (
+            {row.map(({ item, width, index }, column) => (
               // Every photograph stays at full brightness — dimming four of
               // five to crown one would make most of the card unreadable, and
               // the winner is already the only one edged in green.
               <Tile
                 key={index}
-                src={item.u}
+                src={sources[rowIndex][column]}
                 width={width}
                 label={item.p}
                 labelColor={index === 0 ? THEME.win : THEME.muted}

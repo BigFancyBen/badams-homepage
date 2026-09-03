@@ -974,6 +974,37 @@ why not.
   only there for the kind: overwriting a category under an open matchup is a
   pair that no longer shares one, and overwriting a name is a photograph the
   channel has already seen renaming itself.
+- **Cards crop on the food, not the middle of the frame.** Every card cuts its
+  photographs to a wide tile, and the cut used to be the centre of the frame —
+  which on a tall phone photo of a plate at the end of a table is the table,
+  with the plate off the bottom. The renderer draws with satori, which accepts
+  `object-position` and then ignores it, so nothing about the layout could
+  move the crop.
+
+  So the classifier, which already looks at every photograph, also boxes what
+  the photo is *of* — the plate, the glass, the person, the dog, the whole
+  frame for a place — and the centre of that box is stored as a focal point
+  (`focus_x`/`focus_y`, fractions of the frame). The Worker puts it in the
+  signed payload beside the name, and the render endpoints cut the tile
+  themselves with sharp, centred on it, before satori sees the image. A point
+  is all a cover crop can use: the window is always the full width or the
+  full height, so the only decision is where along the other axis it sits.
+
+  It is one more field in the same vision call, not a second call, so a new
+  photograph costs nothing extra. Everything already in the catalog needs one
+  pass more, which the classifier treats as its third tier of pending work —
+  behind unlabelled photographs and behind missing kinds, since a dish with no
+  focal point is on the cards already, just cropped the old way. Until its
+  turn comes the render falls back to sharp's attention crop, which scores
+  regions on detail, saturation and skin: a fair guess at where the food is
+  and a better one than the middle. A box the model fails to draw becomes the
+  centre of the frame rather than a null, so the row leaves the queue instead
+  of coming back every tick on a call that succeeded. Hurry the backfill with
+  `/admin/classify?secret=…&limit=20` in a loop; it reports `remaining`.
+
+  Handing satori a tile-sized JPEG rather than a multi-megapixel original also
+  takes most of the rasterizing out of a render, which is where the seconds
+  went.
 - **The draw is a rotation.** Both halves of a pair come off the least-played
   end of the pool, in every category, so the whole catalog plays once before
   anything plays twice and then again before anything plays three times. Within

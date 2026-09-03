@@ -108,6 +108,13 @@ export interface Dish {
    */
   kind: string | null;
   name: string | null;
+  /**
+   * Where the subject sits in the frame, as fractions of the width and
+   * height — 0.5/0.5 is dead centre. The cards centre their crop on it. Null
+   * until the classifier's pass reaches it; see migration 0011.
+   */
+  focus_x: number | null;
+  focus_y: number | null;
 }
 
 export interface Matchup {

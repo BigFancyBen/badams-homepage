@@ -1,8 +1,13 @@
 import { ImageResponse } from "next/og";
+import { cropTo, type Focus } from "../../_lib/crop";
 import { readSignedPayload } from "../../_lib/signing";
 import { CARD_HEIGHT, CARD_WIDTH, THEME } from "../../_lib/theme";
 
-/** Vote counts `va`/`vb` and chef names `ca`/`cb` are revealed here for the first time. */
+/**
+ * Vote counts `va`/`vb` and chef names `ca`/`cb` are revealed here for the
+ * first time. `fa`/`fb` are the focal points the crop is centred on, optional
+ * like the names so older URLs still render.
+ */
 interface ResultPayload {
   a: string;
   b: string;
@@ -13,6 +18,8 @@ interface ResultPayload {
   n: number;
   na?: string;
   nb?: string;
+  fa?: Focus;
+  fb?: Focus;
   /** Retry counter. Only there to make a re-render a different URL. */
   r?: number;
 }
@@ -193,7 +200,11 @@ export async function GET(request: Request) {
     return new Response(result.error, { status: result.status });
   }
 
-  const { a, b, va, vb, ca, cb, n, na, nb } = result.payload;
+  const { a, b, va, vb, ca, cb, n, na, nb, fa, fb } = result.payload;
+  const [srcA, srcB] = await Promise.all([
+    cropTo(a, PLATE_WIDTH, IMAGE_HEIGHT, fa),
+    cropTo(b, PLATE_WIDTH, IMAGE_HEIGHT, fb),
+  ]);
   const total = va + vb;
   const shareA = total === 0 ? 0 : Math.round((va / total) * 100);
   const shareB = total === 0 ? 0 : 100 - shareA;
@@ -236,7 +247,7 @@ export async function GET(request: Request) {
           }}
         >
           <ResultPlate
-            src={a}
+            src={srcA}
             chef={ca}
             votes={va}
             share={shareA}
@@ -244,7 +255,7 @@ export async function GET(request: Request) {
             name={na}
           />
           <ResultPlate
-            src={b}
+            src={srcB}
             chef={cb}
             votes={vb}
             share={shareB}

@@ -29,6 +29,7 @@ import {
   ballotImageUrl,
   ballotResultImageUrl,
   cardKey,
+  dishFocus,
   dishUrl,
   renderCard,
 } from "./images";
@@ -671,6 +672,7 @@ function renderResultCard(
         t: entry.name ?? "",
         p: ordinal(index),
         d: Math.round(result.delta),
+        f: dishFocus(entry),
       },
     ];
   });
