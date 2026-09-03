@@ -14,6 +14,7 @@ import { getStores, getTown, ledgerOn, storesLine } from "./town.ts";
 import { buttonRow, type Env } from "./types.ts";
 import { summaryLines, type WeekSummary } from "./weekly.ts";
 import { raidLine } from "./raids.ts";
+import { championsGuildLine, questIntro, questLine } from "./quests.ts";
 import { openVotes } from "./votes.ts";
 
 /**
@@ -99,6 +100,11 @@ export async function composeDigest(env: Env, today: string): Promise<DigestPart
 
   const raid = await raidLine(env);
   if (raid) lines.push(raid);
+  // The quest of the week: introduced on Monday (below), a progress line the rest of the week.
+  if (thisWeek !== today) {
+    const quest = await questLine(env, today);
+    if (quest) lines.push(quest);
+  }
   const votes = await openVotes(env);
   if (votes.length > 0) {
     lines.push(
@@ -118,6 +124,10 @@ export async function composeDigest(env: Env, today: string): Promise<DigestPart
     }
     const beat = CAMPAIGN_EVENTS.find((event) => event.week === week);
     if (beat) lines.push(`📯 ${beat.post}`);
+    // The Champions' Guild is earned at 32 quest points, as in the game.
+    if (beat?.key === "champions_guild") lines.push(await championsGuildLine(env));
+    const intro = questIntro(env, today);
+    if (intro) lines.push(intro);
   }
 
   return { header, lines, imageUrl };

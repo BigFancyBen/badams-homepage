@@ -45,6 +45,7 @@ import {
 } from "./clues.ts";
 import {
   addXpStatement,
+  bankDepositStatement,
   markStep,
   checkinsOn,
   completeClue,
@@ -68,6 +69,8 @@ import {
 } from "./db.ts";
 import { escapeMarkdown } from "./discord.ts";
 import { eventLabel, pickQuiz, rollEvent, seededRng } from "./events.ts";
+import { gpShort, oneIn, rollDrops } from "./loot.ts";
+import { questHit } from "./quests.ts";
 import { actForWeek, addDays, campaignWeek, daysBetween, gameWeek } from "./schedule.ts";
 import {
   baseHaul,
@@ -121,13 +124,17 @@ export interface CheckinOutcome {
   essentials: string[];
   /** The line the day's thread sees. */
   publicLine: string;
+  /** Group news the channel itself should hear: a quest completed. */
+  channelLines: string[];
   levelUps: { skill: SkillKey; level: number; from: number }[];
   tierUp: string | null;
   quiz: { index: number } | null;
   hasLamp: boolean;
   hasClue: boolean;
-  /** What the check-in produced, as item keys with counts, for the loot card. */
-  loot: { k: string; c: number }[];
+  /** What the check-in produced, as item keys with counts, for the loot card; drops carry their gp value. */
+  loot: { k: string; c: number; v?: number }[];
+  /** The session's drops, in coins. */
+  lootTotal: number;
   xpGained: { k: string; x: number }[];
   task: string | null;
   /** The session, for the card: "23 hill giants · max hit 4 · 54% to hit". */
@@ -233,6 +240,15 @@ export async function performCheckin(
   const altar = ALTAR_MULTIPLIER[Math.min(ALTAR_MULTIPLIER.length - 1, Math.floor(effectiveLevel(buildings.get("chapel"))))] ?? 1;
   const prayerXp = monster.bones ? Math.floor(session.kills * monster.bones.xp * altar) : 0;
 
+  // The kills' drops, rolled against the monster's real table. The bones are
+  // buried for Prayer rather than banked, so they are left out here.
+  const drops = rollDrops(
+    monster.name,
+    session.kills,
+    seededRng(`${player.discord_id}:${day}:drops`),
+    (row) => row.item === monster.bones?.item
+  );
+
   const combatXpTotal = (session.xp.attack ?? 0) + (session.xp.strength ?? 0) + (session.xp.defence ?? 0);
   const hourUtc = new Date(now).getUTCHours();
   const checkinId = await insertCheckin(env, {
@@ -259,6 +275,7 @@ export async function performCheckin(
       weapon: session.weapon.key,
       armour: session.armour.key,
     }),
+    loot: JSON.stringify({ s: drops.stacks.map((stack) => [stack.key, stack.qty, stack.value]), t: drops.total }),
     hour_utc: hourUtc,
     created_at: now,
   });
@@ -274,15 +291,21 @@ export async function performCheckin(
     essentials.push(line);
   };
   const publicBits: string[] = [];
+  const channelLines: string[] = [];
   const statements: D1PreparedStatement[] = [];
-  const loot: { k: string; c: number }[] = [];
-  const addLoot = (key: string, count = 1) => {
+  const loot: { k: string; c: number; v?: number }[] = [];
+  const addLoot = (key: string, count = 1, value?: number) => {
     const existing = loot.find((item) => item.k === key);
-    if (existing) existing.c += count;
-    else loot.push({ k: key, c: count });
+    if (existing) {
+      existing.c += count;
+      if (value !== undefined) existing.v = (existing.v ?? 0) + value;
+    } else {
+      loot.push({ k: key, c: count, ...(value !== undefined ? { v: value } : {}) });
+    }
   };
   if (monster.bones) addLoot(itemKey(monster.bones.item), session.kills);
   for (const [resource, amount] of Object.entries(haul)) if ((amount ?? 0) > 0) addLoot(resource, amount ?? 0);
+  for (const stack of drops.stacks) addLoot(stack.key, stack.qty, stack.value);
 
   // ── XP ─────────────────────────────────────────────────────────
   const gains: Partial<Record<SkillKey, number>> = { ...session.xp };
@@ -305,6 +328,14 @@ export async function performCheckin(
     logEventStatement(env, player.discord_id, day, checkinId, "checkin", { ordinal, weight, gains, haul, monster: monster.name, kills: session.kills, damage: session.damage }, now)
   );
   await env.DB.batch(statements);
+  // The drops go to the bank, in batches of their own: a big table is many stacks.
+  for (let i = 0; i < drops.stacks.length; i += 40) {
+    await env.DB.batch(
+      drops.stacks
+        .slice(i, i + 40)
+        .map((stack) => bankDepositStatement(env, player.discord_id, stack.key, stack.qty, stack.value, day))
+    );
+  }
 
   // ── Slayer task ────────────────────────────────────────────────
   const progress = await progressTask(env, player, task, assignedNow, session.kills, levelsBefore, combatBefore, day, checkinId, now);
@@ -312,10 +343,25 @@ export async function performCheckin(
 
   receipt.push(`**Checked in.** ${ordinalWord(ordinal)} this week, ${weightWord(weight)}.`);
   receipt.push(sessionLine(session, monsterName));
+  if (drops.stacks.length > 0) {
+    const top = drops.stacks.slice(0, 3).map((stack) => `${stack.qty.toLocaleString("en-US")}× ${stack.item}`).join(", ");
+    receipt.push(
+      `💰 Loot worth ${gpShort(drops.total)}: ${top}${drops.stacks.length > 3 ? `, +${drops.stacks.length - 3} more` : ""} (\`/bank\`).`
+    );
+  }
   if (assignedNow || progress.completed) keep(`🗡️ ${progress.line}`);
   else receipt.push(`🗡️ ${progress.line}`);
   publicBits.push(`⚔️ ${session.kills} ${monsterName} slain${progress.completed ? "" : ` (${progress.task.kills}/${progress.task.kills_needed} on task)`}.`);
   if (progress.publicBit) publicBits.push(progress.publicBit);
+  // A drop worth shouting about: rare by the wiki's rate, or worth a lot.
+  for (const stack of drops.notable) {
+    publicBits.push(
+      `💎 **${escapeMarkdown(player.username)}** — **${stack.item}**${stack.qty > 1 ? ` ×${stack.qty}` : ""} from the ${monsterName} (${oneIn(stack.rate)}).`
+    );
+    if (await logEntry(env, player.discord_id, `drop:${stack.key}`, day)) {
+      publicBits.push(`📗 Notable drop logged: ${stack.item}.`);
+    }
+  }
 
   // ── Level-ups, the weapon, the tier ────────────────────────────
   const skillsAfter = await getSkills(env, player.discord_id);
@@ -680,6 +726,30 @@ export async function performCheckin(
     ]);
   }
 
+  // ── Quest of the week ──────────────────────────────────────────
+  // A supply, or a mini-fight, for the party's quest; a completion is
+  // channel news.
+  try {
+    const quest = await questHit(
+      env,
+      player,
+      levelsBefore,
+      player.combat_style,
+      { slayerHelmet: hasSlayerHelmet(player), glory: owned.has("clue:Amulet of glory (t)") },
+      checkinId,
+      input,
+      day,
+      now
+    );
+    for (const line of quest.lines) {
+      receipt.push(line);
+      publicBits.push(line);
+    }
+    channelLines.push(...quest.channelLines);
+  } catch {
+    // The quest is decoration on the check-in; the check-in stands.
+  }
+
   // ── Bingo ──────────────────────────────────────────────────────
   const bingo = bingoLines(await evaluateBingo(env, { ...player, last_active_day: day }, day, act, now), player.username);
   if (bingo.receipt) receipt.push(bingo.receipt);
@@ -718,12 +788,14 @@ export async function performCheckin(
     receipt,
     essentials,
     publicLine,
+    channelLines,
     levelUps,
     tierUp,
     quiz,
     hasLamp: gotLamp,
     hasClue,
     loot,
+    lootTotal: drops.total,
     xpGained,
     task: taskShort(progress.completed ? progress.next : progress.task),
     session: `${session.kills} ${monsterName} · max hit ${session.maxHit} · ${Math.round(session.hitChance * 100)}% to hit · ${session.weapon.name}`,
@@ -745,8 +817,9 @@ function logLine(name: string, count: number): string {
   return `📗 New log entry: ${name} (${count}/90).`;
 }
 
+/** The curated log's count; notable drops are counted separately. */
 async function logCountFor(env: Env, playerId: string): Promise<number> {
-  return (await logEntries(env, playerId)).length;
+  return (await logEntries(env, playerId)).filter((entry) => !entry.startsWith("drop:")).length;
 }
 
 function stepLabelFor(step: string): string {
@@ -802,6 +875,8 @@ export async function hubButtons(env: Env, player: Player, day: string): Promise
   buttons.push({ label: "Sheet", custom_id: `sheet:${day}`, emoji: "📋" });
   buttons.push({ label: "Town", custom_id: "town", emoji: "🏘️" });
   buttons.push({ label: "Log", custom_id: "log", emoji: "📗" });
+  buttons.push({ label: "Bank", custom_id: "bank", emoji: "💰" });
+  buttons.push({ label: "Quest", custom_id: "quest", emoji: "🗺️" });
   buttons.push({ label: "Task", custom_id: "task", emoji: "🗡️" });
   buttons.push({ label: "Bingo", custom_id: "bingo", emoji: "🎯" });
   buttons.push({ label: "Shop", custom_id: "shop", emoji: "🛒" });

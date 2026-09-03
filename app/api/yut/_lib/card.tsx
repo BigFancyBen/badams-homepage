@@ -237,20 +237,56 @@ export function LootCell({
   );
 }
 
-/** Seven slots to a row, like the report's loot block. */
-export function LootGrid({ items }: { items: LootItem[] }) {
+/** The last slot when the drops did not all fit: "+12". */
+function MoreCell({ count }: { count: number }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: LOOT_CELL_W,
+        height: LOOT_CELL_H,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: LOOT_ICON,
+          height: LOOT_ICON,
+          backgroundColor: "rgba(74,74,74,0.6)",
+          border: "2px solid #6b6b6b",
+          fontFamily: FONT.bold,
+          fontSize: 22,
+          lineHeight: 1,
+          color: RS.yellow,
+          textShadow: RS.shadow,
+        }}
+      >
+        {`+${count}`}
+      </div>
+    </div>
+  );
+}
+
+/** Seven slots to a row, like the report's loot block; `more` adds a "+N" slot at the end. */
+export function LootGrid({ items, more = 0 }: { items: LootItem[]; more?: number }) {
+  const cells = items.length + (more > 0 ? 1 : 0);
   return (
     <div
       style={{
         display: "flex",
         flexWrap: "wrap",
         width: LOOT_CELL_W * LOOT_COLS,
-        height: gridRows(items.length, LOOT_COLS) * LOOT_CELL_H,
+        height: gridRows(cells, LOOT_COLS) * LOOT_CELL_H,
       }}
     >
       {items.map((item, i) => (
         <LootCell key={`${item.k}-${i}`} item={item} />
       ))}
+      {more > 0 ? <MoreCell count={more} /> : null}
     </div>
   );
 }

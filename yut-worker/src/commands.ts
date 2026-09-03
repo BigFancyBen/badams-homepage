@@ -28,6 +28,8 @@ import {
 import { ACCENT, allowedMentions, editInteractionReply, escapeMarkdown, postMessage, replyTo } from "./discord.ts";
 import { getState } from "./db.ts";
 import { attachmentKind, mirrorAttachment } from "./images.ts";
+import { bankView } from "./bank.ts";
+import { questLog, questView } from "./quests.ts";
 import {
   deferred,
   finishLater,
@@ -144,6 +146,12 @@ export async function runCommand(
       return relay(env, ctx, interaction, user, "clue", now);
     case "log":
       return relay(env, ctx, interaction, user, "log", now);
+    case "bank":
+      return playerAction(env, user, day, (p) => bankView(env, p));
+    case "quest": {
+      const sub = subcommand(interaction);
+      return playerAction(env, user, day, () => (sub === "log" ? questLog(env) : questView(env, day)));
+    }
     case "town":
       return playerAction(env, user, day, (p) => townView(env, p, day, now));
     case "recruit": {

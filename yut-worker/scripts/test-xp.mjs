@@ -40,6 +40,11 @@ import { streakMultiplier } from "../src/slayer.ts";
 import { addDays, campaignWeek, dailyHourDue, daysBetween, gameDay, gameWeek, weekdayOf } from "../src/schedule.ts";
 import { threadName } from "../src/digest.ts";
 import { goingStale, reminderMessage } from "../src/reminders.ts";
+import { dropTable, gpShort, isNotable, oneIn, rollDrops } from "../src/loot.ts";
+import { currentEnemy, enemyPools, questFor, questKey, questLampXp, suppliesNeeded } from "../src/quests.ts";
+import { questFight } from "../src/combat.ts";
+import { QUEST_CALENDAR, QUEST_FIGHT_ATTACKS } from "../src/config.ts";
+import { PROFILES, run as runPace } from "./lib/pace.mjs";
 
 let failures = 0;
 function check(name, condition, detail) {
@@ -214,6 +219,82 @@ const stale = goingStale(roster, "2026-09-16");
 check("goingStale picks exactly the player on their third day", stale.length === 1 && stale[0].discord_id === "edge", stale);
 const shame = reminderMessage({ nudges: [], goingStale: stale });
 check("the stale warning @mentions by id and allows only that mention", shame.content.includes("<@edge>") && /Tomorrow makes four/.test(shame.content) && shame.allowed_mentions.users.join() === "edge", shame);
+
+// ── Drops ──────────────────────────────────────────────────────────
+const ankou = dropTable("Ankou");
+check("Ankou has a drop table with an Always row and a rare-drop-table row", ankou.length > 30 && ankou.some((r) => r.p === 1) && ankou.some((r) => r.rdt), ankou.length);
+const monsterList = Object.values(MONSTERS);
+const missing = monsterList.filter((m) => dropTable(m.name).length === 0).map((m) => m.name);
+// Ghost and Giant spider genuinely drop nothing the game keeps (their wiki rows are all Slayer-only items).
+check("every Slayer monster has a drop table, bar the two that drop nothing", missing.every((name) => ["Ghost", "Giant spider"].includes(name)), missing);
+const badRows = monsterList.flatMap((m) => dropTable(m.name)).filter((r) => !(r.p > 0 && r.p <= 1) || r.low > r.high || r.low < 0 || r.rolls < 1 || !/^[a-z0-9_+]+$/.test(r.key));
+check("every row has a sane rate, quantity, roll count and key", badRows.length === 0, badRows.slice(0, 5));
+const many = rollDrops("Ankou", 100_000, seededRng("drops-test"));
+const deathRune = many.stacks.find((s) => s.key === "death_rune");
+const deathRow = ankou.find((r) => r.key === "death_rune");
+const expected = deathRow.p * deathRow.rolls * 100_000 * (deathRow.low + deathRow.high) / 2;
+check("100k Ankou kills pay Death runes at the wiki's rate (±2%)", deathRune && Math.abs(deathRune.qty - expected) / expected < 0.02, { got: deathRune?.qty, expected });
+const bones = many.stacks.find((s) => s.key === "bones");
+check("an Always drop lands exactly once per kill", bones?.qty === 100_000, bones);
+check("stacks are sorted richest first and the total is their sum", many.stacks.every((s, i) => i === 0 || many.stacks[i - 1].value >= s.value) && Math.abs(many.total - many.stacks.reduce((sum, s) => sum + s.value, 0)) < 1e-6);
+check("no stack is empty or negative", many.stacks.every((s) => s.qty > 0 && s.value >= 0));
+const once = rollDrops("Ankou", 60, seededRng("p1:2026-09-16:drops"));
+const twice = rollDrops("Ankou", 60, seededRng("p1:2026-09-16:drops"));
+const other = rollDrops("Ankou", 60, seededRng("p1:2026-09-17:drops"));
+check("the same seed rolls the same drops; a different day differs", JSON.stringify(once) === JSON.stringify(twice) && JSON.stringify(once) !== JSON.stringify(other));
+const excluded = rollDrops("Ankou", 60, seededRng("x"), (r) => r.key === "bones");
+check("an excluded row never lands", !excluded.stacks.some((s) => s.key === "bones"));
+check("Dragon spear is notable, Death rune is not", isNotable(ankou.find((r) => r.key === "dragon_spear")) && !isNotable(deathRow));
+check("gpShort and oneIn read like the game", gpShort(312) === "312 gp" && gpShort(48_212) === "48k gp" && gpShort(4_821) === "4.8k gp" && gpShort(1_234_567) === "1.2m gp" && oneIn(1 / 273066.67) === "1/273,067");
+
+// ── Quest of the week ──────────────────────────────────────────────
+const weeks = QUEST_CALENDAR.map((q) => q.week);
+check("the calendar has 51 unique weeks inside the year", weeks.length === 51 && new Set(weeks).size === 51 && weeks.every((w) => w >= 1 && w <= 52));
+const noData = QUEST_CALENDAR.filter((q) => !questFor(q.week));
+check("every calendar quest has wiki data", noData.length === 0, noData);
+check("every quest pays at least one quest point", QUEST_CALENDAR.every((q) => questFor(q.week).data.qp >= 1));
+const qpThrough17 = QUEST_CALENDAR.filter((q) => q.week <= 17).reduce((sum, q) => sum + questFor(q.week).data.qp, 0);
+check("32 quest points before the Champions' Guild beat at week 18, as in the game", qpThrough17 >= 32, qpThrough17);
+check("week 8 is The Restless Ghost and week 50 is Dragon Slayer I", questFor(8).name === "The Restless Ghost" && questFor(50).name === "Dragon Slayer I");
+const cooks = questFor(1).data;
+check("a quest with no enemies has no fight step", cooks.enemies.length === 0 && enemyPools(cooks, 5).length === 0 && currentEnemy(cooks, 5, 0) === null);
+const ds = questFor(50).data;
+const pools = enemyPools(ds, 5);
+check("pools are hitpoints × count, in order, whatever the roster", pools[pools.length - 1] === ds.enemies[ds.enemies.length - 1].hitpoints * ds.enemies[ds.enemies.length - 1].count && JSON.stringify(enemyPools(ds, 1)) === JSON.stringify(pools) && currentEnemy(ds, 5, 0).enemy.name === ds.enemies[0].name);
+check("damage carries into the next enemy", currentEnemy(ds, 5, pools[0] + 3).index === 1 && currentEnemy(ds, 5, pools[0] + 3).left === pools[1] - 3);
+check("supplies needed never exceed half the roster", suppliesNeeded(ds, 4) === Math.min(ds.items, 2) && suppliesNeeded(cooks, 10) === Math.min(cooks.items, 5));
+check("quest lamps are antique lamps by difficulty", questLampXp(cooks) === ANTIQUE_LAMP.easy && questLampXp(questFor(40).data) === ANTIQUE_LAMP.hard);
+check("questKey slugs the name", questKey("Cook's Assistant") === "quest:cook_s_assistant" && questKey("Romeo & Juliet") === "quest:romeo_juliet");
+const low = { hitpoints: 10, attack: 1, strength: 1, defence: 1, prayer: 1, slayer: 1, woodcutting: 1, mining: 1, fishing: 1 };
+const mid = { ...low, attack: 40, strength: 40, defence: 40, hitpoints: 40 };
+const elvarg = ds.enemies[ds.enemies.length - 1];
+const f1 = questFight(low, "controlled", { slayerHelmet: false, glory: false }, elvarg, QUEST_FIGHT_ATTACKS);
+const f2 = questFight(mid, "controlled", { slayerHelmet: false, glory: false }, elvarg, QUEST_FIGHT_ATTACKS);
+check("a mini-fight is deterministic and grows with levels", f1 === questFight(low, "controlled", { slayerHelmet: false, glory: false }, elvarg, QUEST_FIGHT_ATTACKS) && f2 > f1, { f1, f2 });
+// The pace check: a party of 2/week players must finish the quest inside their two check-ins each —
+// gather takes at most ceil(R/2) of them, so the fights must fit in the other 1.5R. Every quest
+// must fall to a party of four; the Grandmasters may want six.
+const paceD = runPace(PROFILES.find((p) => p.name === "D 2/wk"));
+const fightsFor = (entry) => {
+  const { data } = questFor(entry.week);
+  const lv = paceD.weekly[entry.week];
+  let fights = 0;
+  for (let i = 0; i < data.enemies.length; i++) {
+    const per = Math.max(1, questFight(lv, "controlled", { slayerHelmet: false, glory: false }, data.enemies[i], QUEST_FIGHT_ATTACKS));
+    fights += enemyPools(data, 1)[i] / per;
+  }
+  return fights;
+};
+const tooHardForFour = QUEST_CALENDAR.filter((q) => questFor(q.week).data.difficulty !== "Grandmaster" && fightsFor(q) > 1.5 * 4).map((q) => `${q.quest} (${fightsFor(q).toFixed(1)})`);
+const tooHardForSix = QUEST_CALENDAR.filter((q) => fightsFor(q) > 1.5 * 6).map((q) => `${q.quest} (${fightsFor(q).toFixed(1)})`);
+const hardest = QUEST_CALENDAR.map((q) => ({ q: q.quest, f: fightsFor(q) })).sort((a, b) => b.f - a.f)[0];
+console.log(`      hardest quest for a 2/wk party: ${hardest.q}, ${hardest.f.toFixed(1)} fights`);
+check("every non-Grandmaster quest falls to a 2/week party of four", tooHardForFour.length === 0, tooHardForFour);
+check("every quest, Grandmasters included, falls to a 2/week party of six", tooHardForSix.length === 0, tooHardForSix);
+// The two-a-week promise with the quest lamps included: Dragon by the finale, not long before it.
+const dragonWeek = Object.entries(paceD.weekly).find(([, lv]) => lv.defence >= 60)?.[0];
+console.log(`      pace: 2/wk reaches Defence 60 at week ${dragonWeek ?? "never"} (final def ${paceD.final.defence}, att ${paceD.final.attack}); 1/wk final def ${runPace(PROFILES.find((p) => p.name === "E 1/wk")).final.defence}`);
+check("two a week reaches Dragon by the finale with quest lamps, and not before week 40", paceD.final.defence >= 60 && Number(dragonWeek ?? 99) >= 40, { dragonWeek, final: paceD.final });
 
 console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) failed.`);
 process.exit(failures === 0 ? 0 : 1);

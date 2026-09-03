@@ -80,6 +80,8 @@ export interface Checkin {
   delivered: string | null;
   /** JSON: the session (monster, kills, damage, maxHit, hitChance, attacks, weapon, armour). */
   session: string | null;
+  /** JSON: the session's drops, {"s": [[key, qty, value]], "t": total}. */
+  loot: string | null;
   verified_count: number;
   verified_at: number | null;
   message_id: string | null;

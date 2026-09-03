@@ -38,6 +38,7 @@ import { founding } from "./town.ts";
 import { drawRelics, getRelics } from "./relics.ts";
 import { openBuildVote, openRelicVote } from "./votes.ts";
 import { proposeRaid } from "./raids.ts";
+import { closeQuestWeek } from "./quests.ts";
 import { TREASURE_SEEKER_MULTIPLIER } from "./config.ts";
 
 /**
@@ -55,6 +56,8 @@ export interface WeekSummary {
   graduated: string[];
   standingsUrl: string | null;
   founding: string | null;
+  /** The closed week's quest, settled. */
+  quest?: string | null;
 }
 
 export async function resolveWeekFor(
@@ -253,6 +256,13 @@ export async function resolveWeekFor(
     }
   }
 
+  // The closed week's quest: done, or left where the party stopped.
+  try {
+    summary.quest = await closeQuestWeek(env, closedWeek);
+  } catch {
+    summary.quest = null;
+  }
+
   await setState(env, `week_summary:${closedWeek}`, JSON.stringify(summary));
   return summary;
 }
@@ -287,6 +297,7 @@ export function summaryLines(summary: WeekSummary): string[] {
   if (summary.ringsEarned.length > 0) lines.push(`Rings earned: ${summary.ringsEarned.map(escapeMarkdown).join(", ")}.`);
   if (summary.graduated.length > 0) lines.push(`🎓 Graduated: ${summary.graduated.map(escapeMarkdown).join(", ")}.`);
   if (summary.founding) lines.push(`🏛️ ${summary.founding}`);
+  if (summary.quest) lines.push(summary.quest);
   return lines;
 }
 

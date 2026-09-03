@@ -79,9 +79,12 @@ export const PLAYER_ATTACK_SPEED = 4;
  * over half an hour). Damage taken costs time out of it — three ticks per lobster eaten,
  * and a bank trip when the inventory runs dry — which is what gives Defence
  * and armour their job. Tuned so two sessions a week, every week, reach
- * Dragon (60 Attack and Defence) by the finale.
+ * Dragon (60 Attack and Defence) by the finale — with the Founding lamps and
+ * the weekly quest lamps counted (scripts/calibrate.mjs: 2/wk Defence 60 in
+ * week 45, 5/wk in week 35, 1/wk ends in Adamant). It was 800 before the
+ * quests' lamps existed.
  */
-export const SESSION_ATTACKS = 800;
+export const SESSION_ATTACKS = 600;
 /** A lobster heals 12 and takes three ticks to eat; an inventory carries 27 with a weapon and no shield swap. */
 export const FOOD_HEAL = 12;
 export const EAT_TICKS = 3;
@@ -777,3 +780,84 @@ export const SLAYER_XP_COST = 100;
 export const SLAYER_XP_BOUGHT = 10000;
 /** The Slayer helmet (Malevolent masquerade), 400 points. */
 export const SLAYER_HELMET_COST = 400;
+
+// ── Drops ─────────────────────────────────────────────────────────
+// Real drop tables from the wiki (config/drops.json), rolled once per kill.
+// A notable drop is announced in the thread and logged. The expanded tables
+// carry dozens of rows between 1/128 and 1/1,000 (herbs, gems, seeds), which
+// at 1/128 came to a notable drop every other check-in in the year simulation;
+// 1/1,024 keeps it to the rare drop table and the real uniques.
+export const NOTABLE_RARITY_DENOMINATOR = 1024;  // a drop at 1/1,024 or rarer
+export const NOTABLE_VALUE = 50_000;             // ...or one worth this much gp
+export const LOOT_CARD_CELLS = 13;               // plus one "+N more" cell = two rows of seven
+export const BANK_VIEW_ROWS = 15;
+/** The game's reading of the wiki's named rarity bands (only a handful of rows use them). */
+export const NAMED_RARITY: Record<string, number> = { Common: 1 / 16, Uncommon: 1 / 64, Rare: 1 / 256, "Very rare": 1 / 2048 };
+
+// ── Quest of the week ─────────────────────────────────────────────
+/** One quest a week for 51 weeks, easiest first; week 52 has none. Names are wiki page names. */
+export const QUEST_CALENDAR: { week: number; quest: string }[] = [
+  { week: 1, quest: "Cook's Assistant" },
+  { week: 2, quest: "Sheep Shearer" },
+  { week: 3, quest: "Rune Mysteries" },
+  { week: 4, quest: "Imp Catcher" },
+  { week: 5, quest: "Witch's Potion" },
+  { week: 6, quest: "Doric's Quest" },
+  { week: 7, quest: "Ernest the Chicken" },
+  { week: 8, quest: "The Restless Ghost" },
+  { week: 9, quest: "Goblin Diplomacy" },
+  { week: 10, quest: "Pirate's Treasure" },
+  { week: 11, quest: "Prince Ali Rescue" },
+  { week: 12, quest: "Black Knights' Fortress" },
+  { week: 13, quest: "The Knight's Sword" },
+  { week: 14, quest: "Shield of Arrav" },
+  { week: 15, quest: "Vampyre Slayer" },
+  { week: 16, quest: "Demon Slayer" },
+  { week: 17, quest: "Romeo & Juliet" },
+  { week: 18, quest: "Druidic Ritual" },
+  { week: 19, quest: "Witch's House" },
+  { week: 20, quest: "Fishing Contest" },
+  { week: 21, quest: "Priest in Peril" },
+  { week: 22, quest: "Nature Spirit" },
+  { week: 23, quest: "Waterfall Quest" },
+  { week: 24, quest: "Tree Gnome Village" },
+  { week: 25, quest: "Fight Arena" },
+  { week: 26, quest: "Lost City" },
+  { week: 27, quest: "Plague City" },
+  { week: 28, quest: "Biohazard" },
+  { week: 29, quest: "Death Plateau" },
+  { week: 30, quest: "Troll Stronghold" },
+  { week: 31, quest: "Merlin's Crystal" },
+  { week: 32, quest: "Holy Grail" },
+  { week: 33, quest: "Animal Magnetism" },
+  { week: 34, quest: "The Grand Tree" },
+  { week: 35, quest: "Horror from the Deep" },
+  { week: 36, quest: "The Fremennik Trials" },
+  { week: 37, quest: "Monkey Madness I" },
+  { week: 38, quest: "Underground Pass" },
+  { week: 39, quest: "Regicide" },
+  { week: 40, quest: "Desert Treasure I" },
+  { week: 41, quest: "Legends' Quest" },
+  { week: 42, quest: "Heroes' Quest" },
+  { week: 43, quest: "Recipe for Disaster" },
+  { week: 44, quest: "Lunar Diplomacy" },
+  { week: 45, quest: "Dream Mentor" },
+  { week: 46, quest: "Grim Tales" },
+  { week: 47, quest: "Swan Song" },
+  { week: 48, quest: "Monkey Madness II" },
+  { week: 49, quest: "Song of the Elves" },
+  { week: 50, quest: "Dragon Slayer I" },
+  { week: 51, quest: "Dragon Slayer II" },
+];
+/**
+ * A quest mini-fight per check-in: three quarters of a session's swings
+ * against the current enemy's real stats. Each enemy's pool is its hitpoints × how many the quest
+ * kills, shared by the whole party. The pace check in test-xp.mjs pins this:
+ * every quest but the Grandmasters must fall to a party of four at two a
+ * week; the Grandmasters (Monkey Madness II, Song of the Elves, Dragon Slayer
+ * II) want six.
+ */
+export const QUEST_FIGHT_ATTACKS = 450;
+export const QUEST_PROOF_SUPPLIES = 2;       // a check-in with a note or photo carries two supplies
+export const QUEST_LAMP: Record<string, number> = { Novice: ANTIQUE_LAMP.easy, Intermediate: ANTIQUE_LAMP.medium, Experienced: ANTIQUE_LAMP.hard, Master: ANTIQUE_LAMP.hard, Grandmaster: ANTIQUE_LAMP.hard, Special: ANTIQUE_LAMP.hard };
+export const CHAMPIONS_GUILD_QP = 32;

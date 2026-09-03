@@ -339,6 +339,23 @@ const alicePost = mockLog().find((e) => e.id === aliceRow?.message_id);
 check("message_id points at the proof post", Boolean(alicePost) && alicePost.channel === CHANNEL && /added proof/.test(alicePost.body), { aliceRow, alicePost });
 const standings = await command("standings", [], bob);
 check("/standings lists the roster", /alice|bob/.test(content(standings)), standings);
+// The kills' drops went to the bank and onto the check-in row. (A Turael task can be ghosts or
+// spiders, which drop nothing the game keeps, so look across this run's players, not one.)
+const runBank = await sql(`SELECT COUNT(*) AS n, COALESCE(SUM(value), 0) AS v, MIN(qty) AS minq FROM bank WHERE player_id LIKE '%_${stamp}'`);
+check("the sessions' drops are banked", (runBank?.[0]?.n ?? 0) > 0 && runBank[0].v > 0 && runBank[0].minq > 0, runBank);
+const bobLoot = (await sql(`SELECT loot FROM checkins WHERE player_id = '${bob.user.id}'`))[0];
+check("the check-in row keeps its loot", /"s":\[/.test(bobLoot?.loot ?? "") && /"t":/.test(bobLoot?.loot ?? ""), bobLoot);
+const richest = (await sql(`SELECT player_id FROM bank WHERE player_id LIKE '%_${stamp}' ORDER BY value DESC LIMIT 1`))[0];
+const richName = richest ? (await sql(`SELECT username FROM players WHERE discord_id = '${richest.player_id}'`))[0]?.username : null;
+const bank = await command("bank", [], richest ? { user: { id: richest.player_id, username: richName ?? "rich" } } : bob);
+check("/bank shows the stacks and the total", /bank\*\* — worth/.test(content(bank)) && /×/.test(content(bank)) && /notable drop/.test(content(bank)), bank);
+const emptyBank = await command("bank", [], frank);
+check("/bank on an empty bank says so", /worth 0 gp/.test(content(emptyBank)) && /Empty/.test(content(emptyBank)), emptyBank);
+// The quest of the week answers whatever the calendar says for today (before the campaign starts, that is "no quest").
+const questStatus = await command("quest", [{ name: "status", type: 1 }], bob);
+check("/quest status answers", /No quest this week|📜 \*\*/.test(content(questStatus)), questStatus);
+const questLogReply = await command("quest", [{ name: "log", type: 1 }], bob);
+check("/quest log answers with the quest points", /Quest log\*\* — \d+ quest point/.test(content(questLogReply)), questLogReply);
 
 // 18. Interactions from inside the day's thread are served; a thread of another channel is not.
 const fromThread = await post({ ...base(), channel_id: threadId, channel: { id: threadId, type: 11, parent_id: CHANNEL }, type: 3, data: { custom_id: "lamp" }, member: bob });

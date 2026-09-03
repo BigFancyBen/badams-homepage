@@ -32,7 +32,7 @@ export async function composeMonthlyLog(env: Env, today: string) {
     .then((r) => r.results)
     .catch(() => [] as { status: string; n: number }[]);
   const logs = await env.DB.prepare(
-    "SELECT p.username AS username, COUNT(*) AS n FROM collection_log c JOIN players p ON p.discord_id = c.player_id GROUP BY c.player_id ORDER BY n DESC LIMIT 3"
+    "SELECT p.username AS username, COUNT(*) AS n FROM collection_log c JOIN players p ON p.discord_id = c.player_id WHERE c.entry_key NOT LIKE 'drop:%' GROUP BY c.player_id ORDER BY n DESC LIMIT 3"
   )
     .all<{ username: string; n: number }>()
     .then((r) => r.results)

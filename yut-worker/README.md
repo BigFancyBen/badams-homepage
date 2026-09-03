@@ -45,7 +45,10 @@ src/
   commands.ts     slash commands.
   register.ts     the command list Discord is told about.
   checkins.ts     the check-in transaction: the session, the haul, and everything a check-in can produce.
-  combat.ts       Old School's combat as arithmetic: combat level, max hit, accuracy, the session, masters and assignments — pure.
+  loot.ts         the kills' drops, rolled per kill against config/drops.json — pure. bank.ts /bank.
+  quests.ts       the Quest of the Week: the calendar's quest, supplies, mini-fights, completion, /quest.
+  reminders.ts    the evening reminders and the going-stale @mention.
+  combat.ts       Old School's combat as arithmetic: combat level, max hit, accuracy, the session, the quest mini-fight, masters and assignments — pure.
   events.ts       random events (seeded on player + day).
   clues.ts        clue scrolls.
   slayer.ts       Slayer tasks: a master by combat level, kills from the session, points and streaks.
@@ -58,10 +61,12 @@ src/
   votes.ts        group votes (build, relic, raid). relics.ts the relics. raids.ts raid weeks.
   actions.ts      the town buttons and vote handlers. bingo.ts the grids. shop.ts the shop.
   db.ts           every D1 query. discord.ts the REST client. roles.ts the opt-in ping role.
-migrations/       0001 the game, 0002 the town, 0003 votes and raids, 0004 bingo and shop, 0005 sessions and answers. One number per file, forever.
-scripts/          the harness (below), plus fetch-osrs.mjs (the wiki pull) and calibrate.mjs (the pace).
+migrations/       0001 the game, 0002 the town, 0003 votes and raids, 0004 bingo and shop, 0005 sessions and answers, 0006 the bank, 0007 quests. One number per file, forever.
+scripts/          the harness (below), plus fetch-osrs.mjs (the wiki pull: --osrs, --drops, --quests), export-icons.mjs (item sprites from the prog-to-img-endpoint database into the Next app) and calibrate.mjs (the pace).
 config/choices.json  option lists shared by the runtime and the registration script.
-config/osrs.json     the wiki's numbers: masters, assignments, monsters, scimitars, armour sets. Regenerate with `node scripts/fetch-osrs.mjs`.
+config/osrs.json     the wiki's numbers: masters, assignments, monsters, scimitars, armour sets. Regenerate with `npm run fetch:osrs -- --osrs`.
+config/drops.json    every Slayer monster's real drop table (herb, seed, gem and rare-drop sub-tables expanded) with GE values. `npm run fetch:osrs -- --drops`, then `npm run export:icons` for any new sprites.
+config/quests.json   the Quest of the Week calendar's data: difficulty, quest points, enemies with real stats, item counts, blurbs. `npm run fetch:osrs -- --quests`.
 ```
 
 ## Setup
@@ -209,6 +214,35 @@ with a synthetic clock (`daily=1`, `post=1`, `lastcall=1` force a phase),
   @mentions anyone whose last check-in was three days ago, because tomorrow
   is day four and stale. Nothing at all is posted when nobody qualifies. It
   is deleted at the next rollover.
+- **Drops are the wiki's.** Every kill of a session rolls the monster's real
+  drop table from `config/drops.json` — herb, seed, gem and rare-drop
+  sub-tables included — with a seeded RNG, so a retried check-in banks the
+  same loot. Each row is rolled independently at its own rate (the game's
+  main table is one exclusive roll per kill, so the expected rates match the
+  wiki exactly and only the variance differs). Stacks go to the player's
+  `bank` at their GE value; `/bank` lists them. Nothing reaches the town
+  economy; bones are buried for Prayer, not banked. A drop at 1/1,024 or
+  rarer, or worth 50k, is announced in the thread and logged as
+  `drop:<item>`, counted apart from the curated 90-entry log.
+- **A quest a week, cooperative, from the game's own book.** `QUEST_CALENDAR`
+  in config.ts names 51 Old School quests — the free-to-play novice quests
+  through Act 1, 37 quest points before the Champions' Guild beat at week 18
+  (the game asks 32), members quests rising by act, Dragon Slayer I at the
+  Elvarg beat, Dragon Slayer II the week after — and `config/quests.json`
+  holds the wiki's data for each: quest points, the enemies to defeat with
+  their real stats, the items list. The week's first check-in starts the
+  quest; every check-in brings a supply (a note or a photo brings two) until
+  the party has `min(items, ceil(roster / 2))`; then every check-in is a
+  mini-fight of `QUEST_FIGHT_ATTACKS` swings against the current enemy, in
+  the quest's order, each enemy's pool its hitpoints × count. The check-in
+  that empties the last pool completes it: the quest points go to the group
+  (`/quest log`), and everyone who checked in that week gets an antique lamp
+  by difficulty (easy for Novice, medium for Intermediate, hard above) as a
+  pending claim, plus a `quest:` log entry. Unfinished on Monday is noted
+  and costs nothing. The pace check in test-xp.mjs keeps every quest inside
+  two check-ins a head for a party of four (six for the Grandmasters), and
+  `SESSION_ATTACKS` came down from 800 to 600 so two a week still reaches
+  Dragon near the finale with the quest lamps counted.
 - **Slayer tasks are the game's.** Every player always holds a task from the
   highest master their combat level earns (Turael, Mazchna 20, Vannaka 40,
   Chaeldar 70, Nieve 85, Duradel 100 and 50 Slayer), drawn from that

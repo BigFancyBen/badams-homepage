@@ -100,7 +100,9 @@ import {
   type Line,
 } from "./actions.ts";
 import { getRelics } from "./relics.ts";
-import { ACTS, ACT_WEEKS, TREASURE_SEEKER_MULTIPLIER } from "./config.ts";
+import { ACTS, ACT_WEEKS, LOOT_CARD_CELLS, TREASURE_SEEKER_MULTIPLIER } from "./config.ts";
+import { bankView } from "./bank.ts";
+import { questView } from "./quests.ts";
 import { bingoLines, bingoView, evaluateBingo } from "./bingo.ts";
 import { shopMenu, shopPress } from "./shop.ts";
 import { actForWeek, campaignWeek } from "./schedule.ts";
@@ -412,6 +414,10 @@ async function route(
         : playerAction(env, user, day, async (p) => shopMenu(p));
     case "log":
       return logReply(env, user, day);
+    case "bank":
+      return playerAction(env, user, day, (p) => bankView(env, p));
+    case "quest":
+      return playerAction(env, user, day, () => questView(env, day));
     case "vf":
       return verify(env, ctx, user, Number(a), day, now);
     case "quiz":
@@ -585,7 +591,13 @@ export async function postCheckinLine(
   try {
     const embeds: unknown[] = [];
 
-    // The loot card: what the check-in produced, as OSRS item icons.
+    // The loot card: what the check-in produced, as OSRS item icons. The
+    // game's own cells (bones, the haul, a lamp, a clue) come first; the
+    // drops follow richest first, and a big table ends in a "+N" cell.
+    const manifest = outcome.loot.filter((item) => item.v === undefined);
+    const stacks = outcome.loot.filter((item) => item.v !== undefined).sort((a, b) => (b.v ?? 0) - (a.v ?? 0));
+    const shown = [...manifest, ...stacks.slice(0, LOOT_CARD_CELLS)].map(({ k, c }) => ({ k, c }));
+    const more = Math.max(0, stacks.length - LOOT_CARD_CELLS);
     const report = await renderCard(env, `reports/${outcome.checkinId}.png`, (attempt) =>
       reportImageUrl(
         env,
@@ -593,7 +605,9 @@ export async function postCheckinLine(
         {
           n: player.username,
           t: `${ordinalWordFor(outcome.ordinal)} check-in this week - ${weightWordFor(outcome.weight)}`,
-          loot: outcome.loot,
+          loot: shown,
+          ...(more > 0 ? { m: more } : {}),
+          ...(outcome.lootTotal > 0 ? { v: Math.round(outcome.lootTotal) } : {}),
           xp: outcome.xpGained,
           ...(outcome.levelUps.length > 0
             ? { lv: outcome.levelUps.map((up) => ({ k: up.skill, l: up.level, f: up.from })) }
@@ -625,6 +639,19 @@ export async function postCheckinLine(
     });
   } catch (error) {
     await logToDiscord(env, `Check-in line failed: ${String(error)}`);
+  }
+
+  // Group news — a quest completed — is the one thing a check-in says in the channel itself.
+  if (outcome.channelLines.length > 0) {
+    try {
+      await postMessage(env, {
+        content: outcome.channelLines.join("\n"),
+        allowed_mentions: allowedMentions(),
+        ...replyTo(dailyPost),
+      });
+    } catch (error) {
+      await logToDiscord(env, `Check-in channel news failed: ${String(error)}`);
+    }
   }
 
   if (input.attachment || input.note) {
@@ -975,8 +1002,11 @@ async function logReply(env: Env, user: DiscordUser, day: string): Promise<Answe
     milestone: "Milestones",
     skill50: "Skills to 50",
     tier: "Tiers",
+    drop: "Notable drops",
   };
-  const lines = [`📗 **Collection log** — ${entries.length}/${LOG_TOTAL}`];
+  // Notable drops sit outside the curated 90: there are hundreds of them on the tables.
+  const curated = entries.filter((entry) => !entry.startsWith("drop:")).length;
+  const lines = [`📗 **Collection log** — ${curated}/${LOG_TOTAL}`];
   for (const [category, list] of groups) {
     lines.push(`**${names[category] ?? category}** (${list.length}): ${list.join(", ")}`);
   }

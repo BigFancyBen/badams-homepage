@@ -303,8 +303,8 @@ export async function insertCheckin(
   const result = await env.DB.prepare(
     "INSERT INTO checkins (player_id, day, week, ordinal, weight, note, " +
       "attachment_r2_key, attachment_url, attachment_kind, hp_xp, combat_xp, " +
-      "combat_style, delivered, session, hour_utc, created_at) " +
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+      "combat_style, delivered, session, loot, hour_utc, created_at) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
       "ON CONFLICT (player_id, day) DO NOTHING"
   )
     .bind(
@@ -322,6 +322,7 @@ export async function insertCheckin(
       row.combat_style,
       row.delivered,
       row.session,
+      row.loot,
       row.hour_utc,
       row.created_at
     )
@@ -675,13 +676,53 @@ export async function logEntries(env: Env, playerId: string): Promise<string[]> 
   return results.map((row) => row.entry_key);
 }
 
+/** The curated log's count: notable drops (`drop:` entries) are counted separately. */
 export async function logCount(env: Env, playerId: string): Promise<number> {
   const row = await env.DB.prepare(
-    "SELECT COUNT(*) AS n FROM collection_log WHERE player_id = ?"
+    "SELECT COUNT(*) AS n FROM collection_log WHERE player_id = ? AND entry_key NOT LIKE 'drop:%'"
   )
     .bind(playerId)
     .first<{ n: number }>();
   return row?.n ?? 0;
+}
+
+// ── The bank ───────────────────────────────────────────────────────
+
+export interface BankRow {
+  item: string;
+  qty: number;
+  value: number;
+}
+
+export function bankDepositStatement(
+  env: Env,
+  playerId: string,
+  item: string,
+  qty: number,
+  value: number,
+  day: string
+): D1PreparedStatement {
+  return env.DB.prepare(
+    "INSERT INTO bank (player_id, item, qty, value, first_day, last_day) VALUES (?, ?, ?, ?, ?, ?) " +
+      "ON CONFLICT (player_id, item) DO UPDATE SET qty = qty + excluded.qty, value = value + excluded.value, last_day = excluded.last_day"
+  ).bind(playerId, item, qty, value, day, day);
+}
+
+/** The richest stacks first. */
+export async function bankFor(env: Env, playerId: string, limit: number): Promise<BankRow[]> {
+  const { results } = await env.DB.prepare(
+    "SELECT item, qty, value FROM bank WHERE player_id = ? ORDER BY value DESC, qty DESC, item LIMIT ?"
+  )
+    .bind(playerId, limit)
+    .all<BankRow>();
+  return results;
+}
+
+export async function bankValue(env: Env, playerId: string): Promise<number> {
+  const row = await env.DB.prepare("SELECT COALESCE(SUM(value), 0) AS v FROM bank WHERE player_id = ?")
+    .bind(playerId)
+    .first<{ v: number }>();
+  return row?.v ?? 0;
 }
 
 // ── Pending claims ─────────────────────────────────────────────────
