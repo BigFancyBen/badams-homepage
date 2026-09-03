@@ -18,6 +18,10 @@ const PORT = Number(process.env.MOCK_DISCORD_PORT ?? 9912);
 
 const messages = new Map();
 
+// GET /__mock/channel-post-status?code=403 makes every channel post fail the
+// way a channel the bot cannot see does; ?code=200 restores it.
+let channelPostStatus = 200;
+
 createServer((req, res) => {
   let body = "";
   req.on("data", (c) => (body += c));
@@ -35,7 +39,16 @@ createServer((req, res) => {
       res.end(PNG);
       return;
     }
+    if (req.method === "GET" && req.url.startsWith("/__mock/channel-post-status")) {
+      channelPostStatus = Number(new URL(req.url, "http://mock").searchParams.get("code") ?? 200);
+      json(200, { channelPostStatus });
+      return;
+    }
     if (req.method === "POST" && /\/channels\/[^/]+\/messages$/.test(req.url)) {
+      if (channelPostStatus !== 200) {
+        json(channelPostStatus, { message: "Missing Access", code: 50001 });
+        return;
+      }
       const id = String(++nextId);
       let content = "";
       try {

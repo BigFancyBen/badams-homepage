@@ -247,9 +247,46 @@ export async function handleInTime(
   ctx.waitUntil(
     work
       .then((response) => deliverLate(env, interaction, isButton, response))
-      .catch((error) => logToDiscord(env, `Late delivery failed: ${String(error)}`))
+      .catch(async (error) => {
+        await logToDiscord(env, `Late delivery failed: ${String(error)}`);
+        await tellFailure(env, interaction, isButton);
+      })
   );
   return isButton ? Response.json({ type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE }) : deferred();
+}
+
+const BROKE = "Something broke. Try again.";
+
+/**
+ * A deferred placeholder that nothing fills sits there "thinking" for
+ * fifteen minutes. Whatever went wrong, the person gets a line.
+ */
+export async function tellFailure(env: Env, interaction: Interaction, isButton: boolean): Promise<void> {
+  const appId = interaction.application_id;
+  const token = interaction.token;
+  if (!appId || !token) return;
+  if (isButton) await followUp(env, appId, token, { content: BROKE, flags: EPHEMERAL });
+  else await editInteractionReply(env, appId, token, { content: BROKE });
+}
+
+/**
+ * Work that runs after a deferral, in ctx.waitUntil. It owns the token, so
+ * it must always end by editing the placeholder — including when it throws.
+ * Launch night: a photo added after a Yes posted its channel line, the bot
+ * was not allowed in the channel, the 403 threw, and the placeholder hung.
+ */
+export async function finishLater(
+  env: Env,
+  interaction: Interaction,
+  what: string,
+  work: () => Promise<void>
+): Promise<void> {
+  try {
+    await work();
+  } catch (error) {
+    await logToDiscord(env, `${what} failed: ${String(error)}`);
+    await tellFailure(env, interaction, interaction.type === InteractionType.MESSAGE_COMPONENT);
+  }
 }
 
 /** What the handler would have answered, sent through the token instead. */

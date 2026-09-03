@@ -252,6 +252,35 @@ check(
   rejoin.body?.type === 4 && /already in/.test(content(rejoin)),
   rejoin
 );
+// 17. A photo added after a Yes while the bot is locked out of the channel
+// (launch night: a 403 on the channel line threw before the placeholder was
+// filled, and Discord sat on "thinking" for fifteen minutes). The proof must
+// attach and the placeholder must be filled either way.
+const MOCK = process.env.MOCK_DISCORD_URL ?? "http://127.0.0.1:9912";
+await fetch(`${MOCK}/__mock/channel-post-status?code=403`);
+const proof = await command("checkin", [{ name: "photo", type: 11, value: "att_proof" }], bob, {
+  attachments: {
+    att_proof: { id: "att_proof", filename: "proof.png", content_type: "image/png", size: 68, url: `${MOCK}/cdn/proof.png` },
+  },
+});
+const proofToken = `tok${seq}`;
+check("a photo after a Yes is deferred", proof.body?.type === 5, proof);
+let proofEdit = null;
+for (let i = 0; i < 40 && !proofEdit; i++) {
+  await new Promise((r) => setTimeout(r, 250));
+  try {
+    const log = JSON.parse(readFileSync("mock-discord-log.json", "utf-8"));
+    proofEdit = log.find((e) => e.method === "PATCH" && e.url.includes(`/${proofToken}/`) && /Proof attached/.test(e.body));
+  } catch {}
+}
+await fetch(`${MOCK}/__mock/channel-post-status?code=200`);
+check(
+  "the placeholder is filled even when the channel line fails",
+  Boolean(proofEdit) && /could not be posted/.test(proofEdit?.body ?? ""),
+  proofEdit
+);
+const bobProof = (await sql(`SELECT attachment_kind FROM checkins WHERE player_id = '${bob.user.id}'`))[0];
+check("the proof is on the check-in regardless", bobProof?.attachment_kind === "image", bobProof);
 const standings = await command("standings", [], bob);
 check("/standings lists the roster", /alice|bob/.test(content(standings)), standings);
 
