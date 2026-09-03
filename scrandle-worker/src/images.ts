@@ -23,6 +23,22 @@ export function dishUrl(env: Env, dish: Dish): string {
 }
 
 /**
+ * The classifier's focal point for a photograph, for the render to centre
+ * its crop on. Undefined — and so absent from the payload, since JSON drops
+ * it — until the classifier has been round, which leaves every URL minted
+ * before this existed byte-identical to what it was.
+ */
+export function dishFocus(dish: Dish): [number, number] | undefined {
+  if (dish.focus_x == null || dish.focus_y == null) return undefined;
+  // Two decimals is a hundredth of the frame, which is finer than the
+  // classifier can see and keeps the URL short.
+  return [
+    Math.round(dish.focus_x * 100) / 100,
+    Math.round(dish.focus_y * 100) / 100,
+  ];
+}
+
+/**
  * `attempt` only appears in the payload from the second try onwards, so the
  * ordinary path mints exactly the URL it always did. It exists to make a retry
  * a different URL: a slow or failed render can be cached against the one that
@@ -47,6 +63,8 @@ export function matchupImageUrl(
     n: matchupId,
     na: a.name ?? "",
     nb: b.name ?? "",
+    fa: dishFocus(a),
+    fb: dishFocus(b),
     ...retryField(attempt),
   });
 }
@@ -72,13 +90,16 @@ export function resultImageUrl(
     n: matchupId,
     na: a.name ?? "",
     nb: b.name ?? "",
+    fa: dishFocus(a),
+    fb: dishFocus(b),
     ...retryField(attempt),
   });
 }
 
 /**
  * The ranking card: up to five photographs, numbered to match the buttons.
- * `t` is the classifier's name for each, and may be blank.
+ * `t` is the classifier's name for each, and may be blank; `f` is its focal
+ * point, and may be missing.
  *
  * `h` is the header — "Rank the pasta" on a themed round, "Rank the places" on
  * a mixed one. Optional in the payload rather than required, so the render
@@ -98,6 +119,7 @@ export function ballotImageUrl(
     items: entries.map((dish) => ({
       u: dishUrl(env, dish),
       t: dish.name ?? "",
+      f: dishFocus(dish),
     })),
     ...retryField(attempt),
   });
@@ -105,12 +127,13 @@ export function ballotImageUrl(
 
 /**
  * The reveal: the same photographs in finishing order, with each one's rating
- * movement. `p` is the position label, `d` the rounded Elo delta.
+ * movement. `p` is the position label, `d` the rounded Elo delta, `f` the
+ * focal point for the crop.
  */
 export function ballotResultImageUrl(
   env: Env,
   roundId: number,
-  rows: { u: string; t: string; p: string; d: number }[],
+  rows: { u: string; t: string; p: string; d: number; f?: [number, number] }[],
   ballots: number,
   attempt = 0
 ): Promise<string> {

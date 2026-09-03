@@ -13,11 +13,12 @@ import type { Dish, Env } from "./types";
  * cursor of its own — it simply asks for the next unclassified batch, so
  * calling it repeatedly drains the catalog.
  *
- * "Unclassified" is two things now. A photograph with no category cannot play
- * at all and is the urgent case; a dish or drink with a category but no kind
- * plays fine and only misses the themed rounds. Both are pending work and the
- * first sorts ahead of the second, so a night's new photographs are never
- * stuck behind a thousand-dish backfill of kinds.
+ * "Unclassified" is three things now. A photograph with no category cannot
+ * play at all and is the urgent case; a dish or drink with a category but no
+ * kind plays fine and only misses the themed rounds; a photograph with no
+ * focal point plays fine and is merely cropped the old way. All three are
+ * pending work and they sort in that order, so a night's new photographs are
+ * never stuck behind a thousand-dish backfill of kinds or focal points.
  */
 const MAX_PER_RUN = 20;
 /** Six simultaneous outgoing connections. */
@@ -50,7 +51,9 @@ kind — what the dish or drink actually *is*, one level below the category. It 
 
 ${kindPromptLines()}
 
-Pick the one a person would use to describe the photo in a word. When two fit, take the more specific — a bowl of ramen is noodles rather than soup, a steak sandwich is a sandwich rather than steak. When nothing fits, "other" is the honest answer and a better one than forcing it.`;
+Pick the one a person would use to describe the photo in a word. When two fit, take the more specific — a bowl of ramen is noodles rather than soup, a steak sandwich is a sandwich rather than steak. When nothing fits, "other" is the honest answer and a better one than forcing it.
+
+subject — a box round what the photo is *of*, as percentages of the frame measured from the top-left corner: left and top edges first, then right and bottom. Every photo gets cropped to a wide tile for the cards, and the crop is centred on this box — so on a tall photo of a plate at the far end of a table, a box round the plate keeps the plate and loses the table, while a box round the whole frame keeps the table and loses the plate. Box the dish or the drink for food and drink, the person for person, the animal for pet, and the whole frame for a place, a document or a screenshot. When several dishes share the frame, box the group. Tight rather than generous.`;
 
 const TOOL: Anthropic.Tool = {
   name: "label_dish",
@@ -84,11 +87,61 @@ const TOOL: Anthropic.Tool = {
         type: "string",
         description: "Three to six words naming what is pictured.",
       },
+      subject: {
+        type: "object",
+        description:
+          "Where the subject is: a box as percentages of the frame, 0-100, " +
+          "measured from the top-left corner.",
+        properties: {
+          left: { type: "integer" },
+          top: { type: "integer" },
+          right: { type: "integer" },
+          bottom: { type: "integer" },
+        },
+        required: ["left", "top", "right", "bottom"],
+        additionalProperties: false,
+      },
     },
-    required: ["category", "kind", "name"],
+    required: ["category", "kind", "name", "subject"],
     additionalProperties: false,
   },
 };
+
+/**
+ * The centre of the box the model drew, as fractions of the frame. The cards
+ * only need a point: their crop is always the full width or the full height,
+ * so all there is to decide is where along the other axis it sits.
+ *
+ * A box that does not parse becomes the centre of the frame rather than
+ * nothing. The label is still good, and a row that kept a null focal point
+ * would come straight back round next tick — with the attempt counter
+ * untouched, since the call succeeded — and burn a vision call an hour on a
+ * photograph the model will never box any better.
+ */
+function focalPoint(subject: unknown): [number, number] {
+  const box = subject as
+    | Partial<Record<"left" | "top" | "right" | "bottom", unknown>>
+    | null;
+  const edge = (value: unknown): number | null =>
+    typeof value === "number" && Number.isFinite(value)
+      ? Math.min(100, Math.max(0, value))
+      : null;
+  const left = edge(box?.left);
+  const top = edge(box?.top);
+  const right = edge(box?.right);
+  const bottom = edge(box?.bottom);
+  if (
+    left === null ||
+    top === null ||
+    right === null ||
+    bottom === null ||
+    right <= left ||
+    bottom <= top
+  ) {
+    return [0.5, 0.5];
+  }
+  return [(left + right) / 200, (top + bottom) / 200];
+}
 
 export interface ClassifyReport {
   attempted: number;
@@ -97,7 +150,13 @@ export interface ClassifyReport {
   remaining: number;
   /** Gave up on these — they failed MAX_ATTEMPTS times. */
   abandoned: number;
-  samples: { id: number; category: string; kind: string; name: string }[];
+  samples: {
+    id: number;
+    category: string;
+    kind: string;
+    name: string;
+    focus: [number, number];
+  }[];
 }
 
 interface Label {
@@ -105,6 +164,7 @@ interface Label {
   category: string;
   kind: string;
   name: string;
+  focus: [number, number];
 }
 
 /**
@@ -114,7 +174,8 @@ interface Label {
  * drain loop ends up spinning forever on rows it will not pick up.
  */
 const NEEDS_LABEL =
-  "(category IS NULL OR (category IN ('food','drink') AND kind IS NULL))";
+  "(category IS NULL OR (category IN ('food','drink') AND kind IS NULL) " +
+  "OR focus_x IS NULL)";
 
 async function abandonedCount(env: Env): Promise<number> {
   const row = await env.DB.prepare(
@@ -163,6 +224,7 @@ async function labelOne(
         category?: string;
         kind?: string;
         name?: string;
+        subject?: unknown;
       };
       if (!input.category || !input.kind || !input.name) return null;
       return {
@@ -170,6 +232,7 @@ async function labelOne(
         category: input.category,
         kind: input.kind,
         name: input.name.slice(0, 120),
+        focus: focalPoint(input.subject),
       };
     }
   }
@@ -194,8 +257,11 @@ export async function classify(
   const pending = await env.DB.prepare(
     `SELECT * FROM dishes WHERE ${NEEDS_LABEL} AND classify_attempts < ? ` +
       // Photographs that cannot play at all come first. A dish waiting only
-      // for its kind is already in every matchup it could be in.
-      "ORDER BY (category IS NULL) DESC, id LIMIT ?"
+      // for its kind is already in every matchup it could be in, and one
+      // waiting only for its focal point is on the cards already, just
+      // cropped down the middle.
+      "ORDER BY (category IS NULL) DESC, " +
+      "(category IN ('food','drink') AND kind IS NULL) DESC, id LIMIT ?"
   )
     .bind(MAX_ATTEMPTS, capped)
     .all<Dish>();
@@ -230,13 +296,24 @@ export async function classify(
       labels.map((label) =>
         env.DB.prepare(
           // COALESCE rather than a straight assignment: most of these rows are
-          // here for the kind alone and already carry a category and a name
+          // here for one missing field and already carry the others, which
           // the channel has seen. Overwriting those would quietly re-label a
-          // photograph mid-rotation — and a category change under an open
-          // matchup is a pair that no longer shares one.
+          // photograph mid-rotation — a category change under an open matchup
+          // is a pair that no longer shares one, and a kind that flips between
+          // noodles and soup on the focal-point pass is a themed round that
+          // drew on one answer and closes on another. The focal point itself
+          // is what every row without one is here for, so it is assigned.
           "UPDATE dishes SET category = COALESCE(category, ?), " +
-            "name = COALESCE(name, ?), kind = ? WHERE id = ?"
-        ).bind(label.category, label.name, label.kind, label.id)
+            "name = COALESCE(name, ?), kind = COALESCE(kind, ?), " +
+            "focus_x = ?, focus_y = ? WHERE id = ?"
+        ).bind(
+          label.category,
+          label.name,
+          label.kind,
+          label.focus[0],
+          label.focus[1],
+          label.id
+        )
       )
     );
     report.labelled = labels.length;
