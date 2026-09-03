@@ -416,7 +416,7 @@ export async function postCheckinLine(
         outcome.checkinId,
         {
           n: player.username,
-          t: `${ordinalWordFor(outcome.ordinal)} check-in this week · ${weightWordFor(outcome.weight)}`,
+          t: `${ordinalWordFor(outcome.ordinal)} check-in this week - ${weightWordFor(outcome.weight)}`,
           loot: outcome.loot,
           xp: outcome.xpGained,
           ...(outcome.levelUps.length > 0 ? { lv: outcome.levelUps.map((up) => ({ k: up.skill, l: up.level })) } : {}),

@@ -75,7 +75,7 @@
     <text x="80" y="382">✓ Random events and lamps</text>
     <text x="80" y="404">✓ Rings of Life</text>
     <text x="80" y="426">✓ Clue scrolls</text>
-    <text x="80" y="448">✓ Rivalries</text>
+    <text x="80" y="448">✓ Slayer tasks</text>
     <text x="80" y="470">✓ Collection log</text>
     <text x="80" y="492">✓ Verification</text>
     <text x="80" y="514">✓ Morning post, last call, Monday resolution</text>
@@ -88,6 +88,7 @@
     <text x="460" y="426">✓ Monthly campaign log</text>
     <text x="460" y="448">✓ RS-styled sheet, level-up and standings cards</text>
     <text x="460" y="470">✓ Rules page</text>
+    <text x="460" y="492">✓ Loot cards with OSRS item icons</text>
   </g>
 
   <!-- Next -->
