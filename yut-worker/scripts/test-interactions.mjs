@@ -334,9 +334,11 @@ const proofOkEdit = await waitFor(
   40
 );
 check("the proof post goes out when the channel is open", Boolean(proofOkEdit), proofOkEdit);
-const aliceRow = (await sql(`SELECT message_id FROM checkins WHERE player_id = '${alice.user.id}'`))[0];
+const aliceRow = (await sql(`SELECT message_id, attachment_url, attachment_r2_key, attachment_kind FROM checkins WHERE player_id = '${alice.user.id}'`))[0];
 const alicePost = mockLog().find((e) => e.id === aliceRow?.message_id);
 check("message_id points at the proof post", Boolean(alicePost) && alicePost.channel === CHANNEL && /added proof/.test(alicePost.body), { aliceRow, alicePost });
+check("the photo is re-uploaded to Discord as a real attachment, not linked", alicePost?.multipart === true && /name="files\[0\]"/.test(alicePost?.body ?? "") && !/image":\{"url"/.test(alicePost?.body ?? ""), alicePost);
+check("the check-in keeps Discord's attachment as its proof", /^discord:/.test(aliceRow?.attachment_r2_key ?? "") && /\/cdn\/att_/.test(aliceRow?.attachment_url ?? "") && aliceRow?.attachment_kind === "image", aliceRow);
 const standings = await command("standings", [], bob);
 check("/standings lists the roster", /alice|bob/.test(content(standings)), standings);
 // The kills' drops went to the bank and onto the check-in row. (A Turael task can be ghosts or

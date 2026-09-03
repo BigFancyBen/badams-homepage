@@ -51,6 +51,33 @@ export async function postMessage(
   return (await response.json()) as DiscordMessage;
 }
 
+/**
+ * Posts a message carrying one file as a real Discord attachment (multipart:
+ * `payload_json` plus `files[0]`), so a photo shows and a video plays the way
+ * a person's own upload does. Discord caps bot uploads at the server's limit
+ * (10 MB unboosted), and answers 40005 above it; the caller falls back.
+ */
+export async function postMessageWithFile(
+  env: Env,
+  payload: Record<string, unknown>,
+  file: { filename: string; bytes: ArrayBuffer; contentType: string },
+  channelId: string = env.DISCORD_CHANNEL_ID
+): Promise<DiscordMessage> {
+  const form = new FormData();
+  form.append("payload_json", JSON.stringify({ ...payload, attachments: [{ id: 0, filename: file.filename }] }));
+  form.append("files[0]", new Blob([file.bytes], { type: file.contentType }), file.filename);
+  const response = await fetch(`${apiBase(env)}/channels/${channelId}/messages`, {
+    method: "POST",
+    headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}` },
+    body: form,
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new Error(`Discord POST /channels/${channelId}/messages (file) → ${response.status}: ${detail.slice(0, 300)}`);
+  }
+  return (await response.json()) as DiscordMessage;
+}
+
 export async function editMessage(
   env: Env,
   messageId: string,

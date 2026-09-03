@@ -88,15 +88,29 @@ createServer((req, res) => {
       }
       const id = String(++nextId);
       let content = "";
+      let attachments = [];
+      // A multipart post carries payload_json plus files[N]; the mock reads
+      // the JSON part and answers with an attachment per file, like Discord.
+      const multipart = body.match(/name="payload_json"\r?\n\r?\n([\s\S]*?)\r?\n--/);
       try {
-        content = JSON.parse(body).content ?? "";
+        const payload = JSON.parse(multipart ? multipart[1] : body);
+        content = payload.content ?? "";
+        if (multipart) {
+          attachments = (payload.attachments ?? [{ filename: "file" }]).map((a, i) => ({
+            id: `att_${id}_${i}`,
+            filename: a.filename ?? "file",
+            size: 1,
+            content_type: "image/png",
+            url: `http://127.0.0.1:${PORT}/cdn/att_${id}_${i}.png`,
+          }));
+        }
       } catch {}
       messages.set(id, content);
       // The log entry learns where the message landed and what id it got, so
       // the harness can tell a thread line from a channel post.
-      Object.assign(sent[sent.length - 1], { id, channel });
+      Object.assign(sent[sent.length - 1], { id, channel, multipart: Boolean(multipart) });
       writeFileSync("mock-discord-log.json", JSON.stringify(sent, null, 2));
-      json(200, { id, channel_id: channel, content, timestamp: new Date(0).toISOString(), attachments: [], author: { id: "bot", username: "bot" } });
+      json(200, { id, channel_id: channel, content, timestamp: new Date(0).toISOString(), attachments, author: { id: "bot", username: "bot" } });
       return;
     }
     if (req.method === "GET" && /\/channels\/[^/]+\/messages\/\d+$/.test(req.url)) {

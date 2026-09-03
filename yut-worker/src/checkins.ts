@@ -70,6 +70,7 @@ import {
 import { escapeMarkdown } from "./discord.ts";
 import { eventLabel, pickQuiz, rollEvent, seededRng } from "./events.ts";
 import { gpShort, oneIn, rollDrops } from "./loot.ts";
+import type { AttachmentFile } from "./images.ts";
 import { questHit } from "./quests.ts";
 import { actForWeek, addDays, campaignWeek, daysBetween, gameWeek } from "./schedule.ts";
 import {
@@ -154,7 +155,12 @@ export interface CheckinRefusal {
 
 export interface CheckinInput {
   note: string | null;
-  attachment: { key: string; url: string; kind: "image" | "video" } | null;
+  /**
+   * The proof. `key` is `discord:<attachment id>`, `url` the CDN link Discord
+   * handed over, and `file` the bytes to re-upload on the channel post so the
+   * media is Discord's to keep and show.
+   */
+  attachment: { key: string; url: string; kind: "image" | "video"; file?: AttachmentFile } | null;
 }
 
 function ordinalWord(n: number): string {

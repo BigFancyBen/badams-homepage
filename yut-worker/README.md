@@ -56,7 +56,7 @@ src/
   xp.ts           the curve (RuneScape's table, exactly), the weight, tiers by Defence — pure.
   config.ts       every number that is the game's own. Edit this and nothing else.
   digest.ts       the morning post. board.ts the pinned board.
-  sheet.ts        signed render URLs and R2 mirroring. images.ts attachment mirroring.
+  sheet.ts        signed render URLs and R2 mirroring of the cards. images.ts fetching a check-in's photo back from Discord to re-upload it.
   town.ts         stores, workers and sacks, buildings, upkeep, the quiet-day rule, Foundings.
   votes.ts        group votes (build, relic, raid). relics.ts the relics. raids.ts raid weeks.
   actions.ts      the town buttons and vote handlers. bingo.ts the grids. shop.ts the shop.
@@ -260,8 +260,14 @@ with a synthetic clock (`daily=1`, `post=1`, `lastcall=1` force a phase),
   credited to `pending_claims` and surface on the next check-in receipt.
 - **Discord caches an embed image per URL forever**, so every sheet key carries
   a stamp and a retry mints a different signed URL.
-- **Attachment URLs expire** within a day; a photo is mirrored into R2 before
-  the check-in line goes out and only the key is kept.
+- **Attachment URLs expire** within a day, so a check-in's photo or video is
+  fetched back from Discord's CDN once and re-uploaded as the bot's own
+  attachment on the channel post (multipart `payload_json` + `files[0]`).
+  Discord keeps the file, shows the image and plays the video inline;
+  nothing is copied into R2. `checkins.attachment_r2_key` holds
+  `discord:<attachment id>` and `attachment_url` the posted attachment's
+  URL. If Discord refuses the upload (over the server's size limit), the
+  post goes out with the note and a link instead and the proof still counts.
 - **Until Founding I the camp is stores only.** Workers, buildings and the
   Monday build vote arrive at week 13; relics and raids at Act 3 (week 27);
   Dragon workers and the statue at Act 4. The tables are there from the start
