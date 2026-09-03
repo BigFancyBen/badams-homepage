@@ -10,7 +10,8 @@ import { addDays } from "./schedule.ts";
 import { formBar } from "./sheet.ts";
 import { getStores, getTown, storesLine } from "./town.ts";
 import { buttonRow, type Env } from "./types.ts";
-import { levelForXp, tierForHp } from "./xp.ts";
+import { levelForXp, tierForDefence } from "./xp.ts";
+import { combatLevel, levelsOf } from "./combat.ts";
 
 /**
  * One pinned message, edited every daily tick. Edits are silent, so this
@@ -28,18 +29,19 @@ export async function composeBoard(env: Env, today: string): Promise<string> {
   } else {
     const rows: { name: string; hp: number; hpXp: number; tier: string; dots: string; fw: number; title: string | null }[] = [];
     for (const player of roster) {
-      const hpXp = skills.get(player.discord_id)?.hitpoints ?? 0;
-      const hp = levelForXp(hpXp);
+      const levels = levelsOf(skills.get(player.discord_id) ?? {}, levelForXp);
+      const hp = combatLevel(levels);
+      const hpXp = hp * 1e9 + (skills.get(player.discord_id)?.hitpoints ?? 0);
       const recent = await checkinsBetween(env, player.discord_id, addDays(today, -6), today);
       const days = new Set(recent.map((c) => c.day));
       let dots = "";
       for (let i = 6; i >= 0; i--) dots += days.has(addDays(today, -i)) ? "x" : ".";
-      rows.push({ name: player.username, hp, hpXp, tier: tierForHp(hp).name, dots, fw: player.form_weeks, title: player.title });
+      rows.push({ name: player.username, hp, hpXp, tier: tierForDefence(levels.defence).name, dots, fw: player.form_weeks, title: player.title });
     }
     rows.sort((a, b) => b.hpXp - a.hpXp);
     for (const row of rows) {
       lines.push(
-        `${formBar(row.dots)} **${escapeMarkdown(row.name)}** · ${row.tier} · HP ${row.hp} · Form weeks ${row.fw}${row.title ? ` · ${row.title}` : ""}`
+        `${formBar(row.dots)} **${escapeMarkdown(row.name)}** · ${row.tier} · Combat ${row.hp} · Form weeks ${row.fw}${row.title ? ` · ${row.title}` : ""}`
       );
     }
   }

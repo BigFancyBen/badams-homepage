@@ -1,18 +1,14 @@
 import {
   CLUE_TIERS,
-  COMBAT_XP,
-  HP_XP,
   LAMP_MAX,
   LAMP_MIN,
   LAMP_PER_LEVEL,
   LEVEL_CAP,
   ORDINAL_WEIGHTS,
-  STYLE_SPLIT,
   TIERS,
-  WORKER_SLOT_PER_HP,
+  WORKER_SLOT_PER_COMBAT,
   XP_DIVISOR,
   type ClueTier,
-  type CombatStyle,
   type SkillKey,
   type Tier,
 } from "./config.ts";
@@ -67,10 +63,11 @@ export function ordinalWeight(ordinal: number): number {
   return ORDINAL_WEIGHTS[index];
 }
 
-export function tierForHp(hpLevel: number): Tier {
+/** The armour tier a Defence level can wear. */
+export function tierForDefence(defenceLevel: number): Tier {
   let tier = TIERS[0];
   for (const candidate of TIERS) {
-    if (hpLevel >= candidate.hp) tier = candidate;
+    if (defenceLevel >= candidate.level) tier = candidate;
   }
   return tier;
 }
@@ -85,43 +82,23 @@ export function nextTier(tier: Tier): Tier | null {
   return index >= 0 && index < TIERS.length - 1 ? TIERS[index + 1] : null;
 }
 
-export function workerSlots(hpLevel: number): number {
-  return 1 + Math.floor(hpLevel / WORKER_SLOT_PER_HP);
+/** How many workers a combat level may own. */
+export function workerSlots(combatLevel: number): number {
+  return 1 + Math.floor(combatLevel / WORKER_SLOT_PER_COMBAT);
 }
 
-export function clueTierForHp(hpLevel: number): ClueTier {
+/** The clue tier a monster of this combat level drops. */
+export function clueTierForMonster(monsterCombat: number): ClueTier {
   let tier = CLUE_TIERS[0];
   for (const candidate of CLUE_TIERS) {
-    if (hpLevel >= candidate.hp) tier = candidate;
+    if (monsterCombat >= candidate.combat) tier = candidate;
   }
   return tier;
 }
 
-/** What a genie lamp is worth rubbed into a skill at this level. */
+/** What a genie's lamp is worth rubbed into a skill at this level: ten times the level. */
 export function lampXp(skillLevel: number): number {
   return Math.max(LAMP_MIN, Math.min(LAMP_MAX, LAMP_PER_LEVEL * skillLevel));
-}
-
-/**
- * The XP one check-in pays, before verification and lamps.
- *
- * Hitpoints and combat are the same base and the same weight; combat is split
- * by style. Controlled thirds are floored, so a controlled check-in at weight
- * 1 pays 66 to each — the one place the rounding is visible, and RuneScape's
- * controlled style loses the same rounding.
- */
-export function checkinXp(
-  weight: number,
-  style: CombatStyle,
-  hpMultiplier = 1
-): { hp: number; combat: Partial<Record<SkillKey, number>>; combatTotal: number } {
-  const hp = Math.floor(HP_XP * weight * hpMultiplier);
-  const combatTotal = Math.floor(COMBAT_XP * weight);
-  const combat: Partial<Record<SkillKey, number>> = {};
-  for (const [skill, share] of Object.entries(STYLE_SPLIT[style])) {
-    combat[skill as SkillKey] = Math.floor(combatTotal * (share ?? 0));
-  }
-  return { hp, combat, combatTotal };
 }
 
 export function totalLevel(xpBySkill: Partial<Record<SkillKey, number>>, skills: SkillKey[]): number {

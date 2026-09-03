@@ -99,10 +99,11 @@ async function admin(env: Env, ctx: ExecutionContext, url: URL): Promise<unknown
       if (!player) return { ok: false, error: "no such player" };
       const day = url.searchParams.get("day") ?? gameDay(now, rollover);
       const withPhoto = url.searchParams.get("photo") === "1";
+      const kind = url.searchParams.get("video") === "1" ? ("video" as const) : ("image" as const);
       const input = {
         note: url.searchParams.get("note"),
         attachment: withPhoto
-          ? { key: `checkins/${id}/${day}-sim.png`, url: `${env.R2_PUBLIC_BASE}/checkins/${id}/${day}-sim.png`, kind: "image" as const }
+          ? { key: `checkins/${id}/${day}-sim.${kind === "video" ? "mp4" : "png"}`, url: `${env.R2_PUBLIC_BASE}/checkins/${id}/${day}-sim.${kind === "video" ? "mp4" : "png"}`, kind }
           : null,
       };
       const outcome = await performCheckin(env, player, day, now, input);
@@ -110,6 +111,18 @@ async function admin(env: Env, ctx: ExecutionContext, url: URL): Promise<unknown
         ctx.waitUntil(postCheckinLine(env, player, day, outcome, input));
       }
       return { ok: outcome.ok, outcome };
+    }
+
+    case "verify-as": {
+      // Presses Verify on a check-in as a player, for the harness.
+      const id = url.searchParams.get("player");
+      const checkinId = Number(url.searchParams.get("checkin") ?? "0");
+      if (!id || !checkinId) return { ok: false, error: "player= and checkin=" };
+      const player = await getPlayer(env, id);
+      if (!player) return { ok: false, error: "no such player" };
+      const { verify } = await import("./interactions.ts");
+      const answer = await verify(env, ctx, { id, username: player.username }, checkinId, gameDay(now, rollover), now);
+      return { ok: true, answer: answer instanceof Response ? "response" : answer.content };
     }
 
     case "resolve-week": {

@@ -18,32 +18,50 @@ Two rules sit above everything and every formula obeys them:
 Nothing is ever awarded for anything other than a check-in, and a check-in in
 the last four days ("fresh") is what unlocks every action.
 
+The bot drives the day. Every morning it asks **did you work out in the last
+24 hours?** with a Yes and a No; Yes is the check-in, No is a rest day that
+is written down and never punished, and the post edits a roll call into
+itself as answers arrive. Slash commands are for the things a player
+chooses to do: `/lamp`, `/clue`, `/task`, `/town`, `/vote`, `/sheet`.
+
+Progression is Old School RuneScape's, not an imitation of it. A check-in is
+one training session against the player's Slayer task, worked out with the
+wiki's formulas (max hit, accuracy, XP per damage, combat level) on the
+wiki's numbers (monster stats, scimitar and armour bonuses, Slayer
+assignment tables, bones, prayers, log/ore/fish tables), all pulled into
+`config/osrs.json` by `scripts/fetch-osrs.mjs`. Levels and gear make every
+session pay more, the way they do in the game. The one number that is the
+campaign's own is the session length, tuned so two a week reaches Dragon
+(Defence 60) in week 52.
+
 ## Layout
 
 ```
 src/
   index.ts        fetch(): /interactions, /admin/*, /health. scheduled(): the tick.
   tick.ts         one hourly tick: daily resolution, morning post, last call.
-  weekly.ts       the Monday boundary: form weeks, Rings, Prayer, rivalries, standings, Foundings.
+  weekly.ts       the Monday boundary: form weeks, Rings, standings, Foundings.
   interactions.ts button routing, the running-reply pattern, the freshness gate.
   commands.ts     slash commands.
   register.ts     the command list Discord is told about.
-  checkins.ts     the check-in transaction and everything a check-in can produce.
+  checkins.ts     the check-in transaction: the session, the haul, and everything a check-in can produce.
+  combat.ts       Old School's combat as arithmetic: combat level, max hit, accuracy, the session, masters and assignments — pure.
   events.ts       random events (seeded on player + day).
   clues.ts        clue scrolls.
-  slayer.ts       Slayer tasks: a master by Hitpoints level, every check-in a kill, points and streaks.
+  slayer.ts       Slayer tasks: a master by combat level, kills from the session, points and streaks.
   streaks.ts      resolveWeek() — pure.
-  xp.ts           the curve (RuneScape's table, exactly), the weight, tiers — pure.
-  config.ts       every number in the game. Edit this and nothing else.
+  xp.ts           the curve (RuneScape's table, exactly), the weight, tiers by Defence — pure.
+  config.ts       every number that is the game's own. Edit this and nothing else.
   digest.ts       the morning post. board.ts the pinned board.
   sheet.ts        signed render URLs and R2 mirroring. images.ts attachment mirroring.
   town.ts         stores, workers and sacks, buildings, upkeep, the quiet-day rule, Foundings.
   votes.ts        group votes (build, relic, raid). relics.ts the relics. raids.ts raid weeks.
   actions.ts      the town buttons and vote handlers. bingo.ts the grids. shop.ts the shop.
   db.ts           every D1 query. discord.ts the REST client. roles.ts the opt-in ping role.
-migrations/       0001 the game, 0002 the town, 0003 votes and raids, 0004 bingo and shop. One number per file, forever.
-scripts/          the harness (below).
+migrations/       0001 the game, 0002 the town, 0003 votes and raids, 0004 bingo and shop, 0005 sessions and answers. One number per file, forever.
+scripts/          the harness (below), plus fetch-osrs.mjs (the wiki pull) and calibrate.mjs (the pace).
 config/choices.json  option lists shared by the runtime and the registration script.
+config/osrs.json     the wiki's numbers: masters, assignments, monsters, scimitars, armour sets. Regenerate with `node scripts/fetch-osrs.mjs`.
 ```
 
 ## Setup
@@ -100,9 +118,14 @@ an empty D1 id even locally; it is gitignored.
 
 ## Testing
 
-- `npm run test:xp` — pure: the curve against its anchors, the weight, tiers,
-  event rates, clue draws, the week boundary, rivalry draws, the calendar.
-  No wrangler needed; runs in CI before every deploy.
+- `npm run test:xp` — pure: the curve against its anchors, the combat
+  formulas against the wiki (99 Strength with a dragon scimitar is a 22 max
+  hit), the weight, tiers, masters and assignments, event rates, clue draws,
+  the week boundary, the calendar. No wrangler needed; runs in CI before
+  every deploy.
+- `node scripts/calibrate.mjs [--attacks N]` — the pace without a database:
+  the design's attendance profiles through a year of sessions, printing where
+  each lands. Run it when touching `SESSION_ATTACKS` or the lamp sizes.
 - `npm run test:interactions` — signed requests against `dev:local` with the
   mock up: bad signature 401, join-and-check-in, the second check-in refused,
   XP and the haul landing, verification (self refused, twice refused, two
@@ -129,6 +152,14 @@ with a synthetic clock (`daily=1`, `post=1`, `lastcall=1` force a phase),
   recomputed rolls the same event and the same clue.
 - **Every message the bot writes is unmentioning** except the opt-in Players
   role on the morning post and Sunday's last call.
+- **A check-in is a session.** The player fights their Slayer task for a
+  fixed stretch with the best scimitar, armour and prayers their levels
+  allow; damage pays combat XP (4 per point, 4/3 to Hitpoints), every kill
+  on task pays the monster's Slayer XP, the bones are buried for Prayer (a
+  Chapel is a gilded altar), and the haul pays gathering XP at the best
+  log, ore or fish the level can take. The session is expected values, not
+  dice, so a retry produces the same numbers. Everybody starts at
+  Hitpoints 10.
 - **The receipt is the play hub.** Lamps, clues, the Slayer task, the sheet,
   the town, the log, bingo, the shop and the votes hang off it; a stale
   player gets "Check in to play" and nothing else.
@@ -136,12 +167,19 @@ with a synthetic clock (`daily=1`, `post=1`, `lastcall=1` force a phase),
   logs, a lamp, a clue, a casket, uniques) as OSRS item icons and the XP it
   paid, rendered by `app/api/yut/report` in the style of an OSRS progress
   report. The icons come from the prog-to-img-endpoint item database.
-- **Slayer tasks replace bounties and rivalries.** Every player always holds
-  a task from a master picked by Hitpoints level (Turael 1, Mazchna 10,
-  Vannaka 20, Chaeldar 30, Nieve 40, Duradel 50). Every check-in is a kill.
-  Finishing pays Slayer XP and points and the next task is handed over at
-  once; missing the due day expires the task and resets the streak, nothing
-  more. The 10th, 50th and 100th task in a row pay 5×, 15× and 25× points.
+- **Slayer tasks are the game's.** Every player always holds a task from the
+  highest master their combat level earns (Turael, Mazchna 20, Vannaka 40,
+  Chaeldar 70, Nieve 85, Duradel 100 and 50 Slayer), drawn from that
+  master's real table with the real amounts, never one their Slayer level
+  cannot damage. Finishing pays the master's points and the next task at
+  once; tasks do not expire; a skip costs 30 points. The 10th, 50th and
+  100th task in a row pay 5×, 15× and 25×. Points buy 10,000 Slayer XP (100)
+  and the Slayer helmet (400), which is +16⅔% on task.
+- **Tiers are armour.** A player's tier is the full set their Defence level
+  can wear (steel 5, mithril 20, adamant 30, rune 40, dragon 60); Attack
+  picks the scimitar the same way. The lamps the campaign hands out are the
+  Achievement Diary's antique lamps (2,500 / 7,500 / 15,000 / 50,000); a
+  genie's is ten times the level.
 - **Group rewards wait.** Founding lamps, holiday rings and titles are
   credited to `pending_claims` and surface on the next check-in receipt.
 - **Discord caches an embed image per URL forever**, so every sheet key carries
@@ -154,5 +192,6 @@ with a synthetic clock (`daily=1`, `post=1`, `lastcall=1` force a phase),
   (`0002_town.sql`, `0003_votes_raids.sql`, `0004_bingo_shop.sql`); the
   campaign calendar in `config.ts` decides when each system wakes up.
 - **The experience table is RuneScape's, exactly.** Level 99 is 13,034,431 XP
-  and every unlock sits at its RuneScape level; a check-in is worth about two
-  thousand so the pace lands a two-a-week player at Dragon by the finale.
+  and every unlock sits at its RuneScape level. A session's XP grows with
+  the player, as in the game; the session length is tuned so two a week
+  reaches Dragon in week 52 and five a week around week 33.

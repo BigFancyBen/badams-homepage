@@ -4,7 +4,7 @@ import { ACCENT, allowedMentions, escapeMarkdown } from "./discord.ts";
 import { actForWeek, campaignWeek } from "./schedule.ts";
 import { getBuildings, getStores, getTown, storesLine, buildingDef } from "./town.ts";
 import type { Env } from "./types.ts";
-import { levelForXp, tierForHp } from "./xp.ts";
+import { levelForXp, tierForDefence } from "./xp.ts";
 
 /**
  * The campaign log: one post on the first of the month, and the only
@@ -21,7 +21,7 @@ export async function composeMonthlyLog(env: Env, today: string) {
 
   const tiers = new Map<string, number>();
   for (const player of roster) {
-    const tier = tierForHp(levelForXp(skills.get(player.discord_id)?.hitpoints ?? 0)).name;
+    const tier = tierForDefence(levelForXp(skills.get(player.discord_id)?.defence ?? 0)).name;
     tiers.set(tier, (tiers.get(tier) ?? 0) + 1);
   }
   const formLeaders = [...roster].sort((a, b) => b.form_weeks - a.form_weeks).slice(0, 3);

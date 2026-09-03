@@ -8,7 +8,7 @@ import {
   setState,
   updatePlayer,
 } from "./db.ts";
-import { composeDigest, composeLastCall, digestPayload, trimmedDigestPayload } from "./digest.ts";
+import { composeDigest, composeLastCall, composeRollCall, digestPayload, trimmedDigestPayload } from "./digest.ts";
 import { allowedMentions, editMessage, logToDiscord, postMessage } from "./discord.ts";
 import { playersRoleId } from "./roles.ts";
 import {
@@ -28,7 +28,6 @@ import { getRelics } from "./relics.ts";
 import { applyRaidVote, raidDailyClose, startDueRaids } from "./raids.ts";
 import { closeDueVotes } from "./votes.ts";
 import { composeMonthlyLog } from "./monthly.ts";
-import { expireTasks } from "./slayer.ts";
 import { ACTS, ACT_WEEKS } from "./config.ts";
 import { actForWeek, campaignWeek } from "./schedule.ts";
 
@@ -60,7 +59,6 @@ export async function runTick(env: Env, now: number, force: { daily?: boolean; p
         }
       }
 
-      daily.tasksExpired = await expireTasks(env, today);
       daily.lampsAutoRubbed = await autoRubLamps(env, today, now);
       daily.town = await dailyTownTick(env, today, now, await getPlayers(env));
       daily.raid = await raidDailyClose(env, yesterday, today, now);
@@ -81,7 +79,7 @@ export async function runTick(env: Env, now: number, force: { daily?: boolean; p
       if (previous) {
         try {
           const parts = JSON.parse((await getState(env, `daily_parts:${yesterday}`)) ?? "null");
-          if (parts) await editMessage(env, previous, trimmedDigestPayload(parts));
+          if (parts) await editMessage(env, previous, trimmedDigestPayload(parts, await composeRollCall(env, yesterday)));
         } catch (error) {
           await logToDiscord(env, `Trim failed: ${String(error)}`);
         }

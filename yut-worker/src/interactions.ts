@@ -32,6 +32,9 @@ import {
   addXpStatement,
   markStep,
   bumpVerifiedCount,
+  countCheckinsBetween,
+  getCheckinFor,
+  recordAnswer,
   getCheckin,
   getEphemeralReply,
   getLamp,
@@ -63,8 +66,9 @@ import {
   replyTo,
 } from "./discord.ts";
 import { runCommand } from "./commands.ts";
-import { setPing } from "./roles.ts";
-import { addDays, daysBetween, gameDay, parseHour } from "./schedule.ts";
+import { playersRoleId, setPing } from "./roles.ts";
+import { refreshDailyPost } from "./digest.ts";
+import { addDays, daysBetween, gameDay, gameWeek, parseHour } from "./schedule.ts";
 import { gatherSheet, levelUpImageUrl, renderCard, reportImageUrl, sheetImageUrl, textSheet } from "./sheet.ts";
 import { spendPoints, taskView } from "./slayer.ts";
 
@@ -112,6 +116,7 @@ import {
   type Player,
 } from "./types.ts";
 import { levelForXp } from "./xp.ts";
+import { combatLevel, levelsOf } from "./combat.ts";
 
 /**
  * A line for the person who clicked, before it has been decided whether to
@@ -237,6 +242,8 @@ async function route(
   switch (prefix) {
     case "ci":
       return checkinFromButton(env, ctx, interaction, user, a, day, now);
+    case "no":
+      return restDay(env, ctx, user, a, day, now);
     case "join":
       return join(env, ctx, interaction, user, a || null, day, now);
     case "ping":
@@ -270,8 +277,8 @@ async function route(
     case "task":
       return a
         ? freshAction(env, user, day, async (p) => {
-            const skills = await getSkills(env, p.discord_id);
-            return { content: await spendPoints(env, p, a, levelForXp(skills.hitpoints ?? 0), day, now) };
+            const levels = levelsOf(await getSkills(env, p.discord_id), levelForXp);
+            return { content: await spendPoints(env, p, a, levels, combatLevel(levels), day, now) };
           })
         : playerAction(env, user, day, (p) => taskView(env, p));
     case "shop":
@@ -327,7 +334,7 @@ export async function requireFresh(
         since === null
           ? "Check in to play — you have not checked in yet."
           : `Check in to play — last seen ${since} day${since === 1 ? "" : "s"} ago. Anything inside ${FRESH_WINDOW_DAYS} days counts.`,
-        { components: [buttonRow([{ label: "Check In", custom_id: `ci:${day}`, style: 3, emoji: "💪" }])] }
+        { components: [buttonRow([{ label: "Yes, I worked out today", custom_id: `ci:${day}`, style: 3, emoji: "💪" }])] }
       ),
     };
   }
@@ -346,14 +353,53 @@ async function checkinFromButton(
   now: number
 ): Promise<Answer> {
   if (buttonDay !== day) {
-    return reply("That was yesterday's button. Today's is on the morning post.", {
-      components: [buttonRow([{ label: "Check In today", custom_id: `ci:${day}`, style: 3, emoji: "💪" }])],
+    return reply("That was yesterday's question. Today's is on the morning post.", {
+      components: [buttonRow([{ label: "Yes, I worked out today", custom_id: `ci:${day}`, style: 3, emoji: "💪" }])],
     });
   }
   const gate = await requirePlayer(env, user, day);
   if ("refusal" in gate) return gate.refusal;
   await updatePlayer(env, user.id, { username: user.username });
   return runCheckin(env, ctx, { ...gate.player, username: user.username }, day, now, { note: null, attachment: null }, "ci");
+}
+
+/**
+ * "No, rest day." Nothing is lost: it is written down so the roll call can
+ * show who has answered, and the reply says where the week stands.
+ */
+async function restDay(
+  env: Env,
+  ctx: ExecutionContext,
+  user: DiscordUser,
+  buttonDay: string,
+  day: string,
+  now: number
+): Promise<Answer> {
+  if (buttonDay !== day) return reply("That was yesterday's question. Today's is on the morning post.");
+  const gate = await requirePlayer(env, user, day);
+  if ("refusal" in gate) return gate.refusal;
+  if (await getCheckinFor(env, user.id, day)) return reply("You already said yes today.", { scope: "ci" });
+  await recordAnswer(env, user.id, day, "no", now);
+  ctx.waitUntil(refreshRollCall(env, day));
+  const week = gameWeek(day);
+  const done = await countCheckinsBetween(env, user.id, week, day);
+  const daysLeft = 6 - daysBetween(week, day);
+  const standing =
+    done >= 2
+      ? `Your two are already in this week.`
+      : done === 1
+        ? `One in this week, one to go${daysLeft > 0 ? `, ${daysLeft} day${daysLeft === 1 ? "" : "s"} left` : ""}.`
+        : `Nothing in yet this week${daysLeft > 0 ? `; ${daysLeft} day${daysLeft === 1 ? "" : "s"} left for your two` : ""}.`;
+  return reply(`Rest day noted. ${standing} Two a week is the whole game.`, { scope: "ci" });
+}
+
+/** Re-edits the morning post's roll call. Errors are swallowed; the post is decoration. */
+export async function refreshRollCall(env: Env, day: string): Promise<void> {
+  try {
+    await refreshDailyPost(env, day, await playersRoleId(env));
+  } catch (error) {
+    await logToDiscord(env, `Roll call refresh failed: ${String(error)}`);
+  }
 }
 
 /**
@@ -454,6 +500,7 @@ export async function postCheckinLine(
   } catch (error) {
     await logToDiscord(env, `Check-in line failed: ${String(error)}`);
   }
+  await refreshRollCall(env, day);
 }
 
 // ── Roster ─────────────────────────────────────────────────────────
@@ -472,7 +519,7 @@ async function join(
     if (thenCheckin === day) {
       return runCheckin(env, ctx, { ...existing, username: user.username }, day, now, { note: null, attachment: null }, "ci");
     }
-    return reply("You are already in. The Check In button is on the morning post.", { scope: "ci" });
+    return reply("You are already in. Answer the morning post's question when you have worked out.", { scope: "ci" });
   }
   await joinPlayer(env, user.id, user.username, now, day);
   const player = (await getPlayer(env, user.id))!;
@@ -486,9 +533,9 @@ async function join(
     return runCheckin(env, ctx, player, day, now, { note: null, attachment: null }, "ci");
   }
   return reply(
-    "You are in. Two a week is the whole game: the first two check-ins each week are full value. Press Check In on the morning post, or `/checkin` with a photo.\n" +
+    "You are in. Two a week is the whole game: the first two check-ins each week are full value. Every morning the bot asks whether you worked out in the last 24 hours; press Yes when you did. `/checkin` adds a note or a photo.\n" +
       "Want the morning post and Sunday's last call to ping you? Press Ping me on the pinned board, or `/pings on`.",
-    { scope: "ci", components: [buttonRow([{ label: "Check In now", custom_id: `ci:${day}`, style: 3, emoji: "💪" }])] }
+    { scope: "ci", components: [buttonRow([{ label: "Yes, I worked out today", custom_id: `ci:${day}`, style: 3, emoji: "💪" }])] }
   );
 }
 
@@ -639,7 +686,7 @@ async function lampMenu(env: Env, user: DiscordUser, day: string): Promise<Answe
   });
   return reply(
     `🧞 ${lamps.length === 1 ? "One lamp" : `${lamps.length} lamps`} (${lamp.source}). Pick a skill for this one` +
-      (lamp.source === "genie" ? " — a genie lamp is worth ten times the skill's level." : "."),
+      (lamp.source === "genie" ? " — a genie's lamp is worth ten times the skill's level." : " — an antique lamp pays the same into any skill."),
     { scope: "ci", components: buttonRows(buttons) }
   );
 }
@@ -765,7 +812,7 @@ async function logReply(env: Env, user: DiscordUser, day: string): Promise<Answe
 
 // ── Verification ───────────────────────────────────────────────────
 
-async function verify(
+export async function verify(
   env: Env,
   ctx: ExecutionContext,
   user: DiscordUser,

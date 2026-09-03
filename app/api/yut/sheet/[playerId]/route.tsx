@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 import { readYutPayload } from "../../_lib/signing";
 import { yutFonts } from "../../_lib/fonts";
-import { iconDataUrl } from "../../_lib/icons";
+import { iconDataUrl, itemIconDataUrl } from "../../_lib/icons";
 import {
   FONT,
   OBSIDIAN_GLOW,
@@ -31,10 +31,14 @@ interface SheetPayload {
   s: SheetSkill[];
   /** Total level */
   t: number;
-  /** Tier key, e.g. "rune_t" */
+  /** Tier key: the armour set Defence can wear, e.g. "rune" */
   tier: string;
-  /** Tier display name, e.g. "Rune (t)" */
+  /** Tier display name, e.g. "Rune" */
   tn: string;
+  /** Combat level */
+  cb?: number;
+  /** Weapon key: the scimitar Attack can wield, e.g. "rune" */
+  wp?: string;
   /** Seven chars, "x" = checked in that day, "." = not, oldest first */
   d7: string;
   /** Form weeks (streak) */
@@ -118,7 +122,9 @@ export async function GET(request: Request) {
     return new Response(result.error, { status: result.status });
   }
 
-  const { n, s, t, tier, tn, d7, fw, rg, lm, cl, log, ti, a, eq, bh, bp } = result.payload;
+  const { n, s, t, tier, tn, d7, fw, rg, lm, cl, log, ti, a, eq, bh, bp, cb, wp } = result.payload;
+  const combat = typeof cb === "number" ? cb : undefined;
+  const weaponIcon = typeof wp === "string" ? itemIconDataUrl(`${wp}_scimitar`) : null;
   const frame = tierColor(tier);
   const skills = orderedSkills(Array.isArray(s) ? s : []);
   const days = (d7 ?? "").padEnd(7, ".").slice(0, 7).split("");
@@ -264,13 +270,18 @@ export async function GET(request: Request) {
             <div
               style={{
                 display: "flex",
+                alignItems: "center",
                 fontFamily: FONT.chat,
                 fontSize: 22,
                 color: frame,
                 textShadow: RS.shadow,
               }}
             >
-              {tn}
+              {weaponIcon ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={weaponIcon} width={28} height={28} alt="" style={{ marginRight: 8 }} />
+              ) : null}
+              {combat !== undefined ? `${tn} · Combat ${combat}` : tn}
             </div>
           </div>
         </div>

@@ -2,8 +2,6 @@ import {
   EARLY_RING_WEEK_FROM,
   EARLY_RING_WEEK_TO,
   FORM_CHECKINS,
-  PRAYER_FORM_WEEK,
-  PRAYER_THREE_PLUS_BONUS,
   RING_CAP,
   RING_CAP_GRADUATED,
   RING_EVERY_EARLY,
@@ -30,7 +28,8 @@ export interface WeekInput {
   paused: boolean;
   /** Last Recall relic: a ring every Form week. */
   ringEveryWeek: boolean;
-  chapelBonus: number;
+  /** Unused since Prayer moved to bones; kept so old callers type-check. */
+  chapelBonus?: number;
   /** Extra ring capacity (Last Recall). */
   ringCapBonus?: number;
 }
@@ -60,8 +59,8 @@ export function resolveWeek(input: WeekInput): WeekResult {
     };
   }
 
-  // A Form week: two or more. Prayer pays, the streak advances, and the ring
-  // counter ticks.
+  // A Form week: two or more. The streak advances and the ring counter
+  // ticks. (Prayer comes from burying the kills' bones, not from here.)
   if (input.checkins >= FORM_CHECKINS) {
     const formWeeks = input.formWeeks + 1;
     let ringProgress = input.ringProgress + 1;
@@ -88,16 +87,11 @@ export function resolveWeek(input: WeekInput): WeekResult {
       }
     }
 
-    const prayerXp =
-      PRAYER_FORM_WEEK +
-      (input.checkins >= 3 ? PRAYER_THREE_PLUS_BONUS : 0) +
-      input.chapelBonus;
-
-    return { outcome: "form", formWeeks, rings, ringProgress, ringEarned, ringSpent: false, prayerXp };
+    return { outcome: "form", formWeeks, rings, ringProgress, ringEarned, ringSpent: false, prayerXp: 0 };
   }
 
   // Exactly one: a Ring holds the week if there is one. The streak survives,
-  // Prayer pays at the one-check-in rate, the ring counter does not move.
+  // the ring counter does not move.
   if (input.checkins === 1 && input.rings > 0) {
     return {
       outcome: "held",
@@ -106,7 +100,7 @@ export function resolveWeek(input: WeekInput): WeekResult {
       ringProgress: input.ringProgress,
       ringEarned: false,
       ringSpent: true,
-      prayerXp: Math.floor(PRAYER_FORM_WEEK / 2),
+      prayerXp: 0,
     };
   }
 

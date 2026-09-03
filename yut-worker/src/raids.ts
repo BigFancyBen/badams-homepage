@@ -3,8 +3,6 @@ import {
   BERSERKER_BONUS,
   BOSSES,
   RAID_COOLDOWN_WEEKS,
-  RAID_DAMAGE_BASE,
-  RAID_DAMAGE_PER_HP,
   RAID_FAIL_CONDITION_LOSS,
   RAID_FAIL_STORE_LOSS,
   RAID_HEAL_CAP_PER_DAY,
@@ -15,8 +13,7 @@ import {
   RAID_PROPOSAL_COOLDOWN_DAYS,
   RAID_SUCCESS_BARS,
   RAID_SUCCESS_COINS,
-  RAID_SUCCESS_LAMP_MIN,
-  RAID_SUCCESS_LAMP_PER_HP,
+  RAID_SUCCESS_LAMP_XP,
   RESOURCES,
   WALLS_HEAL_REDUCTION_PER_LEVEL,
   type RelicKey,
@@ -25,7 +22,6 @@ import {
   activeRoster,
   allCheckinsBetween,
   countCheckinsBetween,
-  getAllSkills,
   getPlayers,
   grantClaimStatement,
   logEntry,
@@ -36,7 +32,6 @@ import { addDays, gameWeek } from "./schedule.ts";
 import { creditStatements, effectiveLevel, getBuildings, getStores } from "./town.ts";
 import type { Env, Player } from "./types.ts";
 import { openVote, openVotes, type VoteRow } from "./votes.ts";
-import { levelForXp } from "./xp.ts";
 
 /**
  * Raid weeks: the opt-in hard mode. A proposal passes at 60% of the active
@@ -191,10 +186,8 @@ export async function applyRaidVote(
   }
   const active = (await activeRoster(env, day)).filter((player) => !sitting.has(player.discord_id));
   if (active.length < 2) return "No raid — fewer than two on the roster after sit-outs.";
-  const skills = await getAllSkills(env);
-  const meanHp =
-    active.reduce((sum, p) => sum + levelForXp(skills.get(p.discord_id)?.hitpoints ?? 0), 0) / active.length;
-  const hpMax = Math.round(active.length * RAID_HP_UNITS_PER_HEAD * (RAID_DAMAGE_BASE + RAID_DAMAGE_PER_HP * meanHp) * boss.hp);
+  const meanDamage = await meanSessionDamage(env, active.map((p) => p.discord_id));
+  const hpMax = Math.round(active.length * RAID_HP_UNITS_PER_HEAD * meanDamage * boss.hp);
   const start = payload.start ?? addDays(gameWeek(day), 7);
   const end = addDays(start, boss.days - 1);
   await env.DB.prepare(
@@ -253,11 +246,11 @@ async function refreshRaidCard(env: Env, raid: RaidRow, lead: string): Promise<v
  * A check-in during a raid. Returns the receipt line, or null if this player
  * is not on the roster.
  */
+/** A session's damage lands on the boss, with the Barracks and Berserker on top. */
 export async function raidHit(
   env: Env,
   player: Player,
-  hpLevel: number,
-  weight: number,
+  sessionDamage: number,
   day: string,
   now: number,
   relics: Set<RelicKey>
@@ -265,7 +258,7 @@ export async function raidHit(
   const raid = await activeRaidFor(env, player.discord_id);
   if (!raid) return null;
   const buildings = await getBuildings(env);
-  let damage = (RAID_DAMAGE_BASE + RAID_DAMAGE_PER_HP * hpLevel) * weight;
+  let damage = sessionDamage;
   damage *= 1 + BARRACKS_DAMAGE_PER_LEVEL * effectiveLevel(buildings.get("barracks"));
   if (relics.has("berserker")) damage *= 1 + BERSERKER_BONUS;
   damage = Math.round(damage);
@@ -285,6 +278,34 @@ export async function raidHit(
   }
   await refreshRaidCard(env, updated, `Day ${Math.min(bossDef(raid.boss).days, daysInto(raid, day))}.`);
   return { line: `⚔️ ${damage} to ${bossDef(raid.boss).name} (${Math.max(0, hp).toLocaleString("en-US")} left).`, damage };
+}
+
+/** A fresh roster with no sessions on record is sized as if each did this much. */
+const FALLBACK_SESSION_DAMAGE = 500;
+
+/** The roster's mean damage per full-value session, from their last five check-ins each. */
+export async function meanSessionDamage(env: Env, ids: string[]): Promise<number> {
+  let total = 0;
+  let count = 0;
+  for (const id of ids) {
+    const { results } = await env.DB.prepare(
+      "SELECT session, weight FROM checkins WHERE player_id = ? ORDER BY day DESC LIMIT 5"
+    )
+      .bind(id)
+      .all<{ session: string | null; weight: number }>();
+    for (const row of results) {
+      try {
+        const session = JSON.parse(row.session ?? "null") as { damage?: number } | null;
+        if (session && typeof session.damage === "number" && row.weight > 0) {
+          total += session.damage / row.weight;
+          count++;
+        }
+      } catch {
+        // An old row without a session; skip it.
+      }
+    }
+  }
+  return count > 0 ? total / count : FALLBACK_SESSION_DAMAGE;
 }
 
 function daysInto(raid: RaidRow, day: string): number {
@@ -338,11 +359,9 @@ async function resolveRaid(env: Env, raid: RaidRow, status: "won" | "lost", day:
   let lead: string;
 
   if (status === "won") {
-    const skills = await getAllSkills(env);
     const weekCheckins = await allCheckinsBetween(env, raid.start_day, raid.end_day);
     for (const id of roster) {
-      const hp = levelForXp(skills.get(id)?.hitpoints ?? 0);
-      const xp = Math.max(RAID_SUCCESS_LAMP_MIN, RAID_SUCCESS_LAMP_PER_HP * hp);
+      const xp = RAID_SUCCESS_LAMP_XP;
       statements.push(grantClaimStatement(env, id, "lamp", { xp, source: "raid", reason: `${boss.name} slain` }, day));
       if (weekCheckins.filter((c) => c.player_id === id).length >= 3) {
         statements.push(grantClaimStatement(env, id, "lamp", { xp, source: "raid", reason: `${boss.name} — three in the week` }, day));

@@ -9,8 +9,9 @@
  *   npm run test:year [--days 365] [--url http://localhost:8788]
  *
  * Prints the balance table and asserts the invariants that matter: nobody
- * above 99, the two-a-week player reaches Dragon, rings only ever spent on
- * one-check-in weeks, one daily resolution per day, no duplicate check-ins.
+ * above 99, the two-a-week player reaches Dragon (Defence 60), rings only
+ * ever spent on one-check-in weeks, one daily resolution per day, no
+ * duplicate check-ins.
  */
 const url = process.argv.includes("--url") ? process.argv[process.argv.indexOf("--url") + 1] : "http://localhost:8788";
 const DAYS = process.argv.includes("--days") ? Number(process.argv[process.argv.indexOf("--days") + 1]) : 365;
@@ -68,12 +69,34 @@ for (let i = 0; i < DAYS; i++) {
   // 15:00 UTC: the morning post.
   await admin("tick", { at: `${day}T15:00:00Z` });
 
+  const photosToday = [];
   for (const player of ROSTER) {
     if (player.quitAfter !== null && i >= player.quitAfter) continue;
     if (!player.days.includes(weekday)) continue;
     if (rand() < player.skip) continue;
-    const result = await admin("checkin-as", { player: player.id, day, at: `${day}T18:00:00Z`, photo: rand() < 0.3 ? "1" : "0" });
-    if (result.ok) checkinsByPlayer[player.id]++;
+    // Real people train at all hours, write the odd note, and post the odd
+    // video; the clue steps are shaped like that.
+    const photo = rand() < 0.3;
+    const hourUtc = [3, 12, 15, 18, 23][Math.floor(rand() * 5)];
+    const note = rand() < 0.25 ? (rand() < 0.4 ? "Long one today: squats, bench, rows, then a slow cooldown on the bike with far too many sets of curls to finish it off properly" : "Legs") : null;
+    const result = await admin("checkin-as", {
+      player: player.id,
+      day,
+      at: `${day}T${String(hourUtc).padStart(2, "0")}:00:00Z`,
+      photo: photo ? "1" : "0",
+      ...(photo && rand() < 0.3 ? { video: "1" } : {}),
+      ...(note ? { note } : {}),
+    });
+    if (result.ok) {
+      checkinsByPlayer[player.id]++;
+      if (photo) photosToday.push({ checkinId: result.outcome.checkinId, owner: player.id });
+    }
+  }
+  // Friends verify about half the photos, later the same evening.
+  for (const { checkinId, owner } of photosToday) {
+    if (rand() < 0.5) continue;
+    const verifier = ROSTER.find((p) => p.id !== owner && p.days.includes(weekday) && (p.quitAfter === null || i < p.quitAfter)) ?? ROSTER.find((p) => p.id !== owner);
+    if (verifier) await admin("verify-as", { player: verifier.id, checkin: String(checkinId), at: `${day}T20:00:00Z` });
   }
 
   // The four regulars vote for the first option on anything open: builds go
@@ -83,25 +106,30 @@ for (let i = 0; i < DAYS; i++) {
   }
 
   if ([30, 90, 180, 364].includes(i) || i === DAYS - 1) {
-    const rows = await sql(`SELECT player_id, xp FROM skill_xp WHERE skill = 'hitpoints'`);
-    milestones[i] = Object.fromEntries(rows.map((r) => [r.player_id, r.xp]));
+    const rows = await sql(`SELECT player_id, skill, xp FROM skill_xp WHERE skill IN ('defence', 'attack', 'hitpoints')`);
+    milestones[i] = {};
+    for (const r of rows) (milestones[i][r.player_id] ??= {})[r.skill] = r.xp;
   }
   if (i % 30 === 0) process.stdout.write(`day ${i} (${((Date.now() - t0) / 1000).toFixed(0)}s)\n`);
 }
 
 // ── The table ──────────────────────────────────────────────────────
-const { levelForXp, tierForHp } = await import("../src/xp.ts");
-console.log("\nHitpoints by player at day 30 / 90 / 180 / 365:");
+const { levelForXp, tierForDefence } = await import("../src/xp.ts");
+console.log("\nAttack / Defence / Hitpoints by player at day 30 / 90 / 180 / 365:");
 const finalLevels = {};
 for (const player of ROSTER) {
   const cells = [30, 90, 180, 364].map((d) => {
-    const xp = milestones[d]?.[player.id] ?? 0;
-    return `L${levelForXp(xp)}`;
+    const xp = milestones[d]?.[player.id] ?? {};
+    return `${levelForXp(xp.attack ?? 0)}/${levelForXp(xp.defence ?? 0)}/${levelForXp(xp.hitpoints ?? 0)}`;
   });
-  const finalXp = milestones[DAYS - 1]?.[player.id] ?? milestones[364]?.[player.id] ?? 0;
-  finalLevels[player.id] = levelForXp(finalXp);
-  console.log(`  ${player.name} (${player.days.length}/wk${player.quitAfter ? `, quit day ${player.quitAfter}` : ""}): ${cells.join(" / ")} · ${tierForHp(finalLevels[player.id]).name} · ${checkinsByPlayer[player.id]} check-ins`);
+  const finalXp = milestones[DAYS - 1]?.[player.id] ?? milestones[364]?.[player.id] ?? {};
+  finalLevels[player.id] = levelForXp(finalXp.defence ?? 0);
+  console.log(`  ${player.name} (${player.days.length}/wk${player.quitAfter ? `, quit day ${player.quitAfter}` : ""}): ${cells.join(" / ")} · ${tierForDefence(finalLevels[player.id]).name} · ${checkinsByPlayer[player.id]} check-ins`);
 }
+const sessions = await sql("SELECT COUNT(*) AS n, AVG(CAST(json_extract(session, '$.damage') AS REAL)) AS dmg, AVG(CAST(json_extract(session, '$.kills') AS REAL)) AS kills FROM checkins WHERE session IS NOT NULL");
+console.log(`Sessions: ${sessions[0]?.n} · mean damage ${Math.round(sessions[0]?.dmg ?? 0)} · mean kills ${Math.round(sessions[0]?.kills ?? 0)}`);
+const monsters = await sql("SELECT json_extract(session, '$.monster') AS m, COUNT(*) AS n FROM checkins WHERE session IS NOT NULL GROUP BY m ORDER BY n DESC LIMIT 8");
+console.log(`Most fought: ${monsters.map((r) => `${r.m} ${r.n}`).join(" · ")}`);
 
 const players = await sql("SELECT discord_id, username, form_weeks, best_form_weeks, rings FROM players");
 console.log("\nForm weeks / best / rings:");
@@ -114,6 +142,8 @@ console.log(`Lamps: ${lamps.map((r) => `${r.n} ${r.source}`).join(" · ")}`);
 const events = await sql("SELECT event_key, COUNT(*) AS n FROM events_log WHERE event_key LIKE 'event:%' GROUP BY event_key");
 console.log(`Events: ${events.map((r) => `${r.n} ${r.event_key.slice(6)}`).join(" · ")}`);
 const caskets = await sql("SELECT COUNT(*) AS n FROM clues WHERE completed_day IS NOT NULL AND loot NOT LIKE '%expired%'");
+const verifiedRows = await sql("SELECT COUNT(*) AS n FROM verifications");
+console.log(`Verifications: ${verifiedRows[0]?.n}`);
 const clues = await sql("SELECT COUNT(*) AS n FROM clues");
 console.log(`Clues: ${clues[0]?.n} dropped, ${caskets[0]?.n} caskets opened`);
 const tasks = await sql("SELECT status, COUNT(*) AS n FROM slayer_tasks GROUP BY status");
@@ -140,9 +170,9 @@ if (DAYS >= 365) {
   const A = finalLevels[ROSTER[0].id];
   const D = finalLevels[ROSTER[3].id];
   const E = finalLevels[ROSTER[4].id];
-  check("five a week is Dragon by the finale", A >= 60, A);
-  check("two a week is within reach of Dragon by the finale (≥ 55 without Founding lamps rubbed)", D >= 55, D);
-  check("one a week is Rune-ish, not Dragon", E >= 40 && E < 60, E);
+  check("five a week is Dragon (Defence 60) by the finale", A >= 60, A);
+  check("two a week is within reach of Dragon by the finale (Defence ≥ 55 without Founding lamps rubbed)", D >= 55, D);
+  check("one a week is Adamant or Rune, not Dragon", E >= 30 && E < 60, E);
 }
 const above = await sql("SELECT COUNT(*) AS n FROM skill_xp WHERE xp > 13034431");
 check("no skill above 99", above[0]?.n === 0, above);
@@ -178,7 +208,13 @@ if (DAYS >= 200) {
   const doneTasks = await sql("SELECT COUNT(*) AS n FROM slayer_tasks WHERE status = 'done'");
   check("Slayer tasks were completed", (doneTasks[0]?.n ?? 0) > 0, doneTasks);
   const expiredTasks = await sql("SELECT COUNT(*) AS n FROM slayer_tasks WHERE status = 'expired'");
-  check("the once-a-week player let some tasks expire", (expiredTasks[0]?.n ?? 0) > 0, expiredTasks);
+  check("tasks never expire", (expiredTasks[0]?.n ?? 0) === 0, expiredTasks);
+  const slayerXp = await sql("SELECT MIN(xp) AS m FROM skill_xp WHERE skill = 'slayer'");
+  check("every player earned Slayer from kills on task", (slayerXp[0]?.m ?? 0) > 0, slayerXp);
+  const prayerXp = await sql("SELECT MIN(xp) AS m FROM skill_xp WHERE skill = 'prayer'");
+  check("every player buried bones", (prayerXp[0]?.m ?? 0) > 0, prayerXp);
+  const answers = await sql("SELECT COUNT(*) AS n FROM day_answers WHERE answer = 'yes'");
+  check("check-ins were recorded as answers to the morning question", (answers[0]?.n ?? 0) > 0, answers);
   const overKilled = await sql("SELECT COUNT(*) AS n FROM slayer_tasks WHERE kills > kills_needed");
   check("no task records more kills than it needs", (overKilled[0]?.n ?? 0) === 0, overKilled);
   const relicRows = await sql("SELECT COUNT(*) AS n FROM relics");

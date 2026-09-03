@@ -32,12 +32,13 @@ import { actForWeek, addDays, campaignWeek, daysBetween, gameWeek, weekdayOf } f
 import { renderCard, standingsImageUrl } from "./sheet.ts";
 import { resolveWeek } from "./streaks.ts";
 import type { Env, Player } from "./types.ts";
-import { lampXp, levelForXp, tierForHp } from "./xp.ts";
-import { effectiveLevel, founding, getBuildings } from "./town.ts";
+import { lampXp, levelForXp, tierForDefence } from "./xp.ts";
+import { combatLevel, levelsOf } from "./combat.ts";
+import { founding } from "./town.ts";
 import { drawRelics, getRelics } from "./relics.ts";
 import { openBuildVote, openRelicVote } from "./votes.ts";
 import { proposeRaid } from "./raids.ts";
-import { CHAPEL_PRAYER_PER_LEVEL, TREASURE_SEEKER_MULTIPLIER } from "./config.ts";
+import { TREASURE_SEEKER_MULTIPLIER } from "./config.ts";
 
 /**
  * The Monday boundary. Everything that resolves once a week lives here, and
@@ -85,8 +86,6 @@ export async function resolveWeekFor(
 
   const campaignWk = campaignWeek(closedWeek, env.CAMPAIGN_START);
   const relics = await getRelics(env);
-  const buildings = await getBuildings(env);
-  const chapelBonus = CHAPEL_PRAYER_PER_LEVEL * effectiveLevel(buildings.get("chapel"));
 
   for (const player of [...players, ...paused]) {
     // A player who joined after the week closed has nothing to resolve.
@@ -101,7 +100,6 @@ export async function resolveWeekFor(
       graduated: Boolean(player.graduated_at),
       paused: player.status === "paused",
       ringEveryWeek: relics.has("last_recall"),
-      chapelBonus,
       ringCapBonus: relics.has("last_recall") ? 1 : 0,
     });
 
@@ -175,9 +173,10 @@ export async function resolveWeekFor(
   // ── Standings card ─────────────────────────────────────────────
   const rows = roster
     .map((p) => {
-      const hpXp = skills.get(p.discord_id)?.hitpoints ?? 0;
-      const hp = levelForXp(hpXp);
-      return { n: p.username, hp, hpXp, tier: tierForHp(hp).key, fw: p.form_weeks, u: Math.round((unitsBy.get(p.discord_id) ?? 0) * 10) / 10 };
+      const levels = levelsOf(skills.get(p.discord_id) ?? {}, levelForXp);
+      const cb = combatLevel(levels);
+      const hpXp = cb * 1e9 + (skills.get(p.discord_id)?.hitpoints ?? 0);
+      return { n: p.username, hp: cb, hpXp, tier: tierForDefence(levels.defence).key, fw: p.form_weeks, u: Math.round((unitsBy.get(p.discord_id) ?? 0) * 10) / 10 };
     })
     .sort((a, b) => b.hpXp - a.hpXp);
   // Re-read form weeks after the updates above.
@@ -221,8 +220,8 @@ export async function resolveWeekFor(
       }
     }
     const expired = await expireOpenClues(env, today);
-    const hpLevels = new Map(roster.map((p) => [p.discord_id, levelForXp(skills.get(p.discord_id)?.hitpoints ?? 0)]));
-    const town = await founding(env, roster, hpLevels, today, now);
+    const combatLevels = new Map(roster.map((p) => [p.discord_id, combatLevel(levelsOf(skills.get(p.discord_id) ?? {}, levelForXp))]));
+    const town = await founding(env, roster, combatLevels, today, now);
     await env.DB.prepare("UPDATE town_resources SET amount = CASE WHEN resource = 'coins' THEN 500 ELSE 200 END").run();
     summary.founding =
       `Founding ${act}: Town Hall ${town.level}, ${town.workersGranted} Bronze worker${town.workersGranted === 1 ? "" : "s"} handed out, ` +

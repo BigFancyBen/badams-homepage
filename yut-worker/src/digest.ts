@@ -2,12 +2,13 @@ import { ACTS, ACT_WEEKS, CAMPAIGN_EVENTS } from "./config.ts";
 import {
   activeRoster,
   allCheckinsBetween,
+  answersOn,
   checkinsOn,
   getPlayers,
   getState,
   verifierNames,
 } from "./db.ts";
-import { ACCENT, allowedMentions, escapeMarkdown } from "./discord.ts";
+import { ACCENT, allowedMentions, editMessage, escapeMarkdown } from "./discord.ts";
 import { actForWeek, addDays, campaignWeek, daysBetween, gameWeek, shortDate } from "./schedule.ts";
 import { getStores, getTown, ledgerOn, storesLine } from "./town.ts";
 import { buttonRow, type Env } from "./types.ts";
@@ -17,9 +18,13 @@ import { openVotes } from "./votes.ts";
 
 /**
  * The morning post. One message a day, and the only scheduled one most days:
- * yesterday named, misses counted, the week so far, the camp, and the two
- * buttons. Non-players do not appear anywhere in it.
+ * the question ("did you work out in the last 24 hours?") with a Yes and a
+ * No, yesterday named, the week so far, the camp, and a roll call that the
+ * post edits into itself as answers come in. Non-players do not appear
+ * anywhere in it.
  */
+
+export const QUESTION = "**Did you work out in the last 24 hours?**";
 
 export interface DigestParts {
   header: string;
@@ -122,20 +127,22 @@ export function digestPayload(
   parts: DigestParts,
   today: string,
   roleId: string | null,
-  activeCount: number
+  activeCount: number,
+  rollCall: string | null = null
 ) {
   return {
     content: roleId && activeCount > 0 ? `<@&${roleId}>` : "",
     embeds: [
       {
         color: ACCENT,
-        description: [parts.header, ...parts.lines].join("\n"),
+        description: [parts.header, QUESTION, ...parts.lines, ...(rollCall ? ["", rollCall] : [])].join("\n"),
         ...(parts.imageUrl ? { image: { url: parts.imageUrl } } : {}),
       },
     ],
     components: [
       buttonRow([
-        { label: "Check In", custom_id: `ci:${today}`, style: 3, emoji: "💪" },
+        { label: "Yes", custom_id: `ci:${today}`, style: 3, emoji: "💪" },
+        { label: "No, rest day", custom_id: `no:${today}`, style: 2, emoji: "😴" },
         { label: "Join the campaign", custom_id: `join:${today}`, style: 2 },
       ]),
     ],
@@ -143,13 +150,46 @@ export function digestPayload(
   };
 }
 
-/** Yesterday's post, cut down to its first two lines with no buttons. */
-export function trimmedDigestPayload(parts: DigestParts) {
+/** "✅ Ben, Tom · 😴 Alex · 2 still to answer" — roster members only. */
+export async function composeRollCall(env: Env, today: string): Promise<string | null> {
+  const roster = await activeRoster(env, today);
+  if (roster.length === 0) return null;
+  const byId = new Map(roster.map((p) => [p.discord_id, p]));
+  const yes = (await checkinsOn(env, today)).map((c) => c.player_id).filter((id) => byId.has(id));
+  const yesSet = new Set(yes);
+  const no = (await answersOn(env, today))
+    .filter((a) => a.answer === "no" && byId.has(a.player_id) && !yesSet.has(a.player_id))
+    .map((a) => a.player_id);
+  const waiting = roster.length - yesSet.size - no.length;
+  const name = (id: string) => escapeMarkdown(byId.get(id)?.username ?? "someone");
+  const bits: string[] = [];
+  if (yes.length > 0) bits.push(`✅ ${yes.map(name).join(", ")}`);
+  if (no.length > 0) bits.push(`😴 ${no.map(name).join(", ")}`);
+  bits.push(waiting > 0 ? `${waiting} still to answer` : "everyone has answered");
+  return bits.join(" · ");
+}
+
+/**
+ * Edits today's post so the roll call is current. Silent — an edit pings
+ * nobody — so a Yes or a No costs the channel nothing.
+ */
+export async function refreshDailyPost(env: Env, today: string, roleId: string | null): Promise<void> {
+  const messageId = await getState(env, `daily_post:${today}`);
+  const raw = await getState(env, `daily_parts:${today}`);
+  if (!messageId || !raw) return;
+  const parts = JSON.parse(raw) as DigestParts;
+  const roster = await activeRoster(env, today);
+  const rollCall = await composeRollCall(env, today);
+  await editMessage(env, messageId, digestPayload(parts, today, roleId, roster.length, rollCall));
+}
+
+/** Yesterday's post, cut down to its header, its first line and the final roll call, with no buttons. */
+export function trimmedDigestPayload(parts: DigestParts, rollCall: string | null = null) {
   return {
     embeds: [
       {
         color: ACCENT,
-        description: [parts.header, parts.lines[0] ?? ""].join("\n"),
+        description: [parts.header, parts.lines[0] ?? "", ...(rollCall ? [rollCall] : [])].join("\n"),
       },
     ],
     components: [],

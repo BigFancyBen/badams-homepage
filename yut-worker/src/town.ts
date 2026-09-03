@@ -9,8 +9,6 @@ import {
   FIRE_SALE_DISCOUNT,
   FOUNDING_OUTPUT_BONUS,
   GATHER_BUILDING_BONUS,
-  GATHER_XP_CAP,
-  GATHER_XP_PER_UNIT,
   GOLDEN_GOD_COINS,
   ORE_PER_BAR,
   PRODUCTION_MASTER_BONUS,
@@ -482,7 +480,8 @@ export function sackIsFull(
 
 export interface Delivery {
   delivered: Partial<Stores>;
-  xp: Partial<Record<SkillKey, number>>;
+  /** Units handled per gathering skill; the check-in turns them into XP at the player's level. */
+  units: Partial<Record<SkillKey, number>>;
   hadFullSack: boolean;
   statements: D1PreparedStatement[];
 }
@@ -499,7 +498,7 @@ export async function deliverSacks(
   now: number,
   relics: Set<RelicKey>
 ): Promise<Delivery> {
-  const delivery: Delivery = { delivered: {}, xp: {}, hadFullSack: false, statements: [] };
+  const delivery: Delivery = { delivered: {}, units: {}, hadFullSack: false, statements: [] };
   const town = await getTown(env);
   if (town.level < 1) return delivery;
   const buildings = await getBuildings(env);
@@ -531,7 +530,7 @@ export async function deliverSacks(
     delivery.statements.push(...creditStatements(env, resource, toStore, "sack", day, player.discord_id, now));
     const skill = WORKER_SKILL[worker.kind];
     if (skill) {
-      delivery.xp[skill] = Math.min(GATHER_XP_CAP, (delivery.xp[skill] ?? 0) + Math.floor(amount * GATHER_XP_PER_UNIT * 5));
+      delivery.units[skill] = (delivery.units[skill] ?? 0) + amount;
     }
     delivery.statements.push(
       env.DB.prepare("UPDATE workers SET sack = 0, sack_updated_at = ? WHERE id = ?").bind(now, worker.id)
@@ -540,9 +539,9 @@ export async function deliverSacks(
   return delivery;
 }
 
-/** How many workers a player may own at their Hitpoints level. */
-export function slotsFor(hpLevel: number): number {
-  return workerSlots(hpLevel);
+/** How many workers a player may own at their combat level. */
+export function slotsFor(combat: number): number {
+  return workerSlots(combat);
 }
 
 /** A player's tier as a worker-tier index: the Rune trims all count as Rune. */
@@ -713,9 +712,10 @@ export async function founding(
   return { level, workersGranted: granted };
 }
 
-export function tierKeyForOwner(hpLevel: number): string {
+/** The armour tier a Defence level wears, as the cap on the player's workers. */
+export function tierKeyForOwner(defenceLevel: number): string {
   let key = TIERS[0].key;
-  for (const tier of TIERS) if (hpLevel >= tier.hp) key = tier.key;
+  for (const tier of TIERS) if (defenceLevel >= tier.level) key = tier.key;
   return key;
 }
 

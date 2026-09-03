@@ -1,3 +1,4 @@
+import { STARTING_HITPOINTS_XP } from "./config.ts";
 import { ACTIVE_WINDOW_DAYS, FRESH_WINDOW_DAYS, type SkillKey } from "./config.ts";
 import { addDays } from "./schedule.ts";
 import type {
@@ -126,6 +127,10 @@ export async function joinPlayer(
       .bind(id, username, now, day)
       .run()
   );
+  // Everybody starts at Hitpoints 10, as in the game.
+  await env.DB.prepare("INSERT OR IGNORE INTO skill_xp (player_id, skill, xp) VALUES (?, 'hitpoints', ?)")
+    .bind(id, STARTING_HITPOINTS_XP)
+    .run();
 }
 
 export async function updatePlayer(
@@ -298,8 +303,8 @@ export async function insertCheckin(
   const result = await env.DB.prepare(
     "INSERT INTO checkins (player_id, day, week, ordinal, weight, note, " +
       "attachment_r2_key, attachment_url, attachment_kind, hp_xp, combat_xp, " +
-      "combat_style, delivered, hour_utc, created_at) " +
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+      "combat_style, delivered, session, hour_utc, created_at) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
       "ON CONFLICT (player_id, day) DO NOTHING"
   )
     .bind(
@@ -316,6 +321,7 @@ export async function insertCheckin(
       row.combat_xp,
       row.combat_style,
       row.delivered,
+      row.session,
       row.hour_utc,
       row.created_at
     )
@@ -754,4 +760,34 @@ export async function forgetStaleEphemeralReplies(
       .bind(before)
       .run()
   );
+}
+
+// ── The daily prompt's answers ─────────────────────────────────────
+
+/** Records a Yes or a No to "did you work out in the last 24 hours?". */
+export async function recordAnswer(env: Env, playerId: string, day: string, answer: "yes" | "no", now: number): Promise<void> {
+  await env.DB.prepare(
+    "INSERT INTO day_answers (player_id, day, answer, created_at) VALUES (?, ?, ?, ?) " +
+      "ON CONFLICT (player_id, day) DO UPDATE SET answer = excluded.answer, created_at = excluded.created_at"
+  )
+    .bind(playerId, day, answer, now)
+    .run();
+}
+
+export async function answersOn(env: Env, day: string): Promise<{ player_id: string; answer: string }[]> {
+  try {
+    const { results } = await env.DB.prepare("SELECT player_id, answer FROM day_answers WHERE day = ?")
+      .bind(day)
+      .all<{ player_id: string; answer: string }>();
+    return results;
+  } catch {
+    return [];
+  }
+}
+
+/** Adds a photo or video to a check-in made without one. */
+export async function attachProof(env: Env, checkinId: number, key: string, url: string, kind: "image" | "video"): Promise<void> {
+  await env.DB.prepare("UPDATE checkins SET attachment_r2_key = ?, attachment_url = ?, attachment_kind = ? WHERE id = ?")
+    .bind(key, url, kind, checkinId)
+    .run();
 }

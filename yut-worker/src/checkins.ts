@@ -1,17 +1,18 @@
 import {
   ACTS,
   ACT_WEEKS,
+  ALTAR_MULTIPLIER,
   BEEKEEPER_HOURS,
-  BOOTSTRAP_HP_MULTIPLIER,
-  BOOTSTRAP_WEEKS,
   CAMPAIGN_EVENTS,
-  DRILL_DEMON_KILLS,
+  DRILL_DEMON_LAMP_PER_LEVEL,
   DRUNKEN_DWARF_COINS,
   EVIL_CHICKEN_DEFENCE,
+  FISH,
   FORESTER_REPAIR,
-  GATHER_XP_CAP,
-  GATHER_XP_PER_UNIT,
+  GATHER_UNITS_PER_SESSION,
+  LOGS,
   OLD_MAN_RESOURCE,
+  ORES,
   QUIZ_BANK,
   RECOVERY_CHECKINS,
   RECOVERY_LAMP_XP,
@@ -25,6 +26,7 @@ import {
   VERIFIER_DAILY_CAP,
   VERIFIER_PAY_WINDOW_DAYS,
   VERIFIER_SLAYER,
+  bestResource,
   type ResourceKey,
   type SkillKey,
 } from "./config.ts";
@@ -60,6 +62,7 @@ import {
   markVerificationsPaid,
   openClaims,
   openClue,
+  recordAnswer,
   unpaidVerifications,
   updatePlayer,
 } from "./db.ts";
@@ -70,6 +73,7 @@ import {
   baseHaul,
   creditStatements,
   deliverSacks,
+  effectiveLevel,
   eventChance,
   getBuildings,
   repairWorst,
@@ -78,17 +82,17 @@ import {
 import { getRelics } from "./relics.ts";
 import { activeRaidFor, raidHit } from "./raids.ts";
 import { bingoLines, evaluateBingo } from "./bingo.ts";
-import { progressTask, taskShort } from "./slayer.ts";
+import { ensureTask, hasSlayerHelmet, progressTask, taskMonster, taskName, taskShort } from "./slayer.ts";
+import { combatLevel, levelsOf, simulateSession, weaponFor, type Session } from "./combat.ts";
 import { TRICKSTER_POINTS, XERIC_WEIGHT } from "./config.ts";
 import { buttonRow, type Button, type Checkin, type Env, type Player } from "./types.ts";
 import {
-  checkinXp,
-  clueTierForHp,
+  clueTierForMonster,
   levelForXp,
   lampXp,
   nextTier,
   ordinalWeight,
-  tierForHp,
+  tierForDefence,
   xpForLevel,
   xpToNext,
 } from "./xp.ts";
@@ -96,7 +100,14 @@ import {
 /**
  * The check-in. One transaction in the loose sense — a batch for the writes
  * that must land together, then the rest in order, every step re-runnable
- * because the rolls are seeded on the player and the day.
+ * because the rolls are seeded on the player and the day and the session is
+ * arithmetic rather than dice.
+ *
+ * A check-in is one training session in Old School RuneScape terms: the
+ * player fights their Slayer task for a fixed stretch of time with the best
+ * scimitar, armour and prayers their levels allow (combat.ts). The damage
+ * decides the combat XP, the kills decide the Slayer XP and the bones for
+ * Prayer, and the haul on the way home decides the gathering XP.
  */
 
 export interface CheckinOutcome {
@@ -117,9 +128,11 @@ export interface CheckinOutcome {
   loot: { k: string; c: number }[];
   xpGained: { k: string; x: number }[];
   task: string | null;
+  /** The session, for the card: "23 hill giants · max hit 4 · 54% to hit". */
+  session: string;
 }
 
-/** Turns a unique's display name into its icon key. */
+/** Turns an item's display name into its icon key. */
 export function itemKey(name: string): string {
   if (name === "Amulet of glory (t)") return "glory_t";
   return name.toLowerCase().replace(/[()']/g, "").replace(/[\s-]+/g, "_").replace(/_+/g, "_").replace(/_$/, "");
@@ -152,6 +165,15 @@ export function effectFor(env: Env, day: string): string | undefined {
   return CAMPAIGN_EVENTS.find((event) => event.week === week && event.effect)?.effect;
 }
 
+/** "23 hill giants: max hit 4, 54% to hit, 812 damage." */
+function sessionLine(session: Session, name: string): string {
+  const ate = session.foodEaten > 0 ? ` Ate ${session.foodEaten} lobster${session.foodEaten === 1 ? "" : "s"}${session.bankTrips > 0 ? ` and banked ${session.bankTrips === 1 ? "once" : `${session.bankTrips} times`}` : ""}.` : "";
+  return (
+    `⚔️ ${session.kills} ${name}: max hit ${session.maxHit}, ${Math.round(session.hitChance * 100)}% to hit, ${session.damage.toLocaleString("en-US")} damage. ` +
+    `${session.weapon.name}, ${session.armour.name.toLowerCase()}${session.prayers.length > 0 ? `, ${session.prayers[session.prayers.length - 1]}` : ""}.${ate}`
+  );
+}
+
 export async function performCheckin(
   env: Env,
   player: Player,
@@ -166,28 +188,50 @@ export async function performCheckin(
   const weight =
     relics.has("xerics_endurance") && (ordinal === 3 || ordinal === 4) ? XERIC_WEIGHT : ordinalWeight(ordinal);
 
-  const playerWeek = Math.floor(daysBetween(player.joined_day, day) / 7) + 1;
-  const bootstrap = playerWeek <= BOOTSTRAP_WEEKS;
-  const xp = checkinXp(weight, player.combat_style, bootstrap ? BOOTSTRAP_HP_MULTIPLIER : 1);
-
   const skillsBefore = await getSkills(env, player.discord_id);
-  const hpBefore = levelForXp(skillsBefore.hitpoints ?? 0);
-  const tierBefore = tierForHp(hpBefore);
+  const levelsBefore = levelsOf(skillsBefore, levelForXp);
+  const combatBefore = combatLevel(levelsBefore);
+  const tierBefore = tierForDefence(levelsBefore.defence);
+  const owned = new Set(await logEntries(env, player.discord_id));
+  const buildings = await getBuildings(env);
 
-  // The haul. Workers and sacks arrive with the town; the base haul is what
-  // every check-in delivers regardless.
+  // ── The session ────────────────────────────────────────────────
+  // The Slayer task is the opponent; a player with none gets one first.
+  const { task, assignedNow } = await ensureTask(env, player, levelsBefore, combatBefore, day);
+  const monster = taskMonster(task);
+  const session = simulateSession({
+    levels: levelsBefore,
+    style: player.combat_style,
+    gear: { slayerHelmet: hasSlayerHelmet(player), glory: owned.has("clue:Amulet of glory (t)") },
+    monster,
+    weight,
+  });
+  const monsterName = taskName(task);
+
+  // The haul: what every check-in brings the town, plus the sacks the
+  // player's workers filled since their last one.
   const haul = baseHaul(weight, tierBefore.haul, relics);
-  // Sacks: what the player's workers gathered since their last check-in.
   const sacks = await deliverSacks(env, player, day, now, relics);
   for (const [resource, amount] of Object.entries(sacks.delivered)) {
     haul[resource as ResourceKey] = (haul[resource as ResourceKey] ?? 0) + (amount ?? 0);
   }
   const delivered = Object.values(haul).reduce((sum, n) => sum + (n ?? 0), 0);
-  const woodcuttingXp = Math.min(
-    GATHER_XP_CAP,
-    Math.floor((baseHaul(weight, tierBefore.haul).logs ?? 0) * GATHER_XP_PER_UNIT * 5) + (sacks.xp.woodcutting ?? 0)
-  );
 
+  // Gathering: each log, ore and fish handled pays the XP of the best one
+  // the player's level can take, up to a session's worth.
+  const gatherCap = Math.max(1, Math.floor(GATHER_UNITS_PER_SESSION * weight));
+  const gatherXp = (units: number, table: typeof LOGS, level: number) =>
+    Math.floor(Math.min(units, gatherCap) * bestResource(table, level).xp);
+  const logsHandled = (baseHaul(weight, tierBefore.haul).logs ?? 0) + (sacks.units.woodcutting ?? 0);
+  const woodcuttingXp = gatherXp(logsHandled, LOGS, levelsBefore.woodcutting);
+  const miningXp = gatherXp(sacks.units.mining ?? 0, ORES, levelsBefore.mining);
+  const fishingXp = gatherXp(sacks.units.fishing ?? 0, FISH, levelsBefore.fishing);
+
+  // Bones from the kills, buried at the Chapel's altar if there is one.
+  const altar = ALTAR_MULTIPLIER[Math.min(ALTAR_MULTIPLIER.length - 1, Math.floor(effectiveLevel(buildings.get("chapel"))))] ?? 1;
+  const prayerXp = monster.bones ? Math.floor(session.kills * monster.bones.xp * altar) : 0;
+
+  const combatXpTotal = (session.xp.attack ?? 0) + (session.xp.strength ?? 0) + (session.xp.defence ?? 0);
   const hourUtc = new Date(now).getUTCHours();
   const checkinId = await insertCheckin(env, {
     player_id: player.discord_id,
@@ -199,10 +243,20 @@ export async function performCheckin(
     attachment_r2_key: input.attachment?.key ?? null,
     attachment_url: input.attachment?.url ?? null,
     attachment_kind: input.attachment?.kind ?? null,
-    hp_xp: xp.hp,
-    combat_xp: xp.combatTotal,
+    hp_xp: session.xp.hitpoints ?? 0,
+    combat_xp: combatXpTotal,
     combat_style: player.combat_style,
     delivered: JSON.stringify(haul),
+    session: JSON.stringify({
+      monster: monster.name,
+      kills: session.kills,
+      damage: session.damage,
+      maxHit: session.maxHit,
+      hitChance: Math.round(session.hitChance * 100) / 100,
+      attacks: session.attacks,
+      weapon: session.weapon.key,
+      armour: session.armour.key,
+    }),
     hour_utc: hourUtc,
     created_at: now,
   });
@@ -219,16 +273,15 @@ export async function performCheckin(
     if (existing) existing.c += count;
     else loot.push({ k: key, c: count });
   };
+  if (monster.bones) addLoot(itemKey(monster.bones.item), session.kills);
   for (const [resource, amount] of Object.entries(haul)) if ((amount ?? 0) > 0) addLoot(resource, amount ?? 0);
 
   // ── XP ─────────────────────────────────────────────────────────
-  const gains: Partial<Record<SkillKey, number>> = { hitpoints: xp.hp };
-  for (const [skill, amount] of Object.entries(xp.combat)) {
-    if (amount) gains[skill as SkillKey] = (gains[skill as SkillKey] ?? 0) + amount;
-  }
+  const gains: Partial<Record<SkillKey, number>> = { ...session.xp };
+  if (prayerXp > 0) gains.prayer = prayerXp;
   if (woodcuttingXp > 0) gains.woodcutting = woodcuttingXp;
-  if (sacks.xp.mining) gains.mining = sacks.xp.mining;
-  if (sacks.xp.fishing) gains.fishing = sacks.xp.fishing;
+  if (miningXp > 0) gains.mining = miningXp;
+  if (fishingXp > 0) gains.fishing = fishingXp;
 
   for (const [skill, amount] of Object.entries(gains)) {
     if (amount) statements.push(addXpStatement(env, player.discord_id, skill as SkillKey, amount));
@@ -241,39 +294,64 @@ export async function performCheckin(
   }
   statements.push(...sacks.statements);
   statements.push(
-    logEventStatement(env, player.discord_id, day, checkinId, "checkin", { ordinal, weight, gains, haul }, now)
+    logEventStatement(env, player.discord_id, day, checkinId, "checkin", { ordinal, weight, gains, haul, monster: monster.name, kills: session.kills, damage: session.damage }, now)
   );
   await env.DB.batch(statements);
 
-  receipt.push(
-    `**Checked in.** ${ordinalWord(ordinal)} this week, ${weightWord(weight)}${bootstrap ? ". First two weeks: double Hitpoints" : ""}.`
-  );
+  // ── Slayer task ────────────────────────────────────────────────
+  const progress = await progressTask(env, player, task, assignedNow, session.kills, levelsBefore, combatBefore, day, checkinId, now);
+  if (progress.xp > 0) gains.slayer = progress.xp;
 
-  // ── Level-ups and tier ─────────────────────────────────────────
+  receipt.push(`**Checked in.** ${ordinalWord(ordinal)} this week, ${weightWord(weight)}.`);
+  receipt.push(sessionLine(session, monsterName));
+  receipt.push(`🗡️ ${progress.line}`);
+  publicBits.push(`⚔️ ${session.kills} ${monsterName} slain${progress.completed ? "" : ` (${progress.task.kills}/${progress.task.kills_needed} on task)`}.`);
+  if (progress.publicBit) publicBits.push(progress.publicBit);
+
+  // ── Level-ups, the weapon, the tier ────────────────────────────
   const skillsAfter = await getSkills(env, player.discord_id);
+  const levelsAfter = levelsOf(skillsAfter, levelForXp);
   const levelUps: { skill: SkillKey; level: number }[] = [];
   for (const skill of SKILLS) {
     const gained = gains[skill] ?? 0;
     if (!gained) continue;
     const after = skillsAfter[skill] ?? 0;
-    const levelBefore = levelForXp(skillsBefore[skill] ?? 0);
-    const levelAfter = levelForXp(after);
+    const levelBefore = levelsBefore[skill];
+    const levelAfter = levelsAfter[skill];
     const toNext = xpToNext(after);
+    const detail =
+      skill === "prayer" && monster.bones
+        ? ` — ${session.kills} ${monster.bones.item.toLowerCase()}${altar > 1 ? ` at the altar (${altar}×)` : ""}`
+        : skill === "woodcutting"
+          ? ` — ${Math.min(logsHandled, gatherCap)} ${bestResource(LOGS, levelsBefore.woodcutting).name.toLowerCase()}`
+          : skill === "mining"
+            ? ` — ${Math.min(sacks.units.mining ?? 0, gatherCap)} ${bestResource(ORES, levelsBefore.mining).name.toLowerCase()}`
+            : skill === "fishing"
+              ? ` — ${Math.min(sacks.units.fishing ?? 0, gatherCap)} ${bestResource(FISH, levelsBefore.fishing).name.toLowerCase()}`
+              : "";
     receipt.push(
-      `${SKILL_LABEL[skill]} ${levelAfter} (+${gained}) — ${toNext > 0 ? `${toNext.toLocaleString("en-US")} to ${levelAfter + 1}` : "capped"}`
+      `${SKILL_LABEL[skill]} ${levelAfter} (+${gained.toLocaleString("en-US")})${detail}${toNext > 0 ? ` · ${toNext.toLocaleString("en-US")} to ${levelAfter + 1}` : " · capped"}`
     );
     if (levelAfter > levelBefore) levelUps.push({ skill, level: levelAfter });
   }
   if (delivered > 0) {
-    receipt.push(`Delivered ${haulLine(haul)} to the ${(await getBuildings(env)).size > 0 ? "town" : "camp"}.`);
+    receipt.push(`Delivered ${haulLine(haul)} to the ${buildings.size > 0 ? "town" : "camp"}.`);
   }
 
-  const hpAfter = levelForXp(skillsAfter.hitpoints ?? 0);
-  const tierAfter = tierForHp(hpAfter);
+  const weaponBefore = weaponFor(levelsBefore.attack);
+  const weaponAfter = weaponFor(levelsAfter.attack);
+  if (weaponAfter.key !== weaponBefore.key) {
+    receipt.push(`**You can wield a ${weaponAfter.name.toLowerCase()} now.**`);
+    publicBits.push(`🗡️ **${escapeMarkdown(player.username)} can wield a ${weaponAfter.name.toLowerCase()}.**`);
+    addLoot(`${weaponAfter.key}_scimitar`);
+  }
+
+  const tierAfter = tierForDefence(levelsAfter.defence);
   let tierUp: string | null = null;
   if (tierAfter.key !== tierBefore.key) {
     tierUp = tierAfter.name;
-    receipt.push(`**You are ${tierAfter.name} now${tierAfter.title ? ` — ${tierAfter.title}` : ""}.**`);
+    receipt.push(`**You can wear ${tierAfter.name.toLowerCase()} now${tierAfter.title ? ` — ${tierAfter.title}` : ""}.**`);
+    addLoot(`${tierAfter.key}_platebody`);
     await logEntry(env, player.discord_id, `tier:${tierAfter.key}`, day);
     if (tierAfter.title && !player.title) {
       await updatePlayer(env, player.discord_id, { title: tierAfter.title });
@@ -281,15 +359,16 @@ export async function performCheckin(
   } else {
     const next = nextTier(tierAfter);
     if (next) {
-      const need = xpForLevel(next.hp) - (skillsAfter.hitpoints ?? 0);
-      receipt.push(`${next.name} at Hitpoints ${next.hp} — ${need.toLocaleString("en-US")} XP away.`);
+      const need = xpForLevel(next.level) - (skillsAfter.defence ?? 0);
+      receipt.push(`${next.name} at Defence ${next.level} — ${need.toLocaleString("en-US")} XP away.`);
     }
   }
+  const combatAfter = combatLevel(levelsAfter);
+  if (combatAfter > combatBefore) receipt.push(`Combat level ${combatAfter}.`);
   for (const up of levelUps) publicBits.push(`**${SKILL_LABEL[up.skill]} ${up.level}!**`);
   if (tierUp) publicBits.push(`**${tierUp} now.**`);
   for (const skill of SKILLS) {
-    const after = levelForXp(skillsAfter[skill] ?? 0);
-    if (after >= 50 && levelForXp(skillsBefore[skill] ?? 0) < 50) {
+    if (levelsAfter[skill] >= 50 && levelsBefore[skill] < 50) {
       await logEntry(env, player.discord_id, `skill50:${skill}`, day);
     }
   }
@@ -297,7 +376,6 @@ export async function performCheckin(
   // ── Random event ───────────────────────────────────────────────
   const effect = effectFor(env, day);
   const rng = seededRng(`${player.discord_id}:${day}:event`);
-  const buildings = await getBuildings(env);
   const event = rollEvent(
     rng,
     player.event_dry_streak,
@@ -307,7 +385,6 @@ export async function performCheckin(
   );
   let quiz: { index: number } | null = null;
   let gotLamp = false;
-  let extraKills = 0;
   let rings = player.rings;
   const ringCap = player.graduated_at ? RING_CAP_GRADUATED : RING_CAP;
 
@@ -320,7 +397,7 @@ export async function performCheckin(
         eventStatements.push(grantLampStatement(env, player.discord_id, 0, "genie", day));
         gotLamp = true;
         addLoot("lamp");
-        line = `🧞 A ${label} appeared — you have a lamp. Rub it from the hub.`;
+        line = `🧞 A ${label} appeared — you have a lamp. Rub it with /lamp.`;
         publicBits.push(`🧞 ${label === "Genie" ? "A genie appeared" : "The Grim Reaper called"} — ${escapeMarkdown(player.username)} has a lamp.`);
         break;
       case "old_man": {
@@ -352,11 +429,13 @@ export async function performCheckin(
         break;
       case "evil_chicken":
         eventStatements.push(addXpStatement(env, player.discord_id, "defence", EVIL_CHICKEN_DEFENCE));
+        gains.defence = (gains.defence ?? 0) + EVIL_CHICKEN_DEFENCE;
         line = `🐔 The Evil Chicken! You fended it off: +${EVIL_CHICKEN_DEFENCE} Defence.`;
         publicBits.push(`🐔 The Evil Chicken went for ${escapeMarkdown(player.username)}.`);
         break;
       case "sandwich_lady":
         eventStatements.push(addXpStatement(env, player.discord_id, "hitpoints", SANDWICH_LADY_HP));
+        gains.hitpoints = (gains.hitpoints ?? 0) + SANDWICH_LADY_HP;
         line = `🥪 The Sandwich Lady: +${SANDWICH_LADY_HP} Hitpoints.`;
         publicBits.push(`🥪 The Sandwich Lady fed ${escapeMarkdown(player.username)}.`);
         break;
@@ -368,7 +447,7 @@ export async function performCheckin(
       case "quiz_master": {
         const index = pickQuiz(rng);
         quiz = { index };
-        line = `❓ The Quiz Master: "${QUIZ_BANK[index].q}" — answer from the hub.`;
+        line = `❓ The Quiz Master: "${QUIZ_BANK[index].q}" — answer below.`;
         publicBits.push(`❓ The Quiz Master cornered ${escapeMarkdown(player.username)}.`);
         break;
       }
@@ -387,11 +466,18 @@ export async function performCheckin(
         }
         break;
       }
-      case "drill_demon":
-        extraKills = DRILL_DEMON_KILLS;
-        line = `😈 The Drill Demon put you through your paces: +${DRILL_DEMON_KILLS} kill on your Slayer task.`;
+      case "drill_demon": {
+        // Sergeant Damien's exercises pay into a random combat skill, a
+        // genie lamp's worth: ten times the skill's level.
+        const combatSkills: SkillKey[] = ["attack", "strength", "defence"];
+        const skill = combatSkills[Math.floor(rng() * combatSkills.length)];
+        const xp = DRILL_DEMON_LAMP_PER_LEVEL * levelsAfter[skill];
+        eventStatements.push(addXpStatement(env, player.discord_id, skill, xp));
+        gains[skill] = (gains[skill] ?? 0) + xp;
+        line = `😈 The Drill Demon put you through your paces: +${xp} ${SKILL_LABEL[skill]}.`;
         publicBits.push(`😈 The Drill Demon drilled ${escapeMarkdown(player.username)}.`);
         break;
+      }
       case "prison_pete":
         eventStatements.push(
           grantLampStatement(env, player.discord_id, 0, "genie", day),
@@ -430,15 +516,9 @@ export async function performCheckin(
     }
   }
 
-  // ── Slayer task ────────────────────────────────────────────────
-  const progress = await progressTask(env, player, hpAfter, day, checkinId, now, extraKills);
-  receipt.push(`🗡️ ${progress.line}`);
-  if (progress.publicBit) publicBits.push(progress.publicBit);
-  if (progress.completed) {
-    await logEntry(env, player.discord_id, "milestone:first_task", day);
-  }
-
   // ── Clue scroll ────────────────────────────────────────────────
+  // The tier is the task monster's: a hill giant drops easy clues, a black
+  // demon hard ones, as in the game.
   const todays = await checkinsOn(env, day);
   const week1 = campaignWeek(day, env.CAMPAIGN_START);
   const act = actForWeek(week1, ACT_WEEKS, ACTS.length);
@@ -481,12 +561,12 @@ export async function performCheckin(
   } else {
     const clueRng = seededRng(`${player.discord_id}:${day}:clue`);
     if (rollClue(clueRng, false)) {
-      const tier = clueTierForHp(hpAfter);
+      const tier = clueTierForMonster(monster.combat);
       const steps = drawSteps(clueRng, tier, act);
       if (await insertClue(env, player.discord_id, tier.key, steps, day)) {
         hasClue = true;
         addLoot(`clue_${tier.key}`);
-        receipt.push(`📜 A clue scroll (${tier.name.toLowerCase()})! ${steps.length} steps — first: ${stepLabelFor(steps[0])}.`);
+        receipt.push(`📜 A ${monsterName.replace(/s$/, "")} dropped a clue scroll (${tier.name.toLowerCase()})! ${steps.length} steps — first: ${stepLabelFor(steps[0])}. /clue shows the trail.`);
         publicBits.push(`📜 ${escapeMarkdown(player.username)} found a ${tier.name.toLowerCase()} clue scroll.`);
       }
     }
@@ -510,6 +590,7 @@ export async function performCheckin(
       logEventStatement(env, player.discord_id, day, checkinId, "verifier_paid", { count: paying.length }, now),
     ]);
     await markVerificationsPaid(env, player.discord_id, paying.map((v) => v.checkin_id), checkinId);
+    gains.slayer = (gains.slayer ?? 0) + slayer;
     receipt.push(`Slayer +${slayer} for ${paying.length === 1 ? "a check-in you verified" : `${paying.length} check-ins you verified`}.`);
   }
 
@@ -523,7 +604,7 @@ export async function performCheckin(
         claimStatements.push(grantLampStatement(env, player.discord_id, Number(payload.xp ?? 0), payload.source ?? "claim", day));
         gotLamp = true;
         addLoot("lamp");
-        receipt.push(`🎁 Waiting for you: a ${payload.xp} XP lamp (${payload.reason ?? payload.source ?? "reward"}).`);
+        receipt.push(`🎁 Waiting for you: a ${Number(payload.xp ?? 0).toLocaleString("en-US")} XP antique lamp (${payload.reason ?? payload.source ?? "reward"}).`);
       } else if (claim.kind === "ring") {
         if (rings < ringCap) rings++;
         addLoot("ring");
@@ -552,7 +633,7 @@ export async function performCheckin(
       if (rings < ringCap) rings++;
       addLoot("ring");
       recovery = { recovery_started_day: null, recovery_count: 0, form_weeks: Math.max(1, player.form_weeks) };
-      receipt.push(`🏃 The Restless Lifter, complete: a ${RECOVERY_LAMP_XP} XP lamp, a Ring, and your form counter is back.`);
+      receipt.push(`🏃 The Restless Lifter, complete: a ${RECOVERY_LAMP_XP.toLocaleString("en-US")} XP antique lamp, a Ring, and your form counter is back.`);
       publicBits.push(`🏃 ${escapeMarkdown(player.username)} finished The Restless Lifter.`);
     } else {
       recovery = { recovery_count: count };
@@ -579,7 +660,7 @@ export async function performCheckin(
   if (total === 100) await logEntry(env, player.discord_id, "pet:beaver", day);
 
   // ── Raid ───────────────────────────────────────────────────────
-  const hit = await raidHit(env, player, hpAfter, weight, day, now, relics);
+  const hit = await raidHit(env, player, session.damage, day, now, relics);
   if (hit) {
     receipt.push(hit.line);
     publicBits.push(hit.line);
@@ -599,12 +680,16 @@ export async function performCheckin(
     rings,
     ...recovery,
   });
+  // The answer to the morning question, for the roll call.
+  try {
+    await recordAnswer(env, player.discord_id, day, "yes", now);
+  } catch {
+    // The check-in row is the record that matters.
+  }
 
   // ── Form line ──────────────────────────────────────────────────
   const recent = await countCheckinsBetween(env, player.discord_id, addDays(day, -6), day);
-  receipt.push(
-    `Form: ${recent} of the last 7 days · Form weeks ${player.form_weeks} · Rings ${rings}${player.recovery_started_day || recovery.recovery_started_day ? "" : ""}`
-  );
+  receipt.push(`Form: ${recent} of the last 7 days · Form weeks ${player.form_weeks} · Rings ${rings}`);
 
   const publicLine =
     `**${escapeMarkdown(player.username)}** checked in (${ordinalWord(ordinal)} this week, ${weightWord(weight)}).` +
@@ -613,7 +698,6 @@ export async function performCheckin(
   const xpGained = Object.entries(gains)
     .filter(([, amount]) => (amount ?? 0) > 0)
     .map(([skill, amount]) => ({ k: skill, x: amount ?? 0 }));
-  if (progress.xp > 0) xpGained.push({ k: "slayer", x: progress.xp });
 
   return {
     ok: true,
@@ -630,6 +714,7 @@ export async function performCheckin(
     loot,
     xpGained,
     task: taskShort(progress.completed ? progress.next : progress.task),
+    session: `${session.kills} ${monsterName} · max hit ${session.maxHit} · ${Math.round(session.hitChance * 100)}% to hit · ${session.weapon.name}`,
   };
 }
 
@@ -684,7 +769,7 @@ export async function finishClue(
   }
   const first = await logEntry(env, player.discord_id, "milestone:first_casket", day);
   const receipt =
-    `📜 Casket opened (${tier.name.toLowerCase()}): a ${loot.xp} XP lamp, ${loot.coins} coins to the camp` +
+    `📜 Casket opened (${tier.name.toLowerCase()}): a ${loot.xp.toLocaleString("en-US")} XP antique lamp, ${loot.coins} coins to the camp` +
     (loot.unique ? `, and **${loot.unique}**.` : loot.duplicate ? ", and a duplicate turned into extra XP." : ".");
   const publicBit =
     `📜 ${escapeMarkdown(player.username)} opened a ${tier.name.toLowerCase()} casket` +

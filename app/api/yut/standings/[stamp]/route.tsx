@@ -119,7 +119,7 @@ export async function GET(request: Request) {
                 <div style={{ display: "flex", fontSize: 22 }}>{row.tier}</div>
               </div>
               <div style={{ display: "flex", width: 110, justifyContent: "flex-end" }}>
-                {`HP ${row.hp}`}
+                {`Combat ${row.hp}`}
               </div>
               <div style={{ display: "flex", width: 190, justifyContent: "flex-end" }}>
                 {`Form weeks ${row.fw}`}

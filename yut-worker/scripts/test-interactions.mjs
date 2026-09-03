@@ -75,7 +75,7 @@ async function sql(q) {
 let failures = 0;
 function check(name, condition, detail) {
   if (!condition) failures++;
-  console.log(`${condition ? "PASS" : "FAIL"}  ${name}${condition ? "" : `\n      ${JSON.stringify(detail).slice(0, 600)}`}`);
+  console.log(`${condition ? "PASS" : "FAIL"}  ${name}${condition ? "" : `\n      ${JSON.stringify(detail ?? null).slice(0, 600)}`}`);
 }
 
 const content = (r) => r.body?.data?.content ?? "";
@@ -124,23 +124,40 @@ check("second check-in refused", /Already in for today/.test(content(again)), ag
 
 // 6. Yesterday's button.
 const stale = await click(`ci:2020-01-01`, alice);
-check("yesterday's button refused", /yesterday's button/.test(content(stale)), stale);
+check("yesterday's button refused", /yesterday's question/.test(content(stale)), stale);
 
 // 7. /checkin as a slash command for a new player, with a note.
 await command("join", [], bob);
 const bobCheckin = await command("checkin", [{ name: "note", type: 3, value: "Deadlifts, felt strong today and hit a PR" }], bob);
 check("/checkin accepted", /Checked in\.\*\* 1st this week/.test(content(bobCheckin)), bobCheckin);
-// The first check-in lands at Hitpoints 18 (double XP for new joiners), so
-// Mazchna is the master, not Turael.
-check("the first check-in gets a Slayer task", /(Turael|Mazchna) assigns you: \d+ [a-z ]+, due \d{4}-\d{2}-\d{2}/.test(content(bobCheckin)), bobCheckin);
+check("the first check-in gets a Turael task and fights it", /Turael assigns you \d+ [a-z ]+\./.test(content(bobCheckin)) && /⚔️ \d+ [a-z ]+: max hit \d+, \d+% to hit/.test(content(bobCheckin)), bobCheckin);
 const task = await command("task", [{ name: "status", type: 1 }], bob);
-check("/task shows the task", /Slayer task: .* 1\/\d for (Turael|Mazchna)/.test(content(task)), task);
+check("/task shows the task", /Task: .* \d+\/\d+ for Turael/.test(content(task)), task);
 
-// 8. XP landed: one check-in = 200 HP (×2 bootstrap) and 66/66/66 controlled.
+// 8. XP landed the way the game pays it: 4/3 per damage to each of the
+// three on controlled and to Hitpoints (which starts at 10), plus Slayer for
+// the kills and Prayer for the bones, and Woodcutting for the haul.
 const xp = await sql(`SELECT skill, xp FROM skill_xp WHERE player_id = '${bob.user.id}' ORDER BY skill`);
 const by = Object.fromEntries((xp ?? []).map((r) => [r.skill, r.xp]));
-check("bootstrap Hitpoints 4000, controlled 666 each", by.hitpoints === 4000 && by.attack === 666 && by.strength === 666 && by.defence === 666, by);
+// A random event (the Drill Demon) can add a lamp's worth to one of the three.
+const three = [by.attack ?? 0, by.strength ?? 0, by.defence ?? 0];
+check("controlled pays Attack, Strength and Defence alike, and Hitpoints from 1,154", Math.min(...three) > 0 && Math.max(...three) - Math.min(...three) <= 100 && by.hitpoints > 1154, by);
+check("kills on task paid Slayer", (by.slayer ?? 0) > 0, by);
 check("the haul paid Woodcutting", by.woodcutting > 0, by);
+const session = (await sql(`SELECT session FROM checkins WHERE player_id = '${bob.user.id}'`))[0];
+check("the check-in kept its session", /"monster"/.test(session?.session ?? "") && /"kills"/.test(session?.session ?? ""), session);
+// The morning post's roll call records the Yes. It lands after the response
+// (ctx.waitUntil), so give it a moment.
+let answer;
+for (let attempt = 0; attempt < 10; attempt++) {
+  answer = (await sql(`SELECT answer FROM day_answers WHERE player_id = '${bob.user.id}' AND day = '${day}'`))[0];
+  if (answer) break;
+  await new Promise((resolve) => setTimeout(resolve, 300));
+}
+check("a Yes is recorded as an answer", answer?.answer === "yes", answer);
+// And a No is a rest day, refused after a Yes.
+const noAfterYes = await click(`no:${day}`, bob);
+check("No after Yes is refused", /already said yes/.test(content(noAfterYes)), noAfterYes);
 
 // 9. The camp got the haul.
 const stores = await sql("SELECT resource, amount FROM town_resources WHERE resource IN ('coins','logs')");
@@ -176,7 +193,17 @@ check("bob verifies too", /Verified \(2\)/.test(content(verifyB)), verifyB);
 const verified = (await sql(`SELECT verified_count FROM checkins WHERE id = ${carolCheckin.id}`))[0];
 check("verified_count = 2", verified?.verified_count === 2, verified);
 const carolSlayer = (await sql(`SELECT xp FROM skill_xp WHERE player_id = '${carol}' AND skill = 'slayer'`))[0];
-check("carol got Slayer for the proof", (carolSlayer?.xp ?? 0) >= 1000, carolSlayer);
+check("carol got Slayer for the proof", (carolSlayer?.xp ?? 0) >= 500, carolSlayer);
+
+// 11b. A rest day: a new player says No.
+const frank = { user: { id: `frank_${stamp}`, username: "frank" } };
+await command("join", [], frank);
+const restDay = await click(`no:${day}`, frank);
+check("No is a rest day, nothing lost", /Rest day noted/.test(content(restDay)), restDay);
+const frankAnswer = (await sql(`SELECT answer FROM day_answers WHERE player_id = '${frank.user.id}' AND day = '${day}'`))[0];
+check("the No is recorded", frankAnswer?.answer === "no", frankAnswer);
+const frankCheckins = await sql(`SELECT COUNT(*) AS n FROM checkins WHERE player_id = '${frank.user.id}'`);
+check("a No is not a check-in", frankCheckins[0]?.n === 0, frankCheckins);
 
 // 12. Freshness: a player whose last check-in is four days old cannot act.
 const dave = `dave_${stamp}`;
@@ -202,7 +229,7 @@ check("unknown custom_id refused", /not one of mine/.test(content(junk)), junk);
 
 // 15. /help and /standings.
 const help = await command("help", [], bob);
-check("/help", /two a week/i.test(content(help)), help);
+check("/help", /two a week/i.test(content(help)) && /Slayer task/.test(content(help)), help);
 const standings = await command("standings", [], bob);
 check("/standings lists the roster", /alice|bob/.test(content(standings)), standings);
 

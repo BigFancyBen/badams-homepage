@@ -14,11 +14,12 @@ import { activeTask, taskShort } from "./slayer.ts";
 import { addDays, campaignWeek, actForWeek } from "./schedule.ts";
 import { ACTS, ACT_WEEKS } from "./config.ts";
 import type { Env, Player } from "./types.ts";
+import { combatLevel, weaponFor } from "./combat.ts";
 import {
   levelForXp,
   levelProgress,
   nextTier,
-  tierForHp,
+  tierForDefence,
   totalLevel,
   xpForLevel,
   xpToNext,
@@ -45,8 +46,10 @@ export interface SheetData {
   skills: Partial<Record<SkillKey, number>>;
   levels: Record<SkillKey, number>;
   hpLevel: number;
+  combat: number;
+  weapon: string;
   total: number;
-  tier: ReturnType<typeof tierForHp>;
+  tier: ReturnType<typeof tierForDefence>;
   formDots: string;
   formCount: number;
   lamps: number;
@@ -85,8 +88,10 @@ export async function gatherSheet(env: Env, player: Player, day: string): Promis
     skills,
     levels,
     hpLevel,
+    combat: combatLevel(levels),
+    weapon: weaponFor(levels.attack).key,
     total: totalLevel(skills, SKILLS),
-    tier: tierForHp(hpLevel),
+    tier: tierForDefence(levels.defence),
     formDots,
     formCount: days.size,
     lamps: lamps.length,
@@ -111,6 +116,8 @@ export function sheetImageUrl(env: Env, data: SheetData, attempt = 0): Promise<s
       pct: levelProgress(data.skills[skill] ?? 0),
     })),
     t: data.total,
+    cb: data.combat,
+    wp: data.weapon,
     tier: data.tier.key,
     tn: data.tier.name,
     d7: data.formDots,
@@ -139,6 +146,8 @@ export interface ReportPayload {
   xp: { k: string; x: number }[];
   lv?: { k: string; l: number }[];
   task?: string;
+  /** The session line: "23 hill giants · max hit 4 · 54% to hit · Rune scimitar" */
+  s?: string;
   d: string;
 }
 
@@ -229,7 +238,7 @@ export async function renderCard(
 export function textSheet(data: SheetData): string {
   const lines: string[] = [];
   const title = data.player.title ? ` · ${data.player.title}` : "";
-  lines.push(`**${data.player.username}**${title} — ${data.tier.name} · Total level ${data.total}`);
+  lines.push(`**${data.player.username}**${title} — ${data.tier.name} · Combat ${data.combat} · Total level ${data.total}`);
   const cells = SKILLS.map((skill) => {
     const xp = data.skills[skill] ?? 0;
     const level = data.levels[skill];
@@ -241,9 +250,8 @@ export function textSheet(data: SheetData): string {
   lines.push(cells.slice(6, 9).join(" · "));
   const next = nextTier(data.tier);
   if (next) {
-    const hpXp = data.skills.hitpoints ?? 0;
-    const need = xpForLevel(next.hp) - hpXp;
-    lines.push(`${next.name} at Hitpoints ${next.hp} — ${need.toLocaleString("en-US")} XP away.`);
+    const need = xpForLevel(next.level) - (data.skills.defence ?? 0);
+    lines.push(`${next.name} at Defence ${next.level} — ${need.toLocaleString("en-US")} XP away.`);
   }
   lines.push(
     `Form ${formBar(data.formDots)} (${data.formCount} of 7) · Form weeks ${data.player.form_weeks} · Rings ${data.player.rings} · Lamps ${data.lamps}`

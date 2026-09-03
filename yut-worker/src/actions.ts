@@ -36,6 +36,7 @@ import {
 import { buttonRow, buttonRows, type Button, type DiscordUser, type Env, type Player } from "./types.ts";
 import { castBallot, getOptions, getVote, voteSummary } from "./votes.ts";
 import { levelForXp } from "./xp.ts";
+import { combatLevel, levelsOf } from "./combat.ts";
 
 /**
  * The town's buttons and the group's votes: everything a fresh player can
@@ -88,7 +89,7 @@ export async function townView(env: Env, player: Player, day: string, now: numbe
   }
 
   const skills = await getSkills(env, player.discord_id);
-  const hp = levelForXp(skills.hitpoints ?? 0);
+  const hp = combatLevel(levelsOf(skills, levelForXp));
   const mine = await getWorkers(env, player.discord_id);
   const cap = sackCapHours(buildings);
   if (mine.length > 0) {
@@ -130,7 +131,7 @@ export async function recruitMenu(env: Env, player: Player, day: string): Promis
   const town = await getTown(env);
   if (town.level < 1) return { content: "Workers arrive at Founding I." };
   const skills = await getSkills(env, player.discord_id);
-  const hp = levelForXp(skills.hitpoints ?? 0);
+  const hp = combatLevel(levelsOf(skills, levelForXp));
   const mine = await getWorkers(env, player.discord_id);
   const cost = mine.length === 0 ? 0 : 300 * mine.length;
   void day;
@@ -153,7 +154,7 @@ export async function recruitMenu(env: Env, player: Player, day: string): Promis
 export async function doRecruit(env: Env, player: Player, kind: string, day: string, now: number): Promise<Line> {
   if (!WORKER_KINDS.includes(kind as WorkerKind)) return { content: "No such kind of worker." };
   const skills = await getSkills(env, player.discord_id);
-  const hp = levelForXp(skills.hitpoints ?? 0);
+  const hp = combatLevel(levelsOf(skills, levelForXp));
   const result = await recruit(env, player, kind as WorkerKind, hp, day, now);
   if (!result.ok) return { content: result.reason };
   return {
@@ -186,9 +187,8 @@ export async function upgradeMenu(env: Env, player: Player): Promise<Line> {
 
 export async function doUpgrade(env: Env, player: Player, workerId: number, day: string, now: number): Promise<Line> {
   const skills = await getSkills(env, player.discord_id);
-  const hp = levelForXp(skills.hitpoints ?? 0);
   const relics = await getRelics(env);
-  const result = await upgradeWorker(env, player, workerId, tierKeyForOwner(hp), day, now, relics);
+  const result = await upgradeWorker(env, player, workerId, tierKeyForOwner(levelForXp(skills.defence ?? 0)), day, now, relics);
   if (!result.ok) return { content: result.reason };
   return {
     content: `Upgraded to ${result.tier.name}: ${result.tier.rate} an hour now.`,

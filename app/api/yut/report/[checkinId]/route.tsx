@@ -48,12 +48,20 @@ interface ReportPayload {
   xp: { k: string; x: number }[];
   /** Level-ups */
   lv?: LevelUp[];
-  /** e.g. "Slayer task: Hill giants 3/5 for Mazchna" */
+  /** e.g. "Task: Hill giants 23/40 for Mazchna" */
   task?: string;
+  /** The session: "23 hill giants · max hit 4 · 54% to hit · Rune scimitar" */
+  s?: string;
   /** YYYY-MM-DD */
   d: string;
   /** Retry counter. Only there to make a re-render a different URL. */
   r?: number;
+}
+
+/** The scimitar named at the end of the session line, as an icon key. */
+function sessionIcon(session: string): string {
+  const match = session.match(/(bronze|iron|steel|black|mithril|adamant|rune|dragon) scimitar/i);
+  return match ? `${match[1].toLowerCase()}_scimitar` : "gem";
 }
 
 /** Space above a block, kept out of the block's own height so labels sit flush. */
@@ -76,10 +84,11 @@ export async function GET(request: Request) {
       !!entry && typeof entry.k === "string" && typeof entry.l === "number"
   );
   const task = typeof result.payload.task === "string" ? result.payload.task.trim() : "";
+  const session = typeof result.payload.s === "string" ? result.payload.s.trim() : "";
 
   const lootHeight = loot.length ? LABEL_H + gridRows(loot.length, LOOT_COLS) * LOOT_CELL_H : 0;
   const xpHeight = xp.length ? LABEL_H + gridRows(xp.length, XP_COLS) * XP_CELL_H : 0;
-  const linesHeight = levelUps.length * LINE_H + (task ? LINE_H : 0);
+  const linesHeight = (session ? LINE_H : 0) + levelUps.length * LINE_H + (task ? LINE_H : 0);
   const height = cardHeight([
     TITLE_H,
     SUBTITLE_H,
@@ -103,6 +112,9 @@ export async function GET(request: Request) {
 
         {linesHeight ? (
           <div style={{ display: "flex", flexDirection: "column", marginTop: GAP }}>
+            {session ? (
+              <CardLine icon={itemIconDataUrl(sessionIcon(session))} color={RS.parchment} text={session} />
+            ) : null}
             {levelUps.map((up, i) => (
               <CardLine
                 key={`${up.k}-${i}`}

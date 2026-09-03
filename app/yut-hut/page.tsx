@@ -7,6 +7,7 @@ const description = "A workout-accountability campaign for the yut-hut channel";
 export const metadata: Metadata = {
   title,
   description,
+  robots: { index: false, follow: false },
   openGraph: {
     title,
     description,

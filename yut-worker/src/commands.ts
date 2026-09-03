@@ -15,14 +15,17 @@ import {
 import {
   activeRoster,
   addXp,
+  attachProof,
   getAllSkills,
+  getCheckinFor,
   getPlayer,
   getSkills,
   getPlayers,
   joinPlayer,
   updatePlayer,
 } from "./db.ts";
-import { allowedMentions, editInteractionReply, escapeMarkdown, postMessage } from "./discord.ts";
+import { ACCENT, allowedMentions, editInteractionReply, escapeMarkdown, postMessage, replyTo } from "./discord.ts";
+import { getState } from "./db.ts";
 import { attachmentKind, mirrorAttachment } from "./images.ts";
 import {
   deferred,
@@ -69,7 +72,8 @@ import {
   type InteractionOption,
 } from "./types.ts";
 import { performCheckin } from "./checkins.ts";
-import { levelForXp, tierForHp } from "./xp.ts";
+import { levelForXp, tierForDefence } from "./xp.ts";
+import { combatLevel, levelsOf } from "./combat.ts";
 import { resolveWeekFor } from "./weekly.ts";
 
 /** Reads one option off a command, or off its first subcommand. */
@@ -163,8 +167,8 @@ export async function runCommand(
       const sub = subcommand(interaction);
       if (sub && sub !== "status") {
         return freshAction(env, user, day, async (p) => {
-          const skills = await getSkills(env, p.discord_id);
-          return { content: await spendPoints(env, p, sub, levelForXp(skills.hitpoints ?? 0), day, now) };
+          const levels = levelsOf(await getSkills(env, p.discord_id), levelForXp);
+          return { content: await spendPoints(env, p, sub, levels, combatLevel(levels), day, now) };
         });
       }
       return playerAction(env, user, day, (p) => taskView(env, p));
@@ -230,9 +234,9 @@ async function joinCommand(
     }).catch(() => undefined)
   );
   return reply(
-    "You are in. Two a week is the whole game. Press Check In on the morning post, or `/checkin` with a photo." +
+    "You are in. Two a week is the whole game. Every morning the bot asks whether you worked out in the last 24 hours: press Yes when you did. `/checkin` adds a note or a photo." +
       (ping ? " You will be pinged on the morning post and Sunday's last call." : ""),
-    { components: [buttonRow([{ label: "Check In now", custom_id: `ci:${day}`, style: 3, emoji: "💪" }])] }
+    { components: [buttonRow([{ label: "Yes, I worked out today", custom_id: `ci:${day}`, style: 3, emoji: "💪" }])] }
   );
 }
 
@@ -309,6 +313,35 @@ async function checkinCommand(
   if (!kind) return reply("That file is not an image or a video.");
   if (attachment.size > MAX_ATTACHMENT_BYTES) return reply("That file is too big — 25 MB is the cap.");
 
+  // Already said Yes today: the photo becomes that check-in's proof.
+  const existing = await getCheckinFor(env, user.id, day);
+  if (existing) {
+    if (existing.attachment_r2_key) return reply("Today's check-in already carries proof.");
+    ctx.waitUntil(
+      (async () => {
+        const mirrored = await mirrorAttachment(env, user.id, day, attachment);
+        if (!mirrored) {
+          await editInteractionReply(env, interaction.application_id, interaction.token, { content: "The photo could not be saved." });
+          return;
+        }
+        await attachProof(env, existing.id, mirrored.key, mirrored.url, kind);
+        const message = await postMessage(env, {
+          content: `📸 **${escapeMarkdown(user.username)}** added proof to today's check-in.` + (kind === "video" ? `\n${mirrored.url}` : "") + (note ? `\n> ${escapeMarkdown(note)}` : ""),
+          embeds: kind === "image" ? [{ color: ACCENT, image: { url: mirrored.url } }] : [],
+          components: [buttonRow([{ label: "Verify", custom_id: `vf:${existing.id}`, style: 3, emoji: "💪" }])],
+          allowed_mentions: allowedMentions(),
+          ...replyTo(await getState(env, `daily_post:${day}`)),
+        });
+        void message;
+        await editInteractionReply(env, interaction.application_id, interaction.token, {
+          content: "Proof attached. Friends have 72 hours to press Verify.",
+          flags: EPHEMERAL,
+        });
+      })()
+    );
+    return deferred();
+  }
+
   // Mirroring the file first is a fetch, and a fetch does not fit inside
   // the three seconds Discord gives an interaction. Defer, then do the work.
   ctx.waitUntil(
@@ -362,14 +395,15 @@ async function standingsCommand(env: Env, day: string): Promise<Answer> {
   const skills = await getAllSkills(env);
   const rows = roster
     .map((p) => {
-      const hpXp = skills.get(p.discord_id)?.hitpoints ?? 0;
-      const hp = levelForXp(hpXp);
-      return { name: p.username, hp, hpXp, tier: tierForHp(hp).name, fw: p.form_weeks };
+      const levels = levelsOf(skills.get(p.discord_id) ?? {}, levelForXp);
+      const hp = combatLevel(levels);
+      const hpXp = hp * 1e9 + (skills.get(p.discord_id)?.hitpoints ?? 0);
+      return { name: p.username, hp, hpXp, tier: tierForDefence(levels.defence).name, fw: p.form_weeks };
     })
     .sort((a, b) => b.hpXp - a.hpXp);
   if (rows.length === 0) return reply("Nobody is on the roster yet.");
   return reply(
-    rows.map((r, i) => `${i + 1}. **${escapeMarkdown(r.name)}** · ${r.tier} · HP ${r.hp} · Form weeks ${r.fw}`).join("\n")
+    rows.map((r, i) => `${i + 1}. **${escapeMarkdown(r.name)}** · ${r.tier} · Combat ${r.hp} · Form weeks ${r.fw}`).join("\n")
   );
 }
 
@@ -377,9 +411,10 @@ async function helpCommand(env: Env): Promise<Answer> {
   return reply(
     [
       "**Yut Hut** — two a week is the whole game.",
-      "Check in whenever you have exercised: the Check In button on the morning post, or `/checkin` with a note and a photo. Any exercise counts. One per day.",
+      "Every morning the bot asks whether you worked out in the last 24 hours. Press Yes when you did (any exercise counts, one a day), No when you rested. `/checkin` adds a note or a photo.",
+      "Every Yes is a training session against your Slayer task, scored the way Old School RuneScape scores it: your levels, weapon, armour and prayers decide the damage, and the damage decides the XP.",
       "The first two check-ins of the week are full value, the third and fourth half, the rest a fifth.",
-      "A check-in in the last four days is what lets you play: rub lamps, follow clues, verify friends.",
+      "A check-in in the last four days is what lets you play: `/lamp`, `/clue`, `/task`, `/town`, `/vote`, and verifying friends.",
       "Only people who `/join` are counted. Nobody else is ever named.",
       `Rules and commands: ${env.IMAGE_BASE_URL}/yut-hut`,
     ].join("\n")

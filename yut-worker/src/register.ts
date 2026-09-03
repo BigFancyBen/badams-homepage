@@ -14,10 +14,10 @@ const BUILDING_CHOICES = BUILDINGS.filter((b) => b.key !== "town_hall").map((b) 
 export const COMMANDS = [
   {
     name: "checkin",
-    description: "Log today's exercise. Any exercise counts.",
+    description: "Check in with a note or a photo. The morning post's Yes button does it without either.",
     options: [
       { type: 3, name: "note", description: "One line, optional", max_length: MAX_NOTE_LENGTH },
-      { type: 11, name: "photo", description: "Proof. Unlocks peer verification" },
+      { type: 11, name: "photo", description: "Proof. Unlocks peer verification; can be added after a Yes" },
     ],
   },
   { name: "play", description: "The hub: lamps, clues, the camp, your sheet" },
@@ -122,8 +122,8 @@ export const COMMANDS = [
     options: [
       { type: 1, name: "status", description: "Your task and your Slayer points" },
       { type: 1, name: "skip", description: "Skip the task for 30 Slayer points" },
-      { type: 1, name: "lamp", description: "A 5,000 XP lamp for 100 Slayer points" },
-      { type: 1, name: "helmet", description: "The Slayer helmet and the title Slayer Master, 400 points" },
+      { type: 1, name: "xp", description: "10,000 Slayer XP for 100 Slayer points" },
+      { type: 1, name: "helmet", description: "The Slayer helmet (+16% on task) and the title Slayer Master, 400 points" },
     ],
   },
   { name: "shop", description: "Spend bingo points" },
@@ -134,6 +134,7 @@ export const COMMANDS = [
     options: [
       { type: 1, name: "status", description: "The current raid, or why none can start" },
       { type: 1, name: "propose", description: "Open a raid vote" },
+      { type: 1, name: "sitout", description: "How to sit a raid out" },
     ],
   },
   { name: "freeze", description: "Your Rings of Life and how they work" },

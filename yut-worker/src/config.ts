@@ -48,17 +48,77 @@ export function isSkill(key: string): key is SkillKey {
 
 /**
  * RuneScape's experience table, exactly — level 99 is 13,034,431 XP and every
- * unlock sits at its RuneScape level. Awards are sized so a check-in is worth
- * about two thousand, which puts a two-a-week player at Dragon (Hitpoints
- * 60, 273,742 XP) by the finale. 99 is unreachable by design.
+ * unlock sits at its RuneScape level. Experience is earned the way Old School
+ * pays it: a check-in is one training session against the player's Slayer
+ * task, and the session's damage decides the XP (see combat.ts). 99 is
+ * unreachable in a year by design.
  */
 export const XP_DIVISOR = 1;
 export const LEVEL_CAP = 99;
 
-/** Hitpoints per check-in, before the weight. */
-export const HP_XP = 2000;
-/** Combat XP per check-in, before the weight, split by combat style. */
-export const COMBAT_XP = 2000;
+/** Everybody starts at Hitpoints 10, as in the game. */
+export const STARTING_HITPOINTS_XP = 1154;
+
+// ── The session (combat.ts) ────────────────────────────────────────
+
+/**
+ * Combat experience per point of damage: 4 to the trained skill, or 4/3 to
+ * each of Attack, Strength and Defence on controlled, and 4/3 to Hitpoints
+ * always. Wiki: Combat experience.
+ */
+export const COMBAT_XP_PER_DAMAGE = 4;
+export const CONTROLLED_XP_PER_DAMAGE = 4 / 3;
+export const HITPOINTS_XP_PER_DAMAGE = 4 / 3;
+
+/** A scimitar swings every four ticks. */
+export const PLAYER_ATTACK_SPEED = 4;
+
+/**
+ * The one knob that is the game's rather than RuneScape's: how long a
+ * full-value session is, in swings (a four-tick weapon makes 800 in a little
+ * over half an hour). Damage taken costs time out of it — three ticks per lobster eaten,
+ * and a bank trip when the inventory runs dry — which is what gives Defence
+ * and armour their job. Tuned so two sessions a week, every week, reach
+ * Dragon (60 Attack and Defence) by the finale.
+ */
+export const SESSION_ATTACKS = 800;
+/** A lobster heals 12 and takes three ticks to eat; an inventory carries 27 with a weapon and no shield swap. */
+export const FOOD_HEAL = 12;
+export const EAT_TICKS = 3;
+export const INVENTORY_FOOD = 27;
+/** A trip to the bank and back, in swings' worth of time (about three minutes). */
+export const BANK_TRIP_ATTACKS = 75;
+/** However bad it goes, a session keeps this much of its time. */
+export const SESSION_MIN_FRACTION = 0.2;
+
+/** Style bonuses to effective levels: +3 to one, or +1 to all three on controlled. */
+export const STYLE_BONUS: Record<CombatStyle, Partial<Record<"attack" | "strength" | "defence", number>>> = {
+  accurate: { attack: 3 },
+  aggressive: { strength: 3 },
+  defensive: { defence: 3 },
+  controlled: { attack: 1, strength: 1, defence: 1 },
+};
+
+/** The Slayer helmet: +16⅔% accuracy and damage on task. */
+export const SLAYER_HELMET_MULTIPLIER = 7 / 6;
+
+/** The melee prayers, by Prayer level, as effective-level multipliers. */
+export const PRAYERS: { name: string; level: number; attack?: number; strength?: number; defence?: number }[] = [
+  { name: "Thick Skin", level: 1, defence: 1.05 },
+  { name: "Burst of Strength", level: 4, strength: 1.05 },
+  { name: "Clarity of Thought", level: 7, attack: 1.05 },
+  { name: "Rock Skin", level: 10, defence: 1.1 },
+  { name: "Superhuman Strength", level: 13, strength: 1.1 },
+  { name: "Improved Reflexes", level: 16, attack: 1.1 },
+  { name: "Steel Skin", level: 28, defence: 1.15 },
+  { name: "Ultimate Strength", level: 31, strength: 1.15 },
+  { name: "Incredible Reflexes", level: 34, attack: 1.15 },
+  { name: "Chivalry", level: 60, attack: 1.15, strength: 1.18, defence: 1.2 },
+  { name: "Piety", level: 70, attack: 1.2, strength: 1.23, defence: 1.25 },
+];
+
+/** Burying the kills' bones at the Chapel: a gilded altar pays 250%, 300% with one burner, 350% with two. */
+export const ALTAR_MULTIPLIER = [1, 2.5, 3, 3.5];
 
 export type CombatStyle = "accurate" | "aggressive" | "defensive" | "controlled";
 
@@ -72,14 +132,6 @@ export const COMBAT_STYLES: CombatStyle[] = [
 export function isCombatStyle(value: string): value is CombatStyle {
   return (COMBAT_STYLES as string[]).includes(value);
 }
-
-/** Where a check-in's combat XP goes. Controlled splits it three ways. */
-export const STYLE_SPLIT: Record<CombatStyle, Partial<Record<SkillKey, number>>> = {
-  accurate: { attack: 1 },
-  aggressive: { strength: 1 },
-  defensive: { defence: 1 },
-  controlled: { attack: 1 / 3, strength: 1 / 3, defence: 1 / 3 },
-};
 
 export const STYLE_LABEL: Record<CombatStyle, string> = Object.fromEntries(
   choices.styles.map((s) => [s.value, s.name])
@@ -96,13 +148,13 @@ export const STYLE_LABEL: Record<CombatStyle, string> = Object.fromEntries(
 export const ORDINAL_WEIGHTS = [1.0, 1.0, 0.5, 0.5, 0.2, 0.2, 0.2];
 
 /** Slayer for the author of a verified check-in, before the weight. */
-export const VERIFIED_AUTHOR_SLAYER = 1000;
+export const VERIFIED_AUTHOR_SLAYER = 500;
 /** Combat XP multiplier once a check-in is verified. */
 export const VERIFIED_MULTIPLIER = 1.5;
 /** Slayer for pressing Verify, paid on the verifier's own next check-in. */
-export const VERIFIER_SLAYER = 250;
+export const VERIFIER_SLAYER = 100;
 /** Extra Slayer to the author for each verification past the first, up to this many. */
-export const EXTRA_VERIFICATION_SLAYER = 100;
+export const EXTRA_VERIFICATION_SLAYER = 50;
 export const MAX_COUNTED_VERIFICATIONS = 3;
 /** How long the Verify button stays live. */
 export const VERIFY_WINDOW_HOURS = 72;
@@ -111,13 +163,64 @@ export const VERIFIER_PAY_WINDOW_DAYS = 7;
 /** How many verifications one person can be paid for in a day. */
 export const VERIFIER_DAILY_CAP = 3;
 
-/** Prayer for a Form week, and the bonus for three or more that week. */
-export const PRAYER_FORM_WEEK = 1500;
-export const PRAYER_THREE_PLUS_BONUS = 1000;
+/**
+ * Gathering: every log, ore and fish the player handles pays the experience
+ * of the best one their level can take — the wiki's tables. A session
+ * handles at most this many of each resource (× weight); the rest still
+ * reaches the town, it just is not the player's own skilling.
+ */
+export const GATHER_UNITS_PER_SESSION = 100;
 
-/** Gathering XP per resource delivered, and the cap per check-in. */
-export const GATHER_XP_PER_UNIT = 2;
-export const GATHER_XP_CAP = 1500;
+export interface Resource {
+  name: string;
+  level: number;
+  xp: number;
+}
+
+export const LOGS: Resource[] = [
+  { name: "Logs", level: 1, xp: 25 },
+  { name: "Oak logs", level: 15, xp: 37.5 },
+  { name: "Willow logs", level: 30, xp: 67.5 },
+  { name: "Teak logs", level: 35, xp: 85 },
+  { name: "Maple logs", level: 45, xp: 100 },
+  { name: "Mahogany logs", level: 50, xp: 125 },
+  { name: "Yew logs", level: 60, xp: 175 },
+  { name: "Magic logs", level: 75, xp: 250 },
+  { name: "Redwood logs", level: 90, xp: 380 },
+];
+
+export const ORES: Resource[] = [
+  { name: "Copper ore", level: 1, xp: 17.5 },
+  { name: "Iron ore", level: 15, xp: 35 },
+  { name: "Silver ore", level: 20, xp: 40 },
+  { name: "Coal", level: 30, xp: 50 },
+  { name: "Gold ore", level: 40, xp: 65 },
+  { name: "Mithril ore", level: 55, xp: 80 },
+  { name: "Adamantite ore", level: 70, xp: 95 },
+  { name: "Runite ore", level: 85, xp: 125 },
+];
+
+export const FISH: Resource[] = [
+  { name: "Shrimps", level: 1, xp: 10 },
+  { name: "Sardine", level: 5, xp: 20 },
+  { name: "Herring", level: 10, xp: 30 },
+  { name: "Anchovies", level: 15, xp: 40 },
+  { name: "Trout", level: 20, xp: 50 },
+  { name: "Pike", level: 25, xp: 60 },
+  { name: "Salmon", level: 30, xp: 70 },
+  { name: "Tuna", level: 35, xp: 80 },
+  { name: "Lobster", level: 40, xp: 90 },
+  { name: "Swordfish", level: 50, xp: 100 },
+  { name: "Monkfish", level: 62, xp: 120 },
+  { name: "Shark", level: 76, xp: 110 },
+];
+
+/** The best resource a level can take. */
+export function bestResource(table: Resource[], level: number): Resource {
+  let best = table[0];
+  for (const row of table) if (level >= row.level) best = row;
+  return best;
+}
 
 // ── Roster ─────────────────────────────────────────────────────────
 
@@ -132,9 +235,6 @@ export const EXPEDITION_MAX_WEEKS = 8;
 
 // ── Per-player phases, from /join ──────────────────────────────────
 
-/** Weeks 1-2: every check-in is worth double Hitpoints. */
-export const BOOTSTRAP_WEEKS = 2;
-export const BOOTSTRAP_HP_MULTIPLIER = 2;
 /** Week 13: Graduation. */
 export const GRADUATION_WEEK = 13;
 
@@ -155,14 +255,19 @@ export const EARLY_RING_WEEK_TO = 4;
 export const RECOVERY_SILENT_DAYS = 14;
 export const RECOVERY_WINDOW_DAYS = 14;
 export const RECOVERY_CHECKINS = 3;
-export const RECOVERY_LAMP_XP = 5000;
+export const RECOVERY_LAMP_XP = 7500;
 
 // ── Lamps ──────────────────────────────────────────────────────────
 
-/** A genie lamp is 100 × the chosen skill's level, clamped. */
-export const LAMP_PER_LEVEL = 100;
-export const LAMP_MIN = 1000;
-export const LAMP_MAX = 6000;
+/**
+ * A genie's lamp pays ten times the chosen skill's level, as in the game.
+ * The bigger lamps the campaign hands out (quests, Foundings, raids, caskets)
+ * are the Achievement Diary's antique lamps: 2,500 / 7,500 / 15,000 / 50,000.
+ */
+export const LAMP_PER_LEVEL = 10;
+export const LAMP_MIN = 10;
+export const LAMP_MAX = 990;
+export const ANTIQUE_LAMP = { easy: 2500, medium: 7500, hard: 15000, elite: 50000 };
 /** Unrubbed lamps go into Hitpoints after this long. */
 export const LAMP_AUTO_RUB_DAYS = 14;
 
@@ -198,17 +303,17 @@ export const EVENT_TABLE: { key: EventKey; weight: number; label: string }[] = [
   { key: "prison_pete", weight: 2, label: "Prison Pete" },
 ];
 
-export const EVIL_CHICKEN_DEFENCE = 1500;
-export const SANDWICH_LADY_HP = 1500;
+export const EVIL_CHICKEN_DEFENCE = 500;
+export const SANDWICH_LADY_HP = 500;
 export const OLD_MAN_RESOURCE = 150;
 export const DRUNKEN_DWARF_COINS = 200;
-export const QUIZ_RIGHT_XP = 2000;
+export const QUIZ_RIGHT_XP = 500;
 export const QUIZ_WRONG_COINS = 50;
 export const FORESTER_REPAIR = 30;
 export const BEEKEEPER_HOURS = 24;
 export const BEEKEEPER_BONUS = 0.25;
-/** The Drill Demon puts you through your paces: extra kills on your Slayer task. */
-export const DRILL_DEMON_KILLS = 1;
+/** The Drill Demon's exercises pay a genie lamp's worth (ten × level) into a random combat skill. */
+export const DRILL_DEMON_LAMP_PER_LEVEL = 10;
 
 /** Three-button trivia. The right answer is index `a`. */
 export const QUIZ_BANK: { q: string; o: [string, string, string]; a: number }[] = [
@@ -256,31 +361,36 @@ export const QUIZ_BANK: { q: string; o: [string, string, string]; a: number }[] 
 
 // ── Tiers ──────────────────────────────────────────────────────────
 
+/**
+ * A player's tier is the full armour set their Defence level can wear —
+ * the game's own requirements: bronze and iron at 1 (so everyone starts in
+ * iron), steel 5, black 10,
+ * mithril 20, adamant 30, rune 40, dragon 60. Attack picks the scimitar
+ * the same way (combat.ts). The Rune (t), (g) and (or) sets are clue
+ * rewards, not levels, so they are cosmetics in the collection log.
+ */
 export interface Tier {
   key: string;
   name: string;
-  /** Hitpoints level the tier starts at. */
-  hp: number;
+  /** Defence level the set needs. */
+  level: number;
   title?: string;
   haul: number;
 }
 
 export const TIERS: Tier[] = [
-  { key: "bronze", name: "Bronze", hp: 1, title: "Recruit", haul: 1 },
-  { key: "iron", name: "Iron", hp: 2, haul: 1 },
-  { key: "steel", name: "Steel", hp: 5, haul: 1 },
-  { key: "black", name: "Black", hp: 10, haul: 1 },
-  { key: "mithril", name: "Mithril", hp: 20, title: "Regular", haul: 1 },
-  { key: "adamant", name: "Adamant", hp: 30, title: "Veteran", haul: 1 },
-  { key: "rune", name: "Rune", hp: 40, title: "Champion", haul: 1 },
-  { key: "rune_t", name: "Rune (t)", hp: 45, haul: 1.25 },
-  { key: "rune_g", name: "Rune (g)", hp: 50, title: "Elite", haul: 1.25 },
-  { key: "rune_or", name: "Rune (or)", hp: 55, haul: 1.5 },
-  { key: "dragon", name: "Dragon", hp: 60, title: "Dragon Slayer", haul: 2 },
+  { key: "bronze", name: "Bronze", level: 1, title: "Recruit", haul: 1 },
+  { key: "iron", name: "Iron", level: 1, haul: 1 },
+  { key: "steel", name: "Steel", level: 5, haul: 1 },
+  { key: "black", name: "Black", level: 10, haul: 1 },
+  { key: "mithril", name: "Mithril", level: 20, title: "Regular", haul: 1 },
+  { key: "adamant", name: "Adamant", level: 30, title: "Veteran", haul: 1.25 },
+  { key: "rune", name: "Rune", level: 40, title: "Champion", haul: 1.5 },
+  { key: "dragon", name: "Dragon", level: 60, title: "Dragon Slayer", haul: 2 },
 ];
 
-/** Worker slots = 1 + floor(HP / this). */
-export const WORKER_SLOT_PER_HP = 15;
+/** Worker slots = 1 + floor(combat level / this). */
+export const WORKER_SLOT_PER_COMBAT = 25;
 
 // ── Town ───────────────────────────────────────────────────────────
 
@@ -347,9 +457,10 @@ export const CLUE_CHANCE = 12;
 export interface ClueTier {
   key: string;
   name: string;
-  /** Hitpoints level the tier starts at. */
-  hp: number;
+  /** Combat level of the monster that drops it, as the game does. */
+  combat: number;
   steps: number;
+  /** The antique lamp inside. */
   xp: number;
   coins: number;
   /** One in this many caskets holds a unique. */
@@ -359,15 +470,15 @@ export interface ClueTier {
 }
 
 export const CLUE_TIERS: ClueTier[] = [
-  { key: "easy", name: "Easy", hp: 1, steps: 2, xp: 1500, coins: 100, uniqueChance: 3, verifiedSteps: 0,
+  { key: "easy", name: "Easy", combat: 1, steps: 2, xp: ANTIQUE_LAMP.easy, coins: 100, uniqueChance: 3, verifiedSteps: 0,
     uniques: ["Bob shirt (red)", "Bob shirt (blue)", "Bob shirt (green)", "Highwayman mask", "Team cape", "Wooden shield (g)"] },
-  { key: "medium", name: "Medium", hp: 20, steps: 3, xp: 3000, coins: 200, uniqueChance: 4, verifiedSteps: 0,
+  { key: "medium", name: "Medium", combat: 40, steps: 3, xp: ANTIQUE_LAMP.medium, coins: 200, uniqueChance: 4, verifiedSteps: 0,
     uniques: ["Ranger boots", "Wizard boots", "Black cavalier", "Cat mask", "Amulet of glory (t)", "Rune helm (h1)"] },
-  { key: "hard", name: "Hard", hp: 40, steps: 4, xp: 4500, coins: 400, uniqueChance: 5, verifiedSteps: 1,
+  { key: "hard", name: "Hard", combat: 80, steps: 4, xp: ANTIQUE_LAMP.hard, coins: 400, uniqueChance: 5, verifiedSteps: 1,
     uniques: ["Robin hood hat", "Rune (g) set", "Rune (t) set", "Zamorak cloak", "Saradomin cloak"] },
-  { key: "elite", name: "Elite", hp: 55, steps: 5, xp: 6000, coins: 700, uniqueChance: 6, verifiedSteps: 1,
+  { key: "elite", name: "Elite", combat: 120, steps: 5, xp: ANTIQUE_LAMP.elite, coins: 700, uniqueChance: 6, verifiedSteps: 1,
     uniques: ["Dragon full helm ornament", "Gilded scimitar", "Third-age amulet", "Ring of coins"] },
-  { key: "master", name: "Master", hp: 60, steps: 6, xp: 8000, coins: 1000, uniqueChance: 8, verifiedSteps: 2,
+  { key: "master", name: "Master", combat: 180, steps: 6, xp: ANTIQUE_LAMP.elite, coins: 1000, uniqueChance: 8, verifiedSteps: 2,
     uniques: ["Third-age full helm", "Third-age cloak", "Bloodhound"] },
 ];
 
@@ -387,11 +498,7 @@ export type ClueStepKey =
   | "task_complete"
   | "full_sack";
 
-/**
- * `from` is the act a step becomes drawable in. The three that need workers
- * or raids sit at 99 until those ship — a step nobody can complete would
- * make a trail that never opens.
- */
+/** `from` is the act a step becomes drawable in: sacks need the town (Act 2), raids Act 3. */
 export const CLUE_STEPS: { key: ClueStepKey; label: string; verified: boolean; from?: number }[] = [
   { key: "verified_photo", label: "a check-in with a verified photo", verified: true },
   { key: "verified_video", label: "a check-in with a verified video", verified: true },
@@ -401,12 +508,12 @@ export const CLUE_STEPS: { key: ClueStepKey; label: string; verified: boolean; f
   { key: "late", label: "a check-in after 8pm", verified: false },
   { key: "two_in_a_row", label: "two days in a row", verified: false },
   { key: "with_two_others", label: "a check-in on the same day as two others", verified: false },
-  { key: "deliver_200", label: "deliver 200+ resources in one check-in", verified: false, from: 99 },
+  { key: "deliver_200", label: "deliver 200+ resources in one check-in", verified: false, from: 2 },
   { key: "long_note", label: "a check-in with a note of 20+ words", verified: false },
   { key: "verify_someone", label: "verify somebody else's check-in", verified: false },
-  { key: "raid_checkin", label: "a check-in during a raid week", verified: false, from: 99 },
+  { key: "raid_checkin", label: "a check-in during a raid week", verified: false, from: 3 },
   { key: "task_complete", label: "a check-in that completes a Slayer task", verified: false },
-  { key: "full_sack", label: "a check-in while holding a full sack", verified: false, from: 99 },
+  { key: "full_sack", label: "a check-in while holding a full sack", verified: false, from: 2 },
 ];
 
 // ── Collection log ─────────────────────────────────────────────────
@@ -424,7 +531,7 @@ export const ACTS = [
   { number: 3, name: "The Wilderness" },
   { number: 4, name: "Dragon Slayer" },
 ];
-export const FOUNDING_LAMP_XP = 5000;
+export const FOUNDING_LAMP_XP = ANTIQUE_LAMP.hard;
 export const FOUNDING_FORM_WEEKS = 6;
 
 /**
@@ -458,7 +565,7 @@ export const CAMPAIGN_EVENTS: { week: number; key: string; post: string; effect?
 // ── Shop ───────────────────────────────────────────────────────────
 
 export const SHOP: { key: string; name: string; points: number }[] = [
-  { key: "small_lamp", name: "Small lamp (2,000 XP)", points: 15 },
+  { key: "small_lamp", name: "Antique lamp (2,500 XP)", points: 15 },
   { key: "title", name: "A title", points: 25 },
   { key: "trim", name: "Sheet trim skin", points: 30 },
   { key: "worker_name", name: "Name or skin a worker", points: 10 },
@@ -505,7 +612,7 @@ export const BUILDINGS: Building[] = [
   { key: "dock", name: "Fishing Dock", cost: { logs: 150, coins: 200, ore: 50 }, from: 2, effect: "Fish +25% per level", maxLevel: 3 },
   { key: "mill", name: "Lumber Mill", cost: { logs: 150, coins: 200, ore: 50 }, from: 2, effect: "Logs +25% per level", maxLevel: 3 },
   { key: "cart", name: "Mine Cart", cost: { logs: 150, coins: 200, ore: 50 }, from: 2, effect: "Ore +25% per level", maxLevel: 3 },
-  { key: "chapel", name: "Chapel", cost: { logs: 200, coins: 300 }, from: 2, effect: "Prayer +500 per Form week per level", maxLevel: 3 },
+  { key: "chapel", name: "Chapel", cost: { logs: 200, coins: 300 }, from: 2, effect: "A gilded altar: the bones from your kills pay 250%, then 300%, then 350%", maxLevel: 3 },
   { key: "tavern", name: "Tavern", cost: { logs: 250, coins: 400 }, from: 2, effect: "Random events 1 in 6 → 1 in 5 → 1 in 4", maxLevel: 2 },
   { key: "barracks", name: "Barracks", cost: { logs: 300, coins: 600, ore: 100 }, from: 3, effect: "Raid damage +10% per level", maxLevel: 3 },
   { key: "walls", name: "Walls", cost: { logs: 300, coins: 600, ore: 100 }, from: 3, effect: "Raid heals −5 per miss per level", maxLevel: 3 },
@@ -517,7 +624,6 @@ export const BUILDING_LEVEL_COST_MULTIPLIER = [1, 2.5, 6, 12];
 export const BUILDING_HALF_AT = 50;
 export const BANK_HOURS_PER_LEVEL = 24;
 export const GATHER_BUILDING_BONUS = 0.25;
-export const CHAPEL_PRAYER_PER_LEVEL = 500;
 export const TAVERN_EVENT_CHANCE = [6, 5, 4];
 export const BARRACKS_DAMAGE_PER_LEVEL = 0.1;
 export const WALLS_HEAL_REDUCTION_PER_LEVEL = 5;
@@ -573,13 +679,15 @@ export const RAID_PROPOSAL_COOLDOWN_DAYS = 7;
 
 export const RAID_DAYS = 7;
 export const RAID_COOLDOWN_WEEKS = 2;
+/**
+ * Boss Hitpoints = roster × this × the roster's mean full-session damage,
+ * × the boss multiplier: everybody doing exactly their two falls 17% short,
+ * and a couple of third sessions carry it. Damage is the session's own.
+ */
 export const RAID_HP_UNITS_PER_HEAD = 2.4;
-export const RAID_DAMAGE_BASE = 100;
-export const RAID_DAMAGE_PER_HP = 2;
 export const RAID_HEAL_PER_MISS = 20;
 export const RAID_HEAL_CAP_PER_DAY = 80;
-export const RAID_SUCCESS_LAMP_PER_HP = 100;
-export const RAID_SUCCESS_LAMP_MIN = 2000;
+export const RAID_SUCCESS_LAMP_XP = ANTIQUE_LAMP.hard;
 export const RAID_SUCCESS_COINS = 1000;
 export const RAID_SUCCESS_BARS = 200;
 export const RAID_FAIL_STORE_LOSS = 0.15;
@@ -649,29 +757,11 @@ export const WORKER_NAMES = ["Bob", "Hans", "Zeke", "Gertrude", "Wise Old Man", 
 
 // ── Slayer tasks ───────────────────────────────────────────────────
 
-export interface SlayerMaster {
-  key: string;
-  name: string;
-  /** Hitpoints level the master starts assigning at. */
-  hp: number;
-  /** Slayer points per task. */
-  points: number;
-  /** Kills per task, inclusive range. Every check-in is one kill. */
-  kills: [number, number];
-  /** Days to finish. */
-  days: number;
-  xpPerKill: number;
-  monsters: string[];
-}
-
-export const SLAYER_MASTERS: SlayerMaster[] = [
-  { key: "turael", name: "Turael", hp: 1, points: 0, kills: [2, 3], days: 14, xpPerKill: 100, monsters: ["chickens", "cows", "goblins", "rats", "spiders"] },
-  { key: "mazchna", name: "Mazchna", hp: 10, points: 2, kills: [3, 4], days: 14, xpPerKill: 250, monsters: ["hill giants", "skeletons", "zombies", "wolves", "bats"] },
-  { key: "vannaka", name: "Vannaka", hp: 20, points: 4, kills: [4, 5], days: 21, xpPerKill: 500, monsters: ["moss giants", "lesser demons", "ogres", "crocodiles", "jellies"] },
-  { key: "chaeldar", name: "Chaeldar", hp: 30, points: 10, kills: [4, 6], days: 21, xpPerKill: 750, monsters: ["bloodvelds", "fire giants", "turoths", "kalphites", "dust devils"] },
-  { key: "nieve", name: "Nieve", hp: 40, points: 12, kills: [5, 7], days: 21, xpPerKill: 1000, monsters: ["greater demons", "gargoyles", "nechryaels", "black dragons", "abyssal demons"] },
-  { key: "duradel", name: "Duradel", hp: 50, points: 15, kills: [6, 8], days: 28, xpPerKill: 1250, monsters: ["abyssal demons", "dark beasts", "smoke devils", "black demons", "iron dragons"] },
-];
+/**
+ * The masters, their assignment tables, the monsters and the amounts all
+ * come from config/osrs.json (scripts/fetch-osrs.mjs pulls them from the
+ * wiki). What is left here is the reward shop: the same prices as the game.
+ */
 
 /** The Nth task in a row pays a multiple: the 10th 5×, the 50th 15×, the 100th 25×. */
 export const SLAYER_STREAK_BONUS = [
@@ -680,6 +770,8 @@ export const SLAYER_STREAK_BONUS = [
   { every: 100, multiplier: 25 },
 ];
 export const SLAYER_SKIP_COST = 30;
-export const SLAYER_LAMP_COST = 100;
-export const SLAYER_LAMP_XP = 5000;
-export const SLAYER_TITLE_COST = 400;
+/** 100 points buys 10,000 Slayer experience. */
+export const SLAYER_XP_COST = 100;
+export const SLAYER_XP_BOUGHT = 10000;
+/** The Slayer helmet (Malevolent masquerade), 400 points. */
+export const SLAYER_HELMET_COST = 400;

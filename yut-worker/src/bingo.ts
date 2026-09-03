@@ -52,6 +52,7 @@ interface Stats {
   quizWon: boolean;
   casket: boolean;
   hp: number;
+  attack: number;
   tierIdx: number;
   maxSkill: number;
   formWeeks: number;
@@ -80,7 +81,7 @@ export const TASKS: Record<string, { label: string; points: number; check: Check
   reach_mithril: { label: "Reach Mithril", points: 3, check: (s) => s.tierIdx >= tierIndex("mithril") },
   reach_adamant: { label: "Reach Adamant", points: 3, check: (s) => s.tierIdx >= tierIndex("adamant") },
   reach_rune: { label: "Reach Rune", points: 3, check: (s) => s.tierIdx >= tierIndex("rune") },
-  reach_rune_g: { label: "Reach Rune (g)", points: 3, check: (s) => s.tierIdx >= tierIndex("rune_g") },
+  reach_rune_g: { label: "Wield a dragon scimitar", points: 3, check: (s) => s.attack >= 60 },
   reach_dragon: { label: "Reach Dragon", points: 3, check: (s) => s.tierIdx >= tierIndex("dragon") },
   hp_55: { label: "Hitpoints 55", points: 3, check: (s) => s.hp >= 55 },
   note: { label: "Check in with a note", points: 1, check: (s) => s.hasNote },
@@ -181,7 +182,8 @@ async function gather(env: Env, player: Player, day: string): Promise<Stats> {
     quizWon: entries.has("milestone:quiz_master"),
     casket: entries.has("milestone:first_casket"),
     hp,
-    tierIdx: tierIndexForHp(hp),
+    attack: levelForXp(skills.attack ?? 0),
+    tierIdx: tierIndexForDefence(levelForXp(skills.defence ?? 0)),
     maxSkill: Math.max(...levels),
     formWeeks: player.form_weeks,
     workers: workers.length,
@@ -200,9 +202,9 @@ async function gather(env: Env, player: Player, day: string): Promise<Stats> {
   };
 }
 
-function tierIndexForHp(hp: number): number {
+function tierIndexForDefence(defence: number): number {
   let index = 0;
-  for (let i = 0; i < TIERS.length; i++) if (hp >= TIERS[i].hp) index = i;
+  for (let i = 0; i < TIERS.length; i++) if (defence >= TIERS[i].level) index = i;
   return index;
 }
 
