@@ -58,9 +58,11 @@ import {
 import {
   ACCENT,
   allowedMentions,
+  deleteInteractionReply,
   editInteractionReply,
   editMessage,
   escapeMarkdown,
+  followUp,
   logToDiscord,
   postMessage,
   replyTo,
@@ -199,6 +201,81 @@ export async function handleInteraction(
   const now = Date.now();
   const answer = await route(env, ctx, interaction, now);
   return answer instanceof Response ? answer : deliver(env, now, interaction, answer);
+}
+
+/**
+ * Discord gives an interaction three seconds, network included, and a cold
+ * D1 can spend most of that on its own — the first `/join` after a deploy
+ * came back "didn't respond in time". So: run the handler, and if it has not
+ * answered by ACK_BUDGET_MS, acknowledge now (a deferred ephemeral for a
+ * command, a silent deferral for a button) and deliver the answer through the
+ * webhook token when it arrives. The fast path is untouched.
+ */
+const ACK_BUDGET_MS = 2000;
+
+export async function handleInTime(
+  env: Env,
+  ctx: ExecutionContext,
+  interaction: Interaction
+): Promise<Response> {
+  if (interaction.type === InteractionType.PING) return handleInteraction(env, ctx, interaction);
+
+  // Test seam: wrangler.test.toml names one command to hold back, so the
+  // harness can watch the late path work.
+  const slow = env.SLOW_COMMAND && interaction.data?.name === env.SLOW_COMMAND;
+  const work = (slow ? new Promise((r) => setTimeout(r, ACK_BUDGET_MS + 500)) : Promise.resolve()).then(() =>
+    handleInteraction(env, ctx, interaction)
+  );
+
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const late = new Promise<"late">((resolve) => {
+    timer = setTimeout(() => resolve("late"), ACK_BUDGET_MS);
+  });
+  const first = await Promise.race([work, late]);
+  if (first !== "late") {
+    clearTimeout(timer);
+    return first;
+  }
+
+  const isButton = interaction.type === InteractionType.MESSAGE_COMPONENT;
+  ctx.waitUntil(
+    work
+      .then((response) => deliverLate(env, interaction, isButton, response))
+      .catch((error) => logToDiscord(env, `Late delivery failed: ${String(error)}`))
+  );
+  return isButton ? Response.json({ type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE }) : deferred();
+}
+
+/** What the handler would have answered, sent through the token instead. */
+async function deliverLate(
+  env: Env,
+  interaction: Interaction,
+  isButton: boolean,
+  response: Response
+): Promise<void> {
+  const body = (await response.json()) as { type: number; data?: unknown };
+  const appId = interaction.application_id;
+  const token = interaction.token;
+  if (!appId || !token) return;
+  switch (body.type) {
+    case InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE:
+      // A command's deferral put up a fresh ephemeral: fill it. A button was
+      // only acknowledged: the reply is a new ephemeral under the same token.
+      if (isButton) await followUp(env, appId, token, body.data);
+      else await editInteractionReply(env, appId, token, body.data);
+      return;
+    case InteractionResponseType.UPDATE_MESSAGE:
+      await editInteractionReply(env, appId, token, body.data);
+      return;
+    case InteractionResponseType.DEFERRED_UPDATE_MESSAGE:
+      // The handler already edited an earlier running reply. A command's
+      // placeholder would sit there "thinking" forever: take it down.
+      if (!isButton) await deleteInteractionReply(env, appId, token);
+      return;
+    default:
+      // The handler deferred itself and owns the token from here.
+      return;
+  }
 }
 
 export function today(env: Env, now: number): string {

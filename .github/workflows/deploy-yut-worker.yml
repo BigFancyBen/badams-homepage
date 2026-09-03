@@ -88,36 +88,43 @@ jobs:
       - name: Secrets
         run: node scripts/push-secrets.mjs
 
-      - name: Slash commands
-        if: env.YUT_DISCORD_BOT_TOKEN != ''
-        run: npm run register
-        env:
-          DISCORD_BOT_TOKEN: ${{ env.YUT_DISCORD_BOT_TOKEN }}
-
-      # Interactions Endpoint URL, and whether the bot is in the server.
+      # Interactions Endpoint URL, and whether the bot is in the server and
+      # can see the channel. Writes the invite link or the channel fix to the
+      # summary when not.
       - name: Discord application
+        id: discord
         if: env.YUT_DISCORD_BOT_TOKEN != ''
         run: node scripts/discord-setup.mjs
         env:
           DISCORD_BOT_TOKEN: ${{ env.YUT_DISCORD_BOT_TOKEN }}
           WORKER_URL: ${{ steps.deploy.outputs.url }}
 
+      # Guild commands can only be registered once the bot is in the guild;
+      # before that Discord answers 403 Missing Access.
+      - name: Slash commands
+        if: steps.discord.outputs.in_guild == 'true'
+        run: npm run register
+        env:
+          DISCORD_BOT_TOKEN: ${{ env.YUT_DISCORD_BOT_TOKEN }}
+
       # The Worker signs render URLs with YUT_IMAGE_SECRET and Vercel checks
-      # them. Sign one here and ask Vercel: 200 means the pair matches, 401
-      # means it does not, anything else usually means the site's own deploy
-      # of this merge has not finished. Never fails the job.
+      # them. Sign one here and ask Vercel: 200 means the pair matches, 403
+      # (bad signature) means it does not, 404 means the site's own deploy of
+      # this merge has not finished. Never fails the job.
       - name: Vercel image secret
         if: env.YUT_IMAGE_SECRET != ''
         run: |
           url=$(node ../scripts/yut-sign.mjs standings/ci '{"t":"CI","rows":[]}' --base https://www.benadams.dev)
           code=$(curl -s -o /dev/null -w '%{http_code}' "$url" || echo 000)
+          echo "Vercel answered $code"
           echo "## Vercel" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           case "$code" in
             200) echo "- ✅ Vercel accepts URLs signed with YUT_IMAGE_SECRET" >> "$GITHUB_STEP_SUMMARY" ;;
-            401) echo "- ❌ Vercel rejected a URL signed with YUT_IMAGE_SECRET. Set the same value as YUT_IMAGE_SECRET in the Vercel project (or make this secret equal Vercel's SCRANDLE_IMAGE_SECRET) and redeploy the site." >> "$GITHUB_STEP_SUMMARY"
+            401|403) echo "- ❌ Vercel rejected a URL signed with YUT_IMAGE_SECRET ($code). Set the same value as YUT_IMAGE_SECRET in the Vercel project (or make this secret equal Vercel's SCRANDLE_IMAGE_SECRET) and redeploy the site." >> "$GITHUB_STEP_SUMMARY"
                  echo "::warning::Vercel image secret does not match YUT_IMAGE_SECRET" ;;
-            *)   echo "- ⚠️ Vercel answered $code; the site deploy for this merge may still be running. Re-run this workflow to check again." >> "$GITHUB_STEP_SUMMARY" ;;
+            404) echo "- ⚠️ Vercel has no render route yet (404): the site deploy for this merge is probably still running. Re-run this workflow to check again." >> "$GITHUB_STEP_SUMMARY" ;;
+            *)   echo "- ⚠️ Vercel answered $code. Re-run this workflow to check again." >> "$GITHUB_STEP_SUMMARY" ;;
           esac
 
       - name: What is still missing

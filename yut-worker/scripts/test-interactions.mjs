@@ -228,8 +228,21 @@ const junk = await click("something:else", bob);
 check("unknown custom_id refused", /not one of mine/.test(content(junk)), junk);
 
 // 15. /help and /standings.
+// /help is held back by SLOW_COMMAND in wrangler.test.toml: the Worker must
+// acknowledge inside Discord's window and fill the placeholder afterwards.
 const help = await command("help", [], bob);
-check("/help", /two a week/i.test(content(help)) && /Slayer task/.test(content(help)), help);
+check("a slow command is acknowledged with a deferred placeholder", help.body?.type === 5, help);
+let lateHelp = null;
+for (let i = 0; i < 40 && !lateHelp; i++) {
+  await new Promise((r) => setTimeout(r, 250));
+  try {
+    const log = JSON.parse(readFileSync("mock-discord-log.json", "utf-8"));
+    lateHelp = log.find(
+      (e) => e.method === "PATCH" && /@original/.test(e.url) && /two a week/i.test(e.body) && /Slayer task/.test(e.body)
+    );
+  } catch {}
+}
+check("the slow answer arrives through the webhook token", Boolean(lateHelp), lateHelp);
 const standings = await command("standings", [], bob);
 check("/standings lists the roster", /alice|bob/.test(content(standings)), standings);
 

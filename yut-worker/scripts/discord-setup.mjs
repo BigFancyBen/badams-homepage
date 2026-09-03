@@ -60,12 +60,15 @@ function note(line) {
   console.log(line);
 }
 
-function summary(invited) {
+function summary(inGuild, seesChannel) {
+  if (process.env.GITHUB_OUTPUT) {
+    appendFileSync(process.env.GITHUB_OUTPUT, `in_guild=${inGuild}\nsees_channel=${seesChannel}\n`);
+  }
   if (!process.env.GITHUB_STEP_SUMMARY) return;
   appendFileSync(
     process.env.GITHUB_STEP_SUMMARY,
     `## Discord\n\n${notes.map((n) => `- ${n.replace(/\n/g, " ")}`).join("\n")}\n\n` +
-      (invited ? "" : `Invite link: ${INVITE}\n\n`)
+      (inGuild ? "" : `Invite link: ${INVITE}\n\n`)
   );
 }
 
@@ -93,28 +96,34 @@ async function main() {
       console.error(
         "The Worker must answer Discord's PING with a valid signature — is it deployed with the right DISCORD_PUBLIC_KEY?"
       );
-      summary(false);
+      summary(false, false);
       return 1;
     }
   }
 
   // ── Membership ───────────────────────────────────────────────────
   const guild = await discord("GET", `/guilds/${guildId}`);
-  let invited = guild.ok;
+  const inGuild = guild.ok;
+  let seesChannel = false;
   if (!guild.ok) {
     note(`⚠️ The bot is not in the server yet. A server admin needs to open, once:\n${INVITE}`);
   } else {
     const channel = await discord("GET", `/channels/${channelId}`);
     if (channel.ok) {
+      seesChannel = true;
       note(`✅ In ${guild.json.name}, sees #${channel.json.name}`);
     } else {
-      invited = false;
+      // The invite grants server-wide permissions; a private channel still
+      // hides itself behind its own overwrites, and only someone who can see
+      // it can add the bot to them.
       note(
-        `⚠️ In ${guild.json.name} but cannot see the channel (${channel.status}). Give the bot View Channel on it, or re-invite:\n${INVITE}`
+        `⚠️ In ${guild.json.name} but cannot see channel ${channelId} (${channel.status}). ` +
+          `It is private: open the channel → Edit Channel → Permissions → Add members or roles → the bot, ` +
+          `and allow View Channel, Send Messages, Manage Messages, Embed Links, Attach Files, Read Message History.`
       );
     }
   }
-  summary(invited);
+  summary(inGuild, seesChannel);
   return 0;
 }
 

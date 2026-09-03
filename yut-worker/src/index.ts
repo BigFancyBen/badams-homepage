@@ -1,7 +1,7 @@
 import { performCheckin } from "./checkins.ts";
 import { getPlayer, joinPlayer } from "./db.ts";
 import { logToDiscord, registerGuildCommands } from "./discord.ts";
-import { handleInteraction, postCheckinLine } from "./interactions.ts";
+import { handleInTime, postCheckinLine } from "./interactions.ts";
 import { COMMANDS } from "./register.ts";
 import { gameDay, parseHour } from "./schedule.ts";
 import { gatherSheet, renderCard, sheetImageUrl } from "./sheet.ts";
@@ -28,7 +28,7 @@ export default {
       if (!valid) return new Response("Bad request signature", { status: 401 });
 
       try {
-        return await handleInteraction(env, ctx, JSON.parse(body) as Interaction);
+        return await handleInTime(env, ctx, JSON.parse(body) as Interaction);
       } catch (error) {
         await logToDiscord(env, `Interaction failed: ${String(error)}`);
         return Response.json({
