@@ -1,0 +1,51 @@
+# The Worker is not part of the Vercel deploy — the site and the bot ship
+# separately. Merging to main is the deploy, the same as scrandle: a change to
+# wrangler.toml or a new migration goes live without anyone remembering to
+# run `wrangler deploy` by hand.
+name: Deploy yut worker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "yut-worker/**"
+      - ".github/workflows/deploy-yut-worker.yml"
+  workflow_dispatch:
+
+# Queue rather than cancel: a cancelled run still leaves main undeployed.
+concurrency:
+  group: deploy-yut-worker
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: yut-worker
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: yut-worker/package-lock.json
+
+      - run: npm ci
+
+      # The pre-commit hook only checks the Next app.
+      - run: npm run type-check
+
+      - run: npm run test:xp
+
+      # Migrations first, in their own step: code that reads a new column
+      # must never reach Cloudflare before the column exists. Idempotent —
+      # wrangler skips what the d1_migrations table already records.
+      - run: npx wrangler d1 migrations apply yut-hut --remote
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+      - run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

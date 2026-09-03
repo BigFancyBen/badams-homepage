@@ -1,0 +1,54 @@
+name = "yut-hut"
+main = "src/index.ts"
+compatibility_date = "2025-01-15"
+
+# Hourly on the hour. One tick does everything that is due: the daily
+# resolution at ROLLOVER_HOUR_UTC, the morning post at DAILY_POST_HOUR_UTC, the
+# Sunday last call, the town's hourly output, vote closes. Keep it broad and
+# UTC — DST is handled by shifting the *_HOUR_UTC vars, never the cron.
+[triggers]
+crons = ["0 * * * *"]
+
+[vars]
+DISCORD_APPLICATION_ID = "1544835406661423185"
+# A verification key, not a signing key: all it lets anyone do is check that a
+# request really came from Discord. Scrandle keeps its own as a secret out of
+# caution; there is no reason to.
+DISCORD_PUBLIC_KEY = "d1a2ff6162e899c7e7a14f0f6262f63a311df2fc1c8d37b0432334049d8378f6"
+DISCORD_GUILD_ID = "108689961535934464"
+DISCORD_CHANNEL_ID = "1544450389628297216"   # yut-hut
+IMAGE_BASE_URL = "https://www.benadams.dev"   # apex 308-redirects to www; avoid the hop
+R2_PUBLIC_BASE = ""                           # from the bucket's public dev URL
+
+# The game runs on Mountain time. Cloudflare crons do not follow DST: every
+# hour below is +1 in November and -1 in March, by hand, the same as scrandle.
+#
+# The game day runs 09:00 UTC to 09:00 UTC — 3am while MDT is in effect — so a
+# midnight session counts as today. The week resolves on the Monday tick.
+ROLLOVER_HOUR_UTC = "9"
+# The morning post: 14:00 UTC = 8am MDT. Set to -1 to disable, which is how a
+# fresh deploy should sit until the roster exists.
+DAILY_POST_HOUR_UTC = "14"
+# Sunday last call: 23:00 UTC Sunday = 5pm MDT. LAST_CALL_WEEKDAY -1 disables.
+LAST_CALL_WEEKDAY = "0"
+LAST_CALL_HOUR_UTC = "23"
+# The Monday the campaign starts. Acts are thirteen weeks from here; the year
+# arc in config.ts is dated off it.
+CAMPAIGN_START = "2026-09-14"
+# The town's hourly tick. Off until the town ships.
+TOWN_TICK_ENABLED = "0"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "yut-hut"
+database_id = ""
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "yut-hut-images"
+
+# Secrets (wrangler secret put <NAME>), never in this file:
+#   DISCORD_BOT_TOKEN
+#   YUT_IMAGE_SECRET          must byte-match the Vercel env of the same name
+#   ADMIN_SECRET              gates /admin/* routes
+#   DISCORD_LOG_WEBHOOK_URL   (optional)

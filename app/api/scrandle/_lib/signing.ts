@@ -60,16 +60,19 @@ export type PayloadResult<T> =
 
 /**
  * Verifies `?d=<base64url json>&s=<hmac>` and returns the decoded payload.
+ *
+ * The secret defaults to Scrandle's; other bots that reuse this scheme pass
+ * their own so a leaked key for one does not sign images for the other.
  */
 export async function readSignedPayload<T>(
-  url: URL
+  url: URL,
+  secret: string | undefined = process.env.SCRANDLE_IMAGE_SECRET
 ): Promise<PayloadResult<T>> {
-  const secret = process.env.SCRANDLE_IMAGE_SECRET;
   if (!secret) {
     return {
       ok: false,
       status: 503,
-      error: "SCRANDLE_IMAGE_SECRET is not configured",
+      error: "image secret is not configured",
     };
   }
 

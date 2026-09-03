@@ -1,0 +1,27 @@
+{
+  "name": "yut-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail",
+    "type-check": "tsc --noEmit",
+    "migrate": "wrangler d1 migrations apply yut-hut --remote",
+    "migrate:local": "node scripts/make-test-config.mjs && wrangler d1 migrations apply yut-hut --local --config wrangler.test.toml",
+    "register": "node scripts/register-commands.mjs",
+    "test:config": "node scripts/make-test-config.mjs",
+    "test:xp": "node scripts/test-xp.mjs",
+    "test:interactions": "node scripts/test-interactions.mjs",
+    "test:year": "node scripts/simulate-year.mjs",
+    "dev:local": "node scripts/make-test-config.mjs && wrangler dev --local --config wrangler.test.toml --port 8788",
+    "db:local": "node scripts/make-test-config.mjs && wrangler d1 execute yut-hut --local --config wrangler.test.toml",
+    "mock:discord": "node scripts/mock-discord.mjs"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260821.1",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.125.0"
+  }
+}

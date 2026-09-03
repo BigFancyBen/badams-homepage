@@ -1,0 +1,19 @@
+{
+  "styles": [
+    { "name": "Accurate (Attack)", "value": "accurate" },
+    { "name": "Aggressive (Strength)", "value": "aggressive" },
+    { "name": "Defensive (Defence)", "value": "defensive" },
+    { "name": "Controlled (all three)", "value": "controlled" }
+  ],
+  "skills": [
+    { "name": "Hitpoints", "value": "hitpoints" },
+    { "name": "Attack", "value": "attack" },
+    { "name": "Strength", "value": "strength" },
+    { "name": "Defence", "value": "defence" },
+    { "name": "Prayer", "value": "prayer" },
+    { "name": "Slayer", "value": "slayer" },
+    { "name": "Woodcutting", "value": "woodcutting" },
+    { "name": "Mining", "value": "mining" },
+    { "name": "Fishing", "value": "fishing" }
+  ]
+}

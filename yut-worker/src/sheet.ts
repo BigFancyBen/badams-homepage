@@ -1,0 +1,215 @@
+import { LOG_TOTAL, SKILLS, SKILL_LABEL, type SkillKey } from "./config.ts";
+import { clueLine } from "./clues.ts";
+import {
+  checkinsBetween,
+  countCheckinsTotal,
+  getSkills,
+  logCount,
+  openClue,
+  unspentLamps,
+} from "./db.ts";
+import { base64UrlFromString, hmacBase64Url } from "./encoding.ts";
+import { addDays, campaignWeek, actForWeek } from "./schedule.ts";
+import { ACTS, ACT_WEEKS } from "./config.ts";
+import type { Env, Player } from "./types.ts";
+import {
+  levelForXp,
+  levelProgress,
+  nextTier,
+  tierForHp,
+  totalLevel,
+  xpForLevel,
+  xpToNext,
+} from "./xp.ts";
+
+/**
+ * The render endpoints live in the Next app on Vercel — Workers Free gives
+ * 10ms of CPU, nowhere near enough to rasterize anything. We hand the render
+ * a signed URL carrying everything it needs and it returns a PNG.
+ */
+async function signedUrl(env: Env, route: string, payload: unknown): Promise<string> {
+  const data = base64UrlFromString(JSON.stringify(payload));
+  const sig = await hmacBase64Url(env.YUT_IMAGE_SECRET, data);
+  return `${env.IMAGE_BASE_URL}/api/yut/${route}?d=${data}&s=${sig}`;
+}
+
+function retryField(attempt: number): { r?: number } {
+  return attempt > 0 ? { r: attempt } : {};
+}
+
+/** Everything the sheet shows, gathered once. */
+export interface SheetData {
+  player: Player;
+  skills: Partial<Record<SkillKey, number>>;
+  levels: Record<SkillKey, number>;
+  hpLevel: number;
+  total: number;
+  tier: ReturnType<typeof tierForHp>;
+  formDots: string;
+  formCount: number;
+  lamps: number;
+  clue: string | null;
+  log: number;
+  checkins: number;
+  act: number;
+  week: number;
+}
+
+export async function gatherSheet(env: Env, player: Player, day: string): Promise<SheetData> {
+  const skills = await getSkills(env, player.discord_id);
+  const levels = Object.fromEntries(
+    SKILLS.map((skill) => [skill, levelForXp(skills[skill] ?? 0)])
+  ) as Record<SkillKey, number>;
+  const hpLevel = levels.hitpoints;
+  const recent = await checkinsBetween(env, player.discord_id, addDays(day, -6), day);
+  const days = new Set(recent.map((c) => c.day));
+  let formDots = "";
+  for (let i = 6; i >= 0; i--) formDots += days.has(addDays(day, -i)) ? "x" : ".";
+  const lamps = await unspentLamps(env, player.discord_id);
+  const clue = await openClue(env, player.discord_id);
+  const week = campaignWeek(day, env.CAMPAIGN_START);
+  return {
+    player,
+    skills,
+    levels,
+    hpLevel,
+    total: totalLevel(skills, SKILLS),
+    tier: tierForHp(hpLevel),
+    formDots,
+    formCount: days.size,
+    lamps: lamps.length,
+    clue: clue ? clueLine(clue) : null,
+    log: await logCount(env, player.discord_id),
+    checkins: await countCheckinsTotal(env, player.discord_id),
+    act: actForWeek(week, ACT_WEEKS, ACTS.length),
+    week,
+  };
+}
+
+export function sheetImageUrl(env: Env, data: SheetData, attempt = 0): Promise<string> {
+  const clueMatch = data.clue?.match(/\((\w+)\) (\d+)\/(\d+)/);
+  return signedUrl(env, `sheet/${data.player.discord_id}`, {
+    p: data.player.discord_id,
+    n: data.player.username,
+    s: SKILLS.map((skill) => ({
+      k: skill,
+      l: data.levels[skill],
+      pct: levelProgress(data.skills[skill] ?? 0),
+    })),
+    t: data.total,
+    tier: data.tier.key,
+    tn: data.tier.name,
+    d7: data.formDots,
+    fw: data.player.form_weeks,
+    rg: data.player.rings,
+    lm: data.lamps,
+    ...(clueMatch
+      ? { cl: { tier: clueMatch[1], step: Number(clueMatch[2]), of: Number(clueMatch[3]) } }
+      : {}),
+    log: data.log,
+    ...(data.player.title ? { ti: data.player.title } : {}),
+    a: data.act,
+    ...retryField(attempt),
+  });
+}
+
+export function levelUpImageUrl(
+  env: Env,
+  playerId: string,
+  name: string,
+  skill: SkillKey,
+  level: number,
+  day: string,
+  attempt = 0
+): Promise<string> {
+  return signedUrl(env, `levelup/${playerId}`, {
+    n: name,
+    k: skill,
+    l: level,
+    d: day,
+    ...retryField(attempt),
+  });
+}
+
+export function standingsImageUrl(
+  env: Env,
+  stamp: number,
+  title: string,
+  rows: { n: string; hp: number; tier: string; fw: number; u: number }[],
+  attempt = 0
+): Promise<string> {
+  return signedUrl(env, `standings/${stamp}`, { t: title, rows, ...retryField(attempt) });
+}
+
+const RENDER_ATTEMPTS = 3;
+
+/**
+ * Renders a card, mirrors it into R2, and returns a public URL for the copy.
+ * Discord fetches an embed image once and caches it against the URL forever,
+ * so the fetch happens here where a failure can be retried, and Discord only
+ * ever sees a static object. Null if the card never rendered.
+ */
+export async function renderCard(
+  env: Env,
+  key: string,
+  mint: (attempt: number) => Promise<string>
+): Promise<string | null> {
+  for (let attempt = 0; attempt < RENDER_ATTEMPTS; attempt++) {
+    const url = await mint(attempt);
+    let bytes: ArrayBuffer;
+    try {
+      const response = await fetch(url);
+      if (!response.ok) continue;
+      if (!(response.headers.get("content-type") ?? "").startsWith("image/")) continue;
+      bytes = await response.arrayBuffer();
+    } catch {
+      continue;
+    }
+    if (bytes.byteLength === 0) continue;
+
+    try {
+      await env.BUCKET.put(key, bytes, {
+        httpMetadata: {
+          contentType: "image/png",
+          cacheControl: "public, max-age=31536000, immutable",
+        },
+      });
+      return `${env.R2_PUBLIC_BASE}/${key}`;
+    } catch {
+      return url;
+    }
+  }
+  return null;
+}
+
+/** The sheet as text, for the fallback and for /sheet before the render ships. */
+export function textSheet(data: SheetData): string {
+  const lines: string[] = [];
+  const title = data.player.title ? ` · ${data.player.title}` : "";
+  lines.push(`**${data.player.username}**${title} — ${data.tier.name} · Total level ${data.total}`);
+  const cells = SKILLS.map((skill) => {
+    const xp = data.skills[skill] ?? 0;
+    const level = data.levels[skill];
+    const toNext = xpToNext(xp);
+    return `${SKILL_LABEL[skill]} **${level}**${toNext > 0 ? ` (${toNext.toLocaleString("en-US")} to ${level + 1})` : ""}`;
+  });
+  lines.push(cells.slice(0, 3).join(" · "));
+  lines.push(cells.slice(3, 6).join(" · "));
+  lines.push(cells.slice(6, 9).join(" · "));
+  const next = nextTier(data.tier);
+  if (next) {
+    const hpXp = data.skills.hitpoints ?? 0;
+    const need = xpForLevel(next.hp) - hpXp;
+    lines.push(`${next.name} at Hitpoints ${next.hp} — ${need.toLocaleString("en-US")} XP away.`);
+  }
+  lines.push(
+    `Form ${formBar(data.formDots)} (${data.formCount} of 7) · Form weeks ${data.player.form_weeks} · Rings ${data.player.rings} · Lamps ${data.lamps}`
+  );
+  if (data.clue) lines.push(data.clue);
+  lines.push(`Log ${data.log}/${LOG_TOTAL} · ${data.checkins} check-ins · Act ${data.act}, week ${data.week}`);
+  return lines.join("\n");
+}
+
+export function formBar(dots: string): string {
+  return dots.replace(/x/g, "🟩").replace(/\./g, "⬛");
+}

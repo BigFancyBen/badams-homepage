@@ -33,6 +33,14 @@ const nextConfig: NextConfig = {
     ],
   },
   serverExternalPackages: ['ably'],
+  /**
+   * The Yut Hut render routes read RuneScape fonts and skill icons off disk.
+   * The paths are literal strings so the tracer should find them on its own;
+   * this keeps the whole folder in the bundle even if that stops being true.
+   */
+  outputFileTracingIncludes: {
+    '/api/yut/**': ['./app/api/yut/_assets/**'],
+  },
   async rewrites() {
     return [
       /**
