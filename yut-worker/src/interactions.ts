@@ -54,6 +54,7 @@ import {
   spendLamp,
   unspentLamps,
   updatePlayer,
+  verifierNames,
 } from "./db.ts";
 import {
   ACCENT,
@@ -63,15 +64,17 @@ import {
   editMessage,
   escapeMarkdown,
   followUp,
+  getMessage,
   logToDiscord,
   postMessage,
   replyTo,
 } from "./discord.ts";
 import { runCommand } from "./commands.ts";
 import { playersRoleId, setPing } from "./roles.ts";
-import { refreshDailyPost } from "./digest.ts";
+import { dailyThread, refreshDailyPost } from "./digest.ts";
 import { addDays, daysBetween, gameDay, gameWeek, parseHour } from "./schedule.ts";
 import { gatherSheet, levelUpImageUrl, renderCard, reportImageUrl, sheetImageUrl, textSheet } from "./sheet.ts";
+import { isLevelMilestone } from "./xp.ts";
 import { spendPoints, taskView } from "./slayer.ts";
 
 function ordinalWordFor(n: number): string {
@@ -97,7 +100,9 @@ import {
   type Line,
 } from "./actions.ts";
 import { getRelics } from "./relics.ts";
-import { ACTS, ACT_WEEKS, TREASURE_SEEKER_MULTIPLIER } from "./config.ts";
+import { ACTS, ACT_WEEKS, LOOT_CARD_CELLS, TREASURE_SEEKER_MULTIPLIER } from "./config.ts";
+import { bankView } from "./bank.ts";
+import { questView } from "./quests.ts";
 import { bingoLines, bingoView, evaluateBingo } from "./bingo.ts";
 import { shopMenu, shopPress } from "./shop.ts";
 import { actForWeek, campaignWeek } from "./schedule.ts";
@@ -335,12 +340,14 @@ async function route(
     return Response.json({ type: InteractionResponseType.PONG });
   }
 
-  // This bot serves exactly one channel in one server. The signature proves
-  // a request came from Discord; it does not prove it came from here.
-  if (
-    interaction.guild_id !== env.DISCORD_GUILD_ID ||
-    (interaction.channel_id !== undefined && interaction.channel_id !== env.DISCORD_CHANNEL_ID)
-  ) {
+  // This bot serves exactly one channel in one server, and that channel's
+  // threads. The signature proves a request came from Discord; it does not
+  // prove it came from here.
+  const inChannel =
+    interaction.channel_id === undefined ||
+    interaction.channel_id === env.DISCORD_CHANNEL_ID ||
+    interaction.channel?.parent_id === env.DISCORD_CHANNEL_ID;
+  if (interaction.guild_id !== env.DISCORD_GUILD_ID || !inChannel) {
     return reply("This game only runs in its own channel.");
   }
 
@@ -407,6 +414,10 @@ async function route(
         : playerAction(env, user, day, async (p) => shopMenu(p));
     case "log":
       return logReply(env, user, day);
+    case "bank":
+      return playerAction(env, user, day, (p) => bankView(env, p));
+    case "quest":
+      return playerAction(env, user, day, () => questView(env, day));
     case "vf":
       return verify(env, ctx, user, Number(a), day, now);
     case "quiz":
@@ -552,10 +563,22 @@ export async function receiptReply(
   const components: unknown[] = [];
   if (outcome.quiz) components.push(quizButtons(outcome.checkinId, outcome.quiz.index));
   components.push(...buttonRows(await hubButtons(env, player, day)));
-  return reply(outcome.receipt.join("\n"), { components, scope: "ci" });
+  // The session itself is in the day's thread; the receipt keeps what only
+  // the player can act on.
+  const threadId = await dailyThread(env, day);
+  const lines = [
+    `**Checked in.** ${ordinalWordFor(outcome.ordinal)} this week, ${weightWordFor(outcome.weight)}.` +
+      (threadId ? ` The session is in <#${threadId}>.` : ""),
+    ...outcome.essentials,
+  ];
+  return reply(lines.join("\n"), { components, scope: "ci" });
 }
 
-/** The one line the channel sees, as a reply to the morning post. */
+/**
+ * What a check-in says in public. The day's thread gets the line and the
+ * card; the channel gets a short post only when the player brought a photo,
+ * a video or a note, and that post carries the Verify button.
+ */
 export async function postCheckinLine(
   env: Env,
   player: Player,
@@ -563,19 +586,18 @@ export async function postCheckinLine(
   outcome: CheckinOutcome,
   input: CheckinInput
 ): Promise<void> {
+  const dailyPost = await getState(env, `daily_post:${day}`).catch(() => null);
+
   try {
-    const dailyPost = await getState(env, `daily_post:${day}`);
     const embeds: unknown[] = [];
-    const components: unknown[] = [];
 
-    if (input.attachment?.kind === "image") {
-      embeds.push({ color: ACCENT, image: { url: input.attachment.url } });
-    }
-    if (input.attachment) {
-      components.push(buttonRow([{ label: "Verify", custom_id: `vf:${outcome.checkinId}`, style: 3, emoji: "💪" }]));
-    }
-
-    // The loot card: what the check-in produced, as OSRS item icons.
+    // The loot card: what the check-in produced, as OSRS item icons. The
+    // game's own cells (bones, the haul, a lamp, a clue) come first; the
+    // drops follow richest first, and a big table ends in a "+N" cell.
+    const manifest = outcome.loot.filter((item) => item.v === undefined);
+    const stacks = outcome.loot.filter((item) => item.v !== undefined).sort((a, b) => (b.v ?? 0) - (a.v ?? 0));
+    const shown = [...manifest, ...stacks.slice(0, LOOT_CARD_CELLS)].map(({ k, c }) => ({ k, c }));
+    const more = Math.max(0, stacks.length - LOOT_CARD_CELLS);
     const report = await renderCard(env, `reports/${outcome.checkinId}.png`, (attempt) =>
       reportImageUrl(
         env,
@@ -583,10 +605,15 @@ export async function postCheckinLine(
         {
           n: player.username,
           t: `${ordinalWordFor(outcome.ordinal)} check-in this week - ${weightWordFor(outcome.weight)}`,
-          loot: outcome.loot,
+          loot: shown,
+          ...(more > 0 ? { m: more } : {}),
+          ...(outcome.lootTotal > 0 ? { v: Math.round(outcome.lootTotal) } : {}),
           xp: outcome.xpGained,
-          ...(outcome.levelUps.length > 0 ? { lv: outcome.levelUps.map((up) => ({ k: up.skill, l: up.level })) } : {}),
+          ...(outcome.levelUps.length > 0
+            ? { lv: outcome.levelUps.map((up) => ({ k: up.skill, l: up.level, f: up.from })) }
+            : {}),
           ...(outcome.task ? { task: outcome.task } : {}),
+          s: outcome.session,
           d: day,
         },
         attempt
@@ -594,33 +621,87 @@ export async function postCheckinLine(
     );
     if (report) embeds.push({ color: ACCENT, image: { url: report } });
 
-    // And the level-up banner, when there is one.
-    if (outcome.levelUps.length > 0) {
-      const top = outcome.levelUps.reduce((best, up) => (up.level > best.level ? up : best));
+    // The level-up scroll, kept for the levels worth framing.
+    for (const up of outcome.levelUps.filter((u) => isLevelMilestone(u.level)).slice(0, 9)) {
       const url = await renderCard(
         env,
-        `levelups/${player.discord_id}-${top.skill}-${top.level}.png`,
-        (attempt) => levelUpImageUrl(env, player.discord_id, player.username, top.skill, top.level, day, attempt)
+        `levelups/${player.discord_id}-${up.skill}-${up.level}.png`,
+        (attempt) => levelUpImageUrl(env, player.discord_id, player.username, up.skill, up.level, day, attempt)
       );
       if (url) embeds.push({ color: ACCENT, image: { url } });
     }
 
-    let content = outcome.publicLine;
-    if (input.attachment?.kind === "video") content += `\n${input.attachment.url}`;
-    if (input.note) content += `\n> ${escapeMarkdown(input.note).slice(0, 200)}`;
-
-    const message = await postMessage(env, {
-      content,
+    await postThreadLine(env, day, dailyPost, {
+      content: outcome.publicLine,
       embeds,
-      components,
+      components: [],
       allowed_mentions: allowedMentions(),
-      ...replyTo(dailyPost),
     });
-    await setCheckinMessage(env, outcome.checkinId, message.id);
   } catch (error) {
     await logToDiscord(env, `Check-in line failed: ${String(error)}`);
   }
+
+  // Group news — a quest completed — is the one thing a check-in says in the channel itself.
+  if (outcome.channelLines.length > 0) {
+    try {
+      await postMessage(env, {
+        content: outcome.channelLines.join("\n"),
+        allowed_mentions: allowedMentions(),
+        ...replyTo(dailyPost),
+      });
+    } catch (error) {
+      await logToDiscord(env, `Check-in channel news failed: ${String(error)}`);
+    }
+  }
+
+  if (input.attachment || input.note) {
+    try {
+      const message = await postMessage(env, {
+        content: mediaLineContent(`**${escapeMarkdown(player.username)}** checked in.`, input.attachment, input.note),
+        embeds: input.attachment?.kind === "image" ? [{ color: ACCENT, image: { url: input.attachment.url } }] : [],
+        components: input.attachment
+          ? [buttonRow([{ label: "Verify", custom_id: `vf:${outcome.checkinId}`, style: 3, emoji: "💪" }])]
+          : [],
+        allowed_mentions: allowedMentions(),
+        ...replyTo(dailyPost),
+      });
+      // message_id is the message Verify edits, so it is always the one with the media.
+      await setCheckinMessage(env, outcome.checkinId, message.id);
+    } catch (error) {
+      await logToDiscord(env, `Check-in media post failed: ${String(error)}`);
+    }
+  }
   await refreshRollCall(env, day);
+}
+
+/** The lead line plus the video link and the quoted note — the same on every media post. */
+export function mediaLineContent(
+  lead: string,
+  attachment: CheckinInput["attachment"],
+  note: string | null
+): string {
+  let content = lead;
+  if (attachment?.kind === "video") content += `\n${attachment.url}`;
+  if (note) content += `\n> ${escapeMarkdown(note).slice(0, 200)}`;
+  return content;
+}
+
+/**
+ * Posts into the day's thread. If there is no thread, or the thread refuses
+ * the post, the same message goes to the channel as a reply to the morning
+ * post — a check-in line is never lost.
+ */
+async function postThreadLine(env: Env, day: string, dailyPost: string | null, payload: object): Promise<void> {
+  const threadId = await dailyThread(env, day);
+  if (threadId) {
+    try {
+      await postMessage(env, payload, threadId);
+      return;
+    } catch (error) {
+      await logToDiscord(env, `Thread post failed, falling back to the channel: ${String(error)}`);
+    }
+  }
+  await postMessage(env, { ...payload, ...replyTo(dailyPost) });
 }
 
 // ── Roster ─────────────────────────────────────────────────────────
@@ -921,8 +1002,11 @@ async function logReply(env: Env, user: DiscordUser, day: string): Promise<Answe
     milestone: "Milestones",
     skill50: "Skills to 50",
     tier: "Tiers",
+    drop: "Notable drops",
   };
-  const lines = [`📗 **Collection log** — ${entries.length}/${LOG_TOTAL}`];
+  // Notable drops sit outside the curated 90: there are hundreds of them on the tables.
+  const curated = entries.filter((entry) => !entry.startsWith("drop:")).length;
+  const lines = [`📗 **Collection log** — ${curated}/${LOG_TOTAL}`];
   for (const [category, list] of groups) {
     lines.push(`**${names[category] ?? category}** (${list.length}): ${list.join(", ")}`);
   }
@@ -1019,32 +1103,19 @@ export async function verify(
     // Bingo is decoration; the verification stands.
   }
 
-  // The check-in line says who verified it.
+  // The media post says who verified it. One edit, read-then-write, so two
+  // verifiers in a row both land and the original line survives.
   if (checkin.message_id) {
-    const names = await (await import("./db")).verifierNames(env, checkinId);
-    ctx.waitUntil(
-      editMessage(env, checkin.message_id, {
-        content: `${outcomeLineFrom(checkin.message_id)}`,
-      }).catch(() => undefined)
-    );
+    const names = await verifierNames(env, checkinId);
     ctx.waitUntil(appendVerified(env, checkin.message_id, names));
   }
   return reply(lines.join("\n"));
 }
 
-function outcomeLineFrom(_messageId: string): string {
-  return "";
-}
-
 /** Re-reads the message and appends "verified by …" without losing the line. */
 async function appendVerified(env: Env, messageId: string, names: string[]): Promise<void> {
   try {
-    const response = await fetch(
-      `${env.DISCORD_API_BASE || "https://discord.com/api/v10"}/channels/${env.DISCORD_CHANNEL_ID}/messages/${messageId}`,
-      { headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}` } }
-    );
-    if (!response.ok) return;
-    const message = (await response.json()) as { content: string };
+    const message = await getMessage(env, messageId);
     const base = message.content.replace(/\n?✅ verified by .*$/s, "");
     await editMessage(env, messageId, {
       content: `${base}\n✅ verified by ${names.map(escapeMarkdown).join(", ")}`,

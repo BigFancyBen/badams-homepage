@@ -176,6 +176,37 @@ if (DAYS >= 365) {
 }
 const above = await sql("SELECT COUNT(*) AS n FROM skill_xp WHERE xp > 13034431");
 check("no skill above 99", above[0]?.n === 0, above);
+// The bank: every check-in's kills dropped something, nothing went negative, and the richest stacks are real items.
+const bankRows = await sql("SELECT COUNT(*) AS n, COALESCE(SUM(value), 0) AS v, MIN(qty) AS minq, MIN(value) AS minv FROM bank");
+check("the bank holds stacks with no negative quantity or value", (bankRows[0]?.n ?? 0) > 0 && bankRows[0].minq > 0 && bankRows[0].minv >= 0, bankRows);
+const bankless = await sql("SELECT COUNT(*) AS n FROM players p WHERE EXISTS (SELECT 1 FROM checkins c WHERE c.player_id = p.discord_id) AND NOT EXISTS (SELECT 1 FROM bank b WHERE b.player_id = p.discord_id)");
+check("everyone who checked in has a bank", bankless[0]?.n === 0, bankless);
+const lootless = await sql("SELECT COUNT(*) AS n FROM checkins WHERE loot IS NULL");
+check("every check-in row keeps its loot", lootless[0]?.n === 0, lootless);
+const richest = await sql("SELECT p.username, b.item, b.qty, b.value FROM bank b JOIN players p ON p.discord_id = b.player_id ORDER BY b.value DESC LIMIT 5");
+console.log(`Richest stacks: ${richest.map((r) => `${r.username} ${r.qty}× ${r.item} (${Math.round(r.value / 1000)}k)`).join(" · ")}`);
+const bankByPlayer = await sql("SELECT p.username, COALESCE(SUM(b.value), 0) AS v FROM players p LEFT JOIN bank b ON b.player_id = p.discord_id GROUP BY p.discord_id ORDER BY v DESC");
+console.log(`Banks: ${bankByPlayer.map((r) => `${r.username} ${(r.v / 1_000_000).toFixed(2)}m`).join(" · ")}`);
+const notableDrops = await sql("SELECT COUNT(*) AS n FROM collection_log WHERE entry_key LIKE 'drop:%'");
+console.log(`Notable drops logged: ${notableDrops[0]?.n ?? 0}`);
+if (DAYS >= 200) check("at least one notable drop was logged", (notableDrops[0]?.n ?? 0) >= 1, notableDrops);
+// Quest of the week: the party finishes most quests, the group's quest points grow, and the lamps were handed out.
+const questRows = await sql("SELECT campaign_week, quest, status, qp, supplies, supplies_needed, damage, hp_total FROM quests ORDER BY campaign_week");
+console.log(`Quests: ${questRows.filter((q) => q.status === "done").length} done, ${questRows.filter((q) => q.status === "unfinished").length} unfinished of ${questRows.length} · QP ${questRows.filter((q) => q.status === "done").reduce((s, q) => s + q.qp, 0)}`);
+for (const q of questRows.filter((q) => q.status !== "done")) console.log(`  unfinished: wk${q.campaign_week} ${q.quest} supplies ${q.supplies}/${q.supplies_needed} damage ${q.damage}/${q.hp_total}`);
+const questWeeks = Math.min(51, Math.floor(DAYS / 7));
+if (questWeeks >= 4) {
+  check("every quest week opened a quest", questRows.length >= questWeeks - 1, { rows: questRows.length, questWeeks });
+  check("at least nine of ten quests get finished", questRows.filter((q) => q.status === "done").length >= Math.floor(questWeeks * 0.9), questRows.map((q) => `${q.campaign_week}:${q.status}`));
+  const questLamps = await sql("SELECT COUNT(*) AS n FROM pending_claims WHERE kind = 'lamp' AND payload LIKE '%\"source\":\"quest\"%'");
+  check("quest lamps were handed out", (questLamps[0]?.n ?? 0) > 0, questLamps);
+  const dupHits = await sql("SELECT COUNT(*) AS n FROM quest_hits h JOIN checkins c ON c.id = h.checkin_id WHERE c.week != h.week");
+  check("every quest hit belongs to its check-in's week", dupHits[0]?.n === 0, dupHits);
+}
+if (DAYS >= 365) {
+  const qp = questRows.filter((q) => q.status === "done").reduce((s, q) => s + q.qp, 0);
+  check("the group passes 32 quest points before week 18 and 100 by the finale", qp >= 100 && questRows.filter((q) => q.campaign_week <= 17 && q.status === "done").reduce((s, q) => s + q.qp, 0) >= 32, qp);
+}
 const dupes = await sql("SELECT player_id, day, COUNT(*) AS n FROM checkins GROUP BY player_id, day HAVING n > 1");
 check("no duplicate (player, day)", dupes.length === 0, dupes);
 const heldOnWrongWeek = await sql("SELECT COUNT(*) AS n FROM week_log WHERE outcome = 'held' AND checkins != 1");

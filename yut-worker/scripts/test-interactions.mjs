@@ -99,6 +99,32 @@ const rows = await sql("SELECT value FROM state WHERE key = 'last_daily_day'");
 const day = rows?.[0]?.value;
 check("the tick has resolved a day", typeof day === "string", rows);
 
+// The mock's log, and the posts that landed in one channel (the thread is a channel too).
+// The mock keeps its log in memory across runs, so start it clean.
+const MOCK = process.env.MOCK_DISCORD_URL ?? "http://127.0.0.1:9912";
+await fetch(`${MOCK}/__mock/reset`).catch(() => null);
+const mockLog = () => {
+  try {
+    return JSON.parse(readFileSync("mock-discord-log.json", "utf-8"));
+  } catch {
+    return [];
+  }
+};
+const posts = (channel) => mockLog().filter((e) => e.method === "POST" && e.url === `/channels/${channel}/messages`);
+const waitFor = async (predicate, tries = 20) => {
+  for (let i = 0; i < tries; i++) {
+    const hit = predicate();
+    if (hit) return hit;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  return null;
+};
+
+// The morning post and its thread, forced so the harness has a thread to post into.
+await admin("tick", { post: "1" });
+const threadId = (await sql(`SELECT value FROM state WHERE key = 'daily_thread:${day}'`))?.[0]?.value;
+check("the morning post starts a thread", typeof threadId === "string" && threadId.startsWith("thread_"), threadId);
+
 // 1. Signatures and PING.
 const bad = await post({ type: 1 }, { corrupt: true });
 check("bad signature → 401", bad.status === 401, bad);
@@ -117,6 +143,10 @@ check("non-player gets a Join button", /not in the campaign/.test(content(strang
 const joined = await click(`join:${day}`, alice);
 check("join + check-in in one press", /Checked in\.\*\* 1st this week, full value/.test(content(joined)), joined);
 check("the receipt carries the hub", JSON.stringify(joined.body).includes("sheet:"), joined);
+check("the receipt points at the thread", content(joined).includes(`<#${threadId}>`), joined);
+const aliceThread = await waitFor(() => posts(threadId).find((e) => /alice\*\* checked in/.test(e.body)));
+check("the check-in line lands in the thread", Boolean(aliceThread) && /⚔️ \d+ [A-Za-z' ]+ slain/.test(aliceThread?.body ?? ""), aliceThread);
+check("a plain check-in says nothing in the channel", !posts(CHANNEL).some((e) => /alice\*\* checked in/.test(e.body)), posts(CHANNEL).map((e) => e.body.slice(0, 80)));
 
 // 5. A second check-in the same day is refused.
 const again = await click(`ci:${day}`, alice);
@@ -130,7 +160,12 @@ check("yesterday's button refused", /yesterday's question/.test(content(stale)),
 await command("join", [], bob);
 const bobCheckin = await command("checkin", [{ name: "note", type: 3, value: "Deadlifts, felt strong today and hit a PR" }], bob);
 check("/checkin accepted", /Checked in\.\*\* 1st this week/.test(content(bobCheckin)), bobCheckin);
-check("the first check-in gets a Turael task and fights it", /Turael assigns you \d+ [a-z ]+\./.test(content(bobCheckin)) && /⚔️ \d+ [a-z ]+: max hit \d+, \d+% to hit/.test(content(bobCheckin)), bobCheckin);
+check("the first check-in's receipt keeps the Turael assignment", /Turael assigns you \d+ [a-z ]+\./.test(content(bobCheckin)), bobCheckin);
+check("the receipt no longer carries the session line", !/max hit \d+, \d+% to hit/.test(content(bobCheckin)), bobCheckin);
+const bobNote = await waitFor(() => posts(CHANNEL).find((e) => /\*\*bob\*\* checked in\./.test(e.body)));
+check("a note goes to the channel, quoted, with no Verify button", Boolean(bobNote) && /> Deadlifts/.test(bobNote?.body ?? "") && !/vf:/.test(bobNote?.body ?? ""), bobNote);
+const bobThread = await waitFor(() => posts(threadId).find((e) => /bob\*\* checked in \(1st this week/.test(e.body)));
+check("and the session goes to the thread", Boolean(bobThread) && /⚔️ \d+ [A-Za-z' ]+ slain/.test(bobThread?.body ?? ""), bobThread);
 const task = await command("task", [{ name: "status", type: 1 }], bob);
 check("/task shows the task", /Task: .* \d+\/\d+ for Turael/.test(content(task)), task);
 
@@ -182,10 +217,16 @@ for (let attempt = 0; attempt < 10; attempt++) {
   await new Promise((resolve) => setTimeout(resolve, 300));
 }
 check("the seeded check-in got a channel line", Boolean(carolCheckin?.message_id), carolCheckin);
+const carolPost = mockLog().find((e) => e.id === carolCheckin?.message_id);
+check("the photo post is in the channel with a Verify button", carolPost?.channel === CHANNEL && /vf:/.test(carolPost?.body ?? "") && /carol\*\* checked in\./.test(carolPost?.body ?? ""), carolPost);
 const selfVerify = await click(`vf:${carolCheckin.id}`, { user: { id: carol, username: "carol" } });
 check("self-verify refused", /your own/.test(content(selfVerify)), selfVerify);
 const verifyA = await click(`vf:${carolCheckin.id}`, alice);
 check("alice verifies", /Verified/.test(content(verifyA)), verifyA);
+const verifiedEdit = await waitFor(() =>
+  mockLog().find((e) => e.method === "PATCH" && e.url === `/channels/${CHANNEL}/messages/${carolCheckin.message_id}` && /verified by alice/.test(e.body))
+);
+check("verified by … is appended without losing the line", Boolean(verifiedEdit) && /carol\*\* checked in/.test(verifiedEdit?.body ?? ""), verifiedEdit);
 const verifyAgain = await click(`vf:${carolCheckin.id}`, alice);
 check("verifying twice refused", /already verified/.test(content(verifyAgain)), verifyAgain);
 const verifyB = await click(`vf:${carolCheckin.id}`, bob);
@@ -256,7 +297,6 @@ check(
 // (launch night: a 403 on the channel line threw before the placeholder was
 // filled, and Discord sat on "thinking" for fifteen minutes). The proof must
 // attach and the placeholder must be filled either way.
-const MOCK = process.env.MOCK_DISCORD_URL ?? "http://127.0.0.1:9912";
 await fetch(`${MOCK}/__mock/channel-post-status?code=403`);
 const proof = await command("checkin", [{ name: "photo", type: 11, value: "att_proof" }], bob, {
   attachments: {
@@ -281,8 +321,98 @@ check(
 );
 const bobProof = (await sql(`SELECT attachment_kind FROM checkins WHERE player_id = '${bob.user.id}'`))[0];
 check("the proof is on the check-in regardless", bobProof?.attachment_kind === "image", bobProof);
+// And with the channel back, the proof post is the message Verify will edit.
+const proofOk = await command("checkin", [{ name: "photo", type: 11, value: "att_ok" }], alice, {
+  attachments: {
+    att_ok: { id: "att_ok", filename: "ok.png", content_type: "image/png", size: 68, url: `${MOCK}/cdn/ok.png` },
+  },
+});
+const proofOkToken = `tok${seq}`;
+check("a photo after a Yes is deferred", proofOk.body?.type === 5, proofOk);
+const proofOkEdit = await waitFor(
+  () => mockLog().find((e) => e.method === "PATCH" && e.url.includes(`/${proofOkToken}/`) && /Proof attached\. Friends/.test(e.body)),
+  40
+);
+check("the proof post goes out when the channel is open", Boolean(proofOkEdit), proofOkEdit);
+const aliceRow = (await sql(`SELECT message_id FROM checkins WHERE player_id = '${alice.user.id}'`))[0];
+const alicePost = mockLog().find((e) => e.id === aliceRow?.message_id);
+check("message_id points at the proof post", Boolean(alicePost) && alicePost.channel === CHANNEL && /added proof/.test(alicePost.body), { aliceRow, alicePost });
 const standings = await command("standings", [], bob);
 check("/standings lists the roster", /alice|bob/.test(content(standings)), standings);
+// The kills' drops went to the bank and onto the check-in row. (A Turael task can be ghosts or
+// spiders, which drop nothing the game keeps, so look across this run's players, not one.)
+const runBank = await sql(`SELECT COUNT(*) AS n, COALESCE(SUM(value), 0) AS v, MIN(qty) AS minq FROM bank WHERE player_id LIKE '%_${stamp}'`);
+check("the sessions' drops are banked", (runBank?.[0]?.n ?? 0) > 0 && runBank[0].v > 0 && runBank[0].minq > 0, runBank);
+const bobLoot = (await sql(`SELECT loot FROM checkins WHERE player_id = '${bob.user.id}'`))[0];
+check("the check-in row keeps its loot", /"s":\[/.test(bobLoot?.loot ?? "") && /"t":/.test(bobLoot?.loot ?? ""), bobLoot);
+const richest = (await sql(`SELECT player_id FROM bank WHERE player_id LIKE '%_${stamp}' ORDER BY value DESC LIMIT 1`))[0];
+const richName = richest ? (await sql(`SELECT username FROM players WHERE discord_id = '${richest.player_id}'`))[0]?.username : null;
+const bank = await command("bank", [], richest ? { user: { id: richest.player_id, username: richName ?? "rich" } } : bob);
+check("/bank shows the stacks and the total", /bank\*\* — worth/.test(content(bank)) && /×/.test(content(bank)) && /notable drop/.test(content(bank)), bank);
+const emptyBank = await command("bank", [], frank);
+check("/bank on an empty bank says so", /worth 0 gp/.test(content(emptyBank)) && /Empty/.test(content(emptyBank)), emptyBank);
+// The quest of the week answers whatever the calendar says for today (before the campaign starts, that is "no quest").
+const questStatus = await command("quest", [{ name: "status", type: 1 }], bob);
+check("/quest status answers", /No quest this week|📜 \*\*/.test(content(questStatus)), questStatus);
+const questLogReply = await command("quest", [{ name: "log", type: 1 }], bob);
+check("/quest log answers with the quest points", /Quest log\*\* — \d+ quest point/.test(content(questLogReply)), questLogReply);
+
+// 18. Interactions from inside the day's thread are served; a thread of another channel is not.
+const fromThread = await post({ ...base(), channel_id: threadId, channel: { id: threadId, type: 11, parent_id: CHANNEL }, type: 3, data: { custom_id: "lamp" }, member: bob });
+check("a button pressed inside the thread is served", !/only runs in its own channel/.test(content(fromThread)), fromThread);
+const foreignThread = await post({ ...base(), channel_id: "thread_x", channel: { id: "thread_x", type: 11, parent_id: "999" }, type: 3, data: { custom_id: "lamp" }, member: bob });
+check("a thread of another channel is refused", /only runs in its own channel/.test(content(foreignThread)), foreignThread);
+
+// 19. The thread refusing a post: the line falls back to the channel as a reply to the morning post.
+await fetch(`${MOCK}/__mock/thread-post-status?code=404`);
+const gina = `gina_${stamp}`;
+await admin("seed", { players: gina, day, [`name_${gina}`]: "gina" });
+await admin("checkin-as", { player: gina, day, post: "1" });
+const ginaLine = await waitFor(() => posts(CHANNEL).find((e) => /gina\*\* checked in/.test(e.body)));
+await fetch(`${MOCK}/__mock/thread-post-status?code=200`);
+check("a thread post that fails lands in the channel as a reply", Boolean(ginaLine) && /message_reference/.test(ginaLine?.body ?? ""), ginaLine);
+
+// 20. No thread at all: the morning post still goes out and check-ins go to the channel.
+await fetch(`${MOCK}/__mock/thread-create-status?code=403`);
+await admin("tick", { post: "1" });
+const noThread = (await sql(`SELECT value FROM state WHERE key = 'daily_thread:${day}'`))?.[0]?.value;
+await fetch(`${MOCK}/__mock/thread-create-status?code=200`);
+check("a thread that could not be made is recorded as none", noThread === "", noThread);
+const hank = `hank_${stamp}`;
+await admin("seed", { players: hank, day, [`name_${hank}`]: "hank" });
+await admin("checkin-as", { player: hank, day, post: "1" });
+const hankLine = await waitFor(() => posts(CHANNEL).find((e) => /hank\*\* checked in/.test(e.body)));
+check("with no thread the line goes to the channel", Boolean(hankLine), hankLine);
+await admin("tick", { post: "1" });
+
+// 21. The evening reminders name a player whose lamp is about to rub itself.
+const staleLampDay = new Date(Date.parse(`${day}T00:00:00Z`) - 13 * 86400000).toISOString().slice(0, 10);
+await admin("grant-lamp", { player: carol, day: staleLampDay });
+const reminded = await admin("tick", { reminders: "1" });
+const reminderPost = [...posts(CHANNEL)].reverse().find((e) => /Evening reminders/.test(e.body));
+check(
+  "the evening reminder names carol's lamp and when it rubs itself",
+  Boolean(reminderPost) && /carol\*\* — .*lamp/.test(reminderPost?.body ?? "") && /rubs itself in 2 days/.test(reminderPost?.body ?? ""),
+  { reminded, body: reminderPost?.body }
+);
+// erin's last check-in was three days ago: erin is @mentioned as going stale; dave (four days) is
+// already stale and is not. (Players from earlier runs share the local database, so the list may be longer.)
+const reminderPayload = (() => {
+  try {
+    return JSON.parse(reminderPost?.body ?? "{}");
+  } catch {
+    return {};
+  }
+})();
+check(
+  "the player on their third day is @mentioned, and only them",
+  (reminderPayload.content ?? "").includes(`<@${erin}>`) &&
+    !(reminderPayload.content ?? "").includes(`<@${dave}>`) &&
+    (reminderPayload.allowed_mentions?.users ?? []).includes(erin) &&
+    !(reminderPayload.allowed_mentions?.users ?? []).includes(dave) &&
+    reminderPayload.allowed_mentions?.parse?.length === 0,
+  reminderPayload
+);
 
 console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) failed.`);
 process.exit(failures === 0 ? 0 : 1);

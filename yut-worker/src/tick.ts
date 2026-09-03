@@ -8,11 +8,13 @@ import {
   setState,
   updatePlayer,
 } from "./db.ts";
-import { composeDigest, composeLastCall, composeRollCall, digestPayload, trimmedDigestPayload } from "./digest.ts";
-import { allowedMentions, editMessage, logToDiscord, postMessage } from "./discord.ts";
+import { composeDigest, composeLastCall, composeRollCall, digestPayload, threadName, trimmedDigestPayload } from "./digest.ts";
+import { allowedMentions, deleteMessage, editMessage, logToDiscord, postMessage, startThread } from "./discord.ts";
+import { composeReminders, reminderMessage } from "./reminders.ts";
 import { playersRoleId } from "./roles.ts";
 import {
   addDays,
+  dailyHourDue,
   dailySlotDue,
   gameDay,
   gameWeek,
@@ -36,7 +38,11 @@ import { actForWeek, campaignWeek } from "./schedule.ts";
  * one failing cannot take the rest down, and each is guarded by a slot key
  * in `state` so a retried tick is a no-op.
  */
-export async function runTick(env: Env, now: number, force: { daily?: boolean; post?: boolean; lastCall?: boolean } = {}): Promise<Record<string, unknown>> {
+export async function runTick(
+  env: Env,
+  now: number,
+  force: { daily?: boolean; post?: boolean; lastCall?: boolean; reminders?: boolean } = {}
+): Promise<Record<string, unknown>> {
   const report: Record<string, unknown> = {};
   const rollover = parseHour(env.ROLLOVER_HOUR_UTC) ?? 9;
   const today = gameDay(now, rollover);
@@ -85,6 +91,16 @@ export async function runTick(env: Env, now: number, force: { daily?: boolean; p
         }
       }
 
+      // Yesterday's evening reminder comes down: the channel holds one at most.
+      const reminder = await getState(env, `reminder_post:${yesterday}`);
+      if (reminder) {
+        try {
+          await deleteMessage(env, reminder);
+        } catch (error) {
+          await logToDiscord(env, `Reminder delete failed: ${String(error)}`);
+        }
+      }
+
       report.daily = daily;
     }
   } catch (error) {
@@ -130,11 +146,43 @@ export async function runTick(env: Env, now: number, force: { daily?: boolean; p
       await setState(env, `daily_post:${today}`, message.id);
       await setState(env, `daily_parts:${today}`, JSON.stringify(parts));
       report.posted = message.id;
+      // The day's thread: every check-in's line and card land there, so the
+      // channel keeps the post itself and what players bring to it. If the
+      // thread cannot be made, the lines fall back to the channel.
+      try {
+        const threadId = await startThread(env, message.id, threadName(today));
+        await setState(env, `daily_thread:${today}`, threadId);
+        report.thread = threadId;
+      } catch (error) {
+        await setState(env, `daily_thread:${today}`, "");
+        await logToDiscord(env, `Thread failed (check-ins fall back to the channel): ${String(error)}`);
+      }
       await refreshBoard(env, today);
     }
   } catch (error) {
     await logToDiscord(env, `Morning post failed: ${String(error)}`);
     report.postError = String(error);
+  }
+
+  // ── Evening reminders ──────────────────────────────────────────
+  // One message naming players with something to claim — lamps, points,
+  // votes, rewards waiting on a check-in — and nothing at all when nobody
+  // has. It is deleted at the next rollover.
+  try {
+    const due = dailyHourDue(now, parseHour(env.REMINDER_HOUR_UTC), rollover);
+    if (force.reminders || (due && (await getState(env, "last_reminder_day")) !== today)) {
+      await setState(env, "last_reminder_day", today);
+      const roster = await activeRoster(env, today);
+      const reminders = await composeReminders(env, today, roster);
+      const message = reminderMessage(reminders);
+      if (message) {
+        const posted = await postMessage(env, message);
+        await setState(env, `reminder_post:${today}`, posted.id);
+      }
+      report.reminders = { nudged: reminders.nudges.length, goingStale: reminders.goingStale.length };
+    }
+  } catch (error) {
+    await logToDiscord(env, `Reminders failed: ${String(error)}`);
   }
 
   // ── The campaign log, on the first of the month ────────────────

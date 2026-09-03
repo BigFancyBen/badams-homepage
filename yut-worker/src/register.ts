@@ -85,6 +85,15 @@ export const COMMANDS = [
   { name: "lamp", description: "Rub a lamp" },
   { name: "clue", description: "Your clue scroll" },
   { name: "log", description: "Your collection log" },
+  { name: "bank", description: "Your bank: what your kills have dropped, by value" },
+  {
+    name: "quest",
+    description: "The quest of the week",
+    options: [
+      { type: 1, name: "status", description: "This week's quest and how far the party has got" },
+      { type: 1, name: "log", description: "Every quest so far and the group's quest points" },
+    ],
+  },
   { name: "town", description: "The town: stores, buildings, your workers" },
   {
     name: "recruit",

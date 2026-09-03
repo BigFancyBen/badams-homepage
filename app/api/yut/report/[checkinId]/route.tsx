@@ -34,6 +34,8 @@ interface LevelUp {
   k: string;
   /** New level */
   l: number;
+  /** The level before, when the worker sends it */
+  f?: number;
 }
 
 /** What one check-in produced, drawn like an OSRS progress report. */
@@ -44,6 +46,10 @@ interface ReportPayload {
   t: string;
   /** Item key and count; c is 1 for a single item */
   loot: { k: string; c: number }[];
+  /** Stacks that did not fit on the card */
+  m?: number;
+  /** The session's drops, in coins */
+  v?: number;
   /** Skill key and XP gained */
   xp: { k: string; x: number }[];
   /** Level-ups */
@@ -62,6 +68,13 @@ interface ReportPayload {
 function sessionIcon(session: string): string {
   const match = session.match(/(bronze|iron|steel|black|mithril|adamant|rune|dragon) scimitar/i);
   return match ? `${match[1].toLowerCase()}_scimitar` : "gem";
+}
+
+/** "48.2k gp", "1.2m gp", as the Worker prints it. */
+function gp(coins: number): string {
+  if (coins >= 1_000_000) return `${(coins / 1_000_000).toFixed(coins >= 10_000_000 ? 0 : 1)}m gp`;
+  if (coins >= 1_000) return `${(coins / 1_000).toFixed(coins >= 10_000 ? 0 : 1)}k gp`;
+  return `${Math.round(coins)} gp`;
 }
 
 /** Space above a block, kept out of the block's own height so labels sit flush. */
@@ -85,10 +98,13 @@ export async function GET(request: Request) {
   );
   const task = typeof result.payload.task === "string" ? result.payload.task.trim() : "";
   const session = typeof result.payload.s === "string" ? result.payload.s.trim() : "";
+  const more = typeof result.payload.m === "number" && result.payload.m > 0 ? Math.floor(result.payload.m) : 0;
+  const worth = typeof result.payload.v === "number" && result.payload.v > 0 ? `Loot worth ${gp(result.payload.v)}` : "";
 
-  const lootHeight = loot.length ? LABEL_H + gridRows(loot.length, LOOT_COLS) * LOOT_CELL_H : 0;
+  const lootCells = loot.length + (more > 0 ? 1 : 0);
+  const lootHeight = lootCells ? LABEL_H + gridRows(lootCells, LOOT_COLS) * LOOT_CELL_H : 0;
   const xpHeight = xp.length ? LABEL_H + gridRows(xp.length, XP_COLS) * XP_CELL_H : 0;
-  const linesHeight = (session ? LINE_H : 0) + levelUps.length * LINE_H + (task ? LINE_H : 0);
+  const linesHeight = (session ? LINE_H : 0) + (worth ? LINE_H : 0) + levelUps.length * LINE_H + (task ? LINE_H : 0);
   const height = cardHeight([
     TITLE_H,
     SUBTITLE_H,
@@ -104,8 +120,8 @@ export async function GET(request: Request) {
         <CardTitle text={n ?? ""} />
         <CardSubtitle text={t ?? ""} />
 
-        {loot.length ? <SectionLabel text="Loot:" /> : null}
-        {loot.length ? <LootGrid items={loot} /> : null}
+        {lootCells ? <SectionLabel text="Loot:" /> : null}
+        {lootCells ? <LootGrid items={loot} more={more} /> : null}
 
         {xp.length ? <SectionLabel text="XP:" /> : null}
         {xp.length ? <XpGrid items={xp} /> : null}
@@ -115,12 +131,18 @@ export async function GET(request: Request) {
             {session ? (
               <CardLine icon={itemIconDataUrl(sessionIcon(session))} color={RS.parchment} text={session} />
             ) : null}
+            {worth ? <CardLine icon={itemIconDataUrl("coins")} color={RS.yellow} text={worth} /> : null}
             {levelUps.map((up, i) => (
               <CardLine
                 key={`${up.k}-${i}`}
                 icon={iconDataUrl(up.k)}
                 color={LEVEL_UP}
-                text={`Level up! ${skillLabel(up.k)} ${up.l}`}
+                text={
+                  typeof up.f === "number"
+                    ? // The RuneScape fonts have no arrow glyph; "->" is the closest they draw.
+                      `${skillLabel(up.k)} ${up.f} -> ${up.l}`
+                    : `Level up! ${skillLabel(up.k)} ${up.l}`
+                }
               />
             ))}
             {task ? (

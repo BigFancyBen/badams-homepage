@@ -77,6 +77,21 @@ export async function getBallot(env: Env, voteId: number, playerId: string): Pro
   return row?.option_idx ?? null;
 }
 
+/** Every ballot on these votes, for the reminders' "hasn't voted". */
+export async function ballotsFor(
+  env: Env,
+  voteIds: number[]
+): Promise<{ vote_id: number; player_id: string }[]> {
+  if (voteIds.length === 0) return [];
+  const marks = voteIds.map(() => "?").join(", ");
+  const { results } = await env.DB.prepare(
+    `SELECT vote_id, player_id FROM vote_ballots WHERE vote_id IN (${marks})`
+  )
+    .bind(...voteIds)
+    .all<{ vote_id: number; player_id: string }>();
+  return results;
+}
+
 export async function castBallot(
   env: Env,
   voteId: number,

@@ -1,5 +1,5 @@
 import { performCheckin } from "./checkins.ts";
-import { getPlayer, joinPlayer } from "./db.ts";
+import { getPlayer, grantLampStatement, joinPlayer } from "./db.ts";
 import { logToDiscord, registerGuildCommands } from "./discord.ts";
 import { handleInTime, postCheckinLine } from "./interactions.ts";
 import { COMMANDS } from "./register.ts";
@@ -81,8 +81,24 @@ async function admin(env: Env, ctx: ExecutionContext, url: URL): Promise<unknown
           daily: url.searchParams.get("daily") === "1",
           post: url.searchParams.get("post") === "1",
           lastCall: url.searchParams.get("lastcall") === "1",
+          reminders: url.searchParams.get("reminders") === "1",
         }),
       };
+
+    case "grant-lamp": {
+      // Hands a player a lamp dated day=, so the harness can test the reminders.
+      const id = url.searchParams.get("player");
+      if (!id) return { ok: false, error: "player=" };
+      const day = url.searchParams.get("day") ?? gameDay(now, rollover);
+      await grantLampStatement(
+        env,
+        id,
+        Number(url.searchParams.get("xp") ?? "0"),
+        url.searchParams.get("source") ?? "genie",
+        day
+      ).run();
+      return { ok: true, player: id, day };
+    }
 
     case "seed": {
       // Creates players by id, for the simulation.

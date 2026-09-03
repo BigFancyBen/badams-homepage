@@ -1,6 +1,7 @@
 import { LOG_TOTAL, SKILLS, SKILL_LABEL, type SkillKey } from "./config.ts";
 import { clueLine } from "./clues.ts";
 import {
+  bankValue,
   checkinsBetween,
   countCheckinsTotal,
   getSkills,
@@ -10,6 +11,7 @@ import {
   unspentLamps,
 } from "./db.ts";
 import { base64UrlFromString, hmacBase64Url } from "./encoding.ts";
+import { gpShort } from "./loot.ts";
 import { activeTask, taskShort } from "./slayer.ts";
 import { addDays, campaignWeek, actForWeek } from "./schedule.ts";
 import { ACTS, ACT_WEEKS } from "./config.ts";
@@ -60,6 +62,8 @@ export interface SheetData {
   week: number;
   bossHeads: number;
   task: string | null;
+  /** The bank's worth, in coins. */
+  bank: number;
 }
 
 function cosmetics(player: Player): Record<string, string> {
@@ -102,6 +106,7 @@ export async function gatherSheet(env: Env, player: Player, day: string): Promis
     week,
     bossHeads: (await logEntries(env, player.discord_id)).filter((e) => e.startsWith("boss:") && e !== "boss:raid_survivor").length,
     task: taskShort(await activeTask(env, player.discord_id)),
+    bank: await bankValue(env, player.discord_id),
   };
 }
 
@@ -134,6 +139,7 @@ export function sheetImageUrl(env: Env, data: SheetData, attempt = 0): Promise<s
     bh: data.bossHeads,
     bp: data.player.bingo_points,
     sp: data.player.slayer_points,
+    bk: Math.round(data.bank),
     ...(data.task ? { task: data.task } : {}),
     ...retryField(attempt),
   });
@@ -142,9 +148,15 @@ export function sheetImageUrl(env: Env, data: SheetData, attempt = 0): Promise<s
 export interface ReportPayload {
   n: string;
   t: string;
+  /** The stacks on the card, richest first; the rest are counted in `m`. */
   loot: { k: string; c: number }[];
+  /** Stacks that did not fit on the card. */
+  m?: number;
+  /** The session's drops, in coins. */
+  v?: number;
   xp: { k: string; x: number }[];
-  lv?: { k: string; l: number }[];
+  /** Level-ups: skill, new level, and the level before. */
+  lv?: { k: string; l: number; f?: number }[];
   task?: string;
   /** The session line: "23 hill giants · max hit 4 · 54% to hit · Rune scimitar" */
   s?: string;
@@ -258,7 +270,9 @@ export function textSheet(data: SheetData): string {
   );
   if (data.clue) lines.push(data.clue);
   if (data.task) lines.push(`🗡️ ${data.task} · Slayer points ${data.player.slayer_points}`);
-  lines.push(`Log ${data.log}/${LOG_TOTAL} · ${data.checkins} check-ins · Act ${data.act}, week ${data.week}`);
+  lines.push(
+    `Log ${data.log}/${LOG_TOTAL} · Bank ${gpShort(data.bank)} · ${data.checkins} check-ins · Act ${data.act}, week ${data.week}`
+  );
   return lines.join("\n");
 }
 

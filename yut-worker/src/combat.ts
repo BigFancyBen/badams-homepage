@@ -181,8 +181,21 @@ export interface Session {
  * formulas; the player is assumed to wield the best scimitar and wear the
  * best full set their levels allow, with the strongest prayers they have.
  */
-export function simulateSession(input: SessionInput): Session {
-  const { levels, style, gear, monster } = input;
+/** What a player's offence comes to against one opponent: the wiki's max hit and accuracy. */
+export function offence(
+  levels: Levels,
+  style: CombatStyle,
+  gear: Gear,
+  opponent: Pick<Monster, "def" | "dslash">
+): {
+  weapon: Weapon;
+  armour: Armour;
+  prayer: ReturnType<typeof bestPrayers>;
+  maxHit: number;
+  hitChance: number;
+  effectiveDefence: number;
+  gloryDef: number;
+} {
   const weapon = weaponFor(levels.attack);
   const armour = armourFor(levels.defence);
   const prayer = bestPrayers(levels.prayer);
@@ -201,8 +214,34 @@ export function simulateSession(input: SessionInput): Session {
     Math.floor(0.5 + (effectiveStrength * (weapon.str + armour.str + gloryStr + 64)) / 640) * helm
   );
   const attackRoll = Math.floor(effectiveAttack * (weapon.aslash + gloryAttack + 64) * helm);
-  const defenceRoll = (monster.def + 9) * (monster.dslash + 64);
-  const chance = hitChance(attackRoll, defenceRoll);
+  const defenceRoll = (opponent.def + 9) * (opponent.dslash + 64);
+  return { weapon, armour, prayer, maxHit, hitChance: hitChance(attackRoll, defenceRoll), effectiveDefence, gloryDef };
+}
+
+/**
+ * A quest's mini-fight: the expected damage of `attacks` swings at an enemy
+ * with the player's usual kit. Flat — no weight, no food model — because it
+ * is a party's shared boss bar, not a training session.
+ */
+export function questFight(
+  levels: Levels,
+  style: CombatStyle,
+  gear: Gear,
+  enemy: Pick<Monster, "def" | "dslash">,
+  attacks: number
+): number {
+  const { maxHit, hitChance: chance } = offence(levels, style, gear, enemy);
+  return Math.floor(attacks * chance * (maxHit / 2));
+}
+
+export function simulateSession(input: SessionInput): Session {
+  const { levels, style, gear, monster } = input;
+  const { weapon, armour, prayer, maxHit, hitChance: chance, effectiveDefence, gloryDef } = offence(
+    levels,
+    style,
+    gear,
+    monster
+  );
   const damagePerAttack = chance * (maxHit / 2);
 
   // What the monster does back, which is what decides how long the food lasts.

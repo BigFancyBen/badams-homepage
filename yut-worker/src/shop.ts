@@ -1,5 +1,6 @@
 import {
   ACTS,
+  ANTIQUE_LAMP,
   SHOP,
   SHOP_PETS,
   SHOP_TITLES,
@@ -91,7 +92,8 @@ export async function shopPress(
 
   switch (item) {
     case "small_lamp":
-      statements.push(grantLampStatement(env, player.discord_id, 2000, "shop", day));
+      // The shop lamp is the easy antique lamp, as its label says.
+      statements.push(grantLampStatement(env, player.discord_id, ANTIQUE_LAMP.easy, "shop", day));
       line = "A small lamp, banked. Rub it from the hub.";
       break;
     case "title": {

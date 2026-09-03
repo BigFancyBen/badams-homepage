@@ -38,28 +38,68 @@ async function botFetch(
   return response;
 }
 
+/** Posts to the game's channel, or to one of its threads when a channel id is given. */
 export async function postMessage(
   env: Env,
-  payload: unknown
+  payload: unknown,
+  channelId: string = env.DISCORD_CHANNEL_ID
 ): Promise<DiscordMessage> {
-  const response = await botFetch(
-    env,
-    `/channels/${env.DISCORD_CHANNEL_ID}/messages`,
-    { method: "POST", body: JSON.stringify(payload) }
-  );
+  const response = await botFetch(env, `/channels/${channelId}/messages`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
   return (await response.json()) as DiscordMessage;
 }
 
 export async function editMessage(
   env: Env,
   messageId: string,
-  payload: unknown
+  payload: unknown,
+  channelId: string = env.DISCORD_CHANNEL_ID
 ): Promise<void> {
-  await botFetch(
+  await botFetch(env, `/channels/${channelId}/messages/${messageId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getMessage(
+  env: Env,
+  messageId: string,
+  channelId: string = env.DISCORD_CHANNEL_ID
+): Promise<{ id: string; content: string }> {
+  const response = await botFetch(env, `/channels/${channelId}/messages/${messageId}`);
+  return (await response.json()) as { id: string; content: string };
+}
+
+export async function deleteMessage(
+  env: Env,
+  messageId: string,
+  channelId: string = env.DISCORD_CHANNEL_ID
+): Promise<void> {
+  await botFetch(env, `/channels/${channelId}/messages/${messageId}`, { method: "DELETE" });
+}
+
+/**
+ * Starts a public thread on one of the channel's messages and returns the
+ * thread's id, which is a channel id as far as the rest of the API cares.
+ * Needs Create Public Threads and Send Messages in Threads on the channel.
+ */
+export async function startThread(
+  env: Env,
+  messageId: string,
+  name: string,
+  autoArchiveMinutes = 1440
+): Promise<string> {
+  const response = await botFetch(
     env,
-    `/channels/${env.DISCORD_CHANNEL_ID}/messages/${messageId}`,
-    { method: "PATCH", body: JSON.stringify(payload) }
+    `/channels/${env.DISCORD_CHANNEL_ID}/messages/${messageId}/threads`,
+    {
+      method: "POST",
+      body: JSON.stringify({ name: name.slice(0, 100), auto_archive_duration: autoArchiveMinutes }),
+    }
   );
+  return ((await response.json()) as { id: string }).id;
 }
 
 export async function pinMessage(env: Env, messageId: string): Promise<void> {

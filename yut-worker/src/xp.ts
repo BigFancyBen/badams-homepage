@@ -104,3 +104,8 @@ export function lampXp(skillLevel: number): number {
 export function totalLevel(xpBySkill: Partial<Record<SkillKey, number>>, skills: SkillKey[]): number {
   return skills.reduce((sum, skill) => sum + levelForXp(xpBySkill[skill] ?? 0), 0);
 }
+
+/** The levels worth a framed scroll: every tenth, every fifth past 60, every one past 90. */
+export function isLevelMilestone(level: number): boolean {
+  return level % 10 === 0 || (level > 60 && level % 5 === 0) || level > 90;
+}

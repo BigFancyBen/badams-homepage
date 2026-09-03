@@ -9,11 +9,12 @@ import {
   verifierNames,
 } from "./db.ts";
 import { ACCENT, allowedMentions, editMessage, escapeMarkdown } from "./discord.ts";
-import { actForWeek, addDays, campaignWeek, daysBetween, gameWeek, shortDate } from "./schedule.ts";
+import { WEEKDAY_NAMES, actForWeek, addDays, campaignWeek, daysBetween, gameWeek, shortDate, weekdayOf } from "./schedule.ts";
 import { getStores, getTown, ledgerOn, storesLine } from "./town.ts";
 import { buttonRow, type Env } from "./types.ts";
 import { summaryLines, type WeekSummary } from "./weekly.ts";
 import { raidLine } from "./raids.ts";
+import { championsGuildLine, questIntro, questLine } from "./quests.ts";
 import { openVotes } from "./votes.ts";
 
 /**
@@ -99,6 +100,11 @@ export async function composeDigest(env: Env, today: string): Promise<DigestPart
 
   const raid = await raidLine(env);
   if (raid) lines.push(raid);
+  // The quest of the week: introduced on Monday (below), a progress line the rest of the week.
+  if (thisWeek !== today) {
+    const quest = await questLine(env, today);
+    if (quest) lines.push(quest);
+  }
   const votes = await openVotes(env);
   if (votes.length > 0) {
     lines.push(
@@ -118,6 +124,10 @@ export async function composeDigest(env: Env, today: string): Promise<DigestPart
     }
     const beat = CAMPAIGN_EVENTS.find((event) => event.week === week);
     if (beat) lines.push(`📯 ${beat.post}`);
+    // The Champions' Guild is earned at 32 quest points, as in the game.
+    if (beat?.key === "champions_guild") lines.push(await championsGuildLine(env));
+    const intro = questIntro(env, today);
+    if (intro) lines.push(intro);
   }
 
   return { header, lines, imageUrl };
@@ -148,6 +158,20 @@ export function digestPayload(
     ],
     allowed_mentions: allowedMentions(roleId),
   };
+}
+
+/** "Check-ins · Wed 3 Sep" — the name of the day's thread. */
+export function threadName(day: string): string {
+  return `Check-ins · ${WEEKDAY_NAMES[weekdayOf(day)].slice(0, 3)} ${shortDate(day)}`;
+}
+
+/**
+ * The day's check-in thread, or null when there is none: creating it failed,
+ * or the post predates threads. Callers fall back to the channel.
+ */
+export async function dailyThread(env: Env, day: string): Promise<string | null> {
+  const id = await getState(env, `daily_thread:${day}`);
+  return id ? id : null;
 }
 
 /** "✅ Ben, Tom · 😴 Alex · 2 still to answer" — roster members only. */

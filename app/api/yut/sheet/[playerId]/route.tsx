@@ -51,6 +51,8 @@ interface SheetPayload {
   cl?: { tier: string; step: number; of: number };
   /** Collection log entries, out of 90 */
   log: number;
+  /** The bank's worth, in coins */
+  bk?: number;
   /** Title */
   ti?: string;
   /** Act number */
@@ -122,7 +124,7 @@ export async function GET(request: Request) {
     return new Response(result.error, { status: result.status });
   }
 
-  const { n, s, t, tier, tn, d7, fw, rg, lm, cl, log, ti, a, eq, bh, bp, cb, wp } = result.payload;
+  const { n, s, t, tier, tn, d7, fw, rg, lm, cl, log, ti, a, eq, bh, bp, cb, wp, bk } = result.payload;
   const combat = typeof cb === "number" ? cb : undefined;
   const weaponIcon = typeof wp === "string" ? itemIconDataUrl(`${wp}_scimitar`) : null;
   const frame = tierColor(tier);
@@ -142,7 +144,11 @@ export async function GET(request: Request) {
     `Lamps ${lm}`,
   ];
   if (cl) footer.push(`Clue ${cl.tier} ${cl.step}/${cl.of}`);
-  footer.push(`Log ${log}/90`, `Act ${a}`);
+  footer.push(`Log ${log}/90`);
+  if (typeof bk === "number" && bk > 0) {
+    footer.push(`Bank ${bk >= 1_000_000 ? `${(bk / 1_000_000).toFixed(1)}m` : bk >= 1_000 ? `${Math.round(bk / 1_000)}k` : String(Math.round(bk))}`);
+  }
+  footer.push(`Act ${a}`);
 
   /** Right-hand footer group. A zero head count is left off; a dragon beside a 0 reads oddly. */
   const trophies: string[] = [];

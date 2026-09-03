@@ -22,16 +22,20 @@ import {
   getSkills,
   getPlayers,
   joinPlayer,
+  setCheckinMessage,
   updatePlayer,
 } from "./db.ts";
 import { ACCENT, allowedMentions, editInteractionReply, escapeMarkdown, postMessage, replyTo } from "./discord.ts";
 import { getState } from "./db.ts";
 import { attachmentKind, mirrorAttachment } from "./images.ts";
+import { bankView } from "./bank.ts";
+import { questLog, questView } from "./quests.ts";
 import {
   deferred,
   finishLater,
   handleInteraction,
   hub,
+  mediaLineContent,
   postCheckinLine,
   receiptReply,
   reply,
@@ -142,6 +146,12 @@ export async function runCommand(
       return relay(env, ctx, interaction, user, "clue", now);
     case "log":
       return relay(env, ctx, interaction, user, "log", now);
+    case "bank":
+      return playerAction(env, user, day, (p) => bankView(env, p));
+    case "quest": {
+      const sub = subcommand(interaction);
+      return playerAction(env, user, day, () => (sub === "log" ? questLog(env) : questView(env, day)));
+    }
     case "town":
       return playerAction(env, user, day, (p) => townView(env, p, day, now));
     case "recruit": {
@@ -329,13 +339,21 @@ async function checkinCommand(
         // The proof is attached either way; the channel line is the part that
         // can fail (the bot may be locked out of the channel), and it says so.
         const posted = await postMessage(env, {
-          content: `📸 **${escapeMarkdown(user.username)}** added proof to today's check-in.` + (kind === "video" ? `\n${mirrored.url}` : "") + (note ? `\n> ${escapeMarkdown(note)}` : ""),
+          content: mediaLineContent(
+            `📸 **${escapeMarkdown(user.username)}** added proof to today's check-in.`,
+            { key: mirrored.key, url: mirrored.url, kind },
+            note
+          ),
           embeds: kind === "image" ? [{ color: ACCENT, image: { url: mirrored.url } }] : [],
           components: [buttonRow([{ label: "Verify", custom_id: `vf:${existing.id}`, style: 3, emoji: "💪" }])],
           allowed_mentions: allowedMentions(),
           ...replyTo(await getState(env, `daily_post:${day}`)),
         }).then(
-          () => true,
+          async (message) => {
+            // Verify edits "verified by …" into the message that carries the proof.
+            await setCheckinMessage(env, existing.id, message.id);
+            return true;
+          },
           () => false
         );
         await editInteractionReply(env, interaction.application_id, interaction.token, {

@@ -20,10 +20,13 @@
     "mock:discord": "node scripts/mock-discord.mjs",
     "provision": "node scripts/provision.mjs",
     "secrets": "node scripts/push-secrets.mjs",
-    "discord:setup": "node scripts/discord-setup.mjs"
+    "discord:setup": "node scripts/discord-setup.mjs",
+    "fetch:osrs": "node scripts/fetch-osrs.mjs",
+    "export:icons": "node scripts/export-icons.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260821.1",
+    "pngjs": "^7.0.0",
     "typescript": "^5.9.3",
     "wrangler": "^4.125.0"
   }

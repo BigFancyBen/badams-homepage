@@ -19,8 +19,11 @@ const PORT = Number(process.env.MOCK_DISCORD_PORT ?? 9912);
 const messages = new Map();
 
 // GET /__mock/channel-post-status?code=403 makes every channel post fail the
-// way a channel the bot cannot see does; ?code=200 restores it.
+// way a channel the bot cannot see does; ?code=200 restores it. The thread
+// toggles do the same for creating a thread and for posting into one.
 let channelPostStatus = 200;
+let threadCreateStatus = 200;
+let threadPostStatus = 200;
 
 createServer((req, res) => {
   let body = "";
@@ -44,9 +47,43 @@ createServer((req, res) => {
       json(200, { channelPostStatus });
       return;
     }
+    // GET /__mock/reset forgets the log, so a second harness run against the
+    // same mock cannot match the first run's requests.
+    if (req.method === "GET" && req.url.startsWith("/__mock/reset")) {
+      sent.length = 0;
+      writeFileSync("mock-discord-log.json", "[]");
+      json(200, { reset: true });
+      return;
+    }
+    if (req.method === "GET" && req.url.startsWith("/__mock/thread-create-status")) {
+      threadCreateStatus = Number(new URL(req.url, "http://mock").searchParams.get("code") ?? 200);
+      json(200, { threadCreateStatus });
+      return;
+    }
+    if (req.method === "GET" && req.url.startsWith("/__mock/thread-post-status")) {
+      threadPostStatus = Number(new URL(req.url, "http://mock").searchParams.get("code") ?? 200);
+      json(200, { threadPostStatus });
+      return;
+    }
+    // Starting a thread on a message: the thread is a channel named thread_N.
+    if (req.method === "POST" && /\/channels\/[^/]+\/messages\/[^/]+\/threads$/.test(req.url)) {
+      if (threadCreateStatus !== 200) {
+        json(threadCreateStatus, { message: "Missing Permissions", code: 50013 });
+        return;
+      }
+      const parent = req.url.split("/")[2];
+      const id = `thread_${++nextId}`;
+      let name = "";
+      try {
+        name = JSON.parse(body).name ?? "";
+      } catch {}
+      json(200, { id, type: 11, parent_id: parent, name });
+      return;
+    }
     if (req.method === "POST" && /\/channels\/[^/]+\/messages$/.test(req.url)) {
-      if (channelPostStatus !== 200) {
-        json(channelPostStatus, { message: "Missing Access", code: 50001 });
+      const channel = req.url.split("/")[2];
+      if (channel.startsWith("thread_") ? threadPostStatus !== 200 : channelPostStatus !== 200) {
+        json(channel.startsWith("thread_") ? threadPostStatus : channelPostStatus, { message: "Missing Access", code: 50001 });
         return;
       }
       const id = String(++nextId);
@@ -55,7 +92,11 @@ createServer((req, res) => {
         content = JSON.parse(body).content ?? "";
       } catch {}
       messages.set(id, content);
-      json(200, { id, channel_id: "x", content, timestamp: new Date(0).toISOString(), attachments: [], author: { id: "bot", username: "bot" } });
+      // The log entry learns where the message landed and what id it got, so
+      // the harness can tell a thread line from a channel post.
+      Object.assign(sent[sent.length - 1], { id, channel });
+      writeFileSync("mock-discord-log.json", JSON.stringify(sent, null, 2));
+      json(200, { id, channel_id: channel, content, timestamp: new Date(0).toISOString(), attachments: [], author: { id: "bot", username: "bot" } });
       return;
     }
     if (req.method === "GET" && /\/channels\/[^/]+\/messages\/\d+$/.test(req.url)) {

@@ -45,7 +45,10 @@ src/
   commands.ts     slash commands.
   register.ts     the command list Discord is told about.
   checkins.ts     the check-in transaction: the session, the haul, and everything a check-in can produce.
-  combat.ts       Old School's combat as arithmetic: combat level, max hit, accuracy, the session, masters and assignments — pure.
+  loot.ts         the kills' drops, rolled per kill against config/drops.json — pure. bank.ts /bank.
+  quests.ts       the Quest of the Week: the calendar's quest, supplies, mini-fights, completion, /quest.
+  reminders.ts    the evening reminders and the going-stale @mention.
+  combat.ts       Old School's combat as arithmetic: combat level, max hit, accuracy, the session, the quest mini-fight, masters and assignments — pure.
   events.ts       random events (seeded on player + day).
   clues.ts        clue scrolls.
   slayer.ts       Slayer tasks: a master by combat level, kills from the session, points and streaks.
@@ -58,10 +61,12 @@ src/
   votes.ts        group votes (build, relic, raid). relics.ts the relics. raids.ts raid weeks.
   actions.ts      the town buttons and vote handlers. bingo.ts the grids. shop.ts the shop.
   db.ts           every D1 query. discord.ts the REST client. roles.ts the opt-in ping role.
-migrations/       0001 the game, 0002 the town, 0003 votes and raids, 0004 bingo and shop, 0005 sessions and answers. One number per file, forever.
-scripts/          the harness (below), plus fetch-osrs.mjs (the wiki pull) and calibrate.mjs (the pace).
+migrations/       0001 the game, 0002 the town, 0003 votes and raids, 0004 bingo and shop, 0005 sessions and answers, 0006 the bank, 0007 quests. One number per file, forever.
+scripts/          the harness (below), plus fetch-osrs.mjs (the wiki pull: --osrs, --drops, --quests), export-icons.mjs (item sprites from the prog-to-img-endpoint database into the Next app) and calibrate.mjs (the pace).
 config/choices.json  option lists shared by the runtime and the registration script.
-config/osrs.json     the wiki's numbers: masters, assignments, monsters, scimitars, armour sets. Regenerate with `node scripts/fetch-osrs.mjs`.
+config/osrs.json     the wiki's numbers: masters, assignments, monsters, scimitars, armour sets. Regenerate with `npm run fetch:osrs -- --osrs`.
+config/drops.json    every Slayer monster's real drop table (herb, seed, gem and rare-drop sub-tables expanded) with GE values. `npm run fetch:osrs -- --drops`, then `npm run export:icons` for any new sprites.
+config/quests.json   the Quest of the Week calendar's data: difficulty, quest points, enemies with real stats, item counts, blurbs. `npm run fetch:osrs -- --quests`.
 ```
 
 ## Setup
@@ -92,8 +97,12 @@ Three things only a person can do, once:
 3. **Invite the bot.** The workflow prints the invite link in its summary
    when the bot is not in the server (scopes `bot applications.commands`;
    permissions View Channel, Send Messages, Embed Links, Attach Files, Read
-   Message History, Manage Messages for pinning the board, Manage Roles for
-   the opt-in Players role, whose position must be below the bot's own).
+   Message History, Manage Messages for pinning the board, Create Public
+   Threads and Send Messages in Threads for the day's check-in thread,
+   Manage Roles for the opt-in Players role, whose position must be below
+   the bot's own). A private channel's own permission overwrite for the bot
+   needs the two thread permissions too; until it has them, check-in lines
+   fall back to the channel and the log webhook says so.
    A server admin opens it. No privileged intents: attachments arrive on
    the slash option.
 
@@ -166,7 +175,9 @@ with a synthetic clock (`daily=1`, `post=1`, `lastcall=1` force a phase),
 - **Rolls are seeded** on the player and the day, so a check-in that has to be
   recomputed rolls the same event and the same clue.
 - **Every message the bot writes is unmentioning** except the opt-in Players
-  role on the morning post and Sunday's last call.
+  role on the morning post and Sunday's last call, and the evening
+  reminder's stale warning, which @mentions a player on their third day
+  without a check-in (tomorrow the freshness gate closes on them).
 - **A check-in is a session.** The player fights their Slayer task for a
   fixed stretch with the best scimitar, armour and prayers their levels
   allow; damage pays combat XP (4 per point, 4/3 to Hitpoints), every kill
@@ -177,11 +188,61 @@ with a synthetic clock (`daily=1`, `post=1`, `lastcall=1` force a phase),
   Hitpoints 10.
 - **The receipt is the play hub.** Lamps, clues, the Slayer task, the sheet,
   the town, the log, bingo, the shop and the votes hang off it; a stale
-  player gets "Check in to play" and nothing else.
-- **Every check-in line carries a loot card**: the check-in's loot (coins,
+  player gets "Check in to play" and nothing else. The receipt itself is
+  one line plus whatever only the player can act on (a lamp, a quiz, a
+  reward waiting); the session lives in the day's thread.
+- **The day has a thread.** The morning post starts one ("Check-ins · Wed
+  3 Sep", `daily_thread:<day>` in `state`), and every check-in's line and
+  loot card go into it. The channel itself only hears from a check-in when
+  the player brought a photo, a video or a note: a short post with the
+  media, the quoted note and the Verify button, replying to the morning
+  post. `checkins.message_id` is that media post, the one Verify edits. If
+  the thread cannot be created or refuses a post, the line goes to the
+  channel instead — a check-in line is never lost.
+- **Every check-in carries a loot card**: the check-in's loot (coins,
   logs, a lamp, a clue, a casket, uniques) as OSRS item icons and the XP it
   paid, rendered by `app/api/yut/report` in the style of an OSRS progress
-  report. The icons come from the prog-to-img-endpoint item database.
+  report; a level-up reads `Hitpoints 12 -> 13` (the RuneScape fonts have no
+  arrow glyph). The RuneScape level-up
+  scroll only appears for milestone levels (every tenth, every fifth past
+  60, every level past 90). The icons come from the prog-to-img-endpoint
+  item database.
+- **Evening reminders.** At `REMINDER_HOUR_UTC` the bot posts one message
+  naming roster members with something to claim — lamps to rub (and when
+  one will rub itself), Slayer points that buy a skip, bingo points that
+  buy a lamp, open votes not cast, rewards waiting on a check-in — and
+  @mentions anyone whose last check-in was three days ago, because tomorrow
+  is day four and stale. Nothing at all is posted when nobody qualifies. It
+  is deleted at the next rollover.
+- **Drops are the wiki's.** Every kill of a session rolls the monster's real
+  drop table from `config/drops.json` — herb, seed, gem and rare-drop
+  sub-tables included — with a seeded RNG, so a retried check-in banks the
+  same loot. Each row is rolled independently at its own rate (the game's
+  main table is one exclusive roll per kill, so the expected rates match the
+  wiki exactly and only the variance differs). Stacks go to the player's
+  `bank` at their GE value; `/bank` lists them. Nothing reaches the town
+  economy; bones are buried for Prayer, not banked. A drop at 1/1,024 or
+  rarer, or worth 50k, is announced in the thread and logged as
+  `drop:<item>`, counted apart from the curated 90-entry log.
+- **A quest a week, cooperative, from the game's own book.** `QUEST_CALENDAR`
+  in config.ts names 51 Old School quests — the free-to-play novice quests
+  through Act 1, 37 quest points before the Champions' Guild beat at week 18
+  (the game asks 32), members quests rising by act, Dragon Slayer I at the
+  Elvarg beat, Dragon Slayer II the week after — and `config/quests.json`
+  holds the wiki's data for each: quest points, the enemies to defeat with
+  their real stats, the items list. The week's first check-in starts the
+  quest; every check-in brings a supply (a note or a photo brings two) until
+  the party has `min(items, ceil(roster / 2))`; then every check-in is a
+  mini-fight of `QUEST_FIGHT_ATTACKS` swings against the current enemy, in
+  the quest's order, each enemy's pool its hitpoints × count. The check-in
+  that empties the last pool completes it: the quest points go to the group
+  (`/quest log`), and everyone who checked in that week gets an antique lamp
+  by difficulty (easy for Novice, medium for Intermediate, hard above) as a
+  pending claim, plus a `quest:` log entry. Unfinished on Monday is noted
+  and costs nothing. The pace check in test-xp.mjs keeps every quest inside
+  two check-ins a head for a party of four (six for the Grandmasters), and
+  `SESSION_ATTACKS` came down from 800 to 600 so two a week still reaches
+  Dragon near the finale with the quest lamps counted.
 - **Slayer tasks are the game's.** Every player always holds a task from the
   highest master their combat level earns (Turael, Mazchna 20, Vannaka 40,
   Chaeldar 70, Nieve 85, Duradel 100 and 50 Slayer), drawn from that

@@ -17,6 +17,8 @@ export interface Env {
   DAILY_POST_HOUR_UTC: string;
   LAST_CALL_WEEKDAY: string;
   LAST_CALL_HOUR_UTC: string;
+  /** The evening reminders (lamps, points, votes). -1 disables. */
+  REMINDER_HOUR_UTC: string;
   /** The Monday the campaign starts, YYYY-MM-DD. */
   CAMPAIGN_START: string;
   TOWN_TICK_ENABLED: string;
@@ -78,6 +80,8 @@ export interface Checkin {
   delivered: string | null;
   /** JSON: the session (monster, kills, damage, maxHit, hitChance, attacks, weapon, armour). */
   session: string | null;
+  /** JSON: the session's drops, {"s": [[key, qty, value]], "t": total}. */
+  loot: string | null;
   verified_count: number;
   verified_at: number | null;
   message_id: string | null;
@@ -184,6 +188,8 @@ export interface Interaction {
   application_id: string;
   guild_id?: string;
   channel_id?: string;
+  /** A partial channel object; an interaction from a thread names its parent here. */
+  channel?: { id: string; type?: number; parent_id?: string };
   data?: {
     /** Slash command name, on type 2. */
     name?: string;

@@ -32,6 +32,10 @@ DAILY_POST_HOUR_UTC = "14"
 # Sunday last call: 23:00 UTC Sunday = 5pm MDT. LAST_CALL_WEEKDAY -1 disables.
 LAST_CALL_WEEKDAY = "0"
 LAST_CALL_HOUR_UTC = "23"
+# Evening reminders — unrubbed lamps, unspent points, uncast votes — as one
+# message that comes down again at the next rollover. 01:00 UTC = 7pm MDT,
+# still the same game day because the day turns at 09:00. -1 disables.
+REMINDER_HOUR_UTC = "1"
 # The Monday the campaign starts. Acts are thirteen weeks from here; the year
 # arc in config.ts is dated off it.
 CAMPAIGN_START = "2026-09-14"
