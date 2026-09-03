@@ -69,28 +69,102 @@ export async function fetchMessagesBefore(
   return (await response.json()) as DiscordMessage[];
 }
 
+/**
+ * Posts to the game's channel, or — given a thread id — into one of its
+ * threads. A thread is a channel to the API, so the same call serves both; the
+ * default is the channel because almost everything still goes there. Only the
+ * 9am batch and its results live in threads (see openThread).
+ */
 export async function postMessage(
   env: Env,
-  payload: unknown
+  payload: unknown,
+  channelId: string = env.DISCORD_CHANNEL_ID
 ): Promise<DiscordMessage> {
-  const response = await botFetch(
-    env,
-    `/channels/${env.DISCORD_CHANNEL_ID}/messages`,
-    { method: "POST", body: JSON.stringify(payload) }
-  );
+  const response = await botFetch(env, `/channels/${channelId}/messages`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
   return (await response.json()) as DiscordMessage;
 }
 
 export async function editMessage(
   env: Env,
   messageId: string,
-  payload: unknown
+  payload: unknown,
+  channelId: string = env.DISCORD_CHANNEL_ID
 ): Promise<void> {
-  await botFetch(
+  await botFetch(env, `/channels/${channelId}/messages/${messageId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * The message a thread hangs off, and the thread. Both ids are kept: the
+ * thread is where the posts go, and the starter is what has to be deleted if
+ * the thread ends up empty.
+ */
+export interface Thread {
+  id: string;
+  starterMessageId: string;
+}
+
+/** How long a thread stays open with nothing said in it, in minutes. */
+export const ARCHIVE_AFTER_THREE_DAYS = 4320;
+export const ARCHIVE_AFTER_A_DAY = 1440;
+
+/**
+ * Posts a message to the channel and opens a thread under it.
+ *
+ * Two calls rather than a bare thread: a thread started with no message gets
+ * Discord's grey "started a thread" system line, and a message of our own is
+ * where the day's headline goes — what the thread holds and when it shuts.
+ * The thread takes its name from the day, so the sidebar reads as a calendar.
+ *
+ * `archiveAfter` is Discord's idle timer, measured from the last *message* —
+ * button clicks and edits do not count. A thread that has to be edited a day
+ * after its last post needs more than a day on it, which is why the cooking
+ * batch asks for three.
+ */
+export async function openThread(
+  env: Env,
+  starter: unknown,
+  name: string,
+  archiveAfter: number
+): Promise<Thread> {
+  const message = await postMessage(env, starter);
+  const response = await botFetch(
     env,
-    `/channels/${env.DISCORD_CHANNEL_ID}/messages/${messageId}`,
-    { method: "PATCH", body: JSON.stringify(payload) }
+    `/channels/${env.DISCORD_CHANNEL_ID}/messages/${message.id}/threads`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        name: name.slice(0, 100),
+        auto_archive_duration: archiveAfter,
+      }),
+    }
   );
+  const thread = (await response.json()) as { id: string };
+  return { id: thread.id, starterMessageId: message.id };
+}
+
+/**
+ * Takes down a thread that never got anything posted in it, and the message
+ * it hung off. Best effort: this only runs on a path where Discord has already
+ * refused something, and a cleanup that throws would bury the error that
+ * matters under one that does not.
+ */
+export async function discardThread(env: Env, thread: Thread): Promise<void> {
+  try {
+    await botFetch(env, `/channels/${thread.id}`, { method: "DELETE" });
+    await botFetch(
+      env,
+      `/channels/${env.DISCORD_CHANNEL_ID}/messages/${thread.starterMessageId}`,
+      { method: "DELETE" }
+    );
+  } catch {
+    // Left for a human. The log line the caller writes names the failure.
+  }
 }
 
 /**
@@ -142,9 +216,17 @@ export function allowedMentions(env: Env) {
     : { parse: [], replied_user: false };
 }
 
-/** Jump link to any message in the game's channel. */
-export function messageUrl(env: Env, messageId: string): string {
-  return `https://discord.com/channels/${env.DISCORD_GUILD_ID}/${env.DISCORD_CHANNEL_ID}/${messageId}`;
+/**
+ * Jump link to any message in the game's channel, or in one of its threads.
+ * A link into a thread has to name the thread, not its parent — Discord does
+ * not resolve a message through the channel it is nested under.
+ */
+export function messageUrl(
+  env: Env,
+  messageId: string,
+  channelId: string = env.DISCORD_CHANNEL_ID
+): string {
+  return `https://discord.com/channels/${env.DISCORD_GUILD_ID}/${channelId}/${messageId}`;
 }
 
 /**

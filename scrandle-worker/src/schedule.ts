@@ -131,6 +131,30 @@ export function postSlotKey(now: number): string {
 }
 
 /**
+ * The day a moment falls on, as people in the channel would name it —
+ * "Thu 3 Sep". The threads the 9am batch and its results go into are named
+ * with this, so the sidebar reads as a calendar and the two halves of a day
+ * pair up by eye.
+ *
+ * In the configured zone rather than UTC: the 9am slot is 15:00 UTC and the
+ * dates agree, but a forced post at 10pm Mountain is already tomorrow in UTC,
+ * and a thread named for the wrong day would be the first thing anyone saw.
+ * Assembled from parts rather than taken as a formatted string, because the
+ * order and punctuation of a locale's short date are not the same everywhere
+ * the code might run.
+ */
+export function dayLabel(now: number, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    timeZone: timeZone || "UTC",
+  }).formatToParts(new Date(now));
+  const part = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return `${part("weekday")} ${part("day")} ${part("month")}`;
+}
+
+/**
  * How many drink matchups a week a catalog of `count` drinks deserves, as the
  * weekdays to post them on.
  *

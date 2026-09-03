@@ -44,7 +44,18 @@ POST_HOURS_UTC = "15"
 # each, and on 30 August six went up in one day and every one of them still got
 # seven. Five a day is inside what that day already proved. Revisit if the
 # average starts sliding.
+#
+# The five go into a thread rather than onto the channel floor, and so do
+# their results the next morning: one channel post opens "Cooking — Thu 3
+# Sep" with the cards inside, and one opens "Results — Thu 3 Sep" a day later.
+# Ten bot posts a day in the channel people post their dinner in was the
+# problem that solved. Bonuses, ranking rounds and the caption contest stay on
+# the floor — they are one post each.
 MATCHUPS_PER_SLOT = "5"
+# The zone those threads are named in. The cron and every *_HOUR_UTC above
+# stay UTC; this is only for turning a moment into "Thu 3 Sep" the way the
+# channel would say it. An IANA name, and it follows DST on its own.
+LOCAL_TIME_ZONE = "America/Denver"
 # Weekly standings post: 0 = Sunday. Set to -1 to disable.
 STANDINGS_WEEKDAY = "0"
 STANDINGS_HOUR_UTC = "17"

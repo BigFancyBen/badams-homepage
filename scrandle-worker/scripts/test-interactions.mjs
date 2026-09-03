@@ -117,6 +117,41 @@ check(
   foreign
 );
 
+// 5b. The 9am batch's cards live in a thread under the channel, so a click on
+//     one arrives with the thread's id as channel_id — an id the config has
+//     never heard of — and the parent in the channel object. That is let in.
+const fromThread = await post({
+  type: 3,
+  id: "i3b",
+  guild_id: GUILD,
+  channel_id: "thread_123456789",
+  channel: { id: "thread_123456789", parent_id: CHANNEL },
+  data: { custom_id: `v:${matchupId}:a` },
+  member: { user: { id: "user_tester", username: "tester" } },
+});
+check(
+  "a vote from the batch's thread is accepted",
+  fromThread.status === 200 &&
+    (fromThread.body?.data?.content ?? "").includes(`#${matchupId} → 1`),
+  fromThread
+);
+
+// 5c. A thread under some other channel is not the game's, whatever it says.
+const strayThread = await post({
+  type: 3,
+  id: "i3c",
+  guild_id: GUILD,
+  channel_id: "thread_987654321",
+  channel: { id: "thread_987654321", parent_id: "111111111111111111" },
+  data: { custom_id: `v:${matchupId}:a` },
+  member: { user: { id: "user_tester", username: "tester" } },
+});
+check(
+  "a thread under another channel is turned away",
+  /only runs in its own channel/.test(strayThread.body?.data?.content ?? ""),
+  strayThread
+);
+
 // 6. A button that is not ours.
 const junk = await post({
   type: 3,
