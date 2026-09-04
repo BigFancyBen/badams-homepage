@@ -137,10 +137,12 @@ export interface Matchup {
   result_message_id: string | null;
   /**
    * The thread the card was posted in, and the one its result went to. Null
-   * for a matchup posted straight to the channel — every bonus, and everything
-   * before migration 0012. The everyday batch lives in threads: the five cards
-   * in one, the five results in another, so the channel sees two posts a day
-   * rather than ten.
+   * for a message posted straight to the channel — every bonus, and every
+   * card from before migration 0012. The everyday batch lives in threads: the
+   * five cards in one, the five results in another, so the channel sees two
+   * posts a day rather than ten. The two are independent: an everyday result
+   * goes to a results thread even when its card was on the floor, so
+   * `result_thread_id` can be set on a row whose `thread_id` is null.
    */
   thread_id: string | null;
   result_thread_id: string | null;

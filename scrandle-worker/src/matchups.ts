@@ -635,13 +635,15 @@ async function closeOne(env: Env, matchup: Matchup, now: number): Promise<void> 
 
   const log = await voteLog(env, matchup, dishA, dishB);
 
-  // A result in the results thread cannot reply to a card in the cooking
-  // thread — Discord only replies within a channel — so the way back up to the
-  // photographs is a link in the text instead. On the channel floor the reply
-  // header does that job and the link would say it twice.
+  // A result in the results thread cannot reply to its card — Discord only
+  // replies within a channel, and the card is in the cooking thread or on the
+  // floor, never in the results thread — so the way back up to the
+  // photographs is a link in the text instead. A bonus's result stays on the
+  // floor beside its card, where the reply header does that job and the link
+  // would say it twice.
   const back =
-    matchup.thread_id && matchup.message_id
-      ? ` [Back to the card.](${messageUrl(env, matchup.message_id, matchup.thread_id)})`
+    !matchup.bonus && matchup.message_id
+      ? ` [Back to the card.](${messageUrl(env, matchup.message_id, matchup.thread_id ?? undefined)})`
       : "";
 
   await postResult(env, matchup, {
@@ -674,12 +676,14 @@ async function closeOne(env: Env, matchup: Matchup, now: number): Promise<void> 
  * already inert: a click on a closed matchup is turned away by the interaction
  * handler, which reads the row rather than the message.
  *
- * A matchup that was posted into the batch's thread gets its result in a
- * results thread rather than on the channel floor — the five of a batch close
- * in one tick and share one, found through the cards' thread (see
- * resultThreadFor) and opened by whichever of them closes first. A matchup on
- * the channel floor, which is every bonus, gets its result there as before,
- * replying to the card.
+ * An everyday matchup gets its result in a results thread rather than on the
+ * channel floor — the five of a batch close in one tick and share one, found
+ * through the close they share (see resultThreadFor) and opened by whichever
+ * of them closes first. That holds whether or not the cards themselves went
+ * to a thread: a batch that went up before the threads existed, or whose
+ * cards were posted to the floor by hand, still closes as five reveals at
+ * once, and five reveals is what the thread is for. A bonus is one card on
+ * the floor and gets its result there as before, replying to the card.
  */
 async function postResult(
   env: Env,
@@ -687,9 +691,9 @@ async function postResult(
   body: { content: string; embeds: unknown[] }
 ): Promise<void> {
   let resultThreadId: string | null = null;
-  if (matchup.thread_id) {
+  if (!matchup.bonus) {
     resultThreadId =
-      (await resultThreadFor(env, matchup.thread_id)) ??
+      (await resultThreadFor(env, matchup.closes_at)) ??
       (await openResultsThread(env, matchup)).id;
   }
 
