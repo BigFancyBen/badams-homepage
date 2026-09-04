@@ -716,7 +716,12 @@ why not.
   channel. The results thread is found rather than remembered — the first close
   of a batch opens it and writes the id on its own row, the rest read it back
   from a sibling — so a close that failed half way and reran lands in the same
-  thread. The cooking thread asks Discord for three days on the idle timer
+  thread. The sibling is found through the close the batch shares, not
+  through the cards' thread: every card in a batch gets the same `closes_at`,
+  and keying on that means a batch whose cards went to the floor (the one
+  that was open when threads arrived, or a hand-posted batch) still gets its
+  five reveals in one thread instead of five deep in the channel. Only a
+  bonus, which is one card on the floor, keeps its result there. The cooking thread asks Discord for three days on the idle timer
   rather than one: the timer counts messages only, so a day of button clicks is
   a day of silence to it, and the cards are edited when they close a day after
   they went up. The thread names use `LOCAL_TIME_ZONE`, not UTC — a forced

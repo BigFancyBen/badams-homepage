@@ -188,22 +188,33 @@ export async function getMatchupByMessage(
 /**
  * The results thread the rest of a batch has already gone to, if any of it has.
  *
- * The five matchups posted into one thread close in one tick and their results
- * share one thread, which is found rather than remembered: the first close of
- * the batch opens it and writes the id on its own row, and every close after
- * reads it back from a sibling. Keying on the cards' thread rather than on a
- * state row means a close that failed half way and reran next tick still lands
- * in the same thread, and a batch never leaks into the next day's.
+ * The five matchups of a batch close in one tick and their results share one
+ * thread, which is found rather than remembered: the first close of the batch
+ * opens it and writes the id on its own row, and every close after reads it
+ * back from a sibling. Keying on a row rather than on `state` means a close
+ * that failed half way and reran next tick still lands in the same thread,
+ * and a batch never leaks into the next day's.
+ *
+ * A batch is the everyday matchups that close together. Every card in one is
+ * given the same `closes_at` — the next posting hour, not a span from when it
+ * went up — so that is the batch's identity, and it holds for a batch whose
+ * cards went to the channel floor as well as one whose cards went to a
+ * thread. Keying on the cards' thread instead would send the results of the
+ * former to the floor, five reveals deep, which is exactly what the results
+ * thread exists to prevent. Bonuses are excluded: they run on flat windows of
+ * their own, and one that happened to shut on the hour is not the day's
+ * cooking.
  */
 export async function resultThreadFor(
   env: Env,
-  threadId: string
+  closesAt: number
 ): Promise<string | null> {
   const row = await env.DB.prepare(
     "SELECT result_thread_id FROM matchups " +
-      "WHERE thread_id = ? AND result_thread_id IS NOT NULL LIMIT 1"
+      "WHERE status = 'closed' AND closes_at = ? AND bonus = 0 " +
+      "AND result_thread_id IS NOT NULL LIMIT 1"
   )
-    .bind(threadId)
+    .bind(closesAt)
     .first<{ result_thread_id: string }>();
   return row?.result_thread_id ?? null;
 }
