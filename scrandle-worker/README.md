@@ -581,6 +581,38 @@ post, which is a different message. Either link finds the round, so it does not
 matter which of the two you paste. It answers `{"repaired":true}`, or a reason
 why not.
 
+### Merging two accounts
+
+Somebody remakes their Discord account and everything they did stays behind
+under the old snowflake: their cooking sits under a second name in the chef
+standings, their votes count as a stranger's, and the one-vote-each rule stops
+applying to them. Two routes fix that.
+
+```bash
+curl "https://<your-worker>.workers.dev/admin/players?secret=<BACKFILL_SECRET>&q=edwards"
+```
+
+Everybody whose username matches, with the id and the counts beside it —
+dishes, votes, ballots, contest entries. This is how you find the old id;
+`q=` is optional and lists everyone without it.
+
+```bash
+curl "https://<your-worker>.workers.dev/admin/merge-player?secret=<BACKFILL_SECRET>&from=<old id>&to=<new id>"
+curl "https://<your-worker>.workers.dev/admin/merge-player?secret=<BACKFILL_SECRET>&from=<old id>&to=<new id>&confirm=1"
+```
+
+The first is a dry run — it reports what would move and what would be dropped
+and writes nothing. Add `confirm=1` to do it. Everything `from` posted and
+voted on becomes `to`'s, the old `players` row goes, and the surviving row
+keeps the earlier `first_seen`. `to` does not have to exist yet.
+
+Where both accounts answered the same question — a matchup both voted in, a
+round both ranked, a contest both entered — the surviving account's answer
+stands and the old one's is dropped, counted separately in the report. Two
+ballots cannot be averaged into one. Everything else moves. It runs as one D1
+batch, so a failure leaves the person unmerged rather than half-merged, and
+running it twice is a no-op.
+
 ## Behaviour notes
 
 - **Only JPEG and PNG are ingested.** satori rasterizes those two; a WebP or

@@ -24,6 +24,7 @@ import {
   openDueVoting,
   postCaptionContestIfDue,
 } from "./contests";
+import { findPlayers, mergePlayers } from "./players";
 import type { Env, Interaction } from "./types";
 import { verifyDiscordRequest } from "./verify";
 
@@ -287,6 +288,52 @@ export default {
       } catch (error) {
         const reason = error instanceof Error ? error.message : String(error);
         await logToDiscord(env, `Classify failed: ${reason}`);
+        return Response.json({ ok: false, error: reason }, { status: 502 });
+      }
+    }
+
+    // Who the catalog thinks it knows. `?q=` matches part of a username; the
+    // point of it is finding the id of somebody's old account before merging
+    // it away, which is otherwise a trip through Discord's developer mode.
+    if (url.pathname === "/admin/players") {
+      if (url.searchParams.get("secret") !== env.BACKFILL_SECRET) {
+        return new Response("Nope", { status: 403 });
+      }
+      try {
+        return Response.json({
+          ok: true,
+          players: await findPlayers(env, url.searchParams.get("q") ?? undefined),
+        });
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        return Response.json({ ok: false, error: reason }, { status: 502 });
+      }
+    }
+
+    // Folds one account into another: everything `from` posted and voted on
+    // becomes `to`'s, and `from` disappears. Dry by default — pass `confirm=1`
+    // to actually write. See src/players.ts.
+    if (url.pathname === "/admin/merge-player") {
+      if (url.searchParams.get("secret") !== env.BACKFILL_SECRET) {
+        return new Response("Nope", { status: 403 });
+      }
+      const from = url.searchParams.get("from") ?? "";
+      const to = url.searchParams.get("to") ?? "";
+      const confirm = url.searchParams.get("confirm") === "1";
+      try {
+        const report = await mergePlayers(env, from, to, !confirm);
+        if (!report.ok) return Response.json(report, { status: 400 });
+        if (confirm) {
+          await logToDiscord(
+            env,
+            `Merged player ${from} into ${to}: ${JSON.stringify(report.moved)} moved, ` +
+              `${JSON.stringify(report.dropped)} dropped as duplicates.`
+          );
+        }
+        return Response.json(report);
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        await logToDiscord(env, `Player merge failed: ${reason}`);
         return Response.json({ ok: false, error: reason }, { status: 502 });
       }
     }
