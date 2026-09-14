@@ -26,9 +26,12 @@ import {
 } from "./db";
 import { scoreRanking, type RankingResult } from "./elo";
 import {
+  type CardEmbeds,
   ballotImageUrl,
   ballotResultImageUrl,
   cardKey,
+  cardLoaded,
+  confirmCard,
   dishFocus,
   dishUrl,
   renderCard,
@@ -161,9 +164,11 @@ async function createAndPost(
   // a week the draw found five, and "the plates" on a week it did not.
   const label = roundLabel(category, entries);
 
-  const image = await renderCard(env, cardKey("ballot", roundId), (attempt) =>
-    ballotImageUrl(env, roundId, entries, `Rank ${label}`, attempt)
-  );
+  const render = (stamp?: number) =>
+    renderCard(env, cardKey("ballot", roundId, stamp), (attempt) =>
+      ballotImageUrl(env, roundId, entries, `Rank ${label}`, attempt)
+    );
+  const image = await render();
 
   if (!image) {
     await logToDiscord(
@@ -178,11 +183,14 @@ async function createAndPost(
       .map((entry) => sourceLink(env, entry, `#${entry.slot}`))
       .join(" · ");
 
+    const embeds: CardEmbeds | null = image
+      ? [{ color: ACCENT, image: { url: image } }]
+      : null;
     const message = await postMessage(env, {
       content:
         `${opener} — rank ${label}. ` +
         `Click them best first; you can stop whenever.\n${links}`,
-      embeds: image ? [{ color: ACCENT, image: { url: image } }] : [],
+      embeds: embeds ?? [],
       components: ballotButtons(roundId, entries),
       allowed_mentions: allowedMentions(env),
     });
@@ -190,6 +198,20 @@ async function createAndPost(
     await env.DB.prepare("UPDATE rounds SET message_id = ? WHERE id = ?")
       .bind(message.id, roundId)
       .run();
+
+    // Recorded, so a card problem from here is not a stranded round — this
+    // never throws, and nothing below may reach the DELETE.
+    if (embeds) {
+      await confirmCard(
+        env,
+        message,
+        undefined,
+        embeds,
+        render,
+        `Round #${roundId}`,
+        `round=${roundId}`
+      );
+    }
   } catch (error) {
     await env.DB.batch([
       env.DB.prepare("DELETE FROM round_entries WHERE round_id = ?").bind(roundId),
@@ -624,6 +646,9 @@ async function closeOne(env: Env, round: Round, now: number): Promise<void> {
   // A message of its own rather than an edit to the ballot, for the reason
   // spelled out over postResult in matchups.ts: a day-old card is a day of
   // channel traffic above the fold, and Discord shows nothing for an edit.
+  const embeds: CardEmbeds | [unknown] = image
+    ? [{ color: WIN, image: { url: image } }, log]
+    : [log];
   const result = await postMessage(env, {
     content:
       `**Round #${round.id} — the result.** ` +
@@ -632,7 +657,7 @@ async function closeOne(env: Env, round: Round, now: number): Promise<void> {
       entries
         .map((entry) => sourceLink(env, entry, `#${entry.slot}`))
         .join(" · "),
-    embeds: [...(image ? [{ color: WIN, image: { url: image } }] : []), log],
+    embeds,
     allowed_mentions: allowedMentions(env),
     ...replyTo(round.message_id),
   });
@@ -640,6 +665,18 @@ async function closeOne(env: Env, round: Round, now: number): Promise<void> {
   await env.DB.prepare("UPDATE rounds SET result_message_id = ? WHERE id = ?")
     .bind(result.id, round.id)
     .run();
+
+  if (image) {
+    await confirmCard(
+      env,
+      result,
+      undefined,
+      embeds as CardEmbeds,
+      (stamp) => renderResultCard(env, round, entries, results, count, stamp),
+      `Round #${round.id}'s result`,
+      `round=${round.id}`
+    );
+  }
 
   if (round.message_id) {
     // Content and components only, so the ballot card stays under the pointer.
@@ -710,7 +747,12 @@ export async function closeDueRounds(
 export async function repairRoundCard(
   env: Env,
   target: { roundId?: number; messageId?: string }
-): Promise<{ repaired: boolean; round?: number; reason?: string }> {
+): Promise<{
+  repaired: boolean;
+  round?: number;
+  reason?: string;
+  loaded?: boolean | null;
+}> {
   const round = target.messageId
     ? await getRoundByMessage(env, target.messageId)
     : await getRound(env, target.roundId ?? 0);
@@ -747,10 +789,10 @@ export async function repairRoundCard(
         reason: "the card still will not render",
       };
     }
-    await editMessage(env, round.message_id, {
+    const edited = await editMessage(env, round.message_id, {
       embeds: [{ color: ACCENT, image: { url: image } }],
     });
-    return { repaired: true, round: round.id };
+    return { repaired: true, round: round.id, loaded: cardLoaded(edited) };
   }
 
   const ballots = await getRoundBallots(env, round.id);
@@ -787,12 +829,17 @@ export async function repairRoundCard(
   const slotOf = new Map(entries.map((entry) => [entry.id, entry.slot]));
   // Rounds closed before the reveal got a post of its own still carry their
   // result card on the ballot message.
-  await editMessage(env, round.result_message_id ?? round.message_id, {
-    embeds: [
-      { color: WIN, image: { url: image } },
-      ballotEmbed("How everyone ranked them", ballotLines(ballots, slotOf)),
-    ],
-  });
+  const edited = await editMessage(
+    env,
+    round.result_message_id ?? round.message_id,
+    {
+      embeds: [
+        { color: WIN, image: { url: image } },
+        ballotEmbed("How everyone ranked them", ballotLines(ballots, slotOf)),
+      ],
+    }
+  );
 
-  return { repaired: true, round: round.id };
+  // Discord's verdict on the new copy, same as the matchup repair.
+  return { repaired: true, round: round.id, loaded: cardLoaded(edited) };
 }
