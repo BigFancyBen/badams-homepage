@@ -1,5 +1,6 @@
+import { editMessage, logToDiscord } from "./discord";
 import { base64UrlFromString, hmacBase64Url } from "./encoding";
-import type { Dish, Env } from "./types";
+import type { Dish, DiscordMessage, Env } from "./types";
 
 /**
  * The render endpoints live in the Next app on Vercel — Workers Free gives
@@ -231,4 +232,95 @@ export async function renderCard(
   }
 
   return null;
+}
+
+/**
+ * Whether Discord managed to load the card on a message it has just accepted.
+ *
+ * Discord fetches an embed image through its media proxy while it is creating
+ * (or editing) the message, and the message it hands back says how that went:
+ * a proxied copy with a width and a height, or a proxied copy that is 0 by 0,
+ * which the client draws as nothing at all. Rendering the card first (see
+ * renderCard) rules out the render being slow, but not the proxy simply
+ * fumbling a perfectly good file — which it does, intermittently, and has for
+ * years (discord-api-docs #878 and #6694). On 14 September 2026 matchups #111
+ * and #112 went out that way: valid cards in R2, a 0-by-0 answer from
+ * Discord, in the middle of a batch whose other three loaded fine.
+ *
+ * The card is always the first embed. Returns null when the reply says
+ * nothing about it — the local mock, or a shape this does not anticipate — so
+ * a check that cannot be made is not mistaken for a card that failed.
+ */
+export function cardLoaded(message: DiscordMessage): boolean | null {
+  const image = message.embeds?.[0]?.image;
+  if (!image) return null;
+  return (image.width ?? 0) > 0 && (image.height ?? 0) > 0;
+}
+
+/** How many fresh copies to offer Discord before leaving it to a person. */
+const CONFIRM_ATTEMPTS = 2;
+
+/**
+ * The embeds a card post goes out with: the card first, then whatever rides
+ * along under it (a closed matchup's vote log, a round's ballot log).
+ */
+export type CardEmbeds = [{ color: number; image: { url: string } }, ...unknown[]];
+
+/**
+ * Checks that Discord actually loaded the card on `message`, and if it did
+ * not, swaps in a fresh copy until it does or the attempts run out.
+ *
+ * `rerender` mints the replacement under a stamped key — it has to arrive at
+ * a URL Discord has never seen, or the proxy answers with the 0-by-0 it
+ * cached the first time. `embeds` is what was posted: a PATCH replaces the
+ * embeds it names wholesale, so the log under the card has to be sent again
+ * or it would quietly vanish.
+ *
+ * Never throws. The message is up and the round is live by the time this
+ * runs; a card that will not take is a log line and a manual repair, not a
+ * reason to unwind the post. Two attempts and not more: each is a render, an
+ * R2 write and an edit, and the 9am batch shares one invocation's subrequest
+ * budget between five of these.
+ */
+export async function confirmCard(
+  env: Env,
+  message: DiscordMessage,
+  channelId: string | undefined,
+  embeds: CardEmbeds,
+  rerender: (stamp: number) => Promise<string | null>,
+  label: string,
+  repairHint?: string
+): Promise<void> {
+  // The standings have no row to repair by, so they get no retry line.
+  const retry = repairHint
+    ? ` Retry it with /admin/repair-card?${repairHint}.`
+    : "";
+  try {
+    let current = message;
+    for (let attempt = 0; attempt < CONFIRM_ATTEMPTS; attempt++) {
+      if (cardLoaded(current) !== false) return;
+      const image = await rerender(Date.now());
+      if (!image) break;
+      const [card, ...rest] = embeds;
+      current = await editMessage(
+        env,
+        message.id,
+        { embeds: [{ ...card, image: { url: image } }, ...rest] },
+        channelId
+      );
+    }
+    if (cardLoaded(current) !== false) return;
+    await logToDiscord(
+      env,
+      `${label} is up, but Discord never loaded its card — the file is fine, ` +
+        `Discord's proxy answered 0×0 for it and for ${CONFIRM_ATTEMPTS} fresh ` +
+        `copies.${retry}`
+    );
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    await logToDiscord(
+      env,
+      `${label} is up, but checking its card failed: ${reason}.${retry}`
+    );
+  }
 }

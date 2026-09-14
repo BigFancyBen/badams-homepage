@@ -325,6 +325,15 @@ with `DISCORD_API_BASE` in `.dev.vars` pointed at the mock's port. `wrangler
 dev` also leaves `workerd.exe` running after the parent is killed, so check
 nothing is still holding the port before blaming the code.
 
+Cards are off by default in the harness: the render endpoints are on Vercel
+and want real photographs, and a seeded dish has none, so every post goes out
+card-less. To exercise the card path — the R2 mirror, the post-time check and
+the replacement it makes — point `IMAGE_BASE_URL=http://127.0.0.1:9911` at the
+mock as well (it answers every render with a 1×1 PNG), and start the mock with
+`MOCK_CARD_FLAKE=3` to have every third card come back the way Discord's proxy
+sometimes returns one, proxied and 0 by 0. The mock prints a line for each card
+it fumbles and each replacement it receives, and the two counts should match.
+
 It drives each round through `/admin/post-matchup` and `/admin/close-matchup`
 rather than the cron, so it needs `BACKFILL_SECRET` in `.dev.vars` (the value
 from `.dev.vars.example` is what it assumes). Forcing is deliberate: the cron
@@ -578,8 +587,10 @@ re-renders, writes the copy under a stamped key, and edits only the embed, so
 the text and the vote buttons are untouched. Open matchups get the matchup card
 on the post they went out as; closed ones get the result card on the result
 post, which is a different message. Either link finds the round, so it does not
-matter which of the two you paste. It answers `{"repaired":true}`, or a reason
-why not.
+matter which of the two you paste. It answers `{"repaired":true,"loaded":true}`,
+or a reason why not. `loaded` is Discord's own verdict on the new copy, read
+from the edit's reply: `false` means its proxy fumbled this one too and the
+command is worth running again; `null` means the reply said nothing about it.
 
 ### Merging two accounts
 
@@ -644,6 +655,8 @@ running it twice is a no-op.
   and the batch simply runs again next tick.
 
 [d1-errors]: https://developers.cloudflare.com/d1/observability/debug-d1/#error-list
+[proxy-878]: https://github.com/discord/discord-api-docs/issues/878
+[proxy-6694]: https://github.com/discord/discord-api-docs/issues/6694
 - **Cards are rendered before they are posted.** The Worker fetches the card
   from the render endpoint, mirrors the PNG into R2 under `cards/`, and puts
   that R2 URL in the embed. Discord fetches an embed image once, at post time,
@@ -659,6 +672,21 @@ running it twice is a no-op.
   want sweeping eventually — but a sweep cannot simply drop the matchup cards
   once the result cards exist, because the post people voted on keeps its card
   and stays in the channel as the pointer at the result.
+- **And checked after they are posted.** A proven card is not a loaded one.
+  Discord fetches the embed image through its media proxy while it creates the
+  message, and the message it hands back says how that went: a proxied copy
+  with a width and a height, or a proxied copy that is 0 by 0, which the
+  client draws as nothing. The proxy does that to perfectly good files,
+  intermittently, and has for years ([#878][proxy-878], [#6694][proxy-6694]);
+  on 14 September 2026 two of a five-card batch went out that way with valid
+  PNGs behind them. So every card post reads the reply (`cardLoaded` in
+  `images.ts`), and a 0-by-0 answer gets the same treatment the manual repair
+  gives it — a fresh copy under a stamped key, edited in, up to twice. It has
+  to be a URL Discord has never seen, or the proxy answers from what it
+  cached. If both replacements come back 0-by-0 the logs webhook says so and
+  names the repair command. The check never throws: by then the post is up and
+  the row records it, and a card that will not take is not a reason to unwind
+  either.
 - **A matchup with no card still posts.** If all three render attempts fail,
   the round goes out as jump links and vote buttons with no embed at all,
   rather than an embed pointing at nothing. It stays playable, the logs

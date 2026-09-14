@@ -87,16 +87,26 @@ export async function postMessage(
   return (await response.json()) as DiscordMessage;
 }
 
+/**
+ * Returns the message as Discord now holds it. An edit that swaps a card's
+ * image is resolved the same way a post is, so the reply says whether the new
+ * one loaded — that is what confirmCard in images.ts reads.
+ */
 export async function editMessage(
   env: Env,
   messageId: string,
   payload: unknown,
   channelId: string = env.DISCORD_CHANNEL_ID
-): Promise<void> {
-  await botFetch(env, `/channels/${channelId}/messages/${messageId}`, {
-    method: "PATCH",
-    body: JSON.stringify(payload),
-  });
+): Promise<DiscordMessage> {
+  const response = await botFetch(
+    env,
+    `/channels/${channelId}/messages/${messageId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }
+  );
+  return (await response.json()) as DiscordMessage;
 }
 
 /**
