@@ -11,13 +11,6 @@ let nextId = 1000;
 // port means the second one silently talks to the first one's mock.
 const PORT = Number(process.env.MOCK_DISCORD_PORT ?? 9911);
 
-// Every Nth card the worker posts comes back the way Discord's media proxy
-// sometimes hands one back for real: proxied, and 0 by 0. 0 (the default)
-// never does. Point IMAGE_BASE_URL at this mock as well so the cards render
-// (see below), or no card is ever posted and there is nothing to fumble.
-const CARD_FLAKE = Number(process.env.MOCK_CARD_FLAKE ?? 0);
-let cardsPosted = 0;
-
 // A 1×1 PNG — enough to satisfy the Worker's "is this an image" check.
 const PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
@@ -26,10 +19,11 @@ const PNG = Buffer.from(
 
 /**
  * Discord's reply to a post or an edit echoes the embeds with the image
- * resolved: a proxy URL and the fetched copy's size. `loaded` false is the
- * 0-by-0 answer the client draws as nothing.
+ * resolved: a proxy URL and a size. The size is whatever the proxy has
+ * managed by the time the reply goes out, which is often 0 by 0 for a card
+ * that then loads fine — the worker does not read it.
  */
-function resolvedEmbeds(embeds, loaded) {
+function resolvedEmbeds(embeds) {
   return (embeds ?? []).map((embed) =>
     embed.image
       ? {
@@ -37,8 +31,8 @@ function resolvedEmbeds(embeds, loaded) {
           image: {
             url: embed.image.url,
             proxy_url: `https://media.test.local/${encodeURIComponent(embed.image.url)}`,
-            width: loaded ? 1200 : 0,
-            height: loaded ? 630 : 0,
+            width: 0,
+            height: 0,
           },
         }
       : embed
@@ -77,12 +71,6 @@ createServer((req, res) => {
     if (req.method === "POST" && /\/messages$/.test(req.url)) {
       const id = String(++nextId);
       const { embeds } = JSON.parse(body || "{}");
-      let loaded = true;
-      if (embeds?.some((embed) => embed.image)) {
-        cardsPosted++;
-        loaded = !(CARD_FLAKE > 0 && cardsPosted % CARD_FLAKE === 0);
-        if (!loaded) console.log(`card on message ${id} answered 0×0`);
-      }
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(
         JSON.stringify({
@@ -92,18 +80,15 @@ createServer((req, res) => {
           timestamp: new Date(0).toISOString(),
           attachments: [],
           author: { id: "bot", username: "bot" },
-          embeds: resolvedEmbeds(embeds, loaded),
+          embeds: resolvedEmbeds(embeds),
         })
       );
       return;
     }
     if (req.method === "PATCH") {
       const { embeds } = JSON.parse(body || "{}");
-      if (embeds?.some((embed) => embed.image)) {
-        console.log(`card replaced on ${req.url.split("/").pop()}`);
-      }
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ id: "edited", embeds: resolvedEmbeds(embeds, true) }));
+      res.end(JSON.stringify({ id: "edited", embeds: resolvedEmbeds(embeds) }));
       return;
     }
     // GET /channels/{id}/messages — no new photos during the simulation.

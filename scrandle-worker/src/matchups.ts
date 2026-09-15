@@ -35,10 +35,7 @@ import {
 } from "./db";
 import { updateElo } from "./elo";
 import {
-  type CardEmbeds,
   cardKey,
-  cardLoaded,
-  confirmCard,
   matchupImageUrl,
   renderCard,
   resultImageUrl,
@@ -101,11 +98,11 @@ async function createAndPost(
   if (!inserted) throw new Error("Failed to create matchup row");
   const matchupId = inserted.id;
 
-  const render = (stamp?: number) =>
-    renderCard(env, cardKey("matchup", matchupId, stamp), (attempt) =>
-      matchupImageUrl(env, matchupId, pair.a, pair.b, attempt)
-    );
-  const image = await render();
+  const image = await renderCard(
+    env,
+    cardKey("matchup", matchupId),
+    (attempt) => matchupImageUrl(env, matchupId, pair.a, pair.b, attempt)
+  );
 
   // Posting an embed whose image never arrived leaves a card that is broken
   // for good, so a matchup that cannot be illustrated goes out as links and
@@ -126,15 +123,12 @@ async function createAndPost(
     // question and the matchup number. The place bonus is the exception: it
     // runs beside an ordinary matchup, so it has to say which one it is.
     const links = `${sourceLink(env, pair.a, "#1")} · ${sourceLink(env, pair.b, "#2")}`;
-    const embeds: CardEmbeds | null = image
-      ? [{ color: ACCENT, image: { url: image } }]
-      : null;
     const message = await postMessage(
       env,
       {
         content: preamble ? `${preamble}
 ${links}` : links,
-        embeds: embeds ?? [],
+        embeds: image ? [{ color: ACCENT, image: { url: image } }] : [],
         components: voteButtons(matchupId),
         allowed_mentions: allowedMentions(env),
       },
@@ -144,20 +138,6 @@ ${links}` : links,
     await env.DB.prepare("UPDATE matchups SET message_id = ? WHERE id = ?")
       .bind(message.id, matchupId)
       .run();
-
-    // The post is recorded, so from here a failure is a card problem and not
-    // a stranded matchup — nothing below may reach the DELETE.
-    if (embeds) {
-      await confirmCard(
-        env,
-        message,
-        threadId ?? undefined,
-        embeds,
-        render,
-        `Matchup #${matchupId}`,
-        `matchup=${matchupId}`
-      );
-    }
   } catch (error) {
     await env.DB.prepare("DELETE FROM matchups WHERE id = ?").bind(matchupId).run();
     throw error;
@@ -624,8 +604,10 @@ async function closeOne(env: Env, matchup: Matchup, now: number): Promise<void> 
     playerName(env, dishB.poster_discord_id),
   ]);
 
-  const render = (stamp?: number) =>
-    renderCard(env, cardKey("result", matchup.id, stamp), (attempt) =>
+  const image = await renderCard(
+    env,
+    cardKey("result", matchup.id),
+    (attempt) =>
       resultImageUrl(
         env,
         matchup.id,
@@ -637,8 +619,7 @@ async function closeOne(env: Env, matchup: Matchup, now: number): Promise<void> 
         chefB,
         attempt
       )
-    );
-  const image = await render();
+  );
 
   if (!image) {
     await logToDiscord(
@@ -670,28 +651,13 @@ async function closeOne(env: Env, matchup: Matchup, now: number): Promise<void> 
       ? ` [Back to the card.](${messageUrl(env, matchup.message_id, matchup.thread_id ?? undefined)})`
       : "";
 
-  const embeds: CardEmbeds | [unknown] = image
-    ? [{ color: WIN, image: { url: image } }, log]
-    : [log];
-  const { message, threadId } = await postResult(env, matchup, {
+  await postResult(env, matchup, {
     content:
       `**Matchup #${matchup.id} — the result.** ${winner}\n` +
       `${total} ${total === 1 ? "vote" : "votes"}.${back}\n` +
       `${sourceLink(env, dishA, "#1")} · ${sourceLink(env, dishB, "#2")}`,
-    embeds,
+    embeds: image ? [{ color: WIN, image: { url: image } }, log] : [log],
   });
-
-  if (image) {
-    await confirmCard(
-      env,
-      message,
-      threadId ?? undefined,
-      embeds as CardEmbeds,
-      render,
-      `Matchup #${matchup.id}'s result`,
-      `matchup=${matchup.id}`
-    );
-  }
 }
 
 /**
@@ -847,11 +813,11 @@ export async function postStandingsIfDue(
   });
 
   const stamp = Math.floor(now / 1000);
-  const render = (replacement?: number) =>
-    renderCard(env, cardKey("standings", stamp, replacement), (attempt) =>
-      standingsImageUrl(env, stamp, "Chef standings", rows, attempt)
-    );
-  const image = await render();
+  const image = await renderCard(
+    env,
+    cardKey("standings", stamp),
+    (attempt) => standingsImageUrl(env, stamp, "Chef standings", rows, attempt)
+  );
 
   // Unlike a matchup, standings with no card are nothing but a ping. Leave the
   // week un-posted and try again on the next tick rather than send that.
@@ -861,15 +827,11 @@ export async function postStandingsIfDue(
   }
 
   const ping = env.TASTER_ROLE_ID ? `<@&${env.TASTER_ROLE_ID}> ` : "";
-  const embeds: CardEmbeds = [{ color: ACCENT, image: { url: image } }];
-  const message = await postMessage(env, {
+  await postMessage(env, {
     content: `${ping}This week in the kitchen.`,
-    embeds,
+    embeds: [{ color: ACCENT, image: { url: image } }],
     allowed_mentions: allowedMentions(env),
   });
-  // The standings have no repair route — there is no row to look them up by —
-  // so this is the only chance the card gets.
-  await confirmCard(env, message, undefined, embeds, render, "The standings post");
 
   const nextSnapshot: Record<string, number> = {};
   for (const chef of standings) nextSnapshot[chef.discord_id] = chef.elo;
@@ -898,7 +860,6 @@ export async function repairCard(
   repaired: boolean;
   matchup?: number;
   reason?: string;
-  loaded?: boolean | null;
 }> {
   const matchup = target.messageId
     ? await getMatchupByMessage(env, target.messageId)
@@ -975,7 +936,7 @@ export async function repairCard(
   // the vote buttons stay exactly as they are — but it *replaces* the embeds it
   // does name, so a closed matchup has to have its vote log rebuilt alongside
   // the card or the repair would quietly delete it.
-  const edited = await editMessage(
+  await editMessage(
     env,
     cardMessage,
     {
@@ -987,7 +948,5 @@ export async function repairCard(
     cardChannel ?? undefined
   );
 
-  // `loaded` is Discord's verdict on the new copy, so the person running this
-  // knows whether to run it again without opening the channel.
-  return { repaired: true, matchup: matchupId, loaded: cardLoaded(edited) };
+  return { repaired: true, matchup: matchupId };
 }
