@@ -247,22 +247,6 @@ export interface DiscordAttachment {
   content_type?: string;
 }
 
-/**
- * An embed image as Discord hands it back once it has tried to fetch it: the
- * URL it was given, the media-proxy copy, and the copy's size. The size is the
- * tell — see cardLoaded in images.ts.
- */
-export interface DiscordEmbedImage {
-  url: string;
-  proxy_url?: string;
-  width?: number | null;
-  height?: number | null;
-}
-
-export interface DiscordEmbed {
-  image?: DiscordEmbedImage;
-}
-
 export interface DiscordMessage {
   id: string;
   channel_id: string;
@@ -270,8 +254,6 @@ export interface DiscordMessage {
   timestamp: string;
   attachments: DiscordAttachment[];
   author: { id: string; username: string; bot?: boolean };
-  /** Present on what a post or edit returns; not modelled on ingest reads. */
-  embeds?: DiscordEmbed[];
 }
 
 export const InteractionType = {
