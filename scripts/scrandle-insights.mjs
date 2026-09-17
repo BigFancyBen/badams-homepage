@@ -6,6 +6,13 @@
  *   npm run scrandle:insights              # remote D1, needs `npx wrangler login`
  *   npm run scrandle:insights -- --local   # the local D1 from `npm run migrate:local`
  *   npm run scrandle:insights -- --from scrandle-worker/insights/data.json
+ *   npm run scrandle:insights -- --post   # also post the charts to Discord
+ *
+ * --post sends every chart, with its findings underneath, to a Discord
+ * webhook: --webhook <url>, else DISCORD_LOG_WEBHOOK_URL in the environment,
+ * else the same variable in scrandle-worker/.dev.vars. That is the webhook
+ * the bot logs errors to, so by default the charts land wherever those do;
+ * pass a webhook for the food channel to put them in front of everybody.
  *
  * Writes to scrandle-worker/insights/ (gitignored): one PNG per chart,
  * report.html with all of them and the findings, insights.md with the findings
@@ -43,6 +50,20 @@ const FROM = option("from");
 /** Fewer votes than this and a share is a coin toss; it is reported, not charted. */
 const MIN_VOTES = Number(option("min-votes") ?? 15);
 const TIME_ZONE = option("tz") ?? "America/Denver";
+const POST = flag("post");
+const WEBHOOK = option("webhook") ?? process.env.DISCORD_LOG_WEBHOOK_URL ?? readDevVar("DISCORD_LOG_WEBHOOK_URL");
+
+/** A value from the worker's gitignored .dev.vars, the file `wrangler dev` reads. */
+function readDevVar(name) {
+  try {
+    const text = readFileSync(join(WORKER_DIR, ".dev.vars"), "utf8");
+    const line = text.split(/\r?\n/).find((l) => l.startsWith(`${name}=`));
+    const value = line?.slice(name.length + 1).trim().replace(/^["']|["']$/g, "");
+    return value || undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 // ── Pulling the data ─────────────────────────────────────────────────
 
@@ -1443,6 +1464,60 @@ async function render(charts) {
   }
 }
 
+// ── Posting to Discord ───────────────────────────────────────────────
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * One message per chart: the findings as the text, the PNG attached. A
+ * webhook allows a handful of posts a second, so a 429 is waited out rather
+ * than treated as a failure.
+ */
+async function postToDiscord(charts, findings, title) {
+  const heading = (svg) => svg.match(/font-weight="600" fill="#ededed">([^<]+)</)?.[1];
+  const messages = [
+    { content: `**${title}**`, files: [] },
+    ...charts.map((c) => {
+      const f = findings.find((x) => x.slug === c.slug);
+      const text = [`**${heading(c.svg) ?? c.slug}**`, ...(f?.text ?? [])].join("\n");
+      return { content: text.slice(0, 1900), files: [`${c.slug}.png`] };
+    }),
+  ];
+  const trivia = findings.find((f) => f.slug === "trivia");
+  if (trivia) messages.push({ content: ["**Trivia**", ...trivia.text].join("\n").slice(0, 1900), files: [] });
+
+  let sent = 0;
+  for (const m of messages) {
+    const form = new FormData();
+    form.append(
+      "payload_json",
+      JSON.stringify({
+        content: m.content,
+        allowed_mentions: { parse: [] },
+        attachments: m.files.map((name, id) => ({ id, filename: name })),
+      })
+    );
+    m.files.forEach((name, id) => {
+      form.append(`files[${id}]`, new Blob([readFileSync(join(OUT_DIR, name))], { type: "image/png" }), name);
+    });
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const response = await fetch(WEBHOOK, { method: "POST", body: form });
+      if (response.status === 429) {
+        const wait = Number((await response.json().catch(() => ({}))).retry_after ?? 2) * 1000;
+        await sleep(wait + 250);
+        continue;
+      }
+      if (!response.ok) {
+        throw new Error(`Discord refused a post (${response.status}): ${await response.text()}`);
+      }
+      sent += 1;
+      break;
+    }
+    await sleep(400);
+  }
+  console.log(`Posted ${sent} of ${messages.length} messages to Discord.`);
+}
+
 async function main() {
   mkdirSync(OUT_DIR, { recursive: true });
   let data;
@@ -1465,6 +1540,14 @@ async function main() {
   writeFileSync(join(OUT_DIR, "insights.md"), markdown(findings, charts));
   writeFileSync(join(OUT_DIR, "report.html"), html(findings, charts));
   console.log(`Wrote ${charts.length} charts and the report to ${OUT_DIR}`);
+  if (POST) {
+    if (!WEBHOOK) {
+      throw new Error(
+        "--post needs a webhook: pass --webhook <url>, set DISCORD_LOG_WEBHOOK_URL, or put it in scrandle-worker/.dev.vars"
+      );
+    }
+    await postToDiscord(charts, findings, `Scrandle insights, ${new Date().toISOString().slice(0, 10)}`);
+  }
 }
 
 main().catch((error) => {
