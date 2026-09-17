@@ -6,3 +6,6 @@ wrangler.test.toml
 seed.test.sql
 close.test.sql
 mock-discord-log.json
+
+# Output of `npm run scrandle:insights`: charts and a raw pull of the live D1.
+insights
