@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -13,11 +13,13 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import {
   Waypoint,
+  WaypointCategoryMeta,
   WAYPOINT_CATEGORIES,
   WAYPOINT_CATEGORY_MAP,
 } from "../types";
 import { generateWaypointId } from "../utils";
 import { WaypointEditor } from "./WaypointEditor";
+import { WaypointDetails } from "./WaypointDetails";
 import { CategoryGlyph } from "./CategoryGlyph";
 
 interface MapViewProps {
@@ -46,63 +48,40 @@ function glyphSvg(iconPaths: string, size: number, stroke: string): string {
 }
 
 /**
- * Build the marker for a waypoint. A single-category waypoint gets a square pin
- * filled with that category's color and a white icon; a multi-category waypoint
- * gets a distinct strip of per-category color chips (each with its own white
- * icon) so "belongs to several groups" reads at a glance.
+ * Build the marker for a waypoint: a square pin filled with its primary (first)
+ * category's color and that category's icon. A waypoint only ever shows that one
+ * icon; a small "+N" tab says it belongs to more groups, which the details card
+ * lists when tapped.
  */
-function waypointIcon(waypoint: Waypoint): L.DivIcon {
-  const cats = waypoint.categories
-    .map((id) => WAYPOINT_CATEGORY_MAP[id])
-    .filter(Boolean);
-  const multi = cats.length > 1;
-  const label = waypoint.name
+function waypointIcon(
+  primary: WaypointCategoryMeta | undefined,
+  extraCount: number,
+  name: string | undefined,
+  { selected, editable }: { selected: boolean; editable: boolean }
+): L.DivIcon {
+  const color = primary?.color ?? "#9ca3af";
+  const paths = primary?.iconPaths ?? "";
+  const label = name
     ? `<span style="margin-left:4px;background:rgba(17,24,39,0.92);border:1px solid #4b5563;color:#f3f4f6;font-size:10px;font-weight:600;line-height:1.2;padding:1px 4px;box-shadow:0 1px 3px rgba(0,0,0,0.5);">${escapeHtml(
-        waypoint.name
+        name
       )}</span>`
     : "";
-
-  if (multi) {
-    // Chip strip geometry (must match the inline styles below) so the map point
-    // sits at the visual center of the strip.
-    const chip = 20;
-    const gap = 2;
-    const pad = 2;
-    const border = 2;
-    const stripInner = cats.length * chip + (cats.length - 1) * gap;
-    const totalW = 2 * border + 2 * pad + stripInner;
-    const totalH = 2 * border + 2 * pad + chip;
-
-    const chips = cats
-      .map(
-        (c) =>
-          `<span style="display:inline-flex;align-items:center;justify-content:center;width:${chip}px;height:${chip}px;background:${c.color};">${glyphSvg(
-            c.iconPaths,
-            14,
-            "#ffffff"
-          )}</span>`
-      )
-      .join("");
-    const html = `
-      <div style="display:flex;align-items:center;white-space:nowrap;">
-        <div style="display:inline-flex;align-items:center;gap:${gap}px;padding:${pad}px;background:rgba(17,24,39,0.95);border:${border}px solid #ffffff;box-shadow:0 0 0 1px rgba(0,0,0,0.5), 0 1px 4px rgba(0,0,0,0.6);">
-          ${chips}
-        </div>
-        ${label}
-      </div>`;
-    return L.divIcon({
-      html,
-      className: "fw-waypoint-icon",
-      iconAnchor: [totalW / 2, totalH / 2],
-    });
-  }
-
-  const color = cats[0]?.color ?? "#9ca3af";
-  const paths = cats[0]?.iconPaths ?? "";
+  const extra =
+    extraCount > 0
+      ? `<span style="position:absolute;right:-7px;top:-7px;min-width:14px;height:14px;padding:0 2px;background:#111827;border:1px solid #ffffff;color:#ffffff;font-size:9px;font-weight:700;line-height:12px;text-align:center;">+${extraCount}</span>`
+      : "";
+  const ring = selected
+    ? "0 0 0 3px #111827, 0 0 0 5px #fbbf24, 0 2px 8px rgba(0,0,0,0.6)"
+    : "0 0 0 1px rgba(0,0,0,0.5), 0 1px 4px rgba(0,0,0,0.6)";
+  // Edit mode: a dashed amber outline marks the pin as draggable.
+  const outline = editable
+    ? "outline:2px dashed #fbbf24;outline-offset:3px;cursor:move;"
+    : "";
   const html = `
     <div style="display:flex;align-items:center;white-space:nowrap;">
-      <div style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;background:${color};border:2px solid rgba(255,255,255,0.92);box-shadow:0 0 0 1px rgba(0,0,0,0.5), 0 1px 4px rgba(0,0,0,0.6);">
+      <div style="position:relative;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;background:${color};border:2px solid rgba(255,255,255,0.92);box-shadow:${ring};${outline}">
         ${glyphSvg(paths, 17, "#ffffff")}
+        ${extra}
       </div>
       ${label}
     </div>`;
@@ -112,6 +91,76 @@ function waypointIcon(waypoint: Waypoint): L.DivIcon {
     iconAnchor: [16, 16],
   });
 }
+
+/** Placeholder pin for a waypoint that's being created but not saved yet. */
+const draftIcon = L.divIcon({
+  html: `<div style="display:flex;align-items:center;justify-content:center;width:28px;height:28px;background:#2563eb;border:2px dashed #ffffff;box-shadow:0 0 0 1px rgba(0,0,0,0.5), 0 1px 4px rgba(0,0,0,0.6);">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+    </div>`,
+  className: "fw-waypoint-icon",
+  iconAnchor: [16, 16],
+});
+
+/**
+ * One waypoint on the map. Memoized, with a stable icon and position, so the
+ * frequent re-renders from location tracking don't reset the marker — which
+ * would otherwise yank it back mid-drag in edit mode.
+ */
+const WaypointMarker = memo(function WaypointMarker({
+  waypoint,
+  selected,
+  editable,
+  onSelect,
+  onMove,
+}: {
+  waypoint: Waypoint;
+  selected: boolean;
+  editable: boolean;
+  onSelect: (id: string) => void;
+  onMove: (id: string, lat: number, lon: number) => void;
+}) {
+  const primaryId = waypoint.categories[0];
+  const extraCount = Math.max(0, waypoint.categories.length - 1);
+  const icon = useMemo(
+    () =>
+      waypointIcon(WAYPOINT_CATEGORY_MAP[primaryId], extraCount, waypoint.name, {
+        selected,
+        editable,
+      }),
+    [primaryId, extraCount, waypoint.name, selected, editable]
+  );
+  const position = useMemo<[number, number]>(
+    () => [waypoint.lat, waypoint.lon],
+    [waypoint.lat, waypoint.lon]
+  );
+
+  // Some browsers deliver a click at the end of a drag; don't treat it as a tap.
+  const lastDragEnd = useRef(0);
+  const eventHandlers = useMemo<L.LeafletEventHandlerFnMap>(
+    () => ({
+      click: () => {
+        if (Date.now() - lastDragEnd.current < 400) return;
+        onSelect(waypoint.id);
+      },
+      dragend: (e) => {
+        lastDragEnd.current = Date.now();
+        const { lat, lng } = (e.target as L.Marker).getLatLng();
+        onMove(waypoint.id, lat, lng);
+      },
+    }),
+    [waypoint.id, onSelect, onMove]
+  );
+
+  return (
+    <Marker
+      position={position}
+      icon={icon}
+      draggable={editable}
+      zIndexOffset={selected ? 900 : 500}
+      eventHandlers={eventHandlers}
+    />
+  );
+});
 
 /**
  * The "you are here" marker. When a heading is known (from the GPS course over
@@ -179,18 +228,18 @@ function InitialFit({
   return null;
 }
 
-/** Fires when the map is clicked while "add waypoint" mode is active. */
-function MapClickHandler({
-  active,
-  onPick,
+/** Forwards map clicks and pan/zoom start/end to the parent. */
+function MapEvents({
+  onClick,
+  onMovingChange,
 }: {
-  active: boolean;
-  onPick: (lat: number, lon: number) => void;
+  onClick: (latlng: L.LatLng, map: L.Map) => void;
+  onMovingChange: (moving: boolean) => void;
 }) {
-  useMapEvents({
-    click: (e) => {
-      if (active) onPick(e.latlng.lat, e.latlng.lng);
-    },
+  const map = useMapEvents({
+    click: (e) => onClick(e.latlng, map),
+    movestart: () => onMovingChange(true),
+    moveend: () => onMovingChange(false),
   });
   return null;
 }
@@ -346,15 +395,40 @@ export function MapView({
   }, []);
 
   // ── Add / edit waypoint state ─────────────────────────────────────────────
-  const [addMode, setAddMode] = useState(false);
+  // Placing: a pin sits fixed at the map's center and the user pans the map
+  // under it, then confirms — more precise than tapping under a fingertip.
+  const [placing, setPlacing] = useState(false);
+  // Edit mode: pins become draggable and tapping one opens the editor.
+  const [editMode, setEditMode] = useState(false);
+  // The waypoint whose details card is showing (view mode only).
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   // The waypoint currently open in the editor, plus whether it's brand new.
   const [editing, setEditing] = useState<{
     waypoint: Waypoint;
     isNew: boolean;
   } | null>(null);
+  const [legendOpen, setLegendOpen] = useState(false);
+  const [mapMoving, setMapMoving] = useState(false);
 
-  const handlePickLocation = useCallback((lat: number, lon: number) => {
-    setAddMode(false);
+  const selected = selectedId
+    ? waypoints.find((w) => w.id === selectedId) ?? null
+    : null;
+
+  const startPlacing = useCallback(() => {
+    setSelectedId(null);
+    setLegendOpen(false);
+    setPlacing(true);
+  }, []);
+
+  const openNewWaypoint = useCallback((lat: number, lon: number) => {
+    setPlacing(false);
+    // On phones the editor is a bottom sheet over the lower map; slide the
+    // spot up near the top so the draft pin stays visible above it.
+    const map = mapRef.current;
+    if (map && typeof window !== "undefined" && window.innerWidth < 640) {
+      const at = map.latLngToContainerPoint([lat, lon]);
+      map.panBy([at.x - map.getSize().x / 2, at.y - 72]);
+    }
     setEditing({
       waypoint: {
         id: generateWaypointId(lat, lon),
@@ -367,6 +441,54 @@ export function MapView({
       isNew: true,
     });
   }, []);
+
+  const handlePlaceAtCenter = useCallback(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const c = map.getCenter();
+    openNewWaypoint(c.lat, c.lng);
+  }, [openNewWaypoint]);
+
+  const handlePlaceAtMe = useCallback(() => {
+    if (userLocation) openNewWaypoint(userLocation.lat, userLocation.lon);
+  }, [userLocation, openNewWaypoint]);
+
+  const handleMapClick = useCallback(
+    (latlng: L.LatLng, map: L.Map) => {
+      // While placing, a tap slides the map so the pin lands on that spot.
+      if (placing) map.panTo(latlng);
+      else setSelectedId(null);
+    },
+    [placing]
+  );
+
+  const handleMarkerSelect = useCallback(
+    (id: string) => {
+      if (placing) return;
+      const wp = waypoints.find((w) => w.id === id);
+      if (!wp) return;
+      if (editMode) {
+        setEditing({ waypoint: wp, isNew: false });
+      } else {
+        setSelectedId((cur) => (cur === id ? null : id));
+      }
+    },
+    [placing, editMode, waypoints]
+  );
+
+  const handleMarkerMove = useCallback(
+    (id: string, lat: number, lon: number) => {
+      onUpdateWaypoint(id, { lat, lon });
+    },
+    [onUpdateWaypoint]
+  );
+
+  const handleEditFromDetails = useCallback(() => {
+    if (!selected) return;
+    setSelectedId(null);
+    setEditMode(true);
+    setEditing({ waypoint: selected, isNew: false });
+  }, [selected]);
 
   const handleSaveWaypoint = useCallback(
     (wp: Waypoint) => {
@@ -388,9 +510,24 @@ export function MapView({
     (id: string) => {
       onRemoveWaypoint(id);
       setEditing(null);
+      setSelectedId((cur) => (cur === id ? null : cur));
     },
     [onRemoveWaypoint]
   );
+
+  // Escape backs out of whatever is open, innermost first. The editor modal
+  // handles its own dismissal, so leave it alone.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || editing) return;
+      if (placing) setPlacing(false);
+      else if (selectedId) setSelectedId(null);
+      else if (legendOpen) setLegendOpen(false);
+      else if (editMode) setEditMode(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [editing, placing, selectedId, legendOpen, editMode]);
 
   const [shareCopied, setShareCopied] = useState(false);
   const handleShare = useCallback(async () => {
@@ -400,12 +537,25 @@ export function MapView({
     setTimeout(() => setShareCopied(false), 2000);
   }, [onShare]);
 
+  const banner = placing
+    ? "Move the map to put the pin on the spot"
+    : editMode
+      ? "Editing — drag a pin to move it, tap it to change it"
+      : null;
+
   return (
     <div className="w-full">
       <div
         className="relative w-full border border-gray-300 dark:border-gray-600"
         style={{ height: "70vh" }}
       >
+        {/* Top-center mode banner */}
+        {banner && (
+          <div className="pointer-events-none absolute left-1/2 top-2 z-[1000] isolate w-max max-w-[calc(100%-7rem)] -translate-x-1/2 transform-gpu border border-amber-400/60 bg-gray-900/90 px-2.5 py-1.5 text-center text-xs text-gray-100 shadow">
+            {banner}
+          </div>
+        )}
+
         {/* Top-right controls */}
         <div className="absolute right-2 top-2 z-[1000] isolate flex flex-col items-end gap-1 transform-gpu">
           {/* Locate / track */}
@@ -470,54 +620,154 @@ export function MapView({
           )}
         </div>
 
-        {/* Add-waypoint control (bottom-left) */}
-        {!readOnly && (
-          <div className="absolute bottom-4 left-2 z-[1000] isolate flex flex-col items-start gap-1 transform-gpu">
-            {addMode && (
-              <span className="bg-gray-900/90 px-2 py-1 text-[11px] text-gray-100 shadow">
-                Tap the map to drop a waypoint
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={() => setAddMode((v) => !v)}
-              aria-pressed={addMode}
-              className={`flex h-11 items-center gap-1.5 border px-3 text-sm font-medium shadow ${
-                addMode
-                  ? "border-blue-400 bg-blue-600 text-white hover:bg-blue-500"
-                  : "border-gray-600 bg-gray-900/90 text-gray-100 hover:bg-gray-800"
-              }`}
+        {/* Center pin while placing a new waypoint. Its tip marks the map
+            center; it lifts while the map is moving, like a pin in hand. */}
+        {placing && (
+          <div className="pointer-events-none absolute left-1/2 top-1/2 z-[1000] isolate transform-gpu">
+            <div
+              className="absolute bottom-0 left-0 flex flex-col items-center transition-transform duration-150"
+              style={{
+                transform: `translate(-50%, ${mapMoving ? -10 : 0}px)`,
+              }}
             >
-              {addMode ? (
-                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              <div className="flex h-8 w-8 items-center justify-center border-2 border-white bg-blue-600 shadow-[0_0_0_1px_rgba(0,0,0,0.5),0_3px_8px_rgba(0,0,0,0.5)]">
+                <svg className="h-4 w-4" fill="none" stroke="#ffffff" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeWidth={2.5} d="M12 5v14M5 12h14" />
                 </svg>
-              ) : (
-                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
-              )}
-              {addMode ? "Cancel" : "Add waypoint"}
-            </button>
+              </div>
+              <div className="h-3 w-0.5 bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.4)]" />
+            </div>
+            <div className="absolute h-2 w-2 -translate-x-1/2 -translate-y-1/2 border border-white bg-blue-600 shadow-[0_0_0_1px_rgba(0,0,0,0.5)]" />
           </div>
         )}
 
-        {/* Legend (bottom-right) */}
-        <div className="absolute bottom-4 right-2 z-[1000] isolate max-w-[46%] transform-gpu border border-gray-700 bg-gray-900/85 p-1.5 shadow">
-          <div className="grid grid-cols-2 gap-x-2 gap-y-1">
-            {WAYPOINT_CATEGORIES.map((c) => (
-              <div key={c.id} className="flex items-center gap-1 text-[10px] text-gray-200">
-                <span
-                  className="flex h-4 w-4 shrink-0 items-center justify-center"
-                  style={{ backgroundColor: c.color }}
-                >
-                  <CategoryGlyph meta={c} size={11} color="#ffffff" />
-                </span>
-                <span className="truncate">{c.label}</span>
-              </div>
-            ))}
+        {/* Bottom: placing actions, the details card, or the regular controls */}
+        {placing ? (
+          <div className="absolute inset-x-2 bottom-4 z-[1000] isolate flex gap-2 transform-gpu">
+            <button
+              type="button"
+              onClick={() => setPlacing(false)}
+              className="flex h-11 items-center border border-gray-600 bg-gray-900/90 px-3 text-sm font-medium text-gray-100 shadow hover:bg-gray-800"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handlePlaceAtMe}
+              disabled={!userLocation}
+              title={userLocation ? "Drop the waypoint where you are" : "Waiting for your location"}
+              className="flex h-11 items-center gap-1.5 border border-gray-600 bg-gray-900/90 px-3 text-sm font-medium text-gray-100 shadow hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="2" />
+                <path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+              {userLocation ? "Where I am" : acquiring ? "Locating…" : "No location"}
+            </button>
+            <button
+              type="button"
+              onClick={handlePlaceAtCenter}
+              className="flex h-11 flex-1 items-center justify-center border border-blue-400 bg-blue-600 px-3 text-sm font-semibold text-white shadow hover:bg-blue-500"
+            >
+              Place pin here
+            </button>
           </div>
-        </div>
+        ) : selected ? (
+          <div className="absolute inset-x-2 bottom-4 z-[1000] isolate mx-auto max-w-md transform-gpu">
+            <WaypointDetails
+              waypoint={selected}
+              onEdit={readOnly ? undefined : handleEditFromDetails}
+              onClose={() => setSelectedId(null)}
+            />
+          </div>
+        ) : (
+          <>
+            {/* Add / edit controls (bottom-left) */}
+            {!readOnly && (
+              <div className="absolute bottom-4 left-2 z-[1000] isolate flex items-end gap-1.5 transform-gpu">
+                <button
+                  type="button"
+                  onClick={startPlacing}
+                  className="flex h-11 items-center gap-1.5 border border-gray-600 bg-gray-900/90 px-3 text-sm font-medium text-gray-100 shadow hover:bg-gray-800"
+                >
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                  Add
+                </button>
+                {(waypoints.length > 0 || editMode) && (
+                  <button
+                    type="button"
+                    onClick={() => setEditMode((v) => !v)}
+                    aria-pressed={editMode}
+                    className={`flex h-11 items-center gap-1.5 border px-3 text-sm font-medium shadow ${
+                      editMode
+                        ? "border-amber-300 bg-amber-500 text-gray-900 hover:bg-amber-400"
+                        : "border-gray-600 bg-gray-900/90 text-gray-100 hover:bg-gray-800"
+                    }`}
+                  >
+                    {editMode ? (
+                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    ) : (
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M9 13l6.232-6.232a2.5 2.5 0 113.536 3.536L12.536 16.536 9 17l.464-3.536z" />
+                      </svg>
+                    )}
+                    {editMode ? "Done" : "Edit"}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Legend (bottom-right), collapsed until tapped */}
+            <div className="absolute bottom-4 right-2 z-[1000] isolate flex max-w-[60%] flex-col items-end transform-gpu">
+              {legendOpen && (
+                <div className="mb-1 border border-gray-700 bg-gray-900/90 p-1.5 shadow">
+                  <div className="grid grid-cols-2 gap-x-2 gap-y-1">
+                    {WAYPOINT_CATEGORIES.map((c) => (
+                      <div key={c.id} className="flex items-center gap-1 text-[10px] text-gray-200">
+                        <span
+                          className="flex h-4 w-4 shrink-0 items-center justify-center"
+                          style={{ backgroundColor: c.color }}
+                        >
+                          <CategoryGlyph meta={c} size={11} color="#ffffff" />
+                        </span>
+                        <span className="truncate">{c.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => setLegendOpen((v) => !v)}
+                aria-expanded={legendOpen}
+                className="flex h-11 items-center gap-1.5 border border-gray-600 bg-gray-900/90 px-3 text-sm font-medium text-gray-100 shadow hover:bg-gray-800"
+              >
+                <span className="flex">
+                  {WAYPOINT_CATEGORIES.slice(0, 3).map((c) => (
+                    <span
+                      key={c.id}
+                      className="-ml-1 h-3 w-3 border border-gray-900 first:ml-0"
+                      style={{ backgroundColor: c.color }}
+                    />
+                  ))}
+                </span>
+                Legend
+                <svg
+                  className={`h-3.5 w-3.5 transition-transform ${legendOpen ? "" : "rotate-180"}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            </div>
+          </>
+        )}
 
         <MapContainer
           ref={mapRef}
@@ -528,7 +778,6 @@ export function MapView({
             height: "100%",
             width: "100%",
             background: "#e9e6df",
-            cursor: addMode ? "crosshair" : "",
           }}
         >
           <TileLayer
@@ -544,7 +793,7 @@ export function MapView({
                 : null
             }
           />
-          <MapClickHandler active={addMode} onPick={handlePickLocation} />
+          <MapEvents onClick={handleMapClick} onMovingChange={setMapMoving} />
 
           {/* Device location: accuracy ring + heading dot */}
           {userLocation && (
@@ -569,20 +818,25 @@ export function MapView({
 
           {/* Waypoints */}
           {waypoints.map((wp) => (
-            <Marker
+            <WaypointMarker
               key={wp.id}
-              position={[wp.lat, wp.lon]}
-              icon={waypointIcon(wp)}
-              zIndexOffset={500}
-              eventHandlers={{
-                click: () => {
-                  if (addMode) return;
-                  if (readOnly) return;
-                  setEditing({ waypoint: wp, isNew: false });
-                },
-              }}
+              waypoint={wp}
+              selected={wp.id === selectedId}
+              editable={editMode && !readOnly}
+              onSelect={handleMarkerSelect}
+              onMove={handleMarkerMove}
             />
           ))}
+
+          {/* Where a waypoint being created will land */}
+          {editing?.isNew && (
+            <Marker
+              position={[editing.waypoint.lat, editing.waypoint.lon]}
+              icon={draftIcon}
+              zIndexOffset={1100}
+              interactive={false}
+            />
+          )}
         </MapContainer>
       </div>
 
