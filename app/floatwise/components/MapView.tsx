@@ -269,6 +269,20 @@ export function MapView({
   const [tracking, setTracking] = useState(false);
   const [acquiring, setAcquiring] = useState(false);
   const [locateError, setLocateError] = useState<string | null>(null);
+  // Location problems are only worth reporting once the user has asked for
+  // their location with the locate button. The automatic request when the map
+  // opens fails quietly, so someone who blocked location isn't nagged each time.
+  const userAskedForLocation = useRef(false);
+  const reportLocateError = useCallback((message: string) => {
+    if (userAskedForLocation.current) setLocateError(message);
+  }, []);
+
+  // Location errors clear themselves after a few seconds.
+  useEffect(() => {
+    if (!locateError) return;
+    const t = setTimeout(() => setLocateError(null), 5000);
+    return () => clearTimeout(t);
+  }, [locateError]);
 
   const stopTracking = useCallback(() => {
     if (watchId.current !== null && typeof navigator !== "undefined") {
@@ -286,11 +300,11 @@ export function MapView({
   const startTracking = useCallback(
     (autoCenter: boolean) => {
       if (typeof navigator === "undefined" || !navigator.geolocation) {
-        setLocateError("Location isn't supported by this browser.");
+        reportLocateError("Location isn't supported by this browser.");
         return;
       }
       if (typeof window !== "undefined" && window.isSecureContext === false) {
-        setLocateError("Location needs a secure (HTTPS) connection.");
+        reportLocateError("Location needs a secure (HTTPS) connection.");
         return;
       }
       if (watchId.current !== null) {
@@ -331,29 +345,30 @@ export function MapView({
               navigator.permissions
                 .query({ name: "geolocation" })
                 .then((status) => {
-                  setLocateError(
+                  reportLocateError(
                     status.state === "denied"
                       ? "Location is blocked. Allow it via the address-bar icon, then try again."
                       : "Location request dismissed — tap the button and choose Allow."
                   );
                 })
-                .catch(() => setLocateError("Location permission denied."));
+                .catch(() => reportLocateError("Location permission denied."));
             } else {
-              setLocateError("Location permission denied.");
+              reportLocateError("Location permission denied.");
             }
           } else if (err.code === err.POSITION_UNAVAILABLE) {
-            setLocateError("Location unavailable — searching…");
+            reportLocateError("Location unavailable — searching…");
           }
         },
         { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
       );
     },
-    [stopTracking]
+    [stopTracking, reportLocateError]
   );
 
   // The locate button: recenter on the user if we're already tracking (with a
   // fix), otherwise (re)start tracking and center once a fix comes in.
   const handleLocate = useCallback(() => {
+    userAskedForLocation.current = true;
     const map = mapRef.current;
     if (tracking && userLocation && map) {
       map.setView(
