@@ -21,6 +21,8 @@ interface WaypointEditorProps {
 /**
  * Modal for naming a waypoint, picking one or more categories, and jotting a
  * note. Used both when dropping a new waypoint and when editing an existing one.
+ * The first category picked is the primary one (starred): it's the only icon
+ * the map draws for the waypoint.
  */
 export function WaypointEditor({
   waypoint,
@@ -39,6 +41,11 @@ export function WaypointEditor({
     setCategories((prev) =>
       prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]
     );
+  };
+
+  // The first category is the "primary" one — the single icon the map shows.
+  const makePrimary = (id: WaypointCategory) => {
+    setCategories((prev) => [id, ...prev.filter((c) => c !== id)]);
   };
 
   const handleSave = () => {
@@ -75,8 +82,9 @@ export function WaypointEditor({
           </button>
         </div>
 
-        <div className="mb-1 text-[11px] text-gray-500 dark:text-gray-400">
+        <div className="mb-2 text-[11px] text-gray-500 dark:text-gray-400">
           {waypoint.lat.toFixed(5)}, {waypoint.lon.toFixed(5)}
+          {!isNew && " · drag the pin on the map to move it"}
         </div>
 
         {/* Name */}
@@ -101,29 +109,67 @@ export function WaypointEditor({
           <div className="grid grid-cols-2 gap-1.5">
             {WAYPOINT_CATEGORIES.map((cat) => {
               const active = categories.includes(cat.id);
+              const primary = categories[0] === cat.id;
               return (
-                <button
+                <div
                   key={cat.id}
-                  type="button"
-                  onClick={() => toggleCategory(cat.id)}
-                  aria-pressed={active}
-                  className={`flex items-center gap-2 border px-2 py-1.5 text-left text-sm transition-colors ${
+                  className={`flex items-stretch border transition-colors ${
                     active
                       ? "border-transparent text-white"
                       : "border-gray-300 text-gray-700 hover:border-gray-400 dark:border-gray-600 dark:text-gray-200 dark:hover:border-gray-500"
+                  } ${
+                    primary
+                      ? "ring-2 ring-gray-900 ring-offset-2 ring-offset-white dark:ring-white dark:ring-offset-gray-900"
+                      : ""
                   }`}
                   style={active ? { backgroundColor: cat.color } : undefined}
                 >
-                  <CategoryGlyph
-                    meta={cat}
-                    size={18}
-                    color={active ? "#ffffff" : cat.color}
-                  />
-                  <span className="leading-tight">{cat.label}</span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => toggleCategory(cat.id)}
+                    aria-pressed={active}
+                    className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left text-sm"
+                  >
+                    <CategoryGlyph
+                      meta={cat}
+                      size={18}
+                      color={active ? "#ffffff" : cat.color}
+                    />
+                    <span className={`leading-tight ${primary ? "font-semibold" : ""}`}>
+                      {cat.label}
+                    </span>
+                  </button>
+                  {active &&
+                    (primary ? (
+                      <span
+                        className="flex w-8 shrink-0 items-center justify-center"
+                        title="Shown on the map"
+                        aria-label="Map icon"
+                      >
+                        <StarIcon filled />
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => makePrimary(cat.id)}
+                        className="flex w-8 shrink-0 items-center justify-center opacity-70 hover:bg-black/15 hover:opacity-100"
+                        title="Use as the map icon"
+                        aria-label={`Use ${cat.label} as the map icon`}
+                      >
+                        <StarIcon filled={false} />
+                      </button>
+                    ))}
+                </div>
               );
             })}
           </div>
+          <p className="mt-1.5 text-[11px] text-gray-500 dark:text-gray-400">
+            {categories.length === 0
+              ? "Pick at least one to save."
+              : categories.length === 1
+                ? "The starred category is the icon shown on the map."
+                : "The starred category is the icon shown on the map. Tap another star to switch."}
+          </p>
         </div>
 
         {/* Note */}
@@ -169,5 +215,21 @@ export function WaypointEditor({
         </div>
       </div>
     </div>
+  );
+}
+
+function StarIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg
+      className="h-4 w-4"
+      viewBox="0 0 24 24"
+      fill={filled ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 2.5l2.94 5.96 6.56.95-4.75 4.63 1.12 6.54L12 17.5l-5.87 3.08 1.12-6.54L2.5 9.41l6.56-.95z" />
+    </svg>
   );
 }
