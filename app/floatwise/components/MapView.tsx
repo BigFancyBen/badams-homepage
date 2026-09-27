@@ -527,13 +527,17 @@ export function MapView({
           style={{
             height: "100%",
             width: "100%",
-            background: "#e9e6df",
+            background: "#1f2937",
             cursor: addMode ? "crosshair" : "",
           }}
         >
+          {/* USGS Imagery Topo: aerial imagery with topo contours and labels.
+              Tiles stop at z16, so deeper zooms upscale the z16 tiles. */}
           <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-            url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+            attribution='Tiles courtesy of the <a href="https://www.usgs.gov/">U.S. Geological Survey</a>'
+            url="https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryTopo/MapServer/tile/{z}/{y}/{x}"
+            maxNativeZoom={16}
+            maxZoom={19}
           />
 
           <InitialFit
