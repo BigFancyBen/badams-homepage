@@ -50,12 +50,10 @@ function glyphSvg(iconPaths: string, size: number, stroke: string): string {
 /**
  * Build the marker for a waypoint: a square pin filled with its primary (first)
  * category's color and that category's icon. A waypoint only ever shows that one
- * icon; a small "+N" tab says it belongs to more groups, which the details card
- * lists when tapped.
+ * icon; the details card lists the rest when tapped.
  */
 function waypointIcon(
   primary: WaypointCategoryMeta | undefined,
-  extraCount: number,
   name: string | undefined,
   { selected, editable }: { selected: boolean; editable: boolean }
 ): L.DivIcon {
@@ -66,10 +64,6 @@ function waypointIcon(
         name
       )}</span>`
     : "";
-  const extra =
-    extraCount > 0
-      ? `<span style="position:absolute;right:-7px;top:-7px;min-width:14px;height:14px;padding:0 2px;background:#111827;border:1px solid #ffffff;color:#ffffff;font-size:9px;font-weight:700;line-height:12px;text-align:center;">+${extraCount}</span>`
-      : "";
   const ring = selected
     ? "0 0 0 3px #111827, 0 0 0 5px #fbbf24, 0 2px 8px rgba(0,0,0,0.6)"
     : "0 0 0 1px rgba(0,0,0,0.5), 0 1px 4px rgba(0,0,0,0.6)";
@@ -79,9 +73,8 @@ function waypointIcon(
     : "";
   const html = `
     <div style="display:flex;align-items:center;white-space:nowrap;">
-      <div style="position:relative;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;background:${color};border:2px solid rgba(255,255,255,0.92);box-shadow:${ring};${outline}">
+      <div style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;background:${color};border:2px solid rgba(255,255,255,0.92);box-shadow:${ring};${outline}">
         ${glyphSvg(paths, 17, "#ffffff")}
-        ${extra}
       </div>
       ${label}
     </div>`;
@@ -120,14 +113,13 @@ const WaypointMarker = memo(function WaypointMarker({
   onMove: (id: string, lat: number, lon: number) => void;
 }) {
   const primaryId = waypoint.categories[0];
-  const extraCount = Math.max(0, waypoint.categories.length - 1);
   const icon = useMemo(
     () =>
-      waypointIcon(WAYPOINT_CATEGORY_MAP[primaryId], extraCount, waypoint.name, {
+      waypointIcon(WAYPOINT_CATEGORY_MAP[primaryId], waypoint.name, {
         selected,
         editable,
       }),
-    [primaryId, extraCount, waypoint.name, selected, editable]
+    [primaryId, waypoint.name, selected, editable]
   );
   const position = useMemo<[number, number]>(
     () => [waypoint.lat, waypoint.lon],
