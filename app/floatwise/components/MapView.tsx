@@ -620,6 +620,42 @@ export function MapView({
             </div>
           )}
 
+          {/* Legend: just an arrow until tapped */}
+          <button
+            type="button"
+            onClick={() => setLegendOpen((v) => !v)}
+            aria-expanded={legendOpen}
+            title={legendOpen ? "Hide legend" : "Show legend"}
+            aria-label={legendOpen ? "Hide legend" : "Show legend"}
+            className="flex h-9 w-9 items-center justify-center border border-gray-600 bg-gray-900/90 text-gray-100 shadow hover:bg-gray-800"
+          >
+            <svg
+              className={`h-4 w-4 transition-transform ${legendOpen ? "rotate-180" : ""}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {legendOpen && (
+            <div className="border border-gray-700 bg-gray-900/90 p-1.5 shadow">
+              <div className="grid grid-cols-2 gap-x-2 gap-y-1">
+                {WAYPOINT_CATEGORIES.map((c) => (
+                  <div key={c.id} className="flex items-center gap-1 text-[10px] text-gray-200">
+                    <span
+                      className="flex h-4 w-4 shrink-0 items-center justify-center"
+                      style={{ backgroundColor: c.color }}
+                    >
+                      <CategoryGlyph meta={c} size={11} color="#ffffff" />
+                    </span>
+                    <span className="whitespace-nowrap">{c.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {locateError && (
             <span className="max-w-[180px] bg-gray-900/90 px-2 py-1 text-right text-[10px] text-red-400 shadow">
               {locateError}
@@ -695,19 +731,22 @@ export function MapView({
                 <button
                   type="button"
                   onClick={startPlacing}
-                  className="flex h-11 items-center gap-1.5 border border-gray-600 bg-gray-900/90 px-3 text-sm font-medium text-gray-100 shadow hover:bg-gray-800"
+                  title="Add waypoint"
+                  aria-label="Add waypoint"
+                  className="flex h-11 w-11 items-center justify-center border border-gray-600 bg-gray-900/90 text-gray-100 shadow hover:bg-gray-800"
                 >
                   <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                   </svg>
-                  Add
                 </button>
                 {(waypoints.length > 0 || editMode) && (
                   <button
                     type="button"
                     onClick={() => setEditMode((v) => !v)}
                     aria-pressed={editMode}
-                    className={`flex h-11 items-center gap-1.5 border px-3 text-sm font-medium shadow ${
+                    title={editMode ? "Done editing" : "Edit waypoints"}
+                    aria-label={editMode ? "Done editing" : "Edit waypoints"}
+                    className={`flex h-11 w-11 items-center justify-center border shadow ${
                       editMode
                         ? "border-amber-300 bg-amber-500 text-gray-900 hover:bg-amber-400"
                         : "border-gray-600 bg-gray-900/90 text-gray-100 hover:bg-gray-800"
@@ -718,61 +757,14 @@ export function MapView({
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                       </svg>
                     ) : (
-                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M9 13l6.232-6.232a2.5 2.5 0 113.536 3.536L12.536 16.536 9 17l.464-3.536z" />
                       </svg>
                     )}
-                    {editMode ? "Done" : "Edit"}
                   </button>
                 )}
               </div>
             )}
-
-            {/* Legend (bottom-right), collapsed until tapped */}
-            <div className="absolute bottom-4 right-2 z-[1000] isolate flex max-w-[60%] flex-col items-end transform-gpu">
-              {legendOpen && (
-                <div className="mb-1 border border-gray-700 bg-gray-900/90 p-1.5 shadow">
-                  <div className="grid grid-cols-2 gap-x-2 gap-y-1">
-                    {WAYPOINT_CATEGORIES.map((c) => (
-                      <div key={c.id} className="flex items-center gap-1 text-[10px] text-gray-200">
-                        <span
-                          className="flex h-4 w-4 shrink-0 items-center justify-center"
-                          style={{ backgroundColor: c.color }}
-                        >
-                          <CategoryGlyph meta={c} size={11} color="#ffffff" />
-                        </span>
-                        <span className="truncate">{c.label}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              <button
-                type="button"
-                onClick={() => setLegendOpen((v) => !v)}
-                aria-expanded={legendOpen}
-                className="flex h-11 items-center gap-1.5 border border-gray-600 bg-gray-900/90 px-3 text-sm font-medium text-gray-100 shadow hover:bg-gray-800"
-              >
-                <span className="flex">
-                  {WAYPOINT_CATEGORIES.slice(0, 3).map((c) => (
-                    <span
-                      key={c.id}
-                      className="-ml-1 h-3 w-3 border border-gray-900 first:ml-0"
-                      style={{ backgroundColor: c.color }}
-                    />
-                  ))}
-                </span>
-                Legend
-                <svg
-                  className={`h-3.5 w-3.5 transition-transform ${legendOpen ? "" : "rotate-180"}`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-            </div>
           </>
         )}
 
