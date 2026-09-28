@@ -9,6 +9,8 @@ import {
   postMessage,
   replyTo,
   sourceLink,
+  uploadEmbed,
+  type Upload,
 } from "./discord";
 import {
   getContestBallots,
@@ -25,12 +27,28 @@ import {
   playerName,
   setState,
 } from "./db";
-import { dishUrl } from "./images";
+import { dishUrl, photoUpload } from "./images";
 import { pickOne, type Category } from "./matchmaking";
 import { parseWeekdays, postSlotKey } from "./schedule";
-import type { Contest, ContestEntry, Env } from "./types";
+import type { Contest, ContestEntry, Dish, Env } from "./types";
 
 const HOUR = 60 * 60 * 1000;
+
+/**
+ * The contest's photograph as an embed, uploaded with the message when it can
+ * be — the same reason every card is uploaded (see renderCard). A photograph
+ * too big to upload, or missing from R2, falls back to the link.
+ */
+async function photo(
+  env: Env,
+  dish: Dish,
+  color: number
+): Promise<{ embed: unknown; files: Upload[] }> {
+  const upload = await photoUpload(env, dish);
+  return upload
+    ? { embed: uploadEmbed(upload, color), files: [upload] }
+    : { embed: { color, image: { url: dishUrl(env, dish) } }, files: [] };
+}
 
 /**
  * The caption contest.
@@ -204,18 +222,24 @@ export async function postCaptionContestIfDue(
 
   // The photograph goes up as itself. Every other format composites several
   // images into a card and needs a render for it; one photograph needs no
-  // layout, and R2 already serves it at a public URL — so there is nothing
-  // here that can fail to render, and no repair path to write.
+  // layout, and R2 already has it — so there is nothing here that can fail to
+  // render, and no repair path to write.
   try {
-    const message = await postMessage(env, {
-      content:
-        `**Caption contest #${contestId}.** What is going on here?\n` +
-        `Write one line. You have a day; the vote opens when the writing closes.\n` +
-        sourceLink(env, dish, "Original"),
-      embeds: [{ color: ACCENT, image: { url: dishUrl(env, dish) } }],
-      components: writeButton(contestId),
-      allowed_mentions: allowedMentions(env),
-    });
+    const { embed, files } = await photo(env, dish, ACCENT);
+    const message = await postMessage(
+      env,
+      {
+        content:
+          `**Caption contest #${contestId}.** What is going on here?\n` +
+          `Write one line. You have a day; the vote opens when the writing closes.\n` +
+          sourceLink(env, dish, "Original"),
+        embeds: [embed],
+        components: writeButton(contestId),
+        allowed_mentions: allowedMentions(env),
+      },
+      undefined,
+      files
+    );
 
     await env.DB.prepare("UPDATE contests SET submit_message_id = ? WHERE id = ?")
       .bind(message.id, contestId)
@@ -290,16 +314,22 @@ async function openVoting(env: Env, contest: Contest, now: number): Promise<void
 
   const numbered = await getContestEntries(env, contest.id);
 
-  const message = await postMessage(env, {
-    content:
-      `**Caption contest #${contest.id} — the vote.**\n` +
-      `${numbered.length} captions. Click your top ${PICKS} in order, best first.\n\n` +
-      captionLines(numbered),
-    embeds: [{ color: ACCENT, image: { url: dishUrl(env, dish) } }],
-    components: ballotButtons(contest.id, numbered),
-    allowed_mentions: allowedMentions(env),
-    ...replyTo(contest.submit_message_id),
-  });
+  const { embed, files } = await photo(env, dish, ACCENT);
+  const message = await postMessage(
+    env,
+    {
+      content:
+        `**Caption contest #${contest.id} — the vote.**\n` +
+        `${numbered.length} captions. Click your top ${PICKS} in order, best first.\n\n` +
+        captionLines(numbered),
+      embeds: [embed],
+      components: ballotButtons(contest.id, numbered),
+      allowed_mentions: allowedMentions(env),
+      ...replyTo(contest.submit_message_id),
+    },
+    undefined,
+    files
+  );
 
   await env.DB.prepare("UPDATE contests SET vote_message_id = ? WHERE id = ?")
     .bind(message.id, contest.id)
@@ -471,16 +501,17 @@ async function closeOne(env: Env, contest: Contest, now: number): Promise<void> 
     })
   );
 
-  const photo = dish
-    ? [{ color: WIN, image: { url: dishUrl(env, dish) } }]
-    : [];
+  const shown = dish ? await photo(env, dish, WIN) : null;
+  const picture = shown ? [shown.embed] : [];
+  const files = shown?.files ?? [];
 
   if (ballots.length === 0) {
     // Still a reveal, unlike an unvoted matchup: nobody has seen who wrote
     // which caption, and that is most of what a contest is for.
     await postResult(env, contest, {
       content: `**Caption contest #${contest.id} — closed.** Nobody voted.`,
-      embeds: [...photo, table],
+      embeds: [...picture, table],
+      files,
     });
     return;
   }
@@ -516,7 +547,8 @@ async function closeOne(env: Env, contest: Contest, now: number): Promise<void> 
       `**Caption contest #${contest.id} — the result.** ` +
       `**${escapeMarkdown(winnerName)}** takes it.\n` +
       `${ballots.length} ${ballots.length === 1 ? "ballot" : "ballots"}.${botLine}`,
-    embeds: [...photo, table, log],
+    embeds: [...picture, table, log],
+    files,
   });
 }
 
@@ -533,13 +565,18 @@ async function closeOne(env: Env, contest: Contest, now: number): Promise<void> 
 async function postResult(
   env: Env,
   contest: Contest,
-  body: { content: string; embeds: unknown[] }
+  { files, ...body }: { content: string; embeds: unknown[]; files: Upload[] }
 ): Promise<void> {
-  const result = await postMessage(env, {
-    ...body,
-    allowed_mentions: allowedMentions(env),
-    ...replyTo(contest.vote_message_id),
-  });
+  const result = await postMessage(
+    env,
+    {
+      ...body,
+      allowed_mentions: allowedMentions(env),
+      ...replyTo(contest.vote_message_id),
+    },
+    undefined,
+    files
+  );
 
   await env.DB.prepare("UPDATE contests SET result_message_id = ? WHERE id = ?")
     .bind(result.id, contest.id)

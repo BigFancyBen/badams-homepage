@@ -39,11 +39,42 @@ function resolvedEmbeds(embeds) {
   );
 }
 
+/**
+ * The JSON half of a request. A post that uploads a card is multipart, with
+ * the message itself in a part called payload_json and the card in files[n];
+ * everything else is plain JSON.
+ */
+function payloadOf(req, body) {
+  if (!body) return {};
+  const type = req.headers["content-type"] ?? "";
+  if (!type.startsWith("multipart/form-data")) return JSON.parse(body);
+  const boundary = type.split("boundary=")[1]?.replace(/"/g, "");
+  const part = body
+    .split(`--${boundary}`)
+    .find((p) => p.includes('name="payload_json"'));
+  if (!part) return {};
+  // Headers end at the first blank line; the part ends with its own CRLF.
+  return JSON.parse(part.slice(part.indexOf("\r\n\r\n") + 4).replace(/\r\n$/, ""));
+}
+
+/** Filenames uploaded with a multipart request, in the order they were sent. */
+function uploadsOf(body) {
+  return [...body.matchAll(/name="files\[\d+\]"; filename="([^"]+)"/g)].map(
+    (m) => m[1]
+  );
+}
+
 createServer((req, res) => {
   let body = "";
   req.on("data", (c) => (body += c));
   req.on("end", () => {
-    sent.push({ method: req.method, url: req.url, body: body.slice(0, 4000) });
+    const payload = payloadOf(req, body);
+    sent.push({
+      method: req.method,
+      url: req.url,
+      body: JSON.stringify(payload).slice(0, 4000),
+      uploads: uploadsOf(body),
+    });
     writeFileSync("mock-discord-log.json", JSON.stringify(sent, null, 2));
 
     // The render endpoints, when IMAGE_BASE_URL points here. The real ones
@@ -60,7 +91,7 @@ createServer((req, res) => {
     if (req.method === "POST" && /\/threads$/.test(req.url)) {
       const id = `thread_${++nextId}`;
       res.writeHead(201, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ id, type: 11, name: JSON.parse(body || "{}").name ?? "" }));
+      res.end(JSON.stringify({ id, type: 11, name: payload.name ?? "" }));
       return;
     }
     if (req.method === "DELETE") {
@@ -70,7 +101,7 @@ createServer((req, res) => {
     }
     if (req.method === "POST" && /\/messages$/.test(req.url)) {
       const id = String(++nextId);
-      const { embeds } = JSON.parse(body || "{}");
+      const { embeds } = payload;
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(
         JSON.stringify({
@@ -86,7 +117,7 @@ createServer((req, res) => {
       return;
     }
     if (req.method === "PATCH") {
-      const { embeds } = JSON.parse(body || "{}");
+      const { embeds } = payload;
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ id: "edited", embeds: resolvedEmbeds(embeds) }));
       return;
