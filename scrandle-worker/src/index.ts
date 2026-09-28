@@ -232,8 +232,7 @@ export default {
     }
 
     // Puts a card back on a message that went out without one, or with one
-    // Discord failed to fetch. Renders to a URL Discord has never seen, so it
-    // cannot answer from the failure it cached the first time.
+    // Discord failed to fetch. Uploads it, so there is nothing to fetch.
     if (url.pathname === "/admin/repair-card") {
       if (url.searchParams.get("secret") !== env.BACKFILL_SECRET) {
         return new Response("Nope", { status: 403 });

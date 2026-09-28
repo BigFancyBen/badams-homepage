@@ -1,5 +1,6 @@
 import { base64UrlFromString, hmacBase64Url } from "./encoding";
-import type { Dish, DiscordMessage, Env } from "./types";
+import type { Upload } from "./discord";
+import type { Dish, Env } from "./types";
 
 /**
  * The render endpoints live in the Next app on Vercel — Workers Free gives
@@ -163,72 +164,85 @@ export function standingsImageUrl(
 const RENDER_ATTEMPTS = 3;
 
 /**
- * R2 key for a card. `stamp` forces a new key — and so a URL Discord has never
- * seen — when replacing a card that already went out.
+ * Discord's upload cap for a bot on an unboosted server. A card is a megabyte
+ * or two; a raw photograph is whatever the phone made, and one over this goes
+ * out as a link instead.
  */
-export function cardKey(
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+
+/** The filename a card is uploaded under, and so what its embed points at. */
+export function cardName(
   kind: "matchup" | "result" | "standings" | "ballot" | "ballot-result",
-  id: number,
-  stamp?: number
+  id: number
 ): string {
-  return `cards/${kind}-${id}${stamp ? `-${stamp}` : ""}.png`;
+  return `${kind}-${id}.png`;
 }
 
 /**
- * Renders a card, mirrors it into R2, and returns a public URL for the copy.
- * Falls back to the signed render URL if only the mirror failed, and returns
- * null if the card never rendered at all.
+ * Renders a card and returns its bytes, to be uploaded with the message that
+ * shows it. Returns null if the card never rendered at all.
  *
- * Discord fetches an embed image once, at post time, and caches what it gets
- * against that URL — so a render that is briefly slow or briefly failing
- * leaves a card that stays broken forever, because the URL never changes.
- * That is not a hypothetical: it is how a place round went out with no image
- * on it, and nothing about the round could be fixed afterwards.
+ * Uploaded rather than linked because a link is a fetch Discord makes later,
+ * and that fetch is the part that fails. Discord pulls an embed image through
+ * its media proxy once, at post time, and caches whatever it gets against the
+ * URL for good — and the proxy drops perfectly good files now and then. Cards
+ * used to be mirrored into R2 and linked from there, which fixed a slow render
+ * but not the proxy: on 14 September two of a five-card batch went out blank,
+ * and on 28 September four of five did, every one of them a valid PNG sitting
+ * in R2. An upload is on Discord's CDN before the message exists, so there is
+ * nothing left for the proxy to fetch.
  *
- * Fetching it here first moves that risk somewhere it can be survived. The
- * Worker is not waiting on a deadline the way Discord's proxy is, it can ask
- * again, and what Discord ends up fetching is a static object out of R2 rather
- * than a render it might have to sit through. Two large photographs take
- * seconds to rasterize; nothing downstream has to care any more.
+ * The retries are still here for the render itself, which can be slow or
+ * briefly failing: two large photographs take seconds to rasterize. `attempt`
+ * makes each retry a different URL, so a failure cached against the first
+ * cannot be handed back for the second.
  */
 export async function renderCard(
-  env: Env,
-  key: string,
+  name: string,
   mint: (attempt: number) => Promise<string>
-): Promise<string | null> {
+): Promise<Upload | null> {
   for (let attempt = 0; attempt < RENDER_ATTEMPTS; attempt++) {
-    const url = await mint(attempt);
-    let bytes: ArrayBuffer;
-
     try {
-      const response = await fetch(url);
+      const response = await fetch(await mint(attempt));
       if (!response.ok) continue;
       // A signature failure or a crashed render answers with text, and an
-      // embed pointed at text is an embed with nothing in it.
+      // upload of text is a card with nothing in it.
       if (!(response.headers.get("content-type") ?? "").startsWith("image/")) {
         continue;
       }
-      bytes = await response.arrayBuffer();
+      const bytes = await response.arrayBuffer();
+      if (bytes.byteLength === 0 || bytes.byteLength > MAX_UPLOAD_BYTES) {
+        continue;
+      }
+      return { name, type: "image/png", bytes };
     } catch {
       continue;
-    }
-
-    if (bytes.byteLength === 0) continue;
-
-    try {
-      await env.BUCKET.put(key, bytes, {
-        httpMetadata: {
-          contentType: "image/png",
-          cacheControl: "public, max-age=31536000, immutable",
-        },
-      });
-      return `${env.R2_PUBLIC_BASE}/${key}`;
-    } catch {
-      // The card itself is fine — only the copy failed. The signed URL still
-      // renders, and the function behind it is warm from the fetch above.
-      return url;
     }
   }
 
   return null;
+}
+
+/**
+ * A dish's own photograph, read out of R2 for uploading — the caption contest
+ * shows one photograph as itself rather than a card, and it is exposed to the
+ * proxy in exactly the way a card was. Null when the object is gone or too
+ * big to upload, and the caller links it instead.
+ */
+export async function photoUpload(env: Env, dish: Dish): Promise<Upload | null> {
+  try {
+    const object = await env.BUCKET.get(dish.r2_key);
+    if (!object || object.size === 0 || object.size > MAX_UPLOAD_BYTES) {
+      return null;
+    }
+    const type = object.httpMetadata?.contentType ?? "image/jpeg";
+    const extension = type.split("/")[1]?.split(/[;+]/)[0] || "jpg";
+    return {
+      name: `photo-${dish.id}.${extension}`,
+      type,
+      bytes: await object.arrayBuffer(),
+    };
+  } catch {
+    return null;
+  }
 }

@@ -36,9 +36,9 @@ cadence this slow, nothing ever converged.
 
 Rendering lives in the Next app (`app/api/scrandle/*`) because Workers Free
 allows 10ms of CPU per invocation, which cannot rasterize an image. The Worker
-builds a signed URL, fetches the PNG itself, and mirrors it into R2 — Discord
-is handed a static object, never a render it has to wait on. See **Cards are
-rendered before they are posted** below.
+builds a signed URL, fetches the PNG itself, and uploads it with the message —
+Discord is handed the file, never a link it has to fetch. See **Cards are
+uploaded, not linked** below.
 
 ## Setup
 
@@ -104,8 +104,10 @@ it in. That file is gitignored.
 
 The bot needs **MESSAGE CONTENT INTENT** enabled, or attachments come back
 empty even over REST. Invite it with View Channel, Read Message History, Send
-Messages, Embed Links, Create Public Threads, Send Messages in Threads and
-Manage Threads. The thread permissions are for the 9am batch, which posts its
+Messages, Embed Links, Attach Files, Create Public Threads, Send Messages in
+Threads and Manage Threads. Attach Files is for the cards, which go up as
+uploads — without it every post that carries one is refused outright. The
+thread permissions are for the 9am batch, which posts its
 cards and its results into threads rather than onto the channel floor — see
 **The 9am batch lives in two threads** below. Manage Threads is only for
 taking down a thread that opened for a card that then failed to post.
@@ -327,9 +329,13 @@ nothing is still holding the port before blaming the code.
 
 Cards are off by default in the harness: the render endpoints are on Vercel
 and want real photographs, and a seeded dish has none, so every post goes out
-card-less. To exercise the card path — the render retries and the R2 mirror —
+card-less. To exercise the card path — the render retries and the upload —
 point `IMAGE_BASE_URL=http://127.0.0.1:9911` at the mock as well; it answers
-every render with a 1×1 PNG.
+every render with a 1×1 PNG. The mock reads multipart posts, and records the
+filenames each one uploaded under `uploads` in `mock-discord-log.json`. The
+caption contest uploads its photograph out of local R2, which a seeded dish
+never put there, so it links it instead unless you `wrangler r2 object put
+--local` something under the dish's key first.
 
 It drives each round through `/admin/post-matchup` and `/admin/close-matchup`
 rather than the cron, so it needs `BACKFILL_SECRET` in `.dev.vars` (the value
@@ -653,42 +659,38 @@ running it twice is a no-op.
 [d1-errors]: https://developers.cloudflare.com/d1/observability/debug-d1/#error-list
 [proxy-878]: https://github.com/discord/discord-api-docs/issues/878
 [proxy-6694]: https://github.com/discord/discord-api-docs/issues/6694
-- **Cards are rendered before they are posted.** The Worker fetches the card
-  from the render endpoint, mirrors the PNG into R2 under `cards/`, and puts
-  that R2 URL in the embed. Discord fetches an embed image once, at post time,
-  and caches whatever it gets against that URL forever — so a render that is
-  slow or briefly failing used to leave a card broken with no way back, which
-  is exactly how a place round went out with no image on it. Rendering it here
-  first moves the waiting somewhere that can afford it: the Worker has no
-  proxy deadline to miss, retries twice more on a fresh URL, and hands Discord
-  a static object. Large photographs are the ones that made this matter — two
-  full-size landscapes take seconds to rasterize where a pair of phone photos
-  takes under one. A card is a megabyte or two, and at two or three a day that
-  is a couple of gigabytes a year against R2's 10 GB free tier: `cards/` will
-  want sweeping eventually — but a sweep cannot simply drop the matchup cards
-  once the result cards exist, because the post people voted on keeps its card
-  and stays in the channel as the pointer at the result.
-- **But not checked after they are posted.** A proven card is not a loaded
-  one: Discord fetches the embed image through its media proxy, and the proxy
-  does drop perfectly good files now and then ([#878][proxy-878],
-  [#6694][proxy-6694]) — on 14 September 2026 two of a five-card batch went
-  out blank with valid PNGs behind them. The obvious check is to read the
-  message Discord hands back from the post, where the embed image carries the
-  proxied copy's width and height, and treat 0 by 0 as a failure. That was
-  tried, for one day: the reply's size is what the proxy has by the time
-  Discord answers, not a verdict, and it reads 0 by 0 for cards that then
-  load fine. The morning after, six of seven cards "failed" — each one twice
-  more after a fresh copy was edited in — and the logs channel filled with
-  repair prompts for cards nobody had a problem with. So the reply is not
-  read. A card that really does go out blank is what `/admin/repair-card` is
-  for; an automatic check would have to look at the message again later, when
-  the proxy has actually finished, and there is no need for one yet.
+- **Cards are uploaded, not linked.** The Worker fetches the card from the
+  render endpoint and uploads the PNG with the message that shows it — the
+  embed's image is `attachment://matchup-203.png`, which Discord resolves
+  against the file in the same request. Discord has the bytes before the
+  message exists, and serves them off its own CDN.
+  The history is why. A linked embed image is a fetch Discord makes through
+  its media proxy, once, at post time, caching whatever it gets against that
+  URL for good. Linking the render directly broke on slow renders — two
+  full-size landscapes take seconds to rasterize — and a place round went out
+  with no image on it. Mirroring the render into R2 first and linking the
+  `pub-….r2.dev` copy fixed the slow render but not the proxy, which drops
+  perfectly good files now and then ([#878][proxy-878], [#6694][proxy-6694]):
+  on 14 September 2026 two of a five-card batch went out blank, and on 28
+  September four of five did, every one a valid PNG sitting in R2 when checked
+  an hour later. Reading Discord's reply for the proxied image's size was
+  tried for one day as a check, and is useless — it reads 0 by 0 for cards
+  that then load fine, and six of seven were "repaired" for nothing. An upload
+  leaves the proxy nothing to fetch, which is the only fix that is not a
+  guess about when the proxy has finished.
+  The render still retries twice more on a fresh URL if it is slow or fails.
+  Uploads need the **Attach Files** permission, and a file over 10 MB is
+  refused — a card is a megabyte or two. The caption contest's photograph is
+  uploaded too, read straight out of R2, and falls back to the link only for
+  a photograph too big to upload.
 - **A matchup with no card still posts.** If all three render attempts fail,
   the round goes out as jump links and vote buttons with no embed at all,
   rather than an embed pointing at nothing. It stays playable, the logs
-  webhook says so, and `/admin/repair-card` attaches the card afterwards. The
-  weekly standings post is the exception — it is nothing *but* the card, so it
-  waits for the next tick instead.
+  webhook says so, and `/admin/repair-card` uploads the card onto the message
+  afterwards — the same route fixes a card that went out as a link before
+  uploads existed and never loaded. The weekly standings post is the
+  exception — it is nothing *but* the card, so it waits for the next tick
+  instead.
 - **Matchups never ping the role.** A ping would correlate with new dishes
   entering the pool, which tells people which photo is the new one. The weekly
   standings post is the only thing that pings.

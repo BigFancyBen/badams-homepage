@@ -94,7 +94,7 @@ export const CHECKLIST: ChecklistGroup[] = [
       },
       {
         id: "app-invite",
-        text: "Generate an install URL with the `bot` scope and permissions **View Channel**, **Read Message History**, **Send Messages**, **Embed Links**, **Create Public Threads**, **Send Messages in Threads**, and **Manage Threads**. Invite it to the server.",
+        text: "Generate an install URL with the `bot` scope and permissions **View Channel**, **Read Message History**, **Send Messages**, **Embed Links**, **Attach Files**, **Create Public Threads**, **Send Messages in Threads**, and **Manage Threads**. Invite it to the server.",
       },
       {
         id: "app-endpoint",

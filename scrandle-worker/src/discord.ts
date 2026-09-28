@@ -23,7 +23,8 @@ async function botFetch(
     ...init,
     headers: {
       Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`,
-      "Content-Type": "application/json",
+      // A multipart body sets its own Content-Type, boundary and all.
+      ...(init.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
       ...(init.headers ?? {}),
     },
   });
@@ -69,6 +70,51 @@ export async function fetchMessagesBefore(
   return (await response.json()) as DiscordMessage[];
 }
 
+/** A file sent with a message — in practice, a card. */
+export interface Upload {
+  name: string;
+  type: string;
+  bytes: ArrayBuffer;
+}
+
+/**
+ * An embed showing an uploaded file. Discord resolves `attachment://` against
+ * the files sent in the same request, so the image is on Discord's own CDN
+ * before the message exists — there is no URL left for its proxy to fetch.
+ */
+export function uploadEmbed(upload: Upload, color: number) {
+  return { color, image: { url: `attachment://${upload.name}` } };
+}
+
+/**
+ * JSON when there is nothing to upload, multipart when there is.
+ *
+ * With files, `attachments` is written into the payload to match them. On a
+ * PATCH that list is also what Discord keeps, so an edit that sends a card
+ * replaces whatever card the message had rather than stacking a second one
+ * beside it. An edit that sends no files leaves the attachments alone.
+ */
+function messageBody(payload: unknown, files: Upload[]): BodyInit {
+  if (files.length === 0) return JSON.stringify(payload);
+
+  const form = new FormData();
+  form.append(
+    "payload_json",
+    JSON.stringify({
+      ...(payload as object),
+      attachments: files.map((file, index) => ({ id: index, filename: file.name })),
+    })
+  );
+  files.forEach((file, index) => {
+    form.append(
+      `files[${index}]`,
+      new Blob([file.bytes], { type: file.type }),
+      file.name
+    );
+  });
+  return form;
+}
+
 /**
  * Posts to the game's channel, or — given a thread id — into one of its
  * threads. A thread is a channel to the API, so the same call serves both; the
@@ -78,11 +124,12 @@ export async function fetchMessagesBefore(
 export async function postMessage(
   env: Env,
   payload: unknown,
-  channelId: string = env.DISCORD_CHANNEL_ID
+  channelId: string = env.DISCORD_CHANNEL_ID,
+  files: Upload[] = []
 ): Promise<DiscordMessage> {
   const response = await botFetch(env, `/channels/${channelId}/messages`, {
     method: "POST",
-    body: JSON.stringify(payload),
+    body: messageBody(payload, files),
   });
   return (await response.json()) as DiscordMessage;
 }
@@ -91,11 +138,12 @@ export async function editMessage(
   env: Env,
   messageId: string,
   payload: unknown,
-  channelId: string = env.DISCORD_CHANNEL_ID
+  channelId: string = env.DISCORD_CHANNEL_ID,
+  files: Upload[] = []
 ): Promise<void> {
   await botFetch(env, `/channels/${channelId}/messages/${messageId}`, {
     method: "PATCH",
-    body: JSON.stringify(payload),
+    body: messageBody(payload, files),
   });
 }
 

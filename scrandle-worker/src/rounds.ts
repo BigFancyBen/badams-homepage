@@ -10,6 +10,8 @@ import {
   postMessage,
   replyTo,
   sourceLink,
+  uploadEmbed,
+  type Upload,
 } from "./discord";
 import {
   getDueRounds,
@@ -28,7 +30,7 @@ import { scoreRanking, type RankingResult } from "./elo";
 import {
   ballotImageUrl,
   ballotResultImageUrl,
-  cardKey,
+  cardName,
   dishFocus,
   dishUrl,
   renderCard,
@@ -161,7 +163,7 @@ async function createAndPost(
   // a week the draw found five, and "the plates" on a week it did not.
   const label = roundLabel(category, entries);
 
-  const image = await renderCard(env, cardKey("ballot", roundId), (attempt) =>
+  const image = await renderCard(cardName("ballot", roundId), (attempt) =>
     ballotImageUrl(env, roundId, entries, `Rank ${label}`, attempt)
   );
 
@@ -178,14 +180,19 @@ async function createAndPost(
       .map((entry) => sourceLink(env, entry, `#${entry.slot}`))
       .join(" · ");
 
-    const message = await postMessage(env, {
-      content:
-        `${opener} — rank ${label}. ` +
-        `Click them best first; you can stop whenever.\n${links}`,
-      embeds: image ? [{ color: ACCENT, image: { url: image } }] : [],
-      components: ballotButtons(roundId, entries),
-      allowed_mentions: allowedMentions(env),
-    });
+    const message = await postMessage(
+      env,
+      {
+        content:
+          `${opener} — rank ${label}. ` +
+          `Click them best first; you can stop whenever.\n${links}`,
+        embeds: image ? [uploadEmbed(image, ACCENT)] : [],
+        components: ballotButtons(roundId, entries),
+        allowed_mentions: allowedMentions(env),
+      },
+      undefined,
+      image ? [image] : []
+    );
 
     await env.DB.prepare("UPDATE rounds SET message_id = ? WHERE id = ?")
       .bind(message.id, roundId)
@@ -624,18 +631,23 @@ async function closeOne(env: Env, round: Round, now: number): Promise<void> {
   // A message of its own rather than an edit to the ballot, for the reason
   // spelled out over postResult in matchups.ts: a day-old card is a day of
   // channel traffic above the fold, and Discord shows nothing for an edit.
-  const result = await postMessage(env, {
-    content:
-      `**Round #${round.id} — the result.** ` +
-      `${chef ? `**${escapeMarkdown(chef)}** takes it.` : "It is decided."}\n` +
-      `${count} ${count === 1 ? "ballot" : "ballots"}.\n` +
-      entries
-        .map((entry) => sourceLink(env, entry, `#${entry.slot}`))
-        .join(" · "),
-    embeds: image ? [{ color: WIN, image: { url: image } }, log] : [log],
-    allowed_mentions: allowedMentions(env),
-    ...replyTo(round.message_id),
-  });
+  const result = await postMessage(
+    env,
+    {
+      content:
+        `**Round #${round.id} — the result.** ` +
+        `${chef ? `**${escapeMarkdown(chef)}** takes it.` : "It is decided."}\n` +
+        `${count} ${count === 1 ? "ballot" : "ballots"}.\n` +
+        entries
+          .map((entry) => sourceLink(env, entry, `#${entry.slot}`))
+          .join(" · "),
+      embeds: image ? [uploadEmbed(image, WIN), log] : [log],
+      allowed_mentions: allowedMentions(env),
+      ...replyTo(round.message_id),
+    },
+    undefined,
+    image ? [image] : []
+  );
 
   await env.DB.prepare("UPDATE rounds SET result_message_id = ? WHERE id = ?")
     .bind(result.id, round.id)
@@ -659,9 +671,8 @@ function renderResultCard(
   round: Round,
   entries: RoundDish[],
   results: RankingResult[],
-  ballots: number,
-  stamp?: number
-): Promise<string | null> {
+  ballots: number
+): Promise<Upload | null> {
   const byId = new Map(entries.map((entry) => [entry.id, entry]));
   const rows = results.flatMap((result, index) => {
     const entry = byId.get(result.id);
@@ -677,10 +688,8 @@ function renderResultCard(
     ];
   });
 
-  return renderCard(
-    env,
-    cardKey("ballot-result", round.id, stamp),
-    (attempt) => ballotResultImageUrl(env, round.id, rows, ballots, attempt)
+  return renderCard(cardName("ballot-result", round.id), (attempt) =>
+    ballotResultImageUrl(env, round.id, rows, ballots, attempt)
   );
 }
 
@@ -697,11 +706,9 @@ export async function closeDueRounds(
 }
 
 /**
- * Re-renders a round's card and puts it back on the message. Same reasoning as
- * repairCard on the pair side, including the stamp: the replacement has to
- * arrive at a URL Discord has never seen, or its proxy answers from whatever
- * it cached the first time. And, as there, a closed round is repaired on its
- * result post rather than on the ballot — they are two messages now.
+ * Re-renders a round's card and uploads it onto the message. Same reasoning as
+ * repairCard on the pair side. And, as there, a closed round is repaired on
+ * its result post rather than on the ballot — they are two messages now.
  *
  * A closed round gets its ballot log rebuilt alongside the card. A PATCH
  * replaces the embeds it names wholesale, so sending only the image would
@@ -729,12 +736,10 @@ export async function repairRoundCard(
   }
 
   const open = round.status === "open";
-  const stamp = Date.now();
 
   if (open) {
     const image = await renderCard(
-      env,
-      cardKey("ballot", round.id, stamp),
+      cardName("ballot", round.id),
       (attempt) =>
         ballotImageUrl(
           env,
@@ -751,9 +756,13 @@ export async function repairRoundCard(
         reason: "the card still will not render",
       };
     }
-    await editMessage(env, round.message_id, {
-      embeds: [{ color: ACCENT, image: { url: image } }],
-    });
+    await editMessage(
+      env,
+      round.message_id,
+      { embeds: [uploadEmbed(image, ACCENT)] },
+      undefined,
+      [image]
+    );
     return { repaired: true, round: round.id };
   }
 
@@ -777,8 +786,7 @@ export async function repairRoundCard(
     round,
     entries,
     results,
-    ballots.length,
-    stamp
+    ballots.length
   );
   if (!image) {
     return {
@@ -791,12 +799,18 @@ export async function repairRoundCard(
   const slotOf = new Map(entries.map((entry) => [entry.id, entry.slot]));
   // Rounds closed before the reveal got a post of its own still carry their
   // result card on the ballot message.
-  await editMessage(env, round.result_message_id ?? round.message_id, {
-    embeds: [
-      { color: WIN, image: { url: image } },
-      ballotEmbed("How everyone ranked them", ballotLines(ballots, slotOf)),
-    ],
-  });
+  await editMessage(
+    env,
+    round.result_message_id ?? round.message_id,
+    {
+      embeds: [
+        uploadEmbed(image, WIN),
+        ballotEmbed("How everyone ranked them", ballotLines(ballots, slotOf)),
+      ],
+    },
+    undefined,
+    [image]
+  );
 
   return { repaired: true, round: round.id };
 }
