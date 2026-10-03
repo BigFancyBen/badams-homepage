@@ -529,13 +529,15 @@ async function closeOne(env: Env, contest: Contest, now: number): Promise<void> 
         ? " The bot wrote that one."
         : ` The bot came ${ordinal(botIndex)} of ${results.length}.`;
 
+  // By finishing place, to match the table above it — that is sorted by result
+  // and carries no ballot numbers, so a slot would point at nothing in it.
   const log = ballotEmbed(
     "How everyone voted",
     ballots.map((ballot) => {
       const order = ballot.entryIds
         .map((id) => {
-          const found = results.find((r) => r.entry.id === id);
-          return `#${found?.entry.slot ?? "?"}`;
+          const place = results.findIndex((r) => r.entry.id === id);
+          return place === -1 ? "?" : ordinal(place);
         })
         .join(" › ");
       return `**${escapeMarkdown(ballot.name)}** ${order}`;

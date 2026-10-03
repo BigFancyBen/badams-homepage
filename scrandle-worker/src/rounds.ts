@@ -523,14 +523,26 @@ async function postPlacementPair(
   return true;
 }
 
+/**
+ * Each photograph's label on the result card, by dish id.
+ *
+ * Everything under the card names photographs by where they finished rather
+ * than by the number they were voted on under. The card re-sorts them, so a
+ * ballot slot points at nothing on it — "#3" is whichever tile was third on a
+ * card that is now a reply further up the channel.
+ */
+function placeLabels(results: RankingResult[]): Map<number, string> {
+  return new Map(results.map((result, index) => [result.id, ordinal(index)]));
+}
+
 /** The ballot log: everyone's order, in the order they started ranking. */
 function ballotLines(
   ballots: { name: string; dishIds: number[] }[],
-  slotOf: Map<number, number>
+  placeOf: Map<number, string>
 ): string[] {
   return ballots.map((ballot) => {
     const order = ballot.dishIds
-      .map((id) => `#${slotOf.get(id) ?? "?"}`)
+      .map((id) => placeOf.get(id) ?? "?")
       .join(" › ");
     return `**${escapeMarkdown(ballot.name)}** ${order}`;
   });
@@ -617,13 +629,24 @@ async function closeOne(env: Env, round: Round, now: number): Promise<void> {
     );
   }
 
-  const winner = byId.get(results[0].id);
-  const chef = winner ? await playerName(env, winner.poster_discord_id) : null;
+  // Who posted each photograph, in finishing order — the same order, and the
+  // same labels, as the tiles on the card above it.
+  const placeOf = placeLabels(results);
+  const credits: string[] = [];
+  let chef: string | null = null;
+  for (const result of results) {
+    const entry = byId.get(result.id);
+    if (!entry) continue;
+    const name = await playerName(env, entry.poster_discord_id);
+    chef ??= name;
+    credits.push(
+      `${sourceLink(env, entry, placeOf.get(entry.id) ?? "?")} ${escapeMarkdown(name)}`
+    );
+  }
 
-  const slotOf = new Map(entries.map((entry) => [entry.id, entry.slot]));
   const log = ballotEmbed(
     "How everyone ranked them",
-    ballotLines(ballots, slotOf)
+    ballotLines(ballots, placeOf)
   );
 
   const count = ballots.length;
@@ -638,9 +661,7 @@ async function closeOne(env: Env, round: Round, now: number): Promise<void> {
         `**Round #${round.id} — the result.** ` +
         `${chef ? `**${escapeMarkdown(chef)}** takes it.` : "It is decided."}\n` +
         `${count} ${count === 1 ? "ballot" : "ballots"}.\n` +
-        entries
-          .map((entry) => sourceLink(env, entry, `#${entry.slot}`))
-          .join(" · "),
+        credits.join(" · "),
       embeds: image ? [uploadEmbed(image, WIN), log] : [log],
       allowed_mentions: allowedMentions(env),
       ...replyTo(round.message_id),
@@ -796,7 +817,6 @@ export async function repairRoundCard(
     };
   }
 
-  const slotOf = new Map(entries.map((entry) => [entry.id, entry.slot]));
   // Rounds closed before the reveal got a post of its own still carry their
   // result card on the ballot message.
   await editMessage(
@@ -805,7 +825,10 @@ export async function repairRoundCard(
     {
       embeds: [
         uploadEmbed(image, WIN),
-        ballotEmbed("How everyone ranked them", ballotLines(ballots, slotOf)),
+        ballotEmbed(
+          "How everyone ranked them",
+          ballotLines(ballots, placeLabels(results))
+        ),
       ],
     },
     undefined,
