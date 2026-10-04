@@ -60,6 +60,16 @@ LOCAL_TIME_ZONE = "America/Denver"
 STANDINGS_WEEKDAY = "0"
 STANDINGS_HOUR_UTC = "17"
 
+# The weekly Scrandle: ten pairs of voted-on plates, frozen into a JSON file
+# in the public bucket for the site to read, and announced in the channel.
+# 0 = Sunday, 18:00 UTC = noon Mountain while MDT is in effect (shift to 19 in
+# November with the rest) — an hour after the standings, so the table goes up
+# first. Unlike the rounds this is "at or after" the hour rather than on it,
+# and retries every tick until it lands. Set WEEKLY_WEEKDAY to -1 to disable.
+WEEKLY_WEEKDAY = "0"
+WEEKLY_HOUR_UTC = "18"
+WEEKLY_URL = "https://www.benadams.dev/scrandle/play"
+
 # The weekly place round: five places on one card, ranked best-first, posted
 # alongside the ordinary matchup rather than in place of it. Comma-separated
 # weekdays, 1 = Monday; set PLACE_WEEKDAY to -1 (or empty) to disable. 18:00

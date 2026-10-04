@@ -71,6 +71,11 @@ export interface Env {
   DRINK_HOUR_UTC: string;
   /** Flat window for the drink slot — it does not close on a posting hour. */
   DRINK_WINDOW_HOURS: string;
+  /** Weekdays the weekly Scrandle is drawn on. Empty/-1 off. */
+  WEEKLY_WEEKDAY: string;
+  WEEKLY_HOUR_UTC: string;
+  /** Where the game lives on the site — the link the alert carries. */
+  WEEKLY_URL: string;
   /** Weekdays the caption contest opens on, comma-separated. Empty/-1 off. */
   CAPTION_WEEKDAY: string;
   CAPTION_HOUR_UTC: string;

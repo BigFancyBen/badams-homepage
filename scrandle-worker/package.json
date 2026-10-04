@@ -19,6 +19,7 @@
     "test:placement": "node scripts/simulate-placement.mjs",
     "test:contests": "node scripts/simulate-contests.mjs",
     "test:schedule": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/test-schedule.mjs",
+    "test:weekly": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/test-weekly.mjs",
     "test:ingest": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/test-ingest.mjs"
   },
   "devDependencies": {

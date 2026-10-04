@@ -1,5 +1,6 @@
 import { base64UrlFromString, hmacBase64Url } from "./encoding";
 import type { Upload } from "./discord";
+import type { StandingsRow } from "./standings";
 import type { Dish, Env } from "./types";
 
 /**
@@ -150,7 +151,7 @@ export function standingsImageUrl(
   env: Env,
   stamp: number,
   title: string,
-  rows: { n: string; e: number; d: number }[],
+  rows: StandingsRow[],
   attempt = 0
 ): Promise<string> {
   return signedUrl(env, `standings/${stamp}`, {
