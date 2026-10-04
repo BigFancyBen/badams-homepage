@@ -79,3 +79,29 @@ export function drawRounds<T extends WeeklyCandidate>(
 
   return rounds;
 }
+
+/**
+ * Whether a draw is due on this tick: one of the configured days, at or after
+ * the hour, and not already drawn today.
+ *
+ * "Today" rather than a count of days since the last one. The gate used to be
+ * six days, which was right for one puzzle a week and made a second weekday a
+ * setting that did nothing. Comparing the day says what is meant — one draw
+ * per scheduled day — for any list of days, and an hourly retry after a draw
+ * still finds the day already spent.
+ */
+export function weeklyDue(
+  now: number,
+  { weekdays, hourUtc, lastAt }: {
+    weekdays: number[];
+    hourUtc: number;
+    lastAt: number;
+  }
+): boolean {
+  const date = new Date(now);
+  if (!weekdays.includes(date.getUTCDay())) return false;
+  if (date.getUTCHours() < hourUtc) return false;
+
+  const day = (at: number) => new Date(at).toISOString().slice(0, 10);
+  return day(lastAt) !== day(now);
+}

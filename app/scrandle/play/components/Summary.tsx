@@ -58,7 +58,7 @@ export function Summary({ puzzle, picks, score }: SummaryProps) {
             <span className="text-gray-600">/{total}</span>
           </p>
           <p className="mt-3 text-sm text-gray-400">
-            A new one goes up every week — the bot says so in the channel.
+            The bot says so in the channel when the next one goes up.
           </p>
         </div>
 

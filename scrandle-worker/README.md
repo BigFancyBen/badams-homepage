@@ -775,7 +775,7 @@ running it twice is a no-op.
   from thirteenth is a climb and not an appearance from nowhere. "Past" is
   worked out, not assumed from the gap: a place gained because the chef above
   dropped out names nobody.
-- **The weekly Scrandle is a file.** Once a week the Worker draws ten pairs of
+- **The weekly Scrandle is a file.** Twice a week the Worker draws ten pairs of
   voted-on plates, writes them to `weekly/<n>.json` and `weekly/current.json`
   in the public bucket, and posts a link. The page at `/scrandle/play` reads
   `current.json` and nothing else — it never talks to the Worker or to D1.
@@ -794,7 +794,8 @@ running it twice is a no-op.
   the channel preferred is not a question. Under five drawable pairs it posts
   nothing.
   It is gated like the standings rather than like the rounds: any tick on
-  `WEEKLY_WEEKDAY` at or after `WEEKLY_HOUR_UTC`, once six days have passed.
+  one of the `WEEKLY_WEEKDAY` days at or after `WEEKLY_HOUR_UTC`, once per day
+  — Sunday and Wednesday. It kept the name from when it was one a week.
   The order is publish, announce, record, and a puzzle is read back from its
   numbered file if it is already there — so a tick that published and then
   failed to post announces the same puzzle an hour later instead of drawing a
@@ -1274,8 +1275,8 @@ Usage → Image Optimization.
 **How often the weekly game can reset** is therefore not an image question any
 more. What limits it is the catalog — a puzzle spends twenty voted-on plates,
 and once the backlog has been swept the pool grows by about one a day — and
-the channel, which gets a bot post per reset. Twice a week is comfortable;
-daily repeats plates about monthly.
+the channel, which gets a bot post per reset. It runs twice a week, which is
+comfortable on both; daily would repeat plates about monthly.
 
 ## Worth verifying before scaling the per-tick cap
 
