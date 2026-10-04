@@ -145,11 +145,17 @@ export async function editInteractionReply(
   env: Env,
   applicationId: string,
   token: string,
-  payload: unknown
+  payload: unknown,
+  /**
+   * Which message under the token. "@original" is the interaction's own
+   * reply — but for a button that was only acknowledged, "@original" is the
+   * message the button sits on, and the reply is a follow-up with its own id.
+   */
+  messageId = "@original"
 ): Promise<boolean> {
   try {
     const response = await fetch(
-      `${apiBase(env)}/webhooks/${applicationId}/${token}/messages/@original`,
+      `${apiBase(env)}/webhooks/${applicationId}/${token}/messages/${messageId}`,
       {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -162,22 +168,27 @@ export async function editInteractionReply(
   }
 }
 
-/** A second message under a deferred reply. Same token, same fifteen minutes. */
+/**
+ * A second message under a deferred reply. Same token, same fifteen minutes.
+ * Returns the new message's id (to edit it later), or null if it was refused.
+ */
 export async function followUp(
   env: Env,
   applicationId: string,
   token: string,
   payload: unknown
-): Promise<boolean> {
+): Promise<string | null> {
   try {
     const response = await fetch(`${apiBase(env)}/webhooks/${applicationId}/${token}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    return response.ok;
+    if (!response.ok) return null;
+    const message = (await response.json().catch(() => null)) as { id?: string } | null;
+    return message?.id ?? "";
   } catch {
-    return false;
+    return null;
   }
 }
 
