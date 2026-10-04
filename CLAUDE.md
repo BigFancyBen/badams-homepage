@@ -43,7 +43,6 @@ app/
     page.tsx, components/, hooks/, types.ts
   token-helper/               # Token helper app
     page.tsx, components/, hooks/, types.ts, utils/
-  api/ably/                   # Ably realtime API route
 e2e/                          # Playwright e2e tests
 ```
 
@@ -52,10 +51,10 @@ e2e/                          # Playwright e2e tests
 - **State persistence**: All apps use localStorage via custom hooks
 - **Styling**: Tailwind CSS, dark theme, no rounded corners
 - **Fonts**: Inter via `next/font/google` (downloaded at build and self-hosted — no request to Google at runtime) and Geist Mono via the `geist` package
-- **Images**: no `images.remotePatterns` — remote images (Scryfall, Steam, devicons, QR codes) render `unoptimized`; only files in `/public` go through the optimizer. See the note in `next.config.ts`
+- **Images**: no `images.remotePatterns` — remote images (Scryfall, Steam, devicons) render `unoptimized`; only files in `/public` go through the optimizer. See the note in `next.config.ts`
 - **Security headers**: set for every route in `next.config.ts`
 - **Animation**: `motion` library (Framer Motion) for page transitions and UI animations
-- **External APIs**: Scryfall (cards), Open-Meteo (weather), OpenStreetMap (geocoding), Ably (realtime)
+- **External APIs**: Scryfall (cards), Open-Meteo (weather and geocoding)
 - **Mobile-first**: Responsive design with specific mobile layouts
 
 ## Type Definitions
@@ -69,7 +68,7 @@ e2e/                          # Playwright e2e tests
 ### Custom Hooks
 - `useLocalStorage` - Persistent state with localStorage
 - `useWeatherData` - Open-Meteo API fetching with caching
-- `useAutocomplete` - Debounced search with OpenStreetMap
+- `useAutocomplete` - Debounced search with Open-Meteo geocoding
 
 ### Component Organization
 - Page components in `page.tsx`
@@ -91,8 +90,7 @@ After changes, verify:
 These external services may be unavailable in sandboxed environments:
 - Scryfall API (tutor-helper card data)
 - Open-Meteo API (floatwise weather)
-- OpenStreetMap Nominatim (floatwise geocoding)
-- Ably (commander multiplayer)
+- Open-Meteo geocoding (floatwise location search)
 
 <!-- BEGIN:nextjs-agent-rules -->
 

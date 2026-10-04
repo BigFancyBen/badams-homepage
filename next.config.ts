@@ -36,12 +36,11 @@ const nextConfig: NextConfig = {
    * No `images.remotePatterns`, on purpose. The optimizer answers anybody who
    * asks `/_next/image?url=…` for any address the patterns allow, and every
    * answer is one of the 5,000 transformations a month the whole site shares —
-   * an allowlist of "every Scryfall card" or "any QR code" is one a stranger
+   * an allowlist of "every Scryfall card" is one a stranger
    * can spend in an afternoon. Remote images are rendered `unoptimized`
    * instead, straight from a source that already serves them sized, which
    * leaves the optimizer with the finite set of files in /public.
    */
-  serverExternalPackages: ['ably'],
   /**
    * The Yut Hut render routes read RuneScape fonts and skill icons off disk.
    * The paths are literal strings so the tracer should find them on its own;
