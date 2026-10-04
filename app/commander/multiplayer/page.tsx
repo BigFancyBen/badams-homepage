@@ -29,17 +29,31 @@ interface SavedSession {
 const SESSION_KEY = 'commander-multiplayer-session';
 const SESSION_EXPIRY = 1000 * 60 * 60 * 2; // 2 hours
 
+/**
+ * Random characters from `alphabet`, off the platform's CSPRNG. A room code
+ * is the only thing between a stranger and somebody's game, and Math.random
+ * is predictable from a handful of its outputs.
+ */
+function randomString(alphabet: string, length: number): string {
+  // The largest multiple of the alphabet that fits in a byte; anything above
+  // it is thrown away so no character comes up more often than another.
+  const limit = 256 - (256 % alphabet.length);
+  let out = '';
+  while (out.length < length) {
+    const bytes = crypto.getRandomValues(new Uint8Array(length * 2));
+    for (const byte of bytes) {
+      if (byte < limit && out.length < length) out += alphabet[byte % alphabet.length];
+    }
+  }
+  return out;
+}
+
 function generateClientId(): string {
-  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+  return randomString('abcdefghijklmnopqrstuvwxyz0123456789', 24);
 }
 
 function generateRoomCode(): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let code = '';
-  for (let i = 0; i < 6; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return code;
+  return randomString('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 6);
 }
 
 function MultiplayerContent() {

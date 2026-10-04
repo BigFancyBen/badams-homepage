@@ -1,0 +1,46 @@
+# The pre-commit hook lints and type-checks, but a hook only runs on the
+# machine that has it, and nothing ran the build at all before Vercel did. This
+# is the same three checks for every pull request, so a change that cannot
+# build is found before it is merged rather than by a failed deploy.
+#
+# The Workers are checked by their own deploy workflows.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A newer push to the same branch makes the older run pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  site:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run lint
+
+      - run: npm run type-check
+
+      # No secrets: the routes that need them answer 503 at request time, and
+      # the weekly puzzle page already treats an unreachable bucket as "no
+      # puzzle yet", so the build needs nothing the repository does not hold.
+      - run: npm run build
+
+      # Fails on anything high or critical in what ships. Dev-only tooling is
+      # left out — it never runs on the server.
+      - run: npm audit --omit=dev --audit-level=high

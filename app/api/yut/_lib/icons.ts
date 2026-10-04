@@ -54,10 +54,27 @@ const HAND_ITEMS: Record<string, { path: string; name: string }> = {
  */
 const ITEMS: Record<string, { path: string; name: string }> = { ...GENERATED_ITEMS, ...HAND_ITEMS };
 
+/** Where every font and sprite lives, and the prefix each path below carries. */
+const ASSETS = "app/api/yut/_assets/";
+
+/**
+ * The file on disk for one of the paths below.
+ *
+ * The folder is spelled out in the `join` rather than left inside the
+ * argument: a path the bundler cannot see the start of is one it has to
+ * assume could be anywhere, and it answers that by packing the whole project
+ * — source, /public and all — into every route that calls this. A path that
+ * somehow is not under the folder resolves inside it anyway, to nothing.
+ */
+function assetFile(relative: string): string {
+  const name = relative.startsWith(ASSETS) ? relative.slice(ASSETS.length) : relative;
+  return join(process.cwd(), "app", "api", "yut", "_assets", name.replace(/\.\.+/g, "."));
+}
+
 function readDataUrl(relative: string | undefined): string | null {
   if (!relative) return null;
   try {
-    const bytes = readFileSync(join(process.cwd(), relative));
+    const bytes = readFileSync(assetFile(relative));
     return `data:image/png;base64,${bytes.toString("base64")}`;
   } catch {
     return null;

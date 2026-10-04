@@ -209,7 +209,7 @@ real hours and redeploy.
 Run once by hand to pull in the channel's history:
 
 ```bash
-curl "https://<your-worker>.workers.dev/backfill?secret=<BACKFILL_SECRET>&pages=5"
+curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/backfill?pages=5"
 ```
 
 ## Running it locally
@@ -239,7 +239,7 @@ trigger would.
 Put a real `DISCORD_BOT_TOKEN` in `.dev.vars`, start `npm run dev:local`, then:
 
 ```bash
-curl "http://localhost:8787/backfill?secret=dev-only-backfill-secret&pages=1"
+curl -H "Authorization: Bearer dev-only-backfill-secret" "http://localhost:8787/backfill?pages=1"
 ```
 
 That returns a JSON report — `scanned`, `stored`, `duplicates`,
@@ -539,10 +539,11 @@ after 18:00 UTC or with `/admin/post-matchup?weekly=1` on any day, and
 ### Forcing a post by hand
 
 There is no way to fire a cron on demand, so three admin routes stand in. All
-take `?secret=<BACKFILL_SECRET>`.
+take the secret as a header, `Authorization: Bearer <BACKFILL_SECRET>` — never in
+the URL, which is the part every log keeps.
 
 ```bash
-curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>"
+curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/admin/post-matchup"
 ```
 
 Posts an ordinary matchup now, ignoring the schedule. Refuses while one is
@@ -551,13 +552,13 @@ of refusing — it draws around whatever is already live, so no photograph
 appears in two matchups at once, and it does not claim the hour's slot.
 
 ```bash
-curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&place=1"
-curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&placement=1"
-curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&person=1"
-curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&drink=1"
-curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&caption=1"
-curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&foodround=1"
-curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&drinkround=1"
+curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/admin/post-matchup?place=1"
+curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/admin/post-matchup?placement=1"
+curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/admin/post-matchup?person=1"
+curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/admin/post-matchup?drink=1"
+curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/admin/post-matchup?caption=1"
+curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/admin/post-matchup?foodround=1"
+curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/admin/post-matchup?drinkround=1"
 ```
 
 Posts one of the other slots on demand — `place=1` for the five-photo place
@@ -576,7 +577,7 @@ The flags are read in the order they are listed in `index.ts`, and the first
 one set wins — passing two is a request nobody meant to make, not two posts.
 
 ```bash
-curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&weekly=1"
+curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/admin/post-matchup?weekly=1"
 ```
 
 Draws a new weekly Scrandle now, publishes it and announces it. It replaces the
@@ -588,7 +589,7 @@ forced or not, because two open contests would ask people to write and to
 rank at the same time on two photographs in one channel.
 
 ```bash
-curl "https://<your-worker>.workers.dev/admin/open-vote?secret=<BACKFILL_SECRET>"
+curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/admin/open-vote"
 ```
 
 Ends a contest's writing phase early and puts the vote up. Its own route
@@ -597,7 +598,7 @@ separately — forcing them together would open a vote and shut it in the same
 request. Answers `{"opened":0}` when nothing is collecting captions.
 
 ```bash
-curl "https://<your-worker>.workers.dev/admin/close-matchup?secret=<BACKFILL_SECRET>"
+curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/admin/close-matchup"
 ```
 
 Closes everything open right now, ignoring `closes_at` — matchups, ranking
@@ -606,9 +607,9 @@ rounds and contests being voted on. Answers `{"closed":N,"rounds":N,
 alone; `/admin/open-vote` is what moves those on.
 
 ```bash
-curl "https://<your-worker>.workers.dev/admin/repair-card?secret=<BACKFILL_SECRET>&message=<discord message id>"
-curl "https://<your-worker>.workers.dev/admin/repair-card?secret=<BACKFILL_SECRET>&matchup=<id>"
-curl "https://<your-worker>.workers.dev/admin/repair-card?secret=<BACKFILL_SECRET>&round=<id>"
+curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/admin/repair-card?message=<discord message id>"
+curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/admin/repair-card?matchup=<id>"
+curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/admin/repair-card?round=<id>"
 ```
 
 Takes the Discord message id — the last segment of the message link, and the
@@ -634,7 +635,7 @@ standings, their votes count as a stranger's, and the one-vote-each rule stops
 applying to them. Two routes fix that.
 
 ```bash
-curl "https://<your-worker>.workers.dev/admin/players?secret=<BACKFILL_SECRET>&q=edwards"
+curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/admin/players?q=edwards"
 ```
 
 Everybody whose username matches, with the id and the counts beside it —
@@ -642,8 +643,8 @@ dishes, votes, ballots, contest entries. This is how you find the old id;
 `q=` is optional and lists everyone without it.
 
 ```bash
-curl "https://<your-worker>.workers.dev/admin/merge-player?secret=<BACKFILL_SECRET>&from=<old id>&to=<new id>"
-curl "https://<your-worker>.workers.dev/admin/merge-player?secret=<BACKFILL_SECRET>&from=<old id>&to=<new id>&confirm=1"
+curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/admin/merge-player?from=<old id>&to=<new id>"
+curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/admin/merge-player?from=<old id>&to=<new id>&confirm=1"
 ```
 
 The first is a dry run — it reports what would move and what would be dropped
@@ -1166,7 +1167,7 @@ running it twice is a no-op.
   and a better one than the middle. A box the model fails to draw becomes the
   centre of the frame rather than a null, so the row leaves the queue instead
   of coming back every tick on a call that succeeded. Hurry the backfill with
-  `/admin/classify?secret=…&limit=20` in a loop; it reports `remaining`.
+  `/admin/classify?limit=20` in a loop; it reports `remaining`.
 
   Handing satori a tile-sized JPEG rather than a multi-megapixel original also
   takes most of the rasterizing out of a render, which is where the seconds

@@ -20,13 +20,13 @@ function extractDeckId(input: string): string | null {
   const trimmed = input.trim();
 
   // If it's just a number, use it directly
-  if (/^\d+$/.test(trimmed)) {
+  if (/^\d{1,12}$/.test(trimmed)) {
     return trimmed;
   }
 
   // Match archidekt.com/decks/{id} patterns
   const match = trimmed.match(
-    /archidekt\.com\/decks\/(\d+)/i
+    /archidekt\.com\/decks\/(\d{1,12})(?!\d)/i
   );
   return match ? match[1] : null;
 }
@@ -85,10 +85,19 @@ export async function GET(request: NextRequest) {
         name: c.card.oracleCard.name,
       }));
 
-    return NextResponse.json({
-      name: data.name,
-      cards,
-    });
+    return NextResponse.json(
+      {
+        name: data.name,
+        cards,
+      },
+      {
+        // Lets the CDN answer a repeat without running the function. The
+        // deck id is the only thing in the answer, so one copy serves anyone.
+        headers: {
+          "cache-control": "public, s-maxage=300, stale-while-revalidate=600",
+        },
+      }
+    );
   } catch {
     return NextResponse.json(
       { error: "Failed to fetch deck from Archidekt" },

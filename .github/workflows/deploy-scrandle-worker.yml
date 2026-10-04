@@ -26,6 +26,12 @@ concurrency:
   group: deploy-scrandle-worker
   cancel-in-progress: false
 
+# The job reads the repository and talks to Cloudflare with its own token. It
+# never writes back to GitHub, so the token Actions hands it should not be able
+# to either.
+permissions:
+  contents: read
+
 jobs:
   deploy:
     runs-on: ubuntu-latest

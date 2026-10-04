@@ -1,6 +1,46 @@
 import Ably from 'ably';
 import { NextRequest, NextResponse } from 'next/server';
 
+/**
+ * Hands the Commander life tracker a signed Ably token request.
+ *
+ * Anyone can call this — there are no accounts — so what it signs is the only
+ * thing standing between a stranger and the API key's full reach. The token is
+ * therefore pinned to the one thing the app does: talk and show presence on a
+ * `commander:<room>` channel. Without a capability a token inherits everything
+ * the key can do, on every channel in the Ably app.
+ *
+ * The key itself should carry the same restriction in the Ably dashboard, so
+ * the limit holds even if this file is someday wrong.
+ */
+const CAPABILITY = JSON.stringify({
+  'commander:*': ['publish', 'subscribe', 'presence'],
+});
+
+/** An hour: Ably's default, stated so it is a decision rather than an accident. */
+const TOKEN_TTL_MS = 60 * 60 * 1000;
+
+/** What `generateClientId` in the multiplayer page produces, with room to spare. */
+const CLIENT_ID = /^[A-Za-z0-9_-]{1,64}$/;
+
+async function readClientId(request: NextRequest): Promise<unknown> {
+  const contentType = request.headers.get('content-type') || '';
+
+  try {
+    // Ably sends authParams as application/x-www-form-urlencoded
+    if (contentType.includes('application/x-www-form-urlencoded')) {
+      return (await request.formData()).get('clientId');
+    }
+    if (contentType.includes('application/json')) {
+      return (await request.json())?.clientId;
+    }
+  } catch {
+    return null;
+  }
+
+  return request.nextUrl.searchParams.get('clientId');
+}
+
 export async function POST(request: NextRequest) {
   const apiKey = process.env.ABLY_API_KEY;
 
@@ -11,54 +51,19 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Ably sends authParams as application/x-www-form-urlencoded
-  let clientId: string;
-  const contentType = request.headers.get('content-type') || '';
-
-  if (contentType.includes('application/x-www-form-urlencoded')) {
-    const formData = await request.formData();
-    clientId = formData.get('clientId') as string;
-  } else if (contentType.includes('application/json')) {
-    try {
-      const body = await request.json();
-      clientId = body.clientId;
-    } catch {
-      clientId = Math.random().toString(36).substring(2, 15);
-    }
-  } else {
-    // Check query params as fallback
-    clientId = request.nextUrl.searchParams.get('clientId') || Math.random().toString(36).substring(2, 15);
+  const clientId = await readClientId(request);
+  if (typeof clientId !== 'string' || !CLIENT_ID.test(clientId)) {
+    return NextResponse.json({ error: 'Invalid clientId' }, { status: 400 });
   }
 
   const client = new Ably.Rest(apiKey);
   const tokenRequestData = await client.auth.createTokenRequest({
     clientId,
+    capability: CAPABILITY,
+    ttl: TOKEN_TTL_MS,
   });
 
-  return NextResponse.json(tokenRequestData);
-}
-
-// Also support GET for backwards compatibility
-export async function GET(request: NextRequest) {
-  const clientId = request.nextUrl.searchParams.get('clientId');
-
-  if (!clientId) {
-    return NextResponse.json({ error: 'clientId is required' }, { status: 400 });
-  }
-
-  const apiKey = process.env.ABLY_API_KEY;
-
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: 'Ably API key not configured' },
-      { status: 500 }
-    );
-  }
-
-  const client = new Ably.Rest(apiKey);
-  const tokenRequestData = await client.auth.createTokenRequest({
-    clientId,
+  return NextResponse.json(tokenRequestData, {
+    headers: { 'cache-control': 'no-store' },
   });
-
-  return NextResponse.json(tokenRequestData);
 }

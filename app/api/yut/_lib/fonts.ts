@@ -5,13 +5,30 @@ import type { ImageResponse } from "next/og";
 type ImageOptions = NonNullable<ConstructorParameters<typeof ImageResponse>[1]>;
 export type YutFonts = NonNullable<ImageOptions["fonts"]>;
 
+/** Where every font and sprite lives, and the prefix each path below carries. */
+const ASSETS = "app/api/yut/_assets/";
+
+/**
+ * The file on disk for one of the paths below.
+ *
+ * The folder is spelled out in the `join` rather than left inside the
+ * argument: a path the bundler cannot see the start of is one it has to
+ * assume could be anywhere, and it answers that by packing the whole project
+ * — source, /public and all — into every route that calls this. A path that
+ * somehow is not under the folder resolves inside it anyway, to nothing.
+ */
+function assetFile(relative: string): string {
+  const name = relative.startsWith(ASSETS) ? relative.slice(ASSETS.length) : relative;
+  return join(process.cwd(), "app", "api", "yut", "_assets", name.replace(/\.\.+/g, "."));
+}
+
 /**
  * The paths are spelled out as literals rather than built from a list so
  * Next's file tracer sees each one; `outputFileTracingIncludes` in
  * next.config.ts is the belt to these braces.
  */
 function loadFont(relative: string): Promise<ArrayBuffer> {
-  return readFile(join(process.cwd(), relative)).then((buf) => {
+  return readFile(assetFile(relative)).then((buf) => {
     const out = new ArrayBuffer(buf.byteLength);
     new Uint8Array(out).set(buf);
     return out;

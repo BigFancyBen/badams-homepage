@@ -64,8 +64,8 @@ async function post(payload, { corrupt = false } = {}) {
 }
 
 async function admin(path, params = {}) {
-  const query = new URLSearchParams({ secret: ADMIN, ...params });
-  return (await fetch(`${url}/admin/${path}?${query}`)).json();
+  const query = new URLSearchParams(params);
+  return (await fetch(`${url}/admin/${path}?${query}`, { headers: { authorization: `Bearer ${ADMIN}` } })).json();
 }
 
 async function sql(q) {

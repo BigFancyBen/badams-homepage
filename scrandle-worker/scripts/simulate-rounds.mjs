@@ -125,7 +125,8 @@ async function castBallot(roundId, voter, order) {
 async function playRounds(rounds, vote, flag = "place") {
   for (let round = 0; round < rounds; round++) {
     const posted = await fetch(
-      `${WORKER}/admin/post-matchup?${flag}=1&secret=${encodeURIComponent(SECRET)}`
+      `${WORKER}/admin/post-matchup?${flag}=1`,
+      { headers: { authorization: `Bearer ${SECRET}` } }
     );
     if (!posted.ok) throw new Error(`post failed: ${posted.status}`);
 
@@ -144,7 +145,8 @@ async function playRounds(rounds, vote, flag = "place") {
     await sql(`UPDATE rounds SET closes_at = 1 WHERE id = ${roundId};`);
 
     const closed = await fetch(
-      `${WORKER}/admin/close-matchup?secret=${encodeURIComponent(SECRET)}`
+      `${WORKER}/admin/close-matchup`,
+      { headers: { authorization: `Bearer ${SECRET}` } }
     );
     if (!closed.ok) throw new Error(`close failed: ${closed.status}`);
   }
