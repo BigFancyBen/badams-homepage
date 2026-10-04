@@ -8,7 +8,7 @@ import {
   setState,
   updatePlayer,
 } from "./db.ts";
-import { composeDigest, composeLastCall, composeRollCall, digestPayload, threadName, trimmedDigestPayload } from "./digest.ts";
+import { composeDigest, composeLastCall, composeRollCall, dailyCardUrl, digestPayload, threadName, trimmedDigestPayload } from "./digest.ts";
 import { allowedMentions, deleteMessage, editMessage, logToDiscord, postMessage, startThread } from "./discord.ts";
 import { composeReminders, reminderMessage } from "./reminders.ts";
 import { playersRoleId } from "./roles.ts";
@@ -142,7 +142,8 @@ export async function runTick(
       const parts = await composeDigest(env, today);
       const roster = await activeRoster(env, today);
       const roleId = await playersRoleId(env);
-      const message = await postMessage(env, digestPayload(parts, today, roleId, roster.length));
+      const cardUrl = parts.cardSub ? await dailyCardUrl(env, today, parts.cardSub) : null;
+      const message = await postMessage(env, digestPayload(parts, today, roleId, roster.length, null, cardUrl));
       await setState(env, `daily_post:${today}`, message.id);
       await setState(env, `daily_parts:${today}`, JSON.stringify(parts));
       report.posted = message.id;

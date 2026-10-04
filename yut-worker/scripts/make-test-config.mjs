@@ -24,6 +24,8 @@ const PLACEHOLDERS = [
   [/R2_PUBLIC_BASE = ""/, 'R2_PUBLIC_BASE = "https://images.test.local"'],
   // Hold /help and the Boss button back past the ack budget so the harness can watch the late path.
   [/TOWN_TICK_ENABLED = "0"/, 'TOWN_TICK_ENABLED = "0"\nSLOW_COMMAND = "help,boss"'],
+  // TEST_IMAGE_BASE points the cards at a local `next dev`, so the harness can watch one get drawn.
+  ...(process.env.TEST_IMAGE_BASE ? [[/IMAGE_BASE_URL = "[^"]*"/, `IMAGE_BASE_URL = "${process.env.TEST_IMAGE_BASE}"`]] : []),
 ];
 
 let config;
