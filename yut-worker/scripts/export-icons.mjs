@@ -9,7 +9,8 @@
  * and written to app/api/yut/_assets/items/<key>.png only when the bytes
  * change. The keys are the Worker's item keys (scripts/lib/item-key.mjs).
  *
- * Inputs: config/drops.json (every dropped item) and scripts/lib/icon-extras.json
+ * Inputs: config/drops.json (every dropped item), config/spoils.json (everything
+ * a jar or a chest can pay) and scripts/lib/icon-extras.json
  * (the keys icons.ts kept by hand: pulled from the DB, or "keep" for art the
  * DB has no sprite for). Output: the PNGs and app/api/yut/_lib/items.generated.ts.
  *
@@ -38,6 +39,8 @@ const SCALE = 4;
 // ── What to export ─────────────────────────────────────────────────
 
 const drops = JSON.parse(readFileSync(new URL("../config/drops.json", import.meta.url), "utf8"));
+const spoils = JSON.parse(readFileSync(new URL("../config/spoils.json", import.meta.url), "utf8"));
+const bosses = JSON.parse(readFileSync(new URL("../config/bosses.json", import.meta.url), "utf8"));
 const extras = JSON.parse(readFileSync(new URL("./lib/icon-extras.json", import.meta.url), "utf8"));
 
 /** key → { db, name }; the hand-kept keys win over drops on both name and source. */
@@ -52,9 +55,9 @@ for (const [key, spec] of Object.entries(extras)) {
   if (!spec || typeof spec.db !== "string") throw new Error(`icon-extras.json: ${key} needs "keep" or { db }`);
   wanted.set(key, { db: spec.db, name: spec.name ?? spec.db });
 }
-for (const item of drops.items) {
+for (const item of [...drops.items, ...spoils.items, ...(spoils.priced ?? []), ...bosses.items]) {
   if (kept.has(item.k) || wanted.has(item.k)) continue;
-  if (itemKey(item.n) !== item.k) throw new Error(`drops.json: key ${item.k} does not match itemKey(${JSON.stringify(item.n)})`);
+  if (itemKey(item.n) !== item.k) throw new Error(`drops.json/spoils.json: key ${item.k} does not match itemKey(${JSON.stringify(item.n)})`);
   wanted.set(item.k, { db: item.n, name: item.n });
 }
 

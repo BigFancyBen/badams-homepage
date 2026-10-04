@@ -61,6 +61,24 @@ export interface Player {
   slayer_streak: number;
   tasks_done: number;
   ping_opt_in: number;
+  /** Full-value check-ins since a rare container was last on offer. */
+  spoils_dry: number;
+  /** Coins spent at the Grand Exchange; the bank's worth less this is the balance. */
+  gp_spent: number;
+  /** JSON: what is packed for the next session, {"potion": key, "food": key}. */
+  loadout: string;
+  /** JSON: what is worn, {slot: item key}. */
+  gear: string;
+  /** The item key being chased, whose drop rate is doubled. */
+  wishlist: string | null;
+  /** The Slayer master asked for; null takes the highest the player qualifies for. */
+  slayer_master: string | null;
+  /** JSON: monster keys the player has blocked. */
+  slayer_blocks: string;
+  /** The last game day a farm run was done. */
+  farm_day: string | null;
+  /** The last game week the Tears of Guthix were visited. */
+  tears_week: string | null;
 }
 
 export interface Checkin {

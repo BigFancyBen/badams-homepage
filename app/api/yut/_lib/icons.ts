@@ -17,6 +17,8 @@ const ICON_PATHS: Record<string, string> = {
   woodcutting: "app/api/yut/_assets/icons/woodcutting.png",
   mining: "app/api/yut/_assets/icons/mining.png",
   fishing: "app/api/yut/_assets/icons/fishing.png",
+  // The item database has no skill icons; the seed dibber stands in for Farming.
+  farming: "app/api/yut/_assets/items/seed_dibber.png",
   levelUpBackground: "app/api/yut/_assets/icons/levelUpBackground.png",
 };
 

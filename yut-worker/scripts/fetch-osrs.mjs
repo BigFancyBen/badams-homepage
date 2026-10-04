@@ -11,9 +11,17 @@
  *                                           in osrs.json, with GE unit values
  *   node scripts/fetch-osrs.mjs --quests    config/quests.json: the quest of the week's details,
  *                                           requirements and the stats of the enemies it asks for
+ *   node scripts/fetch-osrs.mjs --spoils    config/spoils.json: the loot tables of the impling jars
+ *                                           and reward chests a check-in offers, and the Grand
+ *                                           Exchange prices of what /ge sells, the kingdom
+ *                                           gathers and the farm grows
+ *   node scripts/fetch-osrs.mjs --bosses    config/bosses.json: the stats and real drop table of every
+ *                                           boss of the week in GROUP_BOSSES
+ *   node scripts/fetch-osrs.mjs --gear      config/gear.json: the equipment bonuses of every
+ *                                           wearable drop in GEAR that counts in a session
  */
 import { readFileSync, writeFileSync } from "node:fs";
-import { NAMED_RARITY, QUEST_CALENDAR } from "../src/config.ts";
+import { GEAR, GE_ITEMS, GROUP_BOSSES, NAMED_RARITY, PRICED_ITEMS, QUEST_CALENDAR, SPOILS_CONTAINERS } from "../src/config.ts";
 import { itemKey } from "./lib/item-key.mjs";
 
 const API = "https://oldschool.runescape.wiki/api.php";
@@ -517,6 +525,187 @@ async function fetchDrops() {
   );
 }
 
+// ── Phase: spoils.json ─────────────────────────────────────────────
+
+/** What a jar or chest hands back that is not loot: the empty jar, and keys to other chests. */
+const SPOILS_EXCLUDED = /^(Impling jar|Bird nest \(empty\))$/;
+
+/**
+ * The loot table of every container in SPOILS_CONTAINERS (config.ts), in the
+ * same row format as drops.json, plus the GE prices of what /ge sells. A page
+ * with several versions (a members and a free-to-play table) keeps the first
+ * that is not free-to-play.
+ */
+async function fetchSpoils() {
+  console.log(`Spoils for ${SPOILS_CONTAINERS.length} containers`);
+  const pricesAt = new Date().toISOString();
+  const prices = await fetchPrices();
+
+  const items = [];
+  const itemIndex = new Map();
+  const indexOf = (name, unitValue) => {
+    let index = itemIndex.get(name);
+    if (index === undefined) {
+      index = items.length;
+      items.push({ k: itemKey(name), n: name, v: unitValue });
+      itemIndex.set(name, index);
+    } else if (items[index].v === 0 && unitValue > 0) {
+      items[index].v = unitValue;
+    }
+    return index;
+  };
+
+  const containers = {};
+  for (const container of SPOILS_CONTAINERS) {
+    const raw = await bucket(
+      `bucket('dropsline').select('page_name','item_name','drop_json').where('page_name',${lua(container.page)}).limit(1000).run()`,
+    );
+    const rows = raw.map((row) => ({ item: row.item_name, json: JSON.parse(row.drop_json) }));
+    if (rows.length === 0) throw new Error(`${container.page}: the dropsline bucket has no rows for this page`);
+    const versions = [...new Set(rows.map((row) => row.json["Dropped from"] ?? ""))];
+    const version = versions.find((v) => !/Free-to-play/i.test(v)) ?? versions[0];
+
+    const table = [];
+    for (const row of rows) {
+      const j = row.json;
+      if ((j["Dropped from"] ?? "") !== version) continue;
+      const item = (j["Dropped item"] || row.item).replace(/#.*$/, "");
+      if (SPOILS_EXCLUDED.test(item) || EXCLUDED_ITEM.test(item)) continue;
+      const p = rarityToP(j.Rarity);
+      if (p === null) {
+        console.log(`    ${container.page}: cannot read rarity "${j.Rarity}" for ${item}; row dropped`);
+        continue;
+      }
+      const quantityText = String(j["Drop Quantity"] ?? "");
+      const numbers = quantityText.replace(/,/g, "").match(/\d+/g)?.map(Number) ?? [1];
+      const low = typeof j["Quantity Low"] === "number" ? j["Quantity Low"] : numbers[0];
+      const high = typeof j["Quantity High"] === "number" ? j["Quantity High"] : (numbers[1] ?? numbers[0]);
+      const rolls = typeof j.Rolls === "number" && j.Rolls > 0 ? j.Rolls : 1;
+      let unitValue = 0;
+      if (item === "Coins") unitValue = 1;
+      else if (typeof j["Drop Value"] === "number" && j["Drop Value"] > 0) unitValue = Math.round(j["Drop Value"]);
+      else if (prices.has(item)) unitValue = prices.get(item);
+      table.push([indexOf(item, unitValue), sig8(p), low, high, rolls, /noted/i.test(quantityText) ? 1 : 0]);
+    }
+    if (table.length === 0) throw new Error(`${container.page}: no loot rows survived`);
+    const chance = table.filter((row) => row[1] < 1).reduce((sum, row) => sum + row[1] * row[4], 0);
+    const mean = table.reduce((sum, row) => sum + Math.min(1, row[1]) * row[4] * ((row[2] + row[3]) / 2) * items[row[0]].v, 0);
+    console.log(
+      `  ${container.page} [${version}]: ${table.length} rows, ${table.filter((row) => row[1] >= 1).length} always, ` +
+        `chance rows sum to ${chance.toFixed(2)}, mean worth ${Math.round(mean).toLocaleString("en-US")} gp`,
+    );
+    containers[container.key] = { page: container.page, rows: table };
+  }
+
+  // What the Grand Exchange sells, the kingdom gathers and the farm grows, at today's price.
+  const ge = {};
+  const sold = new Set(GE_ITEMS.map((item) => item.item));
+  const unpriced = [];
+  for (const name of PRICED_ITEMS) {
+    const price = prices.get(name);
+    if (!price) {
+      if (sold.has(name)) throw new Error(`${name}: no GE price`);
+      unpriced.push(name);
+      continue;
+    }
+    ge[itemKey(name)] = price;
+    if (sold.has(name)) console.log(`  GE ${name}: ${price.toLocaleString("en-US")} gp`);
+  }
+  console.log(`  ${Object.keys(ge).length} priced${unpriced.length ? `; no price for ${unpriced.join(", ")}` : ""}`);
+  const priced = PRICED_ITEMS.map((name) => ({ k: itemKey(name), n: name }));
+
+  const out = {
+    fetchedAt: new Date().toISOString(),
+    pricesAt,
+    source: "https://oldschool.runescape.wiki (dropsline bucket) + prices.runescape.wiki",
+    items,
+    containers,
+    ge,
+    priced,
+  };
+  writeFileSync(new URL("../config/spoils.json", import.meta.url), JSON.stringify(out));
+  console.log(`wrote config/spoils.json: ${Object.keys(containers).length} containers, ${items.length} distinct items`);
+}
+
+// ── Phase: bosses.json ─────────────────────────────────────────────
+
+/** The combat stats and drop table of every boss of the week, in drops.json's row format. */
+async function fetchBosses() {
+  const prices = await fetchPrices();
+  const items = [];
+  const itemIndex = new Map();
+  const indexOf = (name, unitValue) => {
+    let index = itemIndex.get(name);
+    if (index === undefined) {
+      index = items.length;
+      items.push({ k: itemKey(name), n: name, v: unitValue });
+      itemIndex.set(name, index);
+    }
+    return index;
+  };
+  const bosses = {};
+  for (const boss of GROUP_BOSSES) {
+    const stats = await monster(boss.page);
+    const table = [];
+    let version = "";
+    // The boss's own table, then its lair chest's: the chest is opened after every kill.
+    for (const page of [boss.page, ...(boss.chest ? [boss.chest] : [])]) {
+    const raw = await bucket(
+      `bucket('dropsline').select('page_name','item_name','drop_json').where('page_name',${lua(page)}).limit(1000).run()`,
+    );
+    const rows = raw.map((row) => ({ item: row.item_name, json: JSON.parse(row.drop_json) }));
+    if (rows.length === 0) throw new Error(`${page}: the dropsline bucket has no rows for this page`);
+    // The members' table (or the fullest one), never the free-to-play one.
+    const versions = [...new Set(rows.map((row) => row.json["Dropped from"] ?? ""))].filter((v) => !/Free-to-play|F2P/i.test(v));
+    const count = (v) => rows.filter((row) => (row.json["Dropped from"] ?? "") === v).length;
+    const pageVersion = versions.sort((a, b) => count(b) - count(a))[0];
+    if (page === boss.page) version = pageVersion;
+    for (const row of rows) {
+      const j = row.json;
+      // Rows with no version are the page's shared tables and belong to every version.
+      const from = j["Dropped from"] ?? "";
+      if (from !== pageVersion && from !== page && from !== "") continue;
+      const item = (j["Dropped item"] || row.item).replace(/#.*$/, "");
+      if (EXCLUDED_ITEM.test(item) || /key$/i.test(item)) continue;
+      const p = rarityToP(j.Rarity);
+      if (p === null) continue;
+      const quantityText = String(j["Drop Quantity"] ?? "");
+      const numbers = quantityText.replace(/,/g, "").match(/\d+/g)?.map(Number) ?? [1];
+      const low = typeof j["Quantity Low"] === "number" ? j["Quantity Low"] : numbers[0];
+      const high = typeof j["Quantity High"] === "number" ? j["Quantity High"] : (numbers[1] ?? numbers[0]);
+      const rolls = typeof j.Rolls === "number" && j.Rolls > 0 ? j.Rolls : 1;
+      let unitValue = 0;
+      if (item === "Coins") unitValue = 1;
+      else if (typeof j["Drop Value"] === "number" && j["Drop Value"] > 0) unitValue = Math.round(j["Drop Value"]);
+      else if (prices.has(item)) unitValue = prices.get(item);
+      table.push([indexOf(item, unitValue), sig8(p), low, high, rolls, /noted/i.test(quantityText) ? 1 : 0]);
+    }
+    }
+    console.log(
+      `  ${boss.page} [${version}]: combat ${stats.combat}, ${stats.hitpoints} hp, def ${stats.def} (stab ${stats.dstab} slash ${stats.dslash} crush ${stats.dcrush}); ${table.length} rows`,
+    );
+    bosses[boss.key] = { stats, version, rows: table };
+  }
+  const out = { fetchedAt: new Date().toISOString(), source: "https://oldschool.runescape.wiki (Infobox Monster, dropsline bucket)", items, bosses };
+  writeFileSync(new URL("../config/bosses.json", import.meta.url), JSON.stringify(out));
+  console.log(`wrote config/bosses.json: ${Object.keys(bosses).length} bosses, ${items.length} distinct items`);
+}
+
+// ── Phase: gear.json ───────────────────────────────────────────────
+
+/** The wiki's equipment bonuses for every wearable drop that counts in a session. */
+async function fetchGear() {
+  const items = {};
+  for (const gear of GEAR.filter((g) => g.stats && g.slot !== "head")) {
+    const b = await bonuses(gear.item);
+    items[itemKey(gear.item)] = { name: gear.item, ...b };
+    console.log(`  ${gear.item}: stab ${b.astab} slash ${b.aslash} crush ${b.acrush} str ${b.str} speed ${b.speed ?? "-"} · def ${b.dstab}/${b.dslash}/${b.dcrush}`);
+  }
+  const out = { fetchedAt: new Date().toISOString(), source: "https://oldschool.runescape.wiki (Infobox Bonuses)", items };
+  writeFileSync(new URL("../config/gear.json", import.meta.url), JSON.stringify(out, null, 1));
+  console.log(`wrote config/gear.json: ${Object.keys(items).length} items`);
+}
+
 // ── Phase: quests.json ─────────────────────────────────────────────
 
 /** Bullets that describe a fight the quest does not require. */
@@ -728,7 +917,10 @@ async function fetchQuests() {
 // ── Main ───────────────────────────────────────────────────────────
 
 const flags = process.argv.slice(2);
-const all = !flags.some((f) => ["--osrs", "--drops", "--quests"].includes(f));
+const all = !flags.some((f) => ["--osrs", "--drops", "--quests", "--spoils", "--gear", "--bosses"].includes(f));
 if (all || flags.includes("--osrs")) await fetchOsrs();
 if (all || flags.includes("--drops")) await fetchDrops();
 if (all || flags.includes("--quests")) await fetchQuests();
+if (all || flags.includes("--spoils")) await fetchSpoils();
+if (all || flags.includes("--gear")) await fetchGear();
+if (all || flags.includes("--bosses")) await fetchBosses();

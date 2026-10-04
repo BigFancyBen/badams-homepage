@@ -177,6 +177,54 @@ export function casketImageUrl(
   return signedUrl(env, `casket/${clueId}`, { ...payload, ...retryField(attempt) });
 }
 
+/** The card for a spoils pick: the headline, the container drawn large, and what came out. */
+export interface SpoilsCardPayload {
+  n: string;
+  t: string;
+  sub: string;
+  /** The icon drawn large: the jar, the key, the book, the crate. */
+  big: string;
+  tier?: string;
+  loot: { k: string; c: number }[];
+  v?: number;
+  d: string;
+}
+
+export function spoilsImageUrl(env: Env, spoilsId: number, payload: SpoilsCardPayload, attempt = 0): Promise<string> {
+  return signedUrl(env, `spoils/${spoilsId}`, { ...payload, ...retryField(attempt) });
+}
+
+/** The diary card: every tier's bar, and the open tier's tasks. */
+export interface DiaryCardPayload {
+  n: string;
+  tiers: { k: string; n: string; done: number; of: number; paid: boolean; lamp: number }[];
+  /** The open tier's tasks: label, have, goal. */
+  tasks: { l: string; h: number; g: number }[];
+  open?: string;
+  d: string;
+}
+
+export function diaryImageUrl(env: Env, playerId: string, payload: DiaryCardPayload, attempt = 0): Promise<string> {
+  return signedUrl(env, `diary/${playerId}`, { ...payload, ...retryField(attempt) });
+}
+
+/** The gear card: every slot worn, the wardrobe count and what is being chased. */
+export interface GearCardPayload {
+  n: string;
+  /** Slot label, item key, item name. */
+  slots: { s: string; k: string; n: string }[];
+  own: number;
+  of: number;
+  chase?: string;
+  ti?: string;
+  cb: number;
+  d: string;
+}
+
+export function gearImageUrl(env: Env, playerId: string, payload: GearCardPayload, attempt = 0): Promise<string> {
+  return signedUrl(env, `gear/${playerId}`, { ...payload, ...retryField(attempt) });
+}
+
 export function levelUpImageUrl(
   env: Env,
   playerId: string,

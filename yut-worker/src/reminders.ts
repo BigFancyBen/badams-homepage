@@ -1,9 +1,13 @@
 import { FRESH_WINDOW_DAYS, LAMP_AUTO_RUB_DAYS, LAMP_REMINDER_DAYS, SHOP, SLAYER_SKIP_COST } from "./config.ts";
-import { openClaimCounts, unspentLampCounts } from "./db.ts";
+import { isFresh, openClaimCounts, unspentLampCounts } from "./db.ts";
 import { escapeMarkdown } from "./discord.ts";
 import { daysBetween } from "./schedule.ts";
 import type { Env, Player } from "./types.ts";
 import { ballotsFor, openVotes } from "./votes.ts";
+import { waitingSpoilsCounts } from "./spoils.ts";
+import { farmNudges } from "./farm.ts";
+import { kingdomNudges } from "./kingdom.ts";
+import { gameWeek } from "./schedule.ts";
 
 /**
  * The evening reminders: what a player is sitting on that only they can
@@ -22,7 +26,10 @@ export interface Nudge {
 }
 
 export interface Reminders {
+  /** What the channel reads by name: only what concerns the group (votes not cast). */
   nudges: Nudge[];
+  /** How many players have something of their own waiting. They are told privately, on their own to-do list. */
+  waiting?: number;
   /** Players whose last check-in was three days ago: tomorrow is day four, and stale. */
   goingStale: Player[];
 }
@@ -39,16 +46,24 @@ export function goingStale(roster: Player[], today: string): Player[] {
 }
 
 export async function composeReminders(env: Env, today: string, roster: Player[]): Promise<Reminders> {
-  return { nudges: await composeNudges(env, today, roster), goingStale: goingStale(roster, today) };
+  const { nudges, waiting } = await composeNudges(env, today, roster);
+  return { nudges, waiting, goingStale: goingStale(roster, today) };
 }
 
-async function composeNudges(env: Env, today: string, roster: Player[]): Promise<Nudge[]> {
-  if (roster.length === 0) return [];
+async function composeNudges(env: Env, today: string, roster: Player[]): Promise<{ nudges: Nudge[]; waiting: number }> {
+  if (roster.length === 0) return { nudges: [], waiting: 0 };
   const ids = new Set(roster.map((p) => p.discord_id));
+  // A player's own business — lamps, spoils, crops, the kingdom, points — is
+  // counted here and told to them alone (todo.ts). Only `shout` reaches the channel.
   const bits = new Map<string, string[]>();
+  const shouted = new Map<string, string[]>();
   const add = (id: string, bit: string) => {
     if (!ids.has(id)) return;
     bits.set(id, [...(bits.get(id) ?? []), bit]);
+  };
+  const shout = (id: string, bit: string) => {
+    if (!ids.has(id)) return;
+    shouted.set(id, [...(shouted.get(id) ?? []), bit]);
   };
 
   for (const row of await unspentLampCounts(env)) {
@@ -58,6 +73,26 @@ async function composeNudges(env: Env, today: string, roster: Player[]): Promise
       bit += ` (one rubs itself ${rubsIn <= 1 ? "tomorrow" : `in ${rubsIn} days`})`;
     }
     add(row.player_id, bit);
+  }
+
+  // Only somebody who can still pick is told: a stale player's spoils wait for their next check-in.
+  const fresh = new Set(roster.filter((p) => isFresh(p, today)).map((p) => p.discord_id));
+  for (const row of await waitingSpoilsCounts(env)) {
+    if (fresh.has(row.player_id)) add(row.player_id, "spoils to pick (`/spoils`)");
+  }
+
+  // The daily and weekly things, for players who can still do them today.
+  try {
+    for (const id of await farmNudges(env, today, Date.now())) if (fresh.has(id)) add(id, "crops ready (`/farm`)");
+    for (const [id, bit] of await kingdomNudges(env, today)) if (fresh.has(id)) add(id, bit);
+    for (const player of roster) {
+      // Tears are weekly, so they are only worth a line when the week is running out.
+      if (fresh.has(player.discord_id) && player.tears_week !== gameWeek(today) && daysBetween(gameWeek(today), today) >= 5) {
+        add(player.discord_id, "Tears of Guthix before Monday (`/tears`)");
+      }
+    }
+  } catch {
+    // The reminders go out without them.
   }
 
   for (const player of roster) {
@@ -77,7 +112,7 @@ async function composeNudges(env: Env, today: string, roster: Player[]): Promise
         (v) => !ballots.some((b) => b.vote_id === v.id && b.player_id === player.discord_id)
       );
       if (missing.length > 0) {
-        add(
+        shout(
           player.discord_id,
           `hasn't voted (${missing.map((v) => `${v.title} closes <t:${Math.floor(v.closes_at / 1000)}:R>`).join("; ")})`
         );
@@ -89,9 +124,12 @@ async function composeNudges(env: Env, today: string, roster: Player[]): Promise
     add(row.player_id, `${row.n === 1 ? "a reward" : `${row.n} rewards`} waiting on a check-in`);
   }
 
-  return roster
-    .filter((p) => bits.has(p.discord_id))
-    .map((p) => ({ playerId: p.discord_id, name: p.username, bits: bits.get(p.discord_id) ?? [] }));
+  return {
+    nudges: roster
+      .filter((p) => shouted.has(p.discord_id))
+      .map((p) => ({ playerId: p.discord_id, name: p.username, bits: shouted.get(p.discord_id) ?? [] })),
+    waiting: roster.filter((p) => bits.has(p.discord_id)).length,
+  };
 }
 
 /** The message, or null when there is nobody to remind and nobody going stale. */
@@ -99,17 +137,33 @@ export function reminderMessage(
   reminders: Reminders
 ): { content: string; allowed_mentions: { parse: never[]; users: string[]; replied_user: false } } | null {
   const { nudges, goingStale: stale } = reminders;
-  if (nudges.length === 0 && stale.length === 0) return null;
-  const lines = ["🔔 **Evening reminders**", ...nudges.map((n) => `• **${escapeMarkdown(n.name)}** — ${n.bits.join(" · ")}`)];
-  if (stale.length > 0) {
-    if (nudges.length > 0) lines.push("");
-    lines.push(
-      `⚠️ ${stale.map((p) => `<@${p.discord_id}>`).join(", ")} — three days without a workout. ` +
+  const waiting = reminders.waiting ?? 0;
+  if (nudges.length === 0 && stale.length === 0 && waiting === 0) return null;
+  // The stale warning is the line that must arrive, so the nudges are what gets cut to fit.
+  const warning =
+    stale.length > 0
+      ? `⚠️ ${stale.map((p) => `<@${p.discord_id}>`).join(", ")} — three days without a workout. ` +
         `Tomorrow makes four, and the game stops listening until you check in.`
+      : "";
+  const lines = ["🔔 **Evening reminders**"];
+  let room = 1900 - lines[0].length - warning.length - 2;
+  for (const nudge of nudges) {
+    const line = `• **${escapeMarkdown(nudge.name)}** — ${nudge.bits.join(" · ")}`;
+    if (line.length + 1 > room) break;
+    lines.push(line);
+    room -= line.length + 1;
+  }
+  if (waiting > 0) {
+    lines.push(
+      `📋 ${waiting === 1 ? "One player has" : `${waiting} players have`} things waiting. Press **My to-do** on the morning post (or \`/todo\`): only you see yours.`
     );
   }
+  if (warning) {
+    if (lines.length > 1) lines.push("");
+    lines.push(warning);
+  }
   return {
-    content: lines.join("\n").slice(0, 1900),
+    content: lines.join("\n").slice(0, 1990),
     // The only message that mentions anyone by id: the players going stale.
     allowed_mentions: { parse: [], users: stale.map((p) => p.discord_id), replied_user: false },
   };

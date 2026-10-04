@@ -8,12 +8,15 @@ import {
   HITPOINTS_XP_PER_DAMAGE,
   INVENTORY_FOOD,
   PLAYER_ATTACK_SPEED,
+  POTION_DOSES,
   PRAYERS,
   SESSION_ATTACKS,
   SESSION_MIN_FRACTION,
   SLAYER_HELMET_MULTIPLIER,
   STYLE_BONUS,
+  TICK_SECONDS,
   type CombatStyle,
+  type GeItem,
   type SkillKey,
 } from "./config.ts";
 
@@ -144,9 +147,25 @@ export function hitChance(attackRoll: number, defenceRoll: number): number {
   return attackRoll / (2 * (defenceRoll + 1));
 }
 
+/** The wiki's equipment bonuses for one item. */
+export interface GearBonuses {
+  astab: number;
+  aslash: number;
+  acrush: number;
+  dstab: number;
+  dslash: number;
+  dcrush: number;
+  str: number;
+  speed?: number | null;
+}
+
 export interface Gear {
   slayerHelmet: boolean;
   glory: boolean;
+  /** A dropped weapon worn in place of the scimitar the Attack level picks. */
+  weapon?: GearBonuses & { key: string; name: string };
+  /** Bonuses from the slots the armour sets leave empty (boots). */
+  extra?: GearBonuses;
 }
 
 export interface SessionInput {
@@ -156,6 +175,33 @@ export interface SessionInput {
   monster: Monster;
   /** Fraction of a full session, from the weekly ordinal. */
   weight: number;
+  /** Levels added by a potion, already averaged over the session (potionBoost). */
+  boost?: Boost;
+  /** What a bite of the food in the inventory heals; a lobster's 12 unless something better was packed. */
+  foodHeal?: number;
+}
+
+export type Boost = Partial<Record<"attack" | "strength" | "defence", number>>;
+
+/**
+ * What a four-dose potion is worth across a session. A dose lifts the level
+ * by the wiki's flat part plus a fraction of the level, and the boost drains
+ * a level a minute; four doses sipped evenly across the session leave the
+ * boost's average over the minutes between sips (it cannot drain below
+ * nothing), rounded to a level.
+ */
+export function potionBoost(levels: Levels, potion: NonNullable<GeItem["boost"]>, weight: number): Boost {
+  const attacks = Math.max(1, Math.round(SESSION_ATTACKS * weight));
+  const minutes = (attacks * PLAYER_ATTACK_SPEED * TICK_SECONDS) / 60;
+  const between = minutes / POTION_DOSES;
+  const boost: Boost = {};
+  for (const skill of potion.skills) {
+    const full = potion.flat + Math.floor(levels[skill] * potion.fraction);
+    // Draining a level a minute from `full`: a wedge if it runs out before the next sip, a trapezium if not.
+    const average = full >= between ? full - between / 2 : (full * full) / (2 * between);
+    boost[skill] = Math.max(0, Math.round(average));
+  }
+  return boost;
 }
 
 export interface Session {
@@ -186,7 +232,8 @@ export function offence(
   levels: Levels,
   style: CombatStyle,
   gear: Gear,
-  opponent: Pick<Monster, "def" | "dslash">
+  opponent: Pick<Monster, "def" | "dslash"> & Partial<Pick<Monster, "dstab" | "dcrush">>,
+  boost: Boost = {}
 ): {
   weapon: Weapon;
   armour: Armour;
@@ -195,8 +242,28 @@ export function offence(
   hitChance: number;
   effectiveDefence: number;
   gloryDef: number;
+  /** Ticks between swings: four for a scimitar. */
+  speed: number;
 } {
-  const weapon = weaponFor(levels.attack);
+  const scimitar = weaponFor(levels.attack);
+  // A worn drop swings with its best attack bonus against the matching
+  // defence; the scimitar slashes, as it always has.
+  let weapon: Weapon = scimitar;
+  let attackBonus = scimitar.aslash;
+  let opponentDefence = opponent.dslash;
+  let speed = PLAYER_ATTACK_SPEED;
+  if (gear.weapon) {
+    const g = gear.weapon;
+    weapon = { key: g.key, name: g.name, attack: 0, aslash: g.aslash, str: g.str };
+    const options: [number, number][] = [
+      [g.aslash, opponent.dslash],
+      [g.astab, opponent.dstab ?? opponent.dslash],
+      [g.acrush, opponent.dcrush ?? opponent.dslash],
+    ];
+    [attackBonus, opponentDefence] = options.reduce((best, option) => (option[0] > best[0] ? option : best));
+    speed = g.speed && g.speed > 0 ? g.speed : PLAYER_ATTACK_SPEED;
+  }
+  const extraStr = gear.extra?.str ?? 0;
   const armour = armourFor(levels.defence);
   const prayer = bestPrayers(levels.prayer);
   const bonus = STYLE_BONUS[style];
@@ -205,17 +272,18 @@ export function offence(
   const gloryStr = gear.glory ? GLORY.str : 0;
   const gloryDef = gear.glory ? GLORY.dslash : 0;
 
-  // Effective levels: floor(level × prayer) + 8 + the style bonus.
-  const effectiveAttack = Math.floor(levels.attack * prayer.attack) + 8 + (bonus.attack ?? 0);
-  const effectiveStrength = Math.floor(levels.strength * prayer.strength) + 8 + (bonus.strength ?? 0);
-  const effectiveDefence = Math.floor(levels.defence * prayer.defence) + 8 + (bonus.defence ?? 0);
+  // Effective levels: floor((level + potion boost) × prayer) + 8 + the style
+  // bonus. A boost never changes what can be wielded or worn.
+  const effectiveAttack = Math.floor((levels.attack + (boost.attack ?? 0)) * prayer.attack) + 8 + (bonus.attack ?? 0);
+  const effectiveStrength = Math.floor((levels.strength + (boost.strength ?? 0)) * prayer.strength) + 8 + (bonus.strength ?? 0);
+  const effectiveDefence = Math.floor((levels.defence + (boost.defence ?? 0)) * prayer.defence) + 8 + (bonus.defence ?? 0);
 
   const maxHit = Math.floor(
-    Math.floor(0.5 + (effectiveStrength * (weapon.str + armour.str + gloryStr + 64)) / 640) * helm
+    Math.floor(0.5 + (effectiveStrength * (weapon.str + armour.str + gloryStr + extraStr + 64)) / 640) * helm
   );
-  const attackRoll = Math.floor(effectiveAttack * (weapon.aslash + gloryAttack + 64) * helm);
-  const defenceRoll = (opponent.def + 9) * (opponent.dslash + 64);
-  return { weapon, armour, prayer, maxHit, hitChance: hitChance(attackRoll, defenceRoll), effectiveDefence, gloryDef };
+  const attackRoll = Math.floor(effectiveAttack * (attackBonus + gloryAttack + 64) * helm);
+  const defenceRoll = (opponent.def + 9) * (opponentDefence + 64);
+  return { weapon, armour, prayer, maxHit, hitChance: hitChance(attackRoll, defenceRoll), effectiveDefence, gloryDef, speed };
 }
 
 /**
@@ -230,44 +298,73 @@ export function questFight(
   enemy: Pick<Monster, "def" | "dslash">,
   attacks: number
 ): number {
-  const { maxHit, hitChance: chance } = offence(levels, style, gear, enemy);
-  return Math.floor(attacks * chance * (maxHit / 2));
+  const { maxHit, hitChance: chance, speed } = offence(levels, style, gear, enemy);
+  return Math.floor(attacks * (PLAYER_ATTACK_SPEED / speed) * chance * (maxHit / 2));
 }
 
 export function simulateSession(input: SessionInput): Session {
   const { levels, style, gear, monster } = input;
-  const { weapon, armour, prayer, maxHit, hitChance: chance, effectiveDefence, gloryDef } = offence(
+  const { weapon, armour, prayer, maxHit, hitChance: chance, effectiveDefence, gloryDef, speed } = offence(
     levels,
     style,
     gear,
-    monster
+    monster,
+    input.boost
   );
-  const damagePerAttack = chance * (maxHit / 2);
+  const foodHeal = input.foodHeal ?? FOOD_HEAL;
+  // A session is measured in four-tick swings; a slower weapon makes fewer of them.
+  const damagePerAttack = chance * (maxHit / 2) * (PLAYER_ATTACK_SPEED / speed);
 
   // What the monster does back, which is what decides how long the food lasts.
   const monsterAttackRoll = (monster.att + 9) * (monster.attbns + 64);
+  const extra = gear.extra;
   const armourDefence =
-    monster.style === "stab" ? armour.dstab : monster.style === "slash" ? armour.dslash : armour.dcrush;
-  const playerDefenceRoll = effectiveDefence * (armourDefence + gloryDef + 64);
-  const monsterChance = hitChance(monsterAttackRoll, playerDefenceRoll);
-  const takenPerMonsterAttack = monsterChance * (monster.maxHit / 2);
+    monster.style === "stab"
+      ? armour.dstab + (extra?.dstab ?? 0)
+      : monster.style === "slash"
+        ? armour.dslash + (extra?.dslash ?? 0)
+        : armour.dcrush + (extra?.dcrush ?? 0);
   const monsterAttacksPerPlayerAttack = PLAYER_ATTACK_SPEED / Math.max(1, monster.speed);
-  const takenPerAttack = takenPerMonsterAttack * monsterAttacksPerPlayerAttack;
+  const takenWith = (defence: number) =>
+    hitChance(monsterAttackRoll, defence * (armourDefence + gloryDef + 64)) * (monster.maxHit / 2) * monsterAttacksPerPlayerAttack;
+  const takenPerAttack = takenWith(effectiveDefence);
 
   // A session is a fixed stretch of time. Damage taken costs some of it:
   // three ticks to eat each lobster, and a trip to the bank when the
   // inventory is empty. Better armour and Defence keep more of the time.
   const attacksPlanned = Math.max(1, Math.round(SESSION_ATTACKS * input.weight));
-  let attacks = attacksPlanned;
-  let foodEaten = 0;
-  let bankTrips = 0;
-  for (let pass = 0; pass < 4; pass++) {
-    const taken = attacks * takenPerAttack;
-    foodEaten = Math.floor(Math.max(0, taken - levels.hitpoints) / FOOD_HEAL);
-    bankTrips = Math.floor(foodEaten / INVENTORY_FOOD);
-    const overhead = (foodEaten * EAT_TICKS) / PLAYER_ATTACK_SPEED + bankTrips * BANK_TRIP_ATTACKS;
-    attacks = Math.max(Math.round(attacksPlanned * SESSION_MIN_FRACTION), Math.round(attacksPlanned - overhead));
+  const floor = Math.round(attacksPlanned * SESSION_MIN_FRACTION);
+  /** The food eaten, the bank trips and the swings they cost, for a session of `swings` swings. */
+  const cost = (swings: number, taken: number, heal: number) => {
+    const food = Math.floor(Math.max(0, swings * taken - levels.hitpoints) / heal);
+    const trips = Math.floor(food / INVENTORY_FOOD);
+    return { food, trips, overhead: (food * EAT_TICKS) / PLAYER_ATTACK_SPEED + trips * BANK_TRIP_ATTACKS };
+  };
+  /** The session on lobsters, as it has always been worked out: four passes from the full length. */
+  const onLobsters = (taken: number) => {
+    let swings = attacksPlanned;
+    for (let pass = 0; pass < 4; pass++) {
+      swings = Math.max(floor, Math.round(attacksPlanned - cost(swings, taken, FOOD_HEAL).overhead));
+    }
+    return swings;
+  };
+
+  let attacks = onLobsters(takenPerAttack);
+  if (input.boost || input.foodHeal) {
+    // Something was bought for this session. The longest session the food
+    // can pay for, found exactly — and never shorter than the session the
+    // player would have had with nothing packed: gold cannot make it worse.
+    let low = floor;
+    let high = attacksPlanned;
+    while (low < high) {
+      const mid = Math.ceil((low + high) / 2);
+      if (mid + cost(mid, takenPerAttack, foodHeal).overhead <= attacksPlanned) low = mid;
+      else high = mid - 1;
+    }
+    const unpacked = onLobsters(takenWith(offence(levels, style, gear, monster).effectiveDefence));
+    attacks = Math.max(low, unpacked);
   }
+  const { food: foodEaten, trips: bankTrips } = cost(attacks, takenPerAttack, foodHeal);
 
   const damage = Math.floor(attacks * damagePerAttack);
   const kills = Math.max(1, Math.floor(damage / Math.max(1, monster.hitpoints)));
@@ -321,12 +418,15 @@ export function drawAssignment(
   rng: () => number,
   master: SlayerMaster,
   slayerLevel: number,
-  combat: number
+  combat: number,
+  /** Monster keys the player has blocked. */
+  blocked: string[] = []
 ): { assignment: SlayerAssignment; monster: Monster; amount: number } {
   const legal = master.tasks.filter((task) => {
     const monster = MONSTERS[task.monster];
     return (
       monster &&
+      !blocked.includes(task.monster) &&
       slayerLevel >= (monster.slayerLevel ?? 1) &&
       slayerLevel >= (task.slayerReq ?? 1) &&
       combat >= (task.combatReq ?? 1)
@@ -355,6 +455,6 @@ export function pluralName(assignment: SlayerAssignment): string {
 }
 
 export function levelsOf(xp: Partial<Record<SkillKey, number>>, levelForXp: (xp: number) => number): Levels {
-  const keys: SkillKey[] = ["hitpoints", "attack", "strength", "defence", "prayer", "slayer", "woodcutting", "mining", "fishing"];
+  const keys: SkillKey[] = ["hitpoints", "attack", "strength", "defence", "prayer", "slayer", "woodcutting", "mining", "fishing", "farming"];
   return Object.fromEntries(keys.map((key) => [key, levelForXp(xp[key] ?? 0)])) as Levels;
 }

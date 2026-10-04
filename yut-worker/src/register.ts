@@ -1,5 +1,6 @@
 import choices from "../config/choices.json" with { type: "json" };
-import { BUILDINGS, EXPEDITION_MAX_WEEKS, EXPEDITION_MIN_WEEKS, MAX_NOTE_LENGTH } from "./config.ts";
+import { BUILDINGS, EXPEDITION_MAX_WEEKS, EXPEDITION_MIN_WEEKS, GEAR_SLOTS, KINGDOM_JOBS, KINGDOM_SUBJECTS, MAX_NOTE_LENGTH } from "./config.ts";
+import { MASTERS } from "./combat.ts";
 
 const BUILDING_CHOICES = BUILDINGS.filter((b) => b.key !== "town_hall").map((b) => ({ name: b.name, value: b.key }));
 
@@ -86,6 +87,72 @@ export const COMMANDS = [
   { name: "clue", description: "Your clue scroll" },
   { name: "log", description: "Your collection log" },
   { name: "bank", description: "Your bank: what your kills have dropped, by value" },
+  { name: "spoils", description: "Your check-in's pick of three, today's container, and the jars and chests you have opened" },
+  { name: "ge", description: "The Grand Exchange: spend your bank on potions, food and bones" },
+  { name: "diary", description: "Your Achievement Diary: four tiers of tasks, a lamp for each" },
+  {
+    name: "gear",
+    description: "What you wear: gear and looks from Slayer drops and clue caskets",
+    options: [
+      { type: 1, name: "view", description: "Your gear and wardrobe" },
+      {
+        type: 1,
+        name: "wear",
+        description: "Wear something you own, or take it off",
+        options: [{ type: 3, name: "item", description: "Its name, or part of it", required: true }],
+      },
+      {
+        type: 1,
+        name: "chase",
+        description: "Chase one item: its drop rate is doubled for you",
+        options: [{ type: 3, name: "item", description: "Its name, or part of it", required: true }],
+      },
+      {
+        type: 1,
+        name: "catalogue",
+        description: "Everything there is to wear, and where it drops",
+        options: [
+          {
+            type: 3,
+            name: "slot",
+            description: "One slot, with drop sources",
+            choices: GEAR_SLOTS.map((slot) => ({ name: slot, value: slot })),
+          },
+        ],
+      },
+      { type: 1, name: "show", description: "Post your gear card to the channel" },
+    ],
+  },
+  { name: "farm", description: "Your farm: three patches, one run a day" },
+  {
+    name: "kingdom",
+    description: "Managing Miscellania: your subjects, the coffer, and what they have gathered",
+    options: [
+      { type: 1, name: "status", description: "Approval, the coffer, and what is waiting" },
+      { type: 1, name: "collect", description: "Bank what your subjects have gathered" },
+      {
+        type: 1,
+        name: "assign",
+        description: `Split your ${KINGDOM_SUBJECTS} subjects across the jobs`,
+        options: KINGDOM_JOBS.map((job) => ({ type: 4, name: job.key, description: `Subjects on ${job.name.toLowerCase()}`, min_value: 0, max_value: KINGDOM_SUBJECTS })),
+      },
+      {
+        type: 1,
+        name: "fund",
+        description: "Put coins from your bank in the coffer",
+        options: [{ type: 4, name: "gp", description: "How many coins", required: true, min_value: 1 }],
+      },
+      {
+        type: 1,
+        name: "withdraw",
+        description: "Take coins back out of the coffer",
+        options: [{ type: 4, name: "gp", description: "How many coins", required: true, min_value: 1 }],
+      },
+    ],
+  },
+  { name: "tears", description: "Tears of Guthix: once a week, XP in your lowest skill" },
+  { name: "boss", description: "The boss of the week: the group's shared fight" },
+  { name: "todo", description: "What is waiting on you. Only you see it" },
   {
     name: "quest",
     description: "The quest of the week",
@@ -133,6 +200,22 @@ export const COMMANDS = [
       { type: 1, name: "skip", description: "Skip the task for 30 Slayer points" },
       { type: 1, name: "xp", description: "10,000 Slayer XP for 100 Slayer points" },
       { type: 1, name: "helmet", description: "The Slayer helmet (+16% on task) and the title Slayer Master, 400 points" },
+      { type: 1, name: "block", description: "Block the current task for good, 100 Slayer points" },
+      { type: 1, name: "unblock", description: "Clear your block list" },
+      {
+        type: 1,
+        name: "master",
+        description: "Choose which Slayer master assigns your tasks",
+        options: [
+          {
+            type: 3,
+            name: "name",
+            description: "Any master you qualify for",
+            required: true,
+            choices: [{ name: "The best I qualify for", value: "best" }, ...MASTERS.map((master) => ({ name: `${master.name} (combat ${master.combat})`, value: master.key }))],
+          },
+        ],
+      },
     ],
   },
   { name: "shop", description: "Spend bingo points" },

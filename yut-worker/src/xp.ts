@@ -2,6 +2,7 @@ import {
   CLUE_TIERS,
   LAMP_MAX,
   LAMP_MIN,
+  BOOK_XP_PER_LEVEL,
   LAMP_PER_LEVEL,
   LEVEL_CAP,
   ORDINAL_WEIGHTS,
@@ -97,6 +98,17 @@ export function clueTierForMonster(monsterCombat: number): ClueTier {
 }
 
 /** What a genie's lamp is worth rubbed into a skill at this level: ten times the level. */
+export function bookXp(skillLevel: number): number {
+  return BOOK_XP_PER_LEVEL * Math.max(1, skillLevel);
+}
+
+/** What a lamp pays into a skill at this level: a genie's and a Book of knowledge scale with the level, an antique lamp is fixed. */
+export function lampWorth(lamp: { xp: number; source: string }, skillLevel: number): number {
+  if (lamp.source === "genie") return lampXp(skillLevel);
+  if (lamp.source === "book") return bookXp(skillLevel);
+  return lamp.xp;
+}
+
 export function lampXp(skillLevel: number): number {
   return Math.max(LAMP_MIN, Math.min(LAMP_MAX, LAMP_PER_LEVEL * skillLevel));
 }

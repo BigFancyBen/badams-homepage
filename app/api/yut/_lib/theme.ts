@@ -71,6 +71,7 @@ export const SKILL_LABEL: Record<string, string> = {
   defence: "Defence",
   slayer: "Slayer",
   woodcutting: "Woodcutting",
+  farming: "Farming",
 };
 
 export function skillLabel(key: string): string {

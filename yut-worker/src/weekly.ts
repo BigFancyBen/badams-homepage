@@ -32,7 +32,7 @@ import { actForWeek, addDays, campaignWeek, daysBetween, gameWeek, weekdayOf } f
 import { renderCard, standingsImageUrl } from "./sheet.ts";
 import { resolveWeek } from "./streaks.ts";
 import type { Env, Player } from "./types.ts";
-import { lampXp, levelForXp, tierForDefence } from "./xp.ts";
+import { lampWorth, levelForXp, tierForDefence } from "./xp.ts";
 import { combatLevel, levelsOf } from "./combat.ts";
 import { founding } from "./town.ts";
 import { drawRelics, getRelics } from "./relics.ts";
@@ -274,7 +274,7 @@ export async function autoRubLamps(env: Env, today: string, now: number): Promis
   for (const lamp of await staleLamps(env, addDays(today, -LAMP_AUTO_RUB_DAYS))) {
     const hp = levelForXp(skills.get(lamp.player_id)?.hitpoints ?? 0);
     const relicsHeld = await getRelics(env);
-    const xp = Math.floor((lamp.source === "genie" ? lampXp(hp) : lamp.xp) * (relicsHeld.has("treasure_seeker") ? TREASURE_SEEKER_MULTIPLIER : 1));
+    const xp = Math.floor(lampWorth(lamp, hp) * (relicsHeld.has("treasure_seeker") ? TREASURE_SEEKER_MULTIPLIER : 1));
     if (await spendLamp(env, lamp.id, "hitpoints", now)) {
       await addXp(env, lamp.player_id, "hitpoints", xp);
       await env.DB.batch([

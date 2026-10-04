@@ -46,6 +46,14 @@ src/
   register.ts     the command list Discord is told about.
   checkins.ts     the check-in transaction: the session, the haul, and everything a check-in can produce.
   loot.ts         the kills' drops, rolled per kill against config/drops.json — pure. bank.ts /bank.
+  spoils.ts       the pick of three a check-in ends with: the draft, the tiers, the pity counter, opening a jar or a chest against config/spoils.json, /spoils.
+  ge.ts           the Grand Exchange: the bank as a balance, potions and food packed for the next session, bones for Prayer.
+  diary.ts        the Achievement Diary: four tiers read off what the check-ins produced, the lamps, /diary.
+  gear.ts         what is worn: the catalogue, ownership, the session's gear, drop sources, the adapted rates, /gear.
+  kingdom.ts      Managing Miscellania: the kingdom worked through day by day when it is next looked at, /kingdom.
+  farm.ts         the farm run and the Tears of Guthix, /farm and /tears.
+  bosses.ts       the boss of the week: the shared bar, a check-in's swing, the rolls, the fall, /boss.
+  todo.ts         a player's private to-do list, shown only on replies to their own presses.
   quests.ts       the Quest of the Week: the calendar's quest, supplies, mini-fights, completion, /quest.
   reminders.ts    the evening reminders and the going-stale @mention.
   combat.ts       Old School's combat as arithmetic: combat level, max hit, accuracy, the session, the quest mini-fight, masters and assignments — pure.
@@ -61,11 +69,14 @@ src/
   votes.ts        group votes (build, relic, raid). relics.ts the relics. raids.ts raid weeks.
   actions.ts      the town buttons and vote handlers. bingo.ts the grids. shop.ts the shop.
   db.ts           every D1 query. discord.ts the REST client. roles.ts the opt-in ping role.
-migrations/       0001 the game, 0002 the town, 0003 votes and raids, 0004 bingo and shop, 0005 sessions and answers, 0006 the bank, 0007 quests. One number per file, forever.
+migrations/       0001 the game, 0002 the town, 0003 votes and raids, 0004 bingo and shop, 0005 sessions and answers, 0006 the bank, 0007 quests, 0008 spoils, the Grand Exchange and the diary, 0009 gear, Slayer choices, the kingdom, the farm and the tears, 0010 the boss of the week. One number per file, forever.
 scripts/          the harness (below), plus fetch-osrs.mjs (the wiki pull: --osrs, --drops, --quests), export-icons.mjs (item sprites from the prog-to-img-endpoint database into the Next app) and calibrate.mjs (the pace).
 config/choices.json  option lists shared by the runtime and the registration script.
 config/osrs.json     the wiki's numbers: masters, assignments, monsters, scimitars, armour sets. Regenerate with `npm run fetch:osrs -- --osrs`.
 config/drops.json    every Slayer monster's real drop table (herb, seed, gem and rare-drop sub-tables expanded) with GE values. `npm run fetch:osrs -- --drops`, then `npm run export:icons` for any new sprites.
+config/spoils.json   the loot table of every impling jar and reward chest in `SPOILS_CONTAINERS`, and the GE prices of what `/ge` sells. `npm run fetch:osrs -- --spoils`, then `npm run export:icons`.
+config/bosses.json   the combat stats and real drop tables (lair chests included) of the bosses in `GROUP_BOSSES`. `npm run fetch:osrs -- --bosses`.
+config/gear.json     the wiki's equipment bonuses for every weapon and boot in `GEAR`. `npm run fetch:osrs -- --gear`.
 config/quests.json   the Quest of the Week calendar's data: difficulty, quest points, enemies with real stats, item counts, blurbs. `npm run fetch:osrs -- --quests`.
 ```
 
@@ -165,7 +176,11 @@ There is no way to fire a cron by hand, so the `/admin/*` routes (all gated
 on `?secret=ADMIN_SECRET`) are the test seams: `tick?at=<ISO>` runs the tick
 with a synthetic clock (`daily=1`, `post=1`, `lastcall=1` force a phase),
 `seed?players=a,b`, `checkin-as?player=&day=&photo=1&post=1`,
-`resolve-week?day=`, `render-sheet?player=`, `register-commands`, and
+`resolve-week?day=`, `render-sheet?player=`, `register-commands`,
+`spoils-as?player=&pick=` (the waiting spoils, or a pick from them),
+`ge-as?player=&item=`, `bank-deposit?player=&gp=`, `bank-item?player=&item=`,
+`diary?player=`, `farm-as?player=&run=1`, `kingdom-as?player=&day=&fund=&collect=1`,
+`tears-as?player=`, `todo?player=`, `boss?day=`, and
 `sql?q=SELECT …` for the harness.
 
 ## Behaviour worth knowing
@@ -243,6 +258,99 @@ with a synthetic clock (`daily=1`, `post=1`, `lastcall=1` force a phase),
   two check-ins a head for a party of four (six for the Grandmasters), and
   `SESSION_ATTACKS` came down from 800 to 600 so two a week still reaches
   Dragon near the finale with the quest lamps counted.
+- **Every check-in ends with a pick of three.** The player's own roll (an
+  impling jar or a reward chest), today's featured container (the same for
+  everybody, named on the morning post), and a sure thing (a Book of
+  knowledge, a supply crate for the camp, a clue bottle). One is taken; the
+  rest are gone. What is inside a container is the wiki's loot table
+  (`config/spoils.json`): a jar is one exclusive roll, as in the game, and a
+  chest with several sub-tables rolls each row at its rate and never comes
+  up empty. Which tier a container sits on (ordered by its real mean worth)
+  and how often a tier comes up (60 / 27 / 10 / 2.5 / 0.5%) are the game's
+  own, in `config.ts`. The draft and the opening are seeded, so a retry
+  offers and opens the same thing. The second check-in of the week is **the
+  week's chest**: its tier is the best of two rolls, three on a four-week
+  Form streak. Past the second check-in the roll stops at uncommon and the
+  featured container is off the table, which keeps two a week the whole
+  game. `players.spoils_dry` counts full-value check-ins without a rare
+  roll; the eighth is rare. Spoils nobody picked open themselves (the roll)
+  at the next check-in. A pick posts a line and a card
+  (`app/api/yut/spoils`) in the day's thread.
+- **The bank is spendable.** `/ge` sells potions and food for the next
+  session and bones for Prayer at the GE's real prices; the balance is the
+  bank's worth less `players.gp_spent`, and nothing leaves the bank. A potion
+  and an inventory of food sit in `players.loadout` until the next check-in
+  uses them. The boosts are the wiki's (+3 and 10%, +5 and 15%), averaged
+  over the minutes between four doses at a level a minute. A session with
+  anything packed is solved exactly (the longest session the food pays for)
+  and is never shorter than the same session with nothing packed; a session
+  with nothing packed is computed as it always was.
+- **The Achievement Diary reads, it does not ask.** Four tiers of tasks
+  (`DIARY` in config.ts) checked against totals the game already keeps;
+  the check-in that completes a tier grants its antique lamp (2,500 / 7,500
+  / 15,000 / 50,000), in order, once (`diary` table). `/diary` is a card
+  (`app/api/yut/diary`) with a text fallback. Every receipt ends with a
+  **Next** line: the week's chest when it is one check-in away, the nearest
+  level, and the closest diary task.
+- **The pace allows for it.** `scripts/lib/pace.mjs` adds a Book of
+  knowledge at every third check-in and each diary tier's lamp, and two a
+  week still reaches Dragon in week 42, inside the test's "not before week
+  40". Potions are not in the pace model; they cost what the drops pay.
+- **Gear is what the task monsters really drop.** `GEAR` in config.ts is a
+  catalogue of 89 wearable items that are already on the drop tables (or are
+  clue uniques). Owned means in the bank, or in the collection log for a
+  clue unique; `players.gear` is what is worn, one per slot. A weapon, boots
+  or the black mask count in the session with the wiki's bonuses
+  (`config/gear.json`) once the game's requirements are met: a worn weapon
+  uses its best attack bonus against the matching defence and swings at its
+  own speed, boots add to strength and defence, the mask is the Slayer
+  helmet's multiplier. Everything else is a look or a trophy. A session with
+  nothing worn is computed exactly as before.
+- **The drop rates are adapted, and say so.** Rows for catalogue items are
+  rolled at `GEAR_RATE_MULTIPLIER` (4) times the wiki's rate, and the one
+  item in `players.wishlist` at `WISHLIST_RATE_MULTIPLIER` (2) times that.
+  Every other row is untouched and the rarity announced is still the
+  wiki's. `/gear catalogue` prints each piece's sources from the tables.
+- **A boss a week, from week one.** `GROUP_BOSSES` rotates Scurrius, Obor
+  and Bryophyta by campaign week. Each check-in, after the session, swings
+  `BOSS_FIGHT_ATTACKS` × its weight at the boss's real defence with the
+  player's gear, and the damage goes into `boss_weeks.damage`. The bar
+  (`hp`) is the active roster × `BOSS_FIGHTS_PER_HEAD` × the roster's mean
+  full fight, fixed when the week's first check-in opens it, so it asks
+  about the same number of check-ins of any roster. The first time a
+  player's own damage for the week reaches the boss's real hitpoints, the
+  boss's table (and its lair chest's) rolls for them, once a week; a roll
+  every fight made the simulated banks six times what the kills pay. The
+  check-in that empties the bar closes the week, gives every
+  player in `boss_hits` `BOSS_CHEST_KILLS` rolls, and posts one channel
+  line. `boss_hits` is keyed on the check-in, so a retry is a no-op.
+- **A player's own reminders are private.** `todo.ts` builds one player's
+  list; it is appended to the receipt, the rest-day reply and the hub, and
+  is behind the morning post's My to-do button and `/todo`. Discord only
+  allows an ephemeral message as the answer to an interaction, so there is
+  no way to push it. The evening channel message now carries only votes not
+  cast (by name), a count of players with things waiting, and the stale
+  @mention.
+- **Slayer choices are the game's.** `/task master` takes any master the
+  player qualifies for (`players.slayer_master`); `/task block` costs 100
+  points, ends the task and keeps that monster off the player's table for
+  good (`players.slayer_blocks`). One block slot, plus one per 50 quest
+  points the group holds, up to six.
+- **Miscellania needs no cron.** `kingdoms` holds the coffer, approval, the
+  split of ten subjects and what is waiting; `advanceKingdom` works through
+  the days since it was last looked at, so the answer is the same whenever
+  that happens. The numbers are the wiki's at a tenth of the size
+  (`KINGDOM_SCALE`): 10% of the coffer a day up to 7,500, 2.5% approval a
+  day down to 25%, and a tenth of the real daily maxima. A check-in adds
+  10% approval × its weight. It stops after thirty days unvisited.
+- **A farm run a day.** `farm_patches` holds what is planted;
+  `players.farm_day` is the claim that makes a run once a game day. Crops
+  never die. Seeds leave the bank at their share of the stack's worth.
+  Farming is a tenth skill: it is in `SKILLS` and the lamp menu and counts
+  to total level, and the sheet's three-by-three grid does not draw it.
+- **Tears of Guthix once a game week** (`players.tears_week`): tears are 60%
+  to 90% of the group's quest points (at least five), each worth the game's
+  10 to 60 XP by the level of the lowest skill.
 - **Slayer tasks are the game's.** Every player always holds a task from the
   highest master their combat level earns (Turael, Mazchna 20, Vannaka 40,
   Chaeldar 70, Nieve 85, Duradel 100 and 50 Slayer), drawn from that

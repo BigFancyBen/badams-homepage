@@ -1,4 +1,6 @@
 import drops from "../config/drops.json" with { type: "json" };
+import spoils from "../config/spoils.json" with { type: "json" };
+import bossData from "../config/bosses.json" with { type: "json" };
 import { MONSTERS } from "./combat.ts";
 import { NOTABLE_RARITY_DENOMINATOR, NOTABLE_VALUE } from "./config.ts";
 
@@ -56,7 +58,11 @@ interface DropsFile {
 
 const FILE = drops as unknown as DropsFile;
 const tables = new Map<string, DropRow[]>();
-const names = new Map(FILE.items.map((item) => [item.k, item.n]));
+/** Names for everything a bank can hold: the kills' drops, and what the spoils' jars and chests pay. */
+const names = new Map([
+  ...(spoils as unknown as { items: { k: string; n: string }[] }).items.map((item) => [item.k, item.n] as [string, string]),
+  ...FILE.items.map((item) => [item.k, item.n] as [string, string]),
+]);
 /** osrs.json keys its monsters by task category; the infobox name can differ ("Cave kraken" is the Whirlpool). */
 const keyByName = new Map(Object.entries(MONSTERS).map(([key, monster]) => [monster.name, key]));
 
@@ -85,6 +91,28 @@ export function dropTable(monster: string): DropRow[] {
   return rows;
 }
 
+/** The item-key rule, as checkins.ts spells it. */
+export function itemKeyOf(name: string): string {
+  if (name === "Amulet of glory (t)") return "glory_t";
+  return name.toLowerCase().replace(/[()']/g, "").replace(/[\s-]+/g, "_").replace(/_+/g, "_").replace(/_$/, "");
+}
+
+const SPOILS = spoils as unknown as { items: { k: string; n: string; v: number }[]; ge: Record<string, number>; priced?: { k: string; n: string }[] };
+for (const item of SPOILS.priced ?? []) if (!names.has(item.k)) names.set(item.k, item.n);
+const BOSS_ITEMS = (bossData as unknown as { items: { k: string; n: string; v: number }[] }).items;
+for (const item of BOSS_ITEMS) if (!names.has(item.k)) names.set(item.k, item.n);
+const values = new Map<string, number>([
+  ...BOSS_ITEMS.map((item) => [item.k, item.v] as [string, number]),
+  ...SPOILS.items.map((item) => [item.k, item.v] as [string, number]),
+  ...FILE.items.map((item) => [item.k, item.v] as [string, number]),
+  ...Object.entries(SPOILS.ge),
+]);
+
+/** An item's GE value per unit at fetch time, for what the farm grows and the kingdom gathers. */
+export function itemValue(key: string): number {
+  return values.get(key) ?? 0;
+}
+
 /** The item's display name for a key, or the key itself. */
 export function itemName(key: string): string {
   return names.get(key) ?? key.replace(/_/g, " ");
@@ -95,19 +123,44 @@ export function isNotable(row: DropRow): boolean {
   return row.p <= 1 / NOTABLE_RARITY_DENOMINATOR || row.value * row.low >= NOTABLE_VALUE;
 }
 
+/** Rows in the files' packed form ([item index, p, low, high, rolls, flags]) as drop rows. */
+export function decodeRows(items: { k: string; n: string; v: number }[], packed: number[][]): DropRow[] {
+  const rows: DropRow[] = [];
+  for (const [index, p, low, high, rolls, flags] of packed) {
+    const item = items[index];
+    if (!item || item.k === "nothing") continue;
+    rows.push({ item: item.n, key: item.k, p, low, high, rolls: rolls || 1, noted: (flags & 1) !== 0, rdt: (flags & 2) !== 0, value: item.v });
+  }
+  return rows;
+}
+
 export function rollDrops(
   monster: string,
   kills: number,
   rng: () => number,
-  exclude?: (row: DropRow) => boolean
+  exclude?: (row: DropRow) => boolean,
+  /** A multiplier on a row's rate: the game's adapted rates for wearable drops. The rarity reported stays the wiki's. */
+  boost?: (row: DropRow) => number
+): Drops {
+  return rollRows(dropTable(monster), kills, rng, exclude, boost);
+}
+
+/** Rolls any table: a monster's, or a boss's. */
+export function rollRows(
+  table: DropRow[],
+  kills: number,
+  rng: () => number,
+  exclude?: (row: DropRow) => boolean,
+  boost?: (row: DropRow) => number
 ): Drops {
   const stacks = new Map<string, Stack>();
-  for (const row of dropTable(monster)) {
+  for (const row of table) {
     if (exclude?.(row)) continue;
     const trials = kills * row.rolls;
+    const p = row.p >= 1 ? 1 : Math.min(1, row.p * (boost?.(row) ?? 1));
     let hits = 0;
-    if (row.p >= 1) hits = trials;
-    else for (let i = 0; i < trials; i++) if (rng() < row.p) hits++;
+    if (p >= 1) hits = trials;
+    else for (let i = 0; i < trials; i++) if (rng() < p) hits++;
     if (hits === 0) continue;
     let qty = 0;
     if (row.low === row.high) qty = hits * row.low;
