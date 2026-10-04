@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { BUCKET_BASE } from "../../api/scrandle/_lib/bucket";
 import { WeeklyGame } from "./components/WeeklyGame";
 import { isWeeklyPuzzle, type WeeklyPuzzle } from "./types";
 
@@ -10,8 +11,7 @@ import { isWeeklyPuzzle, type WeeklyPuzzle } from "./types";
  * the Worker serves the same file at /weekly.
  */
 const WEEKLY_URL =
-  process.env.SCRANDLE_WEEKLY_URL ??
-  "https://pub-b7525558c8974aa0aa1f10bf9856eb18.r2.dev/weekly/current.json";
+  process.env.SCRANDLE_WEEKLY_URL ?? `${BUCKET_BASE}/weekly/current.json`;
 
 /**
  * Five minutes. The puzzle changes once a week, so nearly every check finds
