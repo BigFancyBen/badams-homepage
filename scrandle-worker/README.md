@@ -2,8 +2,12 @@
 
 The whole game. One Cloudflare Worker, one hourly cron, no frontend.
 
-- `scheduled()` — ingest new photos, close what is due, post what is due, post weekly standings
-- `fetch()` — `POST /interactions` for button clicks, plus `/backfill` and `/health`
+- `scheduled()` — ingest new photos, close what is due, post what is due, post weekly standings, draw the weekly Scrandle
+- `fetch()` — `POST /interactions` for button clicks, plus `/backfill`, `/weekly` and `/health`
+
+The one thing that is not in Discord is the weekly Scrandle, which is played
+at `benadams.dev/scrandle/play`. The Worker draws it and announces it; the
+site only reads a file. See **The weekly Scrandle is a file** below.
 
 Three shapes of round. The everyday matchup is a pair with a button each, in
 `matchups.ts`. A ranking round puts up to five photographs on one card and each
@@ -512,6 +516,26 @@ work-it-out-from-the-category rule it would have counted as the day's cooking
 matchup and blacked out the next slot. The suite checks the flag is set and
 that the everyday matchup can still post beside it.
 
+### Testing the standings and the weekly draw
+
+```bash
+npm run test:weekly
+```
+
+No mock and no dev server — these are the two pieces of the week that are
+arithmetic. For the standings: that last week's ranks come back out of last
+week's ratings, that a climb names exactly the chefs who were ahead and are now
+behind, that a place gained because somebody dropped out names nobody, and that
+a chef who was not on the last post is new rather than a climber. For the
+weekly Scrandle: 500 seeded draws from a sixty-plate catalog, checking no plate
+repeats inside a puzzle, no two plates from one kitchen meet, every pair is far
+enough apart to have an answer, and the answer is not always on the same side.
+
+The end-to-end path — the post, the card payload, the file in the bucket —
+runs under `wrangler dev --local --test-scheduled` with the mock, on a Sunday
+after 18:00 UTC or with `/admin/post-matchup?weekly=1` on any day, and
+`GET /weekly` reads back what was written.
+
 ### Forcing a post by hand
 
 There is no way to fire a cron on demand, so three admin routes stand in. All
@@ -550,6 +574,14 @@ slot would not have fired on.
 
 The flags are read in the order they are listed in `index.ts`, and the first
 one set wins — passing two is a request nobody meant to make, not two posts.
+
+```bash
+curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&weekly=1"
+```
+
+Draws a new weekly Scrandle now, publishes it and announces it. It replaces the
+puzzle on the site, so anyone half way through the old one starts again. It
+does not move the calendar: the next scheduled day still draws.
 
 `caption=1` opens a caption contest. It refuses while another is live —
 forced or not, because two open contests would ask people to write and to
@@ -694,6 +726,46 @@ running it twice is a no-op.
 - **Matchups never ping the role.** A ping would correlate with new dishes
   entering the pool, which tells people which photo is the new one. The weekly
   standings post is the only thing that pings.
+- **The standings lead with rank, not rating.** The card used to carry one
+  number per chef, the rating change, and +14 reads the same whether it took
+  somebody from fourth to first or left them where they were. Now a climb is a
+  filled green block with the places gained and a stripe down the row, a fall
+  is the same shape hollow, a chef who was not on last week's post is marked
+  new, and somebody who held their place gets nothing — so the eye lands on who
+  moved. The rating change is still there, a size down at the far right. The
+  message text says it in words as well — "▲ **ben** up 2 places to #1, past
+  mara and greg" — for up to three climbs, biggest first, because the card is
+  an image and that is the line people want to quote back.
+  Last week's ranks are sorted out of the snapshot of last week's ratings
+  rather than stored, so nothing needed migrating. The snapshot covers the
+  whole table rather than the twelve rows on the card, so arriving in twelfth
+  from thirteenth is a climb and not an appearance from nowhere. "Past" is
+  worked out, not assumed from the gap: a place gained because the chef above
+  dropped out names nobody.
+- **The weekly Scrandle is a file.** Once a week the Worker draws ten pairs of
+  voted-on plates, writes them to `weekly/<n>.json` and `weekly/current.json`
+  in the public bucket, and posts a link. The page at `/scrandle/play` reads
+  `current.json` and nothing else — it never talks to the Worker or to D1.
+  The bucket was already public and the site already knew its address, and a
+  puzzle that is a file cannot change under somebody half way through it: the
+  ratings in it are the ratings on the day it was drawn.
+  The game is the one the channel is named after. Each round shows two plates
+  and asks which the channel rated higher; the ratings and the chefs appear
+  after the pick. Progress is kept in the browser against the puzzle's number,
+  so a new puzzle is a clean start and a reload is not a second go.
+  The draw keeps the board's rules — no plate twice in a puzzle, never two
+  from one kitchen — and adds one: a pair must be at least fifteen points
+  apart, or there is no answer to get right. Plates from the last six puzzles
+  go to the back of the queue rather than out of it. Only food that has played
+  is drawn; an unplayed plate is on the opening rating, and which of two 1500s
+  the channel preferred is not a question. Under five drawable pairs it posts
+  nothing.
+  It is gated like the standings rather than like the rounds: any tick on
+  `WEEKLY_WEEKDAY` at or after `WEEKLY_HOUR_UTC`, once six days have passed.
+  The order is publish, announce, record, and a puzzle is read back from its
+  numbered file if it is already there — so a tick that published and then
+  failed to post announces the same puzzle an hour later instead of drawing a
+  second one. It does not ping.
 - **Sides are randomized** for the same reason — position 1 is not always the
   newer dish.
 - **Votes are ephemeral until the round closes.** Nobody sees who voted or the
@@ -809,7 +881,7 @@ running it twice is a no-op.
   early.
 - **Cron hours are UTC and ignore DST.** `POST_HOURS_UTC = "15"` is 9am
   Mountain under MDT and 8am under MST — shift to `"16"` in November.
-  `PLACE_HOUR_UTC`, `PERSON_HOUR_UTC`, `DRINK_HOUR_UTC` and `CAPTION_HOUR_UTC`
+  `PLACE_HOUR_UTC`, `PERSON_HOUR_UTC`, `DRINK_HOUR_UTC`, `CAPTION_HOUR_UTC` and `WEEKLY_HOUR_UTC`
   are the same story and need shifting with it. The clock lives entirely in these vars: the cron stays broad and
   UTC. It ticks on the hour and at `:11`, and `:11` is the only reason the
   second entry exists — the person bonus fires at 11:11am, and an hourly cron

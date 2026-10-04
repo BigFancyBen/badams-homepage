@@ -26,6 +26,12 @@ const nextConfig: NextConfig = {
         pathname: '/gh/devicons/**',
       },
       {
+        // The Scrandle bucket: the photographs the weekly game shows.
+        protocol: 'https',
+        hostname: 'pub-b7525558c8974aa0aa1f10bf9856eb18.r2.dev',
+        pathname: '/**',
+      },
+      {
         protocol: 'https',
         hostname: 'raw.githubusercontent.com',
         pathname: '/pmndrs/**',

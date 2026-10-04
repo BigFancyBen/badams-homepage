@@ -44,6 +44,7 @@ import {
   standingsImageUrl,
 } from "./images";
 import { pickPair } from "./matchmaking";
+import { overtakeLines, overtakes, standingsRows } from "./standings";
 import {
   dayLabel,
   drinkCadence,
@@ -781,6 +782,11 @@ export async function closeDueMatchups(
   return due.length;
 }
 
+/** How many chefs the standings card lists. */
+const STANDINGS_SHOWN = 12;
+/** How many are read and snapshotted, so ranks below the card still compare. */
+const STANDINGS_DEPTH = 100;
+
 /** Weekly standings post. The one place a role ping is appropriate. */
 export async function postStandingsIfDue(
   env: Env,
@@ -796,7 +802,10 @@ export async function postStandingsIfDue(
   const lastAt = Number(await getState(env, "last_standings_at")) || 0;
   if (now - lastAt < 6 * 24 * HOUR) return false;
 
-  const standings = await chefStandings(env);
+  // Everybody, not just the rows the card shows: a rank only means something
+  // against the whole table, and somebody arriving in twelfth from thirteenth
+  // climbed a place rather than appearing from nowhere.
+  const standings = await chefStandings(env, STANDINGS_DEPTH);
   if (standings.length === 0) return false;
 
   const snapshotRaw = await getState(env, "standings_snapshot");
@@ -804,15 +813,13 @@ export async function postStandingsIfDue(
     ? JSON.parse(snapshotRaw)
     : {};
 
-  const rows = standings.map((chef) => {
-    const previous = snapshot[chef.discord_id];
-    const elo = Math.round(chef.elo);
-    return {
-      n: chef.username,
-      e: elo,
-      d: previous === undefined ? 0 : elo - Math.round(previous),
-    };
-  });
+  const rows = standingsRows(standings, snapshot, STANDINGS_SHOWN);
+  // The climbs go in the text as well as on the card. The card is an image,
+  // and who went past whom is the line people will want to quote back.
+  const headlines = overtakeLines(
+    overtakes(standings, snapshot, STANDINGS_SHOWN),
+    escapeMarkdown
+  );
 
   const stamp = Math.floor(now / 1000);
   const image = await renderCard(cardName("standings", stamp), (attempt) =>
@@ -830,7 +837,7 @@ export async function postStandingsIfDue(
   await postMessage(
     env,
     {
-      content: `${ping}This week in the kitchen.`,
+      content: [`${ping}This week in the kitchen.`, ...headlines].join("\n"),
       embeds: [uploadEmbed(image, ACCENT)],
       allowed_mentions: allowedMentions(env),
     },

@@ -25,6 +25,7 @@ import {
   postCaptionContestIfDue,
 } from "./contests";
 import { findPlayers, mergePlayers } from "./players";
+import { currentWeekly, postWeeklyIfDue } from "./weekly";
 import type { Env, Interaction } from "./types";
 import { verifyDiscordRequest } from "./verify";
 
@@ -147,6 +148,12 @@ export default {
             post: () => postCaptionContestIfDue(env, Date.now(), { force: true }),
             reason:
               "a contest is already live, or there is nothing in the ingredient/pet/document/screenshot/other categories to draw",
+          },
+          {
+            flag: "weekly",
+            label: "weekly scrandle",
+            post: () => postWeeklyIfDue(env, Date.now(), { force: true }),
+            reason: "too little voted-on cooking to draw a puzzle from",
           },
         ];
 
@@ -337,6 +344,21 @@ export default {
       }
     }
 
+    // The week's Scrandle, as the site reads it. The site takes the same file
+    // straight from the public bucket; this is here so the puzzle can be
+    // looked at where the bucket is not public, which is every local run.
+    if (url.pathname === "/weekly") {
+      const body = await currentWeekly(env);
+      if (!body) return new Response("No puzzle yet", { status: 404 });
+      return new Response(body, {
+        headers: {
+          "content-type": "application/json",
+          "access-control-allow-origin": "*",
+          "cache-control": "public, max-age=300",
+        },
+      });
+    }
+
     if (url.pathname === "/health") {
       return new Response("ok");
     }
@@ -474,6 +496,14 @@ export default {
       await postStandingsIfDue(env, now);
     } catch (error) {
       await logToDiscord(env, `Standings failed: ${String(error)}`);
+    }
+
+    // After the standings, so on the day they share the table goes up first
+    // and the new puzzle is the last thing in the channel.
+    try {
+      await postWeeklyIfDue(env, now);
+    } catch (error) {
+      await logToDiscord(env, `Weekly scrandle failed: ${String(error)}`);
     }
 
     // Housekeeping, last because nothing waits on it. The tokens that let a
