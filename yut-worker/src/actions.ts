@@ -277,9 +277,17 @@ export async function raidPropose(env: Env, player: Player, day: string, now: nu
 
 export async function raidStatus(env: Env, day: string): Promise<Line> {
   const line = await raidLine(env);
-  if (line) return { content: line };
+  if (line) {
+    return {
+      content: `${line}\nTo sit a raid out, press Sit out on its vote post.`,
+      components: [buttonRow([{ label: "Votes", custom_id: "vote", style: 2, emoji: "🗳️" }])],
+    };
+  }
   const block = await proposalBlock(env, day, actNow(env, day));
-  return { content: block ? `No raid. ${block}` : "No raid. Anyone can `/raid propose`." };
+  return {
+    content: block ? `No raid. ${block}` : "No raid. Anyone who has checked in lately can propose one; it goes to a vote.",
+    components: [buttonRow([{ label: "Propose a raid", custom_id: "raid:propose", style: 3, emoji: "🐉", disabled: Boolean(block) }])],
+  };
 }
 
 export async function relicsView(env: Env): Promise<Line> {

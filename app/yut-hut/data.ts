@@ -788,12 +788,13 @@ export const SECTIONS: RuleSection[] = [
     label: "Commands",
     title: "Commands",
     blocks: [
+      { kind: "note", text: "You never have to type one of these. The **Menu** button on the morning post, on the pinned board and on every check-in receipt opens the same places, with dropdowns where a command takes an option; **Yes, with a note or photo** opens a form for what `/checkin` takes. The commands are shortcuts." },
       {
         kind: "table",
         columns: ["Command", "What it does"],
         rows: [
           ["`/checkin [note] [photo]`", "Check in with a note or a photo. The morning post's Yes button does it without either; a photo sent after a Yes attaches to it."],
-          ["`/play`", "Open your hub without checking in."],
+          ["`/play`", "Open the menu without checking in."],
           ["`/sheet [player] [public]`", "Your sheet, or someone else's. Public posts it to the channel."],
           ["`/join [ping]`", "Become a player. Pass ping to turn pings on at the same time."],
           ["`/leave`", "Retire. Sheet kept."],

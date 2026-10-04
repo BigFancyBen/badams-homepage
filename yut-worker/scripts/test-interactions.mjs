@@ -85,6 +85,9 @@ const bob = { user: { id: `bob_${stamp}`, username: "bob" } };
 let seq = 0;
 const base = () => ({ id: `i${++seq}`, token: `tok${seq}`, application_id: "app_yut", guild_id: GUILD, channel_id: CHANNEL });
 const click = (customId, member, message) => post({ ...base(), type: 3, data: { custom_id: customId }, member, ...(message ? { message } : {}) });
+const pick = (customId, values, member) => post({ ...base(), type: 3, data: { custom_id: customId, values }, member });
+const submit = (customId, fields, member, resolved) =>
+  post({ ...base(), type: 5, data: { custom_id: customId, components: fields.map((component) => ({ type: 18, component })), resolved }, member });
 const command = (name, options, member, resolved) => post({ ...base(), type: 2, data: { name, options, resolved }, member });
 
 const health = await fetch(`${url}/health`).then((r) => r.text()).catch(() => null);
@@ -142,7 +145,7 @@ check("non-player gets a Join button", /not in the campaign/.test(content(strang
 // 4. Joining from that button also checks in.
 const joined = await click(`join:${day}`, alice);
 check("join + check-in in one press", /Checked in\.\*\* 1st this week, full value/.test(content(joined)), joined);
-check("the receipt carries the hub", JSON.stringify(joined.body).includes("sheet:"), joined);
+check("the receipt carries the menu", JSON.stringify(joined.body).includes('"custom_id":"sheet"') && JSON.stringify(joined.body).includes('"custom_id":"hub'), joined);
 check("the receipt points at the thread", content(joined).includes(`<#${threadId}>`), joined);
 const aliceThread = await waitFor(() => posts(threadId).find((e) => /alice\*\* checked in/.test(e.body)));
 check("the check-in line lands in the thread", Boolean(aliceThread) && /⚔️ \d+ [A-Za-z' ]+ slain/.test(aliceThread?.body ?? ""), aliceThread);
@@ -535,7 +538,7 @@ await admin("bank-item", { player: ivy.user.id, item: "bronze_boots" });
 await admin("bank-item", { player: ivy.user.id, item: "abyssal_whip" });
 await admin("bank-item", { player: ivy.user.id, item: "mystic_hat_light" });
 const gearCmd = await command("gear", [{ name: "view", type: 1 }], ivy);
-check("/gear shows the wardrobe and offers what is owned", /wardrobe \d+\/\d+/.test(content(gearCmd)) && JSON.stringify(gearCmd.body).includes("gear:w:bronze_boots") && JSON.stringify(gearCmd.body).includes("gear:show"), gearCmd);
+check("/gear shows the wardrobe and offers what is owned", /wardrobe \d+\/\d+/.test(content(gearCmd)) && JSON.stringify(gearCmd.body).includes('"custom_id":"gear:w"') && JSON.stringify(gearCmd.body).includes('"value":"bronze_boots"') && JSON.stringify(gearCmd.body).includes("gear:show"), gearCmd);
 const wearBoots = await click("gear:w:bronze_boots", ivy);
 check("boots are worn and count", /Wearing Bronze boots \(defence \+2\)/.test(content(wearBoots)), wearBoots);
 const wearWhip = await command("gear", [{ name: "wear", type: 1, options: [{ name: "item", type: 3, value: "whip" }] }], ivy);
@@ -672,6 +675,91 @@ const lastEdit = edits[edits.length - 1];
 check("the next click edits the follow-up, never the message the button was on",
   edits.length === editsBefore + 1 && new RegExp(`/messages/${patRow?.message_id}$`).test(lastEdit?.url ?? "") && !/@original/.test(lastEdit?.url ?? "") && /farm/.test(lastEdit?.body ?? ""),
   { url: lastEdit?.url, body: lastEdit?.body?.slice(0, 120) });
+
+// 35. Nothing needs a slash command: the menu reaches everything, dropdowns stand in for a
+// command's options, and a form stands in for /checkin's note and photo.
+const ids = (r) => [...JSON.stringify(r.body).matchAll(/"custom_id":"([^"]+)"/g)].map((m) => m[1]);
+const menu = await click("hub", ivy);
+const menuIds = ids(menu);
+check("the menu fits Discord's five rows", menu.body?.data?.components?.length === 5, menu.body?.data?.components?.length);
+const wanted = ["sheet", "gear", "bank", "log", "diary", "task", "boss", "quest", "raid", "bingo", "farm", "kd", "tears", "ge", "shop", "town", "vote", "standings", "relics", "help", "hub:more"];
+check("the menu has a button for every place a command goes", wanted.every((id) => menuIds.includes(id)), wanted.filter((id) => !menuIds.includes(id)));
+const settings = await click("hub:more", ivy);
+const settingsIds = ids(settings);
+check(
+  "More holds style, pings, Rings, an expedition and retiring",
+  ["style:accurate", "style:controlled", "rings", "exp", "leave", "hub"].every((id) => settingsIds.includes(id)) && settingsIds.some((id) => id.startsWith("ping:")),
+  settingsIds
+);
+const staleMenu = await click("hub", { user: { id: dave, username: "dave" } });
+check("the menu opens for a stale player, and says what it takes", /Most of this needs a check-in/.test(content(staleMenu)) && ids(staleMenu).includes("sheet"), staleMenu);
+
+const bankView = await click("bank", ivy);
+check("a view carries a way back to the menu", ids(bankView).includes("hub"), bankView);
+const tearsButton = await click("tears", ivy);
+check("the Tears button is /tears", /heard your story this week|Tears of Guthix/.test(content(tearsButton)), tearsButton);
+const raidButton = await click("raid", ivy);
+check("the Raid button is /raid status", /raid/i.test(content(raidButton)) && ids(raidButton).some((id) => id === "raid:propose" || id === "vote"), raidButton);
+const relicsButton = await click("relics", ivy);
+check("the Relics button is /relics", /relic/i.test(content(relicsButton)), relicsButton);
+const ringsButton = await click("rings", ivy);
+check("the Rings button is /freeze", /Rings of Life: \d+ of \d+/.test(content(ringsButton)), ringsButton);
+const questLogButton = await click("quest:log", ivy);
+check("the quest log is a button on the quest", /Quest log/.test(content(questLogButton)) && ids(questLogButton).includes("quest"), questLogButton);
+const table = await click("standings", ivy);
+check("standings come with a dropdown of players", /Combat \d+/.test(content(table)) && ids(table).includes("sheet:of"), table);
+const theirSheet = await pick("sheet:of", [bob.user.id], ivy);
+check("picking a player defers for their sheet", theirSheet.body?.type === 5, theirSheet);
+
+const masterPick = await pick("task:master", ["best"], ivy);
+check("the master dropdown is /task master, and the task view follows", /Back to the highest master/.test(content(masterPick)) && ids(masterPick).includes("task:unblock"), masterPick);
+const split = await pick("kd:split", ["wood", "mining"], ivy);
+check("the split dropdown shares the ten out evenly", /Subjects reassigned: Mining 5 · Wood 5/.test(content(split)), split);
+const moved = await pick("kd:add", ["wood"], ivy);
+check("and one subject can be moved at a time", /Subjects reassigned: Mining 4 · Wood 6/.test(content(moved)), moved);
+check("the kingdom offers a withdrawal", ids(moved).some((id) => /^kd:dep:-\d+$/.test(id)), ids(moved));
+const boots = await pick("gear:cat", ["boots"], ivy);
+const chaseSelect = boots.body?.data?.components?.map((row) => row.components[0]).find((c) => c.custom_id === "gear:c");
+check("the catalogue dropdown lists a slot with something to chase", /\*\*Boots\*\*/.test(content(boots)) && chaseSelect?.options?.length > 0, boots);
+const chased = await pick("gear:c", [chaseSelect?.options?.[0]?.value ?? ""], ivy);
+check("picking one chases it", new RegExp(`Chasing ${chaseSelect?.options?.[0]?.label}`).test(content(chased)), chased);
+const worn = await pick("gear:w", ["bronze_boots"], ivy);
+check("the wardrobe dropdown wears a piece", /(Wearing|Took off) Bronze boots/.test(content(worn)), worn);
+
+// The check-in form.
+const quin = { user: { id: `quin_${stamp}`, username: "quin" } };
+await command("join", [], quin);
+const form = await click(`cin:${day}`, quin);
+const formFields = JSON.stringify(form.body?.data?.components ?? []);
+check("Yes with a note or photo opens a form", form.body?.type === 9 && /"custom_id":"note"/.test(formFields) && /"type":19/.test(formFields), form);
+const oldForm = await click("cin:2001-01-01", quin);
+check("yesterday's form button is refused", /yesterday's question/.test(content(oldForm)), oldForm);
+const filed = await submit(`cin:${day}`, [{ type: 4, custom_id: "note", value: "leg day, by button" }, { type: 19, custom_id: "photo", values: [] }], quin);
+check("the form checks in", /Checked in\.\*\* 1st this week/.test(content(filed)), filed);
+await waitFor(() => posts(CHANNEL).find((e) => /leg day, by button/.test(e.body)), 40);
+check("and its note reaches the channel", posts(CHANNEL).some((e) => /leg day, by button/.test(e.body)));
+check("the receipt offers a photo afterwards", ids(filed).includes(`cin:${day}`), ids(filed));
+const formProof = await submit(
+  `cin:${day}`,
+  [{ type: 4, custom_id: "note", value: "" }, { type: 19, custom_id: "photo", values: ["att9"] }],
+  quin,
+  { attachments: { att9: { id: "att9", filename: "gym.png", content_type: "image/png", size: 1000, url: "http://127.0.0.1:1/gym.png" } } }
+);
+check("a photo sent on the form after a Yes defers to attach it", formProof.body?.type === 5, formProof);
+
+// Leaving the game, for a while or for good, asks first.
+const away = await pick("exp", ["2"], quin);
+check("an expedition is confirmed before it starts", /Go on expedition for 2 weeks\?/.test(content(away)) && ids(away).includes("exp:2:yes"), away);
+check("nothing happened yet", (await sql(`SELECT status FROM players WHERE discord_id = '${quin.user.id}'`))[0]?.status === "active");
+const gone = await click("exp:2:yes", quin);
+check("confirming starts it", /On expedition until/.test(content(gone)) && (await sql(`SELECT status FROM players WHERE discord_id = '${quin.user.id}'`))[0]?.status === "paused", gone);
+const retire = await click("leave", quin);
+check("retiring is confirmed too", /Retire from the campaign\?/.test(content(retire)) && ids(retire).includes("leave:yes"), retire);
+const retired = await click("leave:yes", quin);
+check("and then it happens", /Retired/.test(content(retired)), retired);
+
+const morningNow = [...posts(CHANNEL)].reverse().find((e) => /Did you work out/.test(e.body));
+check("the morning post leads into the menu and the form", /"custom_id":"hub"/.test(morningNow?.body ?? "") && /"custom_id":"cin:/.test(morningNow?.body ?? ""), morningNow?.body?.slice(-700));
 
 console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) failed.`);
 process.exit(failures === 0 ? 0 : 1);

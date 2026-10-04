@@ -74,6 +74,7 @@ import { addDays, daysBetween, gameWeek } from "./schedule.ts";
 import { runTick } from "./tick.ts";
 import {
   buttonRow,
+  userSelectRow,
   EPHEMERAL,
   type DiscordAttachment,
   type DiscordUser,
@@ -135,7 +136,7 @@ export async function runCommand(
     case "pings":
       return pingsCommand(env, user, day, stringOption(interaction, "mode") === "on");
     case "checkin":
-      return checkinCommand(env, ctx, interaction, user, day, now);
+      return checkinWith(env, ctx, interaction, user, day, now, stringOption(interaction, "note"), attachmentOption(interaction, "photo"), "checkin");
     case "play":
       return hub(env, user, day);
     case "style":
@@ -293,7 +294,7 @@ async function joinCommand(
   );
 }
 
-async function leaveCommand(env: Env, ctx: ExecutionContext, user: DiscordUser, day: string): Promise<Answer> {
+export async function leaveCommand(env: Env, ctx: ExecutionContext, user: DiscordUser, day: string): Promise<Answer> {
   const gate = await requirePlayer(env, user, day);
   if ("refusal" in gate) return gate.refusal;
   await updatePlayer(env, user.id, { status: "retired" });
@@ -307,7 +308,7 @@ async function leaveCommand(env: Env, ctx: ExecutionContext, user: DiscordUser, 
   return reply("Retired. Your levels are kept; `/join` picks up where you left off.");
 }
 
-async function expeditionCommand(
+export async function expeditionCommand(
   env: Env,
   ctx: ExecutionContext,
   user: DiscordUser,
@@ -342,24 +343,30 @@ async function pingsCommand(env: Env, user: DiscordUser, day: string, on: boolea
 
 // ── Check-in ───────────────────────────────────────────────────────
 
-async function checkinCommand(
+/**
+ * A check-in with a note or a photo: from /checkin, or from the form the
+ * "Yes, with a note or photo" button opens. Both hand over the same two things.
+ */
+export async function checkinWith(
   env: Env,
   ctx: ExecutionContext,
   interaction: Interaction,
   user: DiscordUser,
   day: string,
-  now: number
+  now: number,
+  rawNote: string | null,
+  attachment: DiscordAttachment | null,
+  scope: string
 ): Promise<Answer> {
   const gate = await requirePlayer(env, user, day);
   if ("refusal" in gate) return gate.refusal;
   const player = { ...gate.player, username: user.username };
   await updatePlayer(env, user.id, { username: user.username });
 
-  const note = (stringOption(interaction, "note") ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_NOTE_LENGTH) || null;
-  const attachment = attachmentOption(interaction, "photo");
+  const note = (rawNote ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_NOTE_LENGTH) || null;
 
   if (!attachment) {
-    return runCheckin(env, ctx, player, day, now, { note, attachment: null }, "checkin");
+    return runCheckin(env, ctx, player, day, now, { note, attachment: null }, scope);
   }
 
   const kind = attachmentKind(attachment);
@@ -441,7 +448,7 @@ async function styleCommand(env: Env, user: DiscordUser, day: string, style: str
   return reply(`Combat style set to ${STYLE_LABEL[style]}.`);
 }
 
-async function freezeCommand(env: Env, user: DiscordUser, day: string): Promise<Answer> {
+export async function freezeCommand(env: Env, user: DiscordUser, day: string): Promise<Answer> {
   const gate = await requirePlayer(env, user, day);
   if ("refusal" in gate) return gate.refusal;
   const { player } = gate;
@@ -455,7 +462,7 @@ async function freezeCommand(env: Env, user: DiscordUser, day: string): Promise<
   );
 }
 
-async function standingsCommand(env: Env, day: string): Promise<Answer> {
+export async function standingsCommand(env: Env, day: string): Promise<Answer> {
   const roster = await activeRoster(env, day);
   const skills = await getAllSkills(env);
   const rows = roster
@@ -468,14 +475,16 @@ async function standingsCommand(env: Env, day: string): Promise<Answer> {
     .sort((a, b) => b.hpXp - a.hpXp);
   if (rows.length === 0) return reply("Nobody is on the roster yet.");
   return reply(
-    rows.map((r, i) => `${i + 1}. **${escapeMarkdown(r.name)}** · ${r.tier} · Combat ${r.hp} · Form weeks ${r.fw}`).join("\n")
+    rows.map((r, i) => `${i + 1}. **${escapeMarkdown(r.name)}** · ${r.tier} · Combat ${r.hp} · Form weeks ${r.fw}`).join("\n"),
+    { components: [userSelectRow("sheet:of", "See somebody's sheet…")] }
   );
 }
 
-async function helpCommand(env: Env): Promise<Answer> {
+export async function helpCommand(env: Env): Promise<Answer> {
   return reply(
     [
       "**Yut Hut** — two a week is the whole game.",
+      "Everything is under the **Menu** button on the morning post and on your check-in receipt. The commands below are shortcuts to the same places.",
       "Every morning the bot asks whether you worked out in the last 24 hours. Press Yes when you did (any exercise counts, one a day), No when you rested. `/checkin` adds a note or a photo.",
       "Every Yes is a training session against your Slayer task, scored the way Old School RuneScape scores it: your levels, weapon, armour and prayers decide the damage, and the damage decides the XP.",
       "The first two check-ins of the week are full value, the third and fourth half, the rest a fifth.",
