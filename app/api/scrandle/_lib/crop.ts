@@ -58,7 +58,7 @@ export async function cropTo(
     // `rotate()` with no angle applies the EXIF orientation, which is how a
     // phone records a portrait photograph in the first place.
     const image = sharp(input, { failOn: "none" }).rotate();
-    let tile: sharp.Sharp;
+    let tile: ReturnType<typeof sharp>;
 
     if (validFocus(focus)) {
       const meta = await image.metadata();

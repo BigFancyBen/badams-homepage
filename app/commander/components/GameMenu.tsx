@@ -1,5 +1,4 @@
 import { PlayerState } from "../types";
-import { RoomCodeDisplay } from "./RoomCodeDisplay";
 
 interface GameMenuProps {
   isOpen: boolean;
@@ -17,16 +16,6 @@ interface GameMenuProps {
   onResetNames: () => void;
   onUpdatePlayerName: (playerIndex: number, name: string) => void;
   onToggleWakeLock: () => void;
-  multiplayerMode?: boolean;
-  onLeaveGame?: () => void;
-  isHost?: boolean;
-  viewMode?: 'controller' | 'overview';
-  onToggleViewMode?: () => void;
-  roomCode?: string;
-  connectedCount?: number;
-  latencyMs?: number | null;
-  localPlayerSlot?: number | null;
-  isConnected?: boolean;
 }
 
 export function GameMenu({
@@ -45,16 +34,6 @@ export function GameMenu({
   onResetNames,
   onUpdatePlayerName,
   onToggleWakeLock,
-  multiplayerMode = false,
-  onLeaveGame,
-  isHost = false,
-  viewMode,
-  onToggleViewMode,
-  roomCode,
-  connectedCount,
-  latencyMs,
-  localPlayerSlot,
-  isConnected,
 }: GameMenuProps) {
   if (!isOpen) return null;
 
@@ -69,48 +48,17 @@ export function GameMenu({
           Game Settings
         </h3>
 
-        {/* Room Code - Only in multiplayer */}
-        {multiplayerMode && roomCode && (
-          <div className="mb-6">
-            <RoomCodeDisplay roomCode={roomCode} showQR={true} size="small" />
-          </div>
-        )}
-
-        {/* Connection Quality - Only in multiplayer */}
-        {multiplayerMode && connectedCount !== undefined && (
-          <div className="mb-4 flex items-center justify-between text-xs" data-testid="connection-status">
-            <div className="flex items-center gap-2">
-              <div className={`w-2 h-2 ${isConnected ? 'bg-[#a9e5bb]' : 'bg-[#e3170a]'}`} data-testid="connection-indicator" />
-              <span className="text-[#8b7699]" data-testid="connected-count">
-                {connectedCount} player{connectedCount !== 1 ? 's' : ''} connected
-              </span>
-            </div>
-            {latencyMs !== null && latencyMs !== undefined && (
-              <span className={`${latencyMs < 100 ? 'text-[#a9e5bb]' : latencyMs < 300 ? 'text-[#f7b32b]' : 'text-[#e3170a]'}`}>
-                {latencyMs}ms latency
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Player Names - In multiplayer controller mode, only show local player */}
+        {/* Player Names */}
         <div className="mb-4">
           <h4 className="text-sm font-bold text-[#9d88aa] mb-3 tracking-wide">
-            {multiplayerMode && viewMode === 'controller' ? 'YOUR NAME:' : 'PLAYER NAMES:'}
+            PLAYER NAMES:
           </h4>
           <div className="space-y-2">
-            {players.map((player, index) => {
-              // In multiplayer controller mode, only show local player's name
-              if (multiplayerMode && viewMode === 'controller' && index !== localPlayerSlot) {
-                return null;
-              }
-              return (
+            {players.map((player, index) => (
                 <div key={index} className="flex items-center gap-3">
-                  {!(multiplayerMode && viewMode === 'controller') && (
-                    <span className="text-xs text-[#8b7699] font-semibold w-16">
-                      P{index + 1}:
-                    </span>
-                  )}
+                  <span className="text-xs text-[#8b7699] font-semibold w-16">
+                    P{index + 1}:
+                  </span>
                   <input
                     type="text"
                     value={
@@ -126,8 +74,7 @@ export function GameMenu({
                     placeholder={`Player ${index + 1}`}
                   />
                 </div>
-              );
-            })}
+            ))}
           </div>
         </div>
 
@@ -169,37 +116,6 @@ export function GameMenu({
           )}
         </div>
 
-        {/* View Mode Toggle - Only in multiplayer */}
-        {multiplayerMode && viewMode && onToggleViewMode && (
-          <div className="mb-4">
-            <h4 className="text-sm font-bold text-[#9d88aa] mb-3 tracking-wide">
-              VIEW MODE:
-            </h4>
-            <div className="flex gap-2">
-              <button
-                onClick={onToggleViewMode}
-                className={`flex-1 text-sm font-bold py-3 px-4 transition-all duration-200 ${
-                  viewMode === 'controller'
-                    ? 'bg-[#1d6637] text-white'
-                    : 'bg-[#473455] hover:bg-[#5e4a6e] text-[#d4ca88]'
-                }`}
-              >
-                My Controls
-              </button>
-              <button
-                onClick={onToggleViewMode}
-                className={`flex-1 text-sm font-bold py-3 px-4 transition-all duration-200 ${
-                  viewMode === 'overview'
-                    ? 'bg-[#1d6637] text-white'
-                    : 'bg-[#473455] hover:bg-[#5e4a6e] text-[#d4ca88]'
-                }`}
-              >
-                View All Players
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* Reset Confirmation Text */}
         <div className="text-center mb-2">
           <p
@@ -211,35 +127,15 @@ export function GameMenu({
           </p>
         </div>
 
-        {/* Multiplayer Leave Button */}
-        {multiplayerMode && onLeaveGame && (
-          <div className="mb-4">
-            <button
-              onClick={onLeaveGame}
-              className="w-full bg-[#7a5a0a] hover:bg-[#a58018] text-white text-sm font-bold py-3 px-4 transition-all duration-200"
-            >
-              Leave Game
-            </button>
-            {isHost && (
-              <p className="text-xs text-[#8b7699] mt-2 text-center">
-                Another player will become host when you leave
-              </p>
-            )}
-          </div>
-        )}
-
         {/* Action Buttons */}
         <div className="flex gap-2">
-          {/* Reset Names - only in single player or for host in multiplayer */}
-          {(!multiplayerMode || isHost) && (
-            <button
-              onClick={onResetNames}
-              className="flex-1 bg-[#473455] hover:bg-[#5e4a6e] text-[#d4ca88] text-sm font-bold py-3 px-4 transition-all duration-200"
-              title="Reset player names to defaults"
-            >
-              Reset Names
-            </button>
-          )}
+          <button
+            onClick={onResetNames}
+            className="flex-1 bg-[#473455] hover:bg-[#5e4a6e] text-[#d4ca88] text-sm font-bold py-3 px-4 transition-all duration-200"
+            title="Reset player names to defaults"
+          >
+            Reset Names
+          </button>
           {!showResetConfirm ? (
             <button
               onClick={onResetClick}

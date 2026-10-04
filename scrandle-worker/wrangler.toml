@@ -205,4 +205,5 @@ bucket_name = "scrandle-images"
 #   DISCORD_PUBLIC_KEY
 #   DISCORD_LOG_WEBHOOK_URL      (optional)
 #   SCRANDLE_IMAGE_SECRET
-#   BACKFILL_SECRET
+#   BACKFILL_SECRET              sent as `Authorization: Bearer …` to /backfill and /admin/*
+#   ANTHROPIC_API_KEY            the classifier's; the one paid service here

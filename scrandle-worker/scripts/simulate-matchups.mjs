@@ -118,7 +118,8 @@ async function playRounds(rounds, beforeRound, unanimousFor) {
     // would close the other two on no votes, and every Elo assertion here would
     // then be measuring the harness rather than the draw.
     const posted = await fetch(
-      `${WORKER}/admin/post-matchup?secret=${encodeURIComponent(SECRET)}&count=1`
+      `${WORKER}/admin/post-matchup?count=1`,
+      { headers: { authorization: `Bearer ${SECRET}` } }
     );
     if (!posted.ok) throw new Error(`tick failed: ${posted.status}`);
 
@@ -152,7 +153,8 @@ async function playRounds(rounds, beforeRound, unanimousFor) {
     // Close it the same way, and for the same reason: the cron tick is gated
     // on the clock, this is not.
     const closed = await fetch(
-      `${WORKER}/admin/close-matchup?secret=${encodeURIComponent(SECRET)}`
+      `${WORKER}/admin/close-matchup`,
+      { headers: { authorization: `Bearer ${SECRET}` } }
     );
     if (!closed.ok) throw new Error(`close failed: ${closed.status}`);
   }
@@ -421,7 +423,8 @@ const drinkIds = new Set(
 
 // Force the drink slot up, the way the cron does on one of its own days.
 const drinkPost = await fetch(
-  `${WORKER}/admin/post-matchup?secret=${encodeURIComponent(SECRET)}&drink=1`
+  `${WORKER}/admin/post-matchup?drink=1`,
+  { headers: { authorization: `Bearer ${SECRET}` } }
 );
 const drinkBody = await drinkPost.json();
 check("the drink slot posts", drinkBody.posted === true, JSON.stringify(drinkBody));
@@ -438,7 +441,8 @@ check(
 // The regression. No overlap flag: this is the ordinary scheduled post, asked
 // for while a drink matchup is open.
 const foodPost = await fetch(
-  `${WORKER}/admin/post-matchup?secret=${encodeURIComponent(SECRET)}&count=1`
+  `${WORKER}/admin/post-matchup?count=1`,
+  { headers: { authorization: `Bearer ${SECRET}` } }
 );
 const foodBody = await foodPost.json();
 check(
@@ -461,7 +465,8 @@ check(
 // the slot asked for", and the drink query narrowing to food must not have
 // turned it off along the way.
 const second = await fetch(
-  `${WORKER}/admin/post-matchup?secret=${encodeURIComponent(SECRET)}&count=1`
+  `${WORKER}/admin/post-matchup?count=1`,
+  { headers: { authorization: `Bearer ${SECRET}` } }
 );
 const secondBody = await second.json();
 check(
@@ -478,7 +483,8 @@ check(
 await sql("DELETE FROM votes; DELETE FROM matchups; UPDATE dishes SET matches_played = 0, first_matchup_id = NULL, elo = 1500;");
 
 const batchPost = await fetch(
-  `${WORKER}/admin/post-matchup?secret=${encodeURIComponent(SECRET)}&count=3`
+  `${WORKER}/admin/post-matchup?count=3`,
+  { headers: { authorization: `Bearer ${SECRET}` } }
 );
 const batchBody = await batchPost.json();
 check("the batch posts", batchBody.posted === true, JSON.stringify(batchBody));
@@ -504,7 +510,8 @@ check(
 // The cap counts what is open, so a second batch asked for while the first is
 // still up posts the shortfall — which here is none of it.
 const fourth = await fetch(
-  `${WORKER}/admin/post-matchup?secret=${encodeURIComponent(SECRET)}&count=3`
+  `${WORKER}/admin/post-matchup?count=3`,
+  { headers: { authorization: `Bearer ${SECRET}` } }
 );
 const fourthBody = await fourth.json();
 check(
@@ -517,7 +524,8 @@ check(
 // than starting a fresh batch of three on top of the two still running.
 await sql(`UPDATE matchups SET status='closed', closed_at=1 WHERE id = ${batchOpen[0].id};`);
 const topUp = await fetch(
-  `${WORKER}/admin/post-matchup?secret=${encodeURIComponent(SECRET)}&count=3`
+  `${WORKER}/admin/post-matchup?count=3`,
+  { headers: { authorization: `Bearer ${SECRET}` } }
 );
 check("a short slot is topped up", (await topUp.json()).posted === true, "");
 const afterTopUp = await sql("SELECT COUNT(*) AS n FROM matchups WHERE status='open'");

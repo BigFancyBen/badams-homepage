@@ -70,7 +70,6 @@ These are external projects showcased in the homepage bento grid:
 - **Language:** TypeScript 5
 - **Animation:** Motion (Framer Motion)
 - **Testing:** Playwright e2e
-- **Realtime:** Ably (Commander multiplayer)
 - **APIs:** Scryfall, NOAA, OpenStreetMap Nominatim, OpenDota
 - **Hosting:** Vercel
 

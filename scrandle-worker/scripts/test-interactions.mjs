@@ -457,7 +457,8 @@ if (Number.isInteger(contestId) && contestId > 0) {
 
   // ── move it to the vote ──────────────────────────────────────────
   const openVote = await fetch(
-    `${url}/admin/open-vote?secret=${encodeURIComponent(secret)}`
+    `${url}/admin/open-vote`,
+    { headers: { authorization: `Bearer ${secret}` } }
   );
   const openBody = await openVote.json();
   check("the vote opens for the ballot checks", openBody.opened === 1, openBody);

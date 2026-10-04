@@ -114,92 +114,95 @@ export interface GeocodingResult {
 
 export type GeocodingResponse = GeocodingResult[];
 
+/** One row of Open-Meteo's geocoding answer — the fields used here. */
+interface OpenMeteoPlace {
+  name: string;
+  latitude: number;
+  longitude: number;
+  feature_code?: string;
+  population?: number;
+  admin1?: string;
+  country?: string;
+}
+
 /**
- * Search for locations by city name with optimized single-strategy approach
+ * Search for locations by city name.
+ *
+ * This is called on every pause in typing, which is exactly what
+ * OpenStreetMap's Nominatim forbids: its usage policy rules out autocomplete,
+ * and the penalty is a block on the visitor's address, not ours. Open-Meteo's
+ * geocoder is built for search-as-you-type, needs no key, and is the same
+ * service the forecasts already come from.
+ *
+ * The answer is mapped onto the shape the old one had, so nothing downstream
+ * had to change: `display_name` is "City, State", which `formatCityState`
+ * passes through as it is.
  */
 export async function searchLocationByName(cityName: string): Promise<GeocodingResult[]> {
-  if (!cityName.trim()) {
+  const query = cityName.trim();
+
+  // Skip search for very short queries to reduce noise
+  if (query.length < 2) {
     return [];
   }
 
   try {
-    const query = cityName.trim();
-    
-    // Skip search for very short queries to reduce noise
-    if (query.length < 2) {
-      return [];
-    }
-    
-    const encodedQuery = encodeURIComponent(query);
-    
-    // Single optimized search strategy for better performance and consistency
+    const params = new URLSearchParams({
+      name: query,
+      count: '20',
+      language: 'en',
+      format: 'json',
+      countryCode: 'US',
+    });
     const response = await fetch(
-      `https://nominatim.openstreetmap.org/search?format=json&q=${encodedQuery}&countrycodes=us&limit=8&addressdetails=1&dedupe=1&class=place`,
-      { 
-        headers: { 'User-Agent': 'FloatWise-Weather-App' },
-        signal: AbortSignal.timeout(5000) // 5 second timeout
-      }
+      `https://geocoding-api.open-meteo.com/v1/search?${params}`,
+      { signal: AbortSignal.timeout(5000) } // 5 second timeout
     );
 
     if (!response.ok) {
       throw new Error(`Search failed: ${response.statusText}`);
     }
 
-    const results: GeocodingResponse = await response.json();
-    
-    // Filter and sort results for better relevance
-    const filteredResults = results
-      .filter(result => {
-        const addressType = result.addresstype || result.type;
-        const placeClass = result.class;
-        const displayName = result.display_name.toLowerCase();
-        const queryLower = query.toLowerCase();
-        
-        // Filter for cities, towns, and villages
-        const isValidPlaceType = (
-          addressType === 'city' || 
-          addressType === 'town' || 
-          addressType === 'village' ||
-          addressType === 'municipality' ||
-          placeClass === 'place' ||
-          displayName.includes('city') ||
-          displayName.includes('town') ||
-          displayName.includes('village')
-        );
-        
-        // Basic relevance check - name should somewhat match query
-        const nameMatch = displayName.includes(queryLower) || 
-                          result.name?.toLowerCase().includes(queryLower) ||
-                          result.address?.city?.toLowerCase().includes(queryLower) ||
-                          result.address?.town?.toLowerCase().includes(queryLower) ||
-                          result.address?.village?.toLowerCase().includes(queryLower);
-        
-        return isValidPlaceType && nameMatch;
-      })
+    const body: { results?: OpenMeteoPlace[] } = await response.json();
+    const queryLower = query.toLowerCase();
+
+    return (body.results ?? [])
+      // Populated places only (GeoNames PPL*), and only ones whose own name
+      // matches — the service also matches on alternate names, which is how
+      // a search for one town returns another.
+      .filter(
+        (place) =>
+          (place.feature_code ?? '').startsWith('PPL') &&
+          place.name.toLowerCase().includes(queryLower)
+      )
       .sort((a, b) => {
-        const queryLower = query.toLowerCase();
-        
-        // Get the primary name for each result
-        const aName = (a.address?.city || a.address?.town || a.address?.village || a.name || a.display_name.split(',')[0]).toLowerCase();
-        const bName = (b.address?.city || b.address?.town || b.address?.village || b.name || b.display_name.split(',')[0]).toLowerCase();
-        
+        const aName = a.name.toLowerCase();
+        const bName = b.name.toLowerCase();
+
         // Exact matches first
-        const aExact = aName === queryLower ? 2 : 0;
-        const bExact = bName === queryLower ? 2 : 0;
+        const aExact = aName === queryLower ? 1 : 0;
+        const bExact = bName === queryLower ? 1 : 0;
         if (aExact !== bExact) return bExact - aExact;
-        
-        // Starts with query second  
+
+        // Starts with query second
         const aStarts = aName.startsWith(queryLower) ? 1 : 0;
         const bStarts = bName.startsWith(queryLower) ? 1 : 0;
         if (aStarts !== bStarts) return bStarts - aStarts;
-        
-        // Finally by importance score
-        return (b.importance || 0) - (a.importance || 0);
+
+        // Finally the bigger place
+        return (b.population ?? 0) - (a.population ?? 0);
       })
-      .slice(0, 8); // Limit to 8 results for better performance
-      
-    return filteredResults;
-      
+      .slice(0, 8)
+      .map((place) => ({
+        lat: String(place.latitude),
+        lon: String(place.longitude),
+        display_name: place.admin1 ? `${place.name}, ${place.admin1}` : place.name,
+        class: 'place',
+        type: 'city',
+        importance: place.population ?? 0,
+        name: place.name,
+        address: { city: place.name, state: place.admin1, country: place.country },
+      }));
   } catch (error) {
     console.error('Error searching for location:', error);
     throw error;

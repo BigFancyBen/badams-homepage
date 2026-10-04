@@ -173,7 +173,7 @@ an empty D1 id even locally; it is gitignored.
   from a fresh local database: `rm -rf .wrangler/state && npm run migrate:local`.
 
 There is no way to fire a cron by hand, so the `/admin/*` routes (all gated
-on `?secret=ADMIN_SECRET`) are the test seams: `tick?at=<ISO>` runs the tick
+on an `Authorization: Bearer <ADMIN_SECRET>` header) are the test seams: `tick?at=<ISO>` runs the tick
 with a synthetic clock (`daily=1`, `post=1`, `lastcall=1` force a phase),
 `seed?players=a,b`, `checkin-as?player=&day=&photo=1&post=1`,
 `resolve-week?day=`, `render-sheet?player=`, `register-commands`,

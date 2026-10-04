@@ -5,3 +5,5 @@ DISCORD_PUBLIC_KEY=
 DISCORD_LOG_WEBHOOK_URL=
 SCRANDLE_IMAGE_SECRET=dev-only-scrandle-secret
 BACKFILL_SECRET=dev-only-backfill-secret
+# Only the classifier needs it; leave empty and photographs stay unlabelled.
+ANTHROPIC_API_KEY=

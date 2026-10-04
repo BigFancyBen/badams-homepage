@@ -156,7 +156,6 @@ These external services may be unavailable in sandboxed environments:
 - **Scryfall API**: Used by tutor-helper for card data
 - **NOAA API**: Used by floatwise for weather forecast data
 - **OpenStreetMap Nominatim**: Used by floatwise for location search
-- **Ably**: Used by commander for multiplayer functionality
 
 ### Performance Notes
 

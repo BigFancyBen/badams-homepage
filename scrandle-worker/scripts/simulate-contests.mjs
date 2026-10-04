@@ -41,7 +41,8 @@ const check = (name, ok, detail) => {
 
 const admin = async (path) => {
   const response = await fetch(
-    `${WORKER}${path}${path.includes("?") ? "&" : "?"}secret=${encodeURIComponent(SECRET)}`
+    `${WORKER}${path}`,
+    { headers: { authorization: `Bearer ${SECRET}` } }
   );
   if (!response.ok) throw new Error(`${path} → ${response.status}`);
   return response.json();

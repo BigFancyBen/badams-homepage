@@ -197,6 +197,7 @@ export function TokenCard({
             unoptimized
             alt={name}
             fill
+            unoptimized
             className="object-cover"
             sizes="(max-width: 640px) 33vw, (max-width: 768px) 25vw, (orientation: landscape) 14vw, 20vw"
           />
