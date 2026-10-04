@@ -45,6 +45,23 @@ import { currentEnemy, enemyPools, questFor, questKey, questLampXp, suppliesNeed
 import { questFight } from "../src/combat.ts";
 import { QUEST_CALENDAR, QUEST_FIGHT_ATTACKS } from "../src/config.ts";
 import { PROFILES, run as runPace } from "./lib/pace.mjs";
+import { containerTable, draftSpoils, featuredFor, openContainer, rollTier, tierRank } from "../src/spoils.ts";
+import { gePrice } from "../src/ge.ts";
+import { currentTier, diaryNext, diaryProgress } from "../src/diary.ts";
+import { potionBoost } from "../src/combat.ts";
+import { lampWorth } from "../src/xp.ts";
+import { GEAR_DEFS, dropBoost, gearSources, meetsReq, sessionGear, sourceLine } from "../src/gear.ts";
+import { blocksOf, masterWanted } from "../src/slayer.ts";
+import { advanceKingdom, dailyWage, pendingStacks } from "../src/kingdom.ts";
+import { bestSeed, harvestOf, isGrown, lowestSkill, tearXp, tearsCaught } from "../src/farm.ts";
+import { itemKeyOf, itemValue } from "../src/loot.ts";
+import gearJson from "../config/gear.json" with { type: "json" };
+import { bossFight, bossFor, bossLoot, bossPool, bossTable } from "../src/bosses.ts";
+import { BOSS_FIGHTS_PER_HEAD, GROUP_BOSSES } from "../src/config.ts";
+import {
+  CROPS, GEAR_RATE_MULTIPLIER, KINGDOM_APPROVAL_FLOOR, KINGDOM_COFFER_MAX, KINGDOM_DAILY_CAP, KINGDOM_JOBS, PATCHES, PRICED_ITEMS, SKILLS, TEARS_MIN,
+} from "../src/config.ts";
+import { DIARY, GE_ITEMS, SPOILS_CONTAINERS, SPOILS_PITY, SPOILS_TIERS } from "../src/config.ts";
 
 let failures = 0;
 function check(name, condition, detail) {
@@ -295,6 +312,270 @@ check("every quest, Grandmasters included, falls to a 2/week party of six", tooH
 const dragonWeek = Object.entries(paceD.weekly).find(([, lv]) => lv.defence >= 60)?.[0];
 console.log(`      pace: 2/wk reaches Defence 60 at week ${dragonWeek ?? "never"} (final def ${paceD.final.defence}, att ${paceD.final.attack}); 1/wk final def ${runPace(PROFILES.find((p) => p.name === "E 1/wk")).final.defence}`);
 check("two a week reaches Dragon by the finale with quest lamps, and not before week 40", paceD.final.defence >= 60 && Number(dragonWeek ?? 99) >= 40, { dragonWeek, final: paceD.final });
+
+// ── Spoils ─────────────────────────────────────────────────────────
+{
+  const base = { playerId: "p1", day: "2026-10-06", ordinal: 1, weight: 1, formWeeks: 0, dry: 0, holdingClue: false };
+  const a = draftSpoils(base);
+  const b = draftSpoils(base);
+  check("a draft is the same on a retry", JSON.stringify(a) === JSON.stringify(b), { a, b });
+  check("a full-value draft offers three: the roll, today's container, a sure thing",
+    a.options.length === 3 && a.options[0].kind === "container" && a.options[0].slot === "roll" &&
+      a.options[1].kind === "container" && a.options[1].slot === "featured" && a.options[2].kind !== "container", a.options);
+  check("today's container is the same for everybody", a.options[1].key === featuredFor("2026-10-06").key && featuredFor("2026-10-06").key === draftSpoils({ ...base, playerId: "p2" }).options[1].key);
+  check("the roll is never today's container", (() => {
+    for (let i = 0; i < 400; i++) {
+      const d = draftSpoils({ ...base, playerId: `x${i}`, day: addDays("2026-10-06", i % 30) });
+      if (d.options[0].key === d.options[1].key) return false;
+    }
+    return true;
+  })());
+  const slim = draftSpoils({ ...base, ordinal: 3, weight: 0.5 });
+  check("a third check-in gets the roll and a sure thing, capped at uncommon", slim.options.length === 2 && tierRank(slim.tier) <= tierRank("uncommon"), slim);
+  let slimOk = true;
+  for (let i = 0; i < 500; i++) if (tierRank(draftSpoils({ ...base, playerId: `s${i}`, ordinal: 4, weight: 0.5 }).tier) > tierRank("uncommon")) slimOk = false;
+  check("no slim draft ever rolls above uncommon", slimOk);
+  const pity = draftSpoils({ ...base, dry: SPOILS_PITY - 1 });
+  check("the pity counter forces a rare roll and resets", tierRank(pity.tier) >= tierRank("rare") && pity.dryAfter === 0, pity);
+  const dryDraft = Array.from({ length: 200 }, (_, i) => draftSpoils({ ...base, playerId: `d${i}`, dry: 2 })).find((d) => tierRank(d.tier) < tierRank("rare"));
+  check("a dry roll counts up", dryDraft?.dryAfter === 3, dryDraft);
+  check("a slim check-in leaves the counter alone", draftSpoils({ ...base, ordinal: 3, weight: 0.5, dry: 5 }).dryAfter === 5);
+  check("nobody holding a clue is offered a clue", Array.from({ length: 300 }, (_, i) => draftSpoils({ ...base, playerId: `c${i}`, holdingClue: true })).every((d) => d.options.every((o) => o.kind !== "clue")));
+
+  // The tier odds, and the week's chest's advantage.
+  const share = (rolls) => {
+    const rng = seededRng(`tiers:${rolls}`);
+    let rare = 0;
+    for (let i = 0; i < 20000; i++) if (tierRank(rollTier(rng, rolls)) >= tierRank("rare")) rare++;
+    return rare / 20000;
+  };
+  const one = share(1);
+  const two = share(2);
+  check("about 13% of rolls are rare or better", Math.abs(one - 0.13) < 0.015, one);
+  check("the week's chest rolls rare or better about 24% of the time", Math.abs(two - (1 - 0.87 * 0.87)) < 0.02, two);
+  check("every tier has a container and every container a loot table",
+    SPOILS_TIERS.every((tier) => SPOILS_CONTAINERS.some((c) => c.tier === tier.key)) && SPOILS_CONTAINERS.every((c) => containerTable(c.key).length > 0),
+    SPOILS_CONTAINERS.filter((c) => containerTable(c.key).length === 0).map((c) => c.key));
+
+  // Opening: deterministic, never empty, and the tiers are in order of worth.
+  const mean = (key) => {
+    const rng = seededRng(`open:${key}`);
+    let total = 0;
+    let empty = 0;
+    for (let i = 0; i < 4000; i++) {
+      const opened = openContainer(key, rng);
+      total += opened.total;
+      if (opened.stacks.length === 0) empty++;
+    }
+    return { mean: total / 4000, empty };
+  };
+  const means = Object.fromEntries(SPOILS_CONTAINERS.map((c) => [c.key, mean(c.key)]));
+  check("no container ever opens empty", Object.values(means).every((m) => m.empty === 0), means);
+  const tierMean = (tier) => {
+    const list = SPOILS_CONTAINERS.filter((c) => c.tier === tier).map((c) => means[c.key].mean);
+    return list.reduce((s, n) => s + n, 0) / list.length;
+  };
+  const ladder = SPOILS_TIERS.map((tier) => Math.round(tierMean(tier.key)));
+  console.log(`      mean worth by tier: ${SPOILS_TIERS.map((tier, i) => `${tier.name} ${gpShort(ladder[i])}`).join(", ")}`);
+  check("each tier's containers are worth more than the tier below", ladder.every((n, i) => i === 0 || n > ladder[i - 1]), ladder);
+  check("an opening is the same on a retry",
+    JSON.stringify(openContainer("magpie_impling_jar", seededRng("retry"))) === JSON.stringify(openContainer("magpie_impling_jar", seededRng("retry"))));
+  const muddy = openContainer("muddy_key", seededRng("muddy"));
+  check("the Muddy chest always pays its whole table", muddy.stacks.length === containerTable("muddy_key").length, muddy);
+}
+
+// ── The Grand Exchange ─────────────────────────────────────────────
+{
+  const at = (level) => ({ hitpoints: level, attack: level, strength: level, defence: level, prayer: 1, slayer: 1, woodcutting: 1, mining: 1, fishing: 1 });
+  const superCombat = GE_ITEMS.find((item) => item.key === "super_combat_potion4");
+  // 5 + 15% of 60 = 14; a 600-swing session is 24 minutes, four doses six minutes apart, so three levels drain on average.
+  const boost = potionBoost(at(60), superCombat.boost, 1);
+  check("a super combat potion at 60 averages +11 across a full session", boost.attack === 11 && boost.strength === 11 && boost.defence === 11, boost);
+  const hill = MONSTERS["Hill Giant"];
+  const gear = { slayerHelmet: false, glory: false };
+  const plain = simulateSession({ levels: at(60), style: "aggressive", gear, monster: hill, weight: 1 });
+  const potted = simulateSession({ levels: at(60), style: "aggressive", gear, monster: hill, weight: 1, boost });
+  check("a potion lifts the max hit and the damage, and never the weapon", potted.maxHit > plain.maxHit && potted.damage > plain.damage && potted.weapon.key === plain.weapon.key, { plain: plain.maxHit, potted: potted.maxHit });
+  console.log(`      super combat at 60 vs hill giants: max hit ${plain.maxHit} -> ${potted.maxHit}, damage +${Math.round((potted.damage / plain.damage - 1) * 100)}%`);
+  // Nothing bought may ever make a session worse, against any monster at any level.
+  let worse = [];
+  let longer = 0;
+  let sessions = 0;
+  for (const level of [20, 40, 60, 80]) {
+    for (const monster of Object.values(MONSTERS)) {
+      const plainRun = simulateSession({ levels: at(level), style: "controlled", gear, monster, weight: 1 });
+      const sharkRun = simulateSession({ levels: at(level), style: "controlled", gear, monster, weight: 1, foodHeal: 20 });
+      const potRun = simulateSession({ levels: at(level), style: "controlled", gear, monster, weight: 1, boost: potionBoost(at(level), superCombat.boost, 1) });
+      sessions++;
+      if (sharkRun.attacks > plainRun.attacks) longer++;
+      if (sharkRun.damage < plainRun.damage || potRun.damage < plainRun.damage) worse.push(`${monster.name}@${level}`);
+    }
+  }
+  console.log(`      sharks lengthen ${longer} of ${sessions} sessions (every monster at 20/40/60/80)`);
+  check("sharks and potions never cost damage, against any monster", worse.length === 0, worse.slice(0, 10));
+  check("sharks lengthen some sessions", longer > 0, longer);
+  check("every Grand Exchange item has a price", GE_ITEMS.every((item) => gePrice(item) > 0), GE_ITEMS.map((item) => [item.key, gePrice(item)]));
+  check("a Book of knowledge is 15 a level", lampWorth({ xp: 0, source: "book" }, 40) === 600 && lampWorth({ xp: 0, source: "genie" }, 40) === 400 && lampWorth({ xp: 2500, source: "diary" }, 40) === 2500);
+}
+
+// ── The diary ──────────────────────────────────────────────────────
+{
+  const zero = { checkins: 0, kills: 0, tasks: 0, bank: 0, combat: 3, total: 18, spoils: 0, containers: 0, form: 0, verified: 0, caskets: 0, spent: 0 };
+  const fresh = diaryProgress(zero, new Set());
+  check("a new player has nothing done", fresh.every((row) => row.done === 0 && !row.complete));
+  const easyDone = diaryProgress({ ...zero, checkins: 5, kills: 100, tasks: 1, spoils: 3, bank: 10_000, combat: 10 }, new Set());
+  check("the Easy diary completes on its six tasks", easyDone[0].complete && !easyDone[1].complete, easyDone[0]);
+  check("the open tier is the first unpaid one", currentTier(easyDone).tier.key === "easy" && currentTier(diaryProgress(zero, new Set(["easy"]))).tier.key === "medium");
+  check("the receipt names the nearest task", /Easy diary 0\/6 \(next: /.test(diaryNext(fresh)), diaryNext(fresh));
+  check("the diary pays the Achievement Diary's lamps", DIARY.map((tier) => tier.lamp).join() === [ANTIQUE_LAMP.easy, ANTIQUE_LAMP.medium, ANTIQUE_LAMP.hard, ANTIQUE_LAMP.elite].join());
+  check("every tier's tasks are harder than the tier before", DIARY.every((tier, i) => i === 0 || tier.tasks.every((task) => {
+    const earlier = DIARY[i - 1].tasks.find((t) => t.stat === task.stat);
+    return !earlier || task.goal > earlier.goal;
+  })));
+}
+
+// ── Gear ───────────────────────────────────────────────────────────
+{
+  const at = (level) => Object.fromEntries(SKILLS.map((skill) => [skill, level]));
+  const player = (gear, extra = {}) => ({ gear: JSON.stringify(gear), cosmetics: "{}", wishlist: null, ...extra });
+  check("gear keys are unique", new Set(GEAR_DEFS.map((d) => d.key)).size === GEAR_DEFS.length);
+  const noStats = GEAR_DEFS.filter((d) => d.stats && d.slot !== "head" && !gearJson.items[d.key]).map((d) => d.item);
+  check("every weapon and boot has the wiki's bonuses", noStats.length === 0, noStats);
+  const clueNames = new Set(CLUE_TIERS.flatMap((tier) => tier.uniques));
+  const strayClue = GEAR_DEFS.filter((d) => d.clue && !clueNames.has(d.item)).map((d) => d.item);
+  check("every clue look is a real clue unique", strayClue.length === 0, strayClue);
+  const sources = gearSources();
+  const noSource = GEAR_DEFS.filter((d) => !d.clue && !sources.has(d.key)).map((d) => d.item);
+  check("every other piece drops from a task monster", noSource.length === 0, noSource);
+  console.log(`      ${GEAR_DEFS.length} pieces: ${GEAR_DEFS.filter((d) => d.stats).length} with stats, ${GEAR_DEFS.filter((d) => d.clue).length} clue looks; e.g. Abyssal whip: ${sourceLine(GEAR_DEFS.find((d) => d.key === "abyssal_whip"))}`);
+
+  const hill = MONSTERS["Hill Giant"];
+  const bare = { slayerHelmet: false, glory: false };
+  const plain = simulateSession({ levels: at(70), style: "aggressive", gear: bare, monster: hill, weight: 1 });
+  const whipGear = sessionGear(player({ weapon: "abyssal_whip" }), at(70), new Set(["abyssal_whip"]), false);
+  const whip = simulateSession({ levels: at(70), style: "aggressive", gear: whipGear, monster: hill, weight: 1 });
+  check("a worn whip out-hits the dragon scimitar at 70", whip.weapon.key === "abyssal_whip" && whip.maxHit > plain.maxHit && whip.damage > plain.damage, { plain: plain.maxHit, whip: whip.maxHit });
+  check("a whip the levels cannot wield is only a look", sessionGear(player({ weapon: "abyssal_whip" }), at(60), new Set(["abyssal_whip"]), false).weapon === undefined);
+  check("a whip that is not owned does nothing", sessionGear(player({ weapon: "abyssal_whip" }), at(70), new Set(), false).weapon === undefined);
+  const maul = simulateSession({ levels: at(70), style: "aggressive", gear: sessionGear(player({ weapon: "granite_maul" }), at(70), new Set(["granite_maul"]), false), monster: hill, weight: 1 });
+  check("a seven-tick maul swings less often than a four-tick whip", maul.maxHit > plain.maxHit && maul.damage < whip.damage, { maul: maul.damage, whip: whip.damage });
+  const hard = Object.values(MONSTERS).sort((x, y) => y.maxHit - x.maxHit)[0];
+  const noBoots = simulateSession({ levels: at(50), style: "controlled", gear: bare, monster: hard, weight: 1 });
+  const boots = simulateSession({ levels: at(50), style: "controlled", gear: sessionGear(player({ boots: "rune_boots" }), at(50), new Set(["rune_boots"]), false), monster: hard, weight: 1 });
+  check("boots take the edge off what the monster does", boots.damageTaken / boots.attacks < noBoots.damageTaken / noBoots.attacks, { boots: boots.damageTaken / boots.attacks, none: noBoots.damageTaken / noBoots.attacks });
+  check("a worn black mask is the Slayer helmet's bonus", sessionGear(player({ head: "black_mask_10" }), at(20), new Set(["black_mask_10"]), false).slayerHelmet === true);
+  check("requirements are the game's", meetsReq(GEAR_DEFS.find((d) => d.key === "abyssal_whip"), at(70)) && !meetsReq(GEAR_DEFS.find((d) => d.key === "leaf_bladed_sword"), { ...at(60), slayer: 54 }));
+
+  // The adapted rates: wearables at twice the wiki's rate, the chased item at four times, nothing else touched.
+  const boost = dropBoost("abyssal_whip");
+  check("the boost is the adapted rate for a wearable, twice that for the chased one, 1x for the rest", boost({ key: "rune_boots" }) === GEAR_RATE_MULTIPLIER && boost({ key: "abyssal_whip" }) === GEAR_RATE_MULTIPLIER * 2 && boost({ key: "coins" }) === 1);
+  const count = (b) => {
+    let whips = 0;
+    let other = 0;
+    for (let i = 0; i < 300; i++) {
+      const d = rollDrops("Abyssal demon", 100, seededRng(`whip:${i}`), undefined, b);
+      for (const s of d.stacks) {
+        if (s.key === "abyssal_whip") whips += s.qty;
+        else if (!GEAR_DEFS.some((def) => def.key === s.key)) other += s.qty;
+      }
+    }
+    return { whips, other };
+  };
+  const wiki = count(undefined);
+  const chased = count(boost);
+  console.log(`      30,000 abyssal demons: ${wiki.whips} whips at the wiki's 1/512, ${chased.whips} when chased`);
+  check("chasing multiplies the whips by about the adapted rate times two", chased.whips > wiki.whips * GEAR_RATE_MULTIPLIER * 2 * 0.7 && chased.whips < wiki.whips * GEAR_RATE_MULTIPLIER * 2 * 1.4, { wiki, chased });
+  check("and leaves every drop that is not a wearable exactly as it was", wiki.other === chased.other, { wiki: wiki.other, chased: chased.other });
+}
+
+// ── Slayer choices ─────────────────────────────────────────────────
+{
+  const vannaka = MASTERS.find((m) => m.name === "Vannaka");
+  const blocked = vannaka.tasks.slice(0, 5).map((t) => t.monster);
+  let hit = false;
+  for (let i = 0; i < 500; i++) if (blocked.includes(drawAssignment(seededRng(`block:${i}`), vannaka, 99, 126, blocked).assignment.monster)) hit = true;
+  check("a blocked monster is never assigned", !hit);
+  check("a chosen master is used while the player qualifies", masterWanted({ slayer_master: "turael" }, 100, 60).key === "turael" && masterWanted({ slayer_master: vannaka.key }, 20, 1).key !== vannaka.key);
+  check("no choice takes the best master", masterWanted({ slayer_master: null }, 100, 60).key === masterFor(100, 60).key);
+  check("a broken block list reads as empty", blocksOf({ slayer_blocks: "nope" }).length === 0 && blocksOf({ slayer_blocks: '["Banshee"]' })[0] === "Banshee");
+}
+
+// ── Miscellania ────────────────────────────────────────────────────
+{
+  const base = { player_id: "k", coffer: KINGDOM_COFFER_MAX, approval: 100, workers: { herbs: 10 }, pending: {}, last_day: "2026-10-05", visited_day: "2026-10-05", collected_day: null };
+  const week = advanceKingdom(base, "2026-10-12");
+  check("a day's wage is 10% of the coffer, capped", dailyWage(1000) === 100 && dailyWage(KINGDOM_COFFER_MAX) === KINGDOM_DAILY_CAP);
+  check("a week costs seven days' wages and 17.5% approval", week.coffer === KINGDOM_COFFER_MAX - 7 * KINGDOM_DAILY_CAP && week.approval === 82.5, week);
+  // Ten subjects on herbs at full pay: 6.1 herbs a day, scaled by approval (97.5% down to 82.5%).
+  const herbs = pendingStacks(week, "seed").reduce((sum, s) => sum + s.qty, 0);
+  check("a week of herbs at full pay is 38", herbs === 38, { herbs, pending: week.pending });
+  check("the same seed deals the same herbs", JSON.stringify(pendingStacks(week, "seed")) === JSON.stringify(pendingStacks(week, "seed")));
+  check("advancing is the same in one step or seven", JSON.stringify(advanceKingdom(advanceKingdom(base, "2026-10-08"), "2026-10-12")) === JSON.stringify({ ...week }), null);
+  check("an empty coffer gathers nothing", pendingStacks(advanceKingdom({ ...base, coffer: 0 }, "2026-10-12"), "s").length === 0);
+  const split = advanceKingdom({ ...base, workers: { wood: 5, mining: 5 } }, "2026-10-06");
+  const got = Object.fromEntries(pendingStacks(split, "s").map((s) => [s.item, s.qty]));
+  check("five on wood and five on coal bring half of each (89.2 and 54.6 a day at full size)", got["Maple logs"] === Math.floor(0.5 * 0.975 * 89.2) && got["Coal"] === Math.floor(0.5 * 0.975 * 54.6), got);
+  const long = advanceKingdom(base, "2027-03-01");
+  check("approval never falls below the floor, and an unvisited kingdom stops after thirty days", long.approval === KINGDOM_APPROVAL_FLOOR && long.coffer === KINGDOM_COFFER_MAX - 30 * KINGDOM_DAILY_CAP, long);
+  const unpriced = PRICED_ITEMS.filter((name) => itemValue(itemKeyOf(name)) <= 0);
+  check("everything gathered, grown or sold has a price", unpriced.length === 0, unpriced);
+  check("every job's subjects fit", KINGDOM_JOBS.length === 5);
+}
+
+// ── The farm and the tears ─────────────────────────────────────────
+{
+  const stock = new Map([["ranarr_seed", 2], ["tarromin_seed", 5], ["watermelon_seed", 3], ["cabbage_seed", 2]]);
+  check("a run plants the best seed the level allows", bestSeed("herb", 32, stock, 1).seed === "Ranarr seed" && bestSeed("herb", 31, stock, 1).seed === "Tarromin seed");
+  check("an allotment needs three seeds, and falls back to potatoes", bestSeed("allotment", 50, stock, 3).seed === "Watermelon seed" && bestSeed("allotment", 10, stock, 3).seed === "Potato seed");
+  check("a herb patch with nothing plantable stays empty", bestSeed("herb", 5, stock, 1) === null && bestSeed("tree", 99, stock, 1) === null);
+  const ranarr = CROPS.find((c) => c.seed === "Ranarr seed");
+  const h = harvestOf(ranarr, "p:1:herb");
+  check("a herb harvest is 4 to 9 leaves at the crop's XP, the same on a retry", h.qty >= 4 && h.qty <= 9 && h.xp === h.qty * 30.5 && harvestOf(ranarr, "p:1:herb").qty === h.qty, h);
+  const willow = CROPS.find((c) => c.seed === "Willow seed");
+  check("a tree is checked, not harvested", harvestOf(willow, "x").qty === 0 && harvestOf(willow, "x").xp === 1456.5);
+  check("herbs take 80 minutes", !isGrown({ seed: "ranarr_seed", planted_at: 0 }, 79 * 60_000) && isGrown({ seed: "ranarr_seed", planted_at: 0 }, 80 * 60_000));
+  check("every crop's patch exists and levels rise within a patch", CROPS.every((c) => PATCHES.some((p) => p.key === c.patch)));
+  check("a tear is 10 XP at level 1 and 60 from level 30", tearXp(1) === 10 && tearXp(30) === 60 && tearXp(99) === 60 && tearXp(15) > 10 && tearXp(15) < 60);
+  check("tears grow with quest points and never fall below the minimum", tearsCaught(0, "a") === TEARS_MIN && tearsCaught(100, "a") >= 60 && tearsCaught(100, "a") <= 90);
+  check("the tears go to the lowest skill", lowestSkill({ hitpoints: 2000, attack: 500, strength: 500, defence: 500, prayer: 300, slayer: 100, woodcutting: 400, mining: 50, fishing: 60, farming: 55 }) === "mining" && lowestSkill({ hitpoints: 1154 }) === "attack");
+}
+
+// ── The boss of the week ───────────────────────────────────────────
+{
+  const at = (level) => Object.fromEntries(SKILLS.map((skill) => [skill, level]));
+  const bare = { slayerHelmet: false, glory: false };
+  check("no boss before the campaign, and they rotate from week 1", bossFor(0) === null && bossFor(1).key === GROUP_BOSSES[0].key && bossFor(2).key === GROUP_BOSSES[1].key && bossFor(GROUP_BOSSES.length + 1).key === GROUP_BOSSES[0].key);
+  for (const def of GROUP_BOSSES) {
+    const boss = bossFor(GROUP_BOSSES.indexOf(def) + 1);
+    check(`${def.name} has the wiki's stats and a table`, boss.stats.hitpoints > 0 && boss.stats.def > 0 && bossTable(def.key).length > 10, boss.stats);
+    check(`${def.name}'s bones are not loot`, !bossTable(def.key).some((row) => / bones$/i.test(row.item)));
+  }
+  const obor = bossFor(2);
+  const roster = [at(10), at(20), at(30), at(40), at(50)];
+  const pool = bossPool(obor, roster);
+  const fights = roster.map((levels) => bossFight(levels, "controlled", bare, obor, 1));
+  check("the pool is the roster's mean fight times the fights a head", pool === Math.round(roster.length * BOSS_FIGHTS_PER_HEAD * (fights.reduce((s, n) => s + n, 0) / fights.length)), { pool, fights });
+  check("two full fights from everyone brings it down", fights.reduce((s, n) => s + 2 * n, 0) >= pool, { pool, fights });
+  check("one fight each does not", fights.reduce((s, n) => s + n, 0) < pool, { pool, fights });
+  check("a half-value check-in swings half as often", bossFight(at(40), "controlled", bare, obor, 0.5) < bossFight(at(40), "controlled", bare, obor, 1));
+  check("an empty roster still has a boss to hit", bossPool(obor, []) >= 1);
+  const loot = bossLoot("obor", 1, "p:2026-10-06:boss", null);
+  check("a boss roll pays something, the same on a retry", loot.stacks.length > 0 && JSON.stringify(loot) === JSON.stringify(bossLoot("obor", 1, "p:2026-10-06:boss", null)), loot);
+  let clubs = 0;
+  let chased = 0;
+  for (let i = 0; i < 3000; i++) {
+    if (bossLoot("obor", 1, `c:${i}`, null).stacks.some((s) => s.key === "hill_giant_club")) clubs++;
+    if (bossLoot("obor", 1, `c:${i}`, "hill_giant_club").stacks.some((s) => s.key === "hill_giant_club")) chased++;
+  }
+  console.log(`      3,000 Obor rolls: ${clubs} hill giant clubs (wiki 1/118, here 1/${Math.round(118 / GEAR_RATE_MULTIPLIER)}), ${chased} when chased`);
+  check("the hill giant club drops at the adapted rate, and twice that when chased", clubs > 60 && clubs < 150 && chased > clubs * 1.5, { clubs, chased });
+  check("the bosses' uniques are in the catalogue with their source", /Obor/.test(sourceLine(GEAR_DEFS.find((d) => d.key === "hill_giant_club"))) && /Scurrius/.test(sourceLine(GEAR_DEFS.find((d) => d.key === "scurrius_spine"))) && /Bryophyta/.test(sourceLine(GEAR_DEFS.find((d) => d.key === "bryophytas_essence"))));
+
+  // The evening message: the group's business by name, a player's own as a count.
+  const quiet = reminderMessage({ nudges: [], waiting: 3, goingStale: [] });
+  check("private things are a count in the channel, never names", /3 players have things waiting/.test(quiet.content) && /My to-do/.test(quiet.content), quiet);
+  check("one player is singular", /One player has things waiting/.test(reminderMessage({ nudges: [], waiting: 1, goingStale: [] }).content));
+}
 
 console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) failed.`);
 process.exit(failures === 0 ? 0 : 1);

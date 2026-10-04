@@ -63,7 +63,12 @@ import {
 } from "./actions.ts";
 import { actOf, freshAction, playerAction } from "./interactions.ts";
 import { bingoView } from "./bingo.ts";
-import { spendPoints, taskView } from "./slayer.ts";
+import { chooseMaster, spendPoints, taskView } from "./slayer.ts";
+import { gearCatalogue, gearChase, gearView, gearWear } from "./gear.ts";
+import { farmView, tearsVisit } from "./farm.ts";
+import { bossView } from "./bosses.ts";
+import { kingdomAssign, kingdomCollect, kingdomFund, kingdomView } from "./kingdom.ts";
+import { KINGDOM_JOBS } from "./config.ts";
 import { shopMenu } from "./shop.ts";
 import { addDays, daysBetween, gameWeek } from "./schedule.ts";
 import { runTick } from "./tick.ts";
@@ -148,6 +153,41 @@ export async function runCommand(
       return relay(env, ctx, interaction, user, "log", now);
     case "bank":
       return playerAction(env, user, day, (p) => bankView(env, p));
+    case "spoils":
+      return relay(env, ctx, interaction, user, "spoils", now);
+    case "ge":
+      return relay(env, ctx, interaction, user, "ge", now);
+    case "diary":
+      return relay(env, ctx, interaction, user, "diary", now);
+    case "gear": {
+      const sub = subcommand(interaction);
+      if (sub === "show") return relay(env, ctx, interaction, user, "gear:show", now);
+      const item = stringOption(interaction, "item") ?? "";
+      const levelsFor = async (p: { discord_id: string }) => levelsOf(await getSkills(env, p.discord_id), levelForXp);
+      if (sub === "wear") return freshAction(env, user, day, async (p) => gearWear(env, p, await levelsFor(p), item));
+      if (sub === "chase") return freshAction(env, user, day, async (p) => gearChase(env, p, await levelsFor(p), item));
+      if (sub === "catalogue") return playerAction(env, user, day, (p) => gearCatalogue(env, p, stringOption(interaction, "slot") ?? ""));
+      return playerAction(env, user, day, async (p) => gearView(env, p, await levelsFor(p)));
+    }
+    case "boss":
+      return playerAction(env, user, day, () => bossView(env, day));
+    case "todo":
+      return relay(env, ctx, interaction, user, "todo", now);
+    case "farm":
+      return playerAction(env, user, day, (p) => farmView(env, p, day, now));
+    case "tears":
+      return freshAction(env, user, day, (p) => tearsVisit(env, p, day, now));
+    case "kingdom": {
+      const sub = subcommand(interaction);
+      if (sub === "collect") return freshAction(env, user, day, (p) => kingdomCollect(env, p, day, now));
+      if (sub === "fund") return freshAction(env, user, day, (p) => kingdomFund(env, p, numberOption(interaction, "gp") ?? 0, day, now));
+      if (sub === "withdraw") return freshAction(env, user, day, (p) => kingdomFund(env, p, -(numberOption(interaction, "gp") ?? 0), day, now));
+      if (sub === "assign") {
+        const workers = Object.fromEntries(KINGDOM_JOBS.map((job) => [job.key, numberOption(interaction, job.key) ?? 0]));
+        return freshAction(env, user, day, (p) => kingdomAssign(env, p, workers, day));
+      }
+      return playerAction(env, user, day, (p) => kingdomView(env, p, day));
+    }
     case "quest": {
       const sub = subcommand(interaction);
       return playerAction(env, user, day, () => (sub === "log" ? questLog(env) : questView(env, day)));
@@ -176,6 +216,12 @@ export async function runCommand(
       return playerAction(env, user, day, async (p) => ({ content: await bingoView(env, p, actOf(env, day)) }));
     case "task": {
       const sub = subcommand(interaction);
+      if (sub === "master") {
+        return freshAction(env, user, day, async (p) => {
+          const levels = levelsOf(await getSkills(env, p.discord_id), levelForXp);
+          return { content: await chooseMaster(env, p, stringOption(interaction, "name") ?? "", levels, combatLevel(levels)) };
+        });
+      }
       if (sub && sub !== "status") {
         return freshAction(env, user, day, async (p) => {
           const levels = levelsOf(await getSkills(env, p.discord_id), levelForXp);
@@ -433,6 +479,12 @@ async function helpCommand(env: Env): Promise<Answer> {
       "Every morning the bot asks whether you worked out in the last 24 hours. Press Yes when you did (any exercise counts, one a day), No when you rested. `/checkin` adds a note or a photo.",
       "Every Yes is a training session against your Slayer task, scored the way Old School RuneScape scores it: your levels, weapon, armour and prayers decide the damage, and the damage decides the XP.",
       "The first two check-ins of the week are full value, the third and fourth half, the rest a fifth.",
+      "Every check-in ends with spoils: pick one of three (your roll, today's container, a sure thing). The week's second check-in rolls with advantage. `/spoils`.",
+      "Your bank is spendable at the Grand Exchange (`/ge`): a potion or better food for your next session, bones for Prayer. `/diary` is the long game.",
+      "Slayer monsters drop things to wear: `/gear` to wear them, chase one, and show off. `/task master` and `/task block` steer what you are assigned.",
+      "Every week the group fights a boss together (`/boss`): every check-in takes a swing, and when it falls everyone who fought shares the spoils.",
+      "`/todo` (or My to-do on the morning post) lists what is waiting on you. Only you see it.",
+      "Between check-ins: a farm run a day (`/farm`), your kingdom's haul once a week (`/kingdom`), and the Tears of Guthix once a week (`/tears`).",
       "A check-in in the last four days is what lets you play: `/lamp`, `/clue`, `/task`, `/town`, `/vote`, and verifying friends.",
       "Only people who `/join` are counted. Nobody else is ever named.",
       `Rules and commands: ${env.IMAGE_BASE_URL}/yut-hut`,

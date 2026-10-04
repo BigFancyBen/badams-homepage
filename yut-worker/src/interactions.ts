@@ -75,9 +75,29 @@ import { runCommand } from "./commands.ts";
 import { playersRoleId, setPing } from "./roles.ts";
 import { dailyThread, refreshDailyPost } from "./digest.ts";
 import { addDays, daysBetween, gameDay, gameWeek, parseHour } from "./schedule.ts";
-import { gatherSheet, levelUpImageUrl, renderCard, reportImageUrl, sheetImageUrl, textSheet } from "./sheet.ts";
+import {
+  diaryImageUrl,
+  gearImageUrl,
+  gatherSheet,
+  levelUpImageUrl,
+  renderCard,
+  reportImageUrl,
+  sheetImageUrl,
+  spoilsImageUrl,
+  textSheet,
+} from "./sheet.ts";
+import { getSpoils, openSpoils, spoilsButtons, spoilsView, optionsOf, type Opened } from "./spoils.ts";
+import { geBuy, geMenu } from "./ge.ts";
+import { GEAR_DEFS, gearCardSlots, gearDef, gearView, gearWear, ownedGear } from "./gear.ts";
+import { farmRun, farmView } from "./farm.ts";
+import { bossView } from "./bosses.ts";
+import { personalTodo, todoBlock } from "./todo.ts";
+import { kingdomAssign, kingdomCollect, kingdomFund, kingdomView } from "./kingdom.ts";
+import { armourFor, weaponFor } from "./combat.ts";
+import { KINGDOM_JOBS, KINGDOM_SUBJECTS } from "./config.ts";
+import { currentTier, diaryFor, diaryText } from "./diary.ts";
 import { isLevelMilestone } from "./xp.ts";
-import { spendPoints, taskView } from "./slayer.ts";
+import { chooseMaster, spendPoints, taskView } from "./slayer.ts";
 
 function ordinalWordFor(n: number): string {
   return ["1st", "2nd", "3rd", "4th", "5th", "6th", "7th"][n - 1] ?? `${n}th`;
@@ -430,9 +450,33 @@ async function route(
       return a
         ? freshAction(env, user, day, async (p) => {
             const levels = levelsOf(await getSkills(env, p.discord_id), levelForXp);
+            if (a === "master") return { content: await chooseMaster(env, p, b ?? "", levels, combatLevel(levels)) };
             return { content: await spendPoints(env, p, a, levels, combatLevel(levels), day, now) };
           })
         : playerAction(env, user, day, (p) => taskView(env, p));
+    case "gear":
+      if (a === "show") return gearShow(env, ctx, interaction, user, day);
+      if (a === "w") {
+        return freshAction(env, user, day, async (p) => gearWear(env, p, levelsOf(await getSkills(env, p.discord_id), levelForXp), b ?? ""));
+      }
+      return playerAction(env, user, day, async (p) => gearView(env, p, levelsOf(await getSkills(env, p.discord_id), levelForXp)));
+    case "boss":
+      return playerAction(env, user, day, () => bossView(env, day));
+    case "todo":
+      return playerAction(env, user, day, async (p) => ({
+        content: todoBlock(await personalTodo(env, p, day, now)) ?? "📋 Nothing is waiting on you.",
+      }));
+    case "farm":
+      return a === "run"
+        ? freshAction(env, user, day, (p) => farmRun(env, p, day, now))
+        : playerAction(env, user, day, (p) => farmView(env, p, day, now));
+    case "kd":
+      if (a === "collect") return freshAction(env, user, day, (p) => kingdomCollect(env, p, day, now));
+      if (a === "dep") return freshAction(env, user, day, (p) => kingdomFund(env, p, Number(b), day, now));
+      if (a === "job" && KINGDOM_JOBS.some((job) => job.key === b)) {
+        return freshAction(env, user, day, (p) => kingdomAssign(env, p, { [b]: KINGDOM_SUBJECTS }, day));
+      }
+      return playerAction(env, user, day, (p) => kingdomView(env, p, day));
     case "shop":
       return a
         ? freshAction(env, user, day, (p) => shopPress(env, p, a, b, day, now, actOf(env, day)))
@@ -441,6 +485,22 @@ async function route(
       return logReply(env, user, day);
     case "bank":
       return playerAction(env, user, day, (p) => bankView(env, p));
+    case "sp":
+      return pickSpoils(env, ctx, user, Number(a), Number(b), day, now);
+    case "spoils":
+      return playerAction(env, user, day, async (p) => {
+        const view = await spoilsView(env, p, day);
+        return {
+          content: view.content,
+          components: view.waiting ? [buttonRow(spoilsButtons(view.waiting.id, optionsOf(view.waiting)))] : [],
+        };
+      });
+    case "ge":
+      return a
+        ? freshAction(env, user, day, (p) => geBuy(env, p, a, day, now))
+        : playerAction(env, user, day, (p) => geMenu(env, p));
+    case "diary":
+      return diaryReply(env, ctx, interaction, user, day);
     case "quest":
       return playerAction(env, user, day, () => questView(env, day));
     case "vf":
@@ -546,7 +606,9 @@ async function restDay(
       : done === 1
         ? `One in this week, one to go${daysLeft > 0 ? `, ${daysLeft} day${daysLeft === 1 ? "" : "s"} left` : ""}.`
         : `Nothing in yet this week${daysLeft > 0 ? `; ${daysLeft} day${daysLeft === 1 ? "" : "s"} left for your two` : ""}.`;
-  return reply(`Rest day noted. ${standing} Two a week is the whole game.`, { scope: "ci" });
+  // The answer is private, so it carries the player's own to-do list.
+  const todo = todoBlock(await personalTodo(env, gate.player, day, now).catch(() => []));
+  return reply(`Rest day noted. ${standing} Two a week is the whole game.${todo ? `\n\n${todo}` : ""}`.slice(0, 1990), { scope: "ci" });
 }
 
 /** Re-edits the morning post's roll call. Errors are swallowed; the post is decoration. */
@@ -587,7 +649,11 @@ export async function receiptReply(
 ): Promise<Ephemeral> {
   const components: unknown[] = [];
   if (outcome.quiz) components.push(quizButtons(outcome.checkinId, outcome.quiz.index));
-  components.push(...buttonRows(await hubButtons(env, player, day)));
+  // The pick sits above the hub: it is the one thing the receipt asks for.
+  if (outcome.spoils) components.push(buttonRow(spoilsButtons(outcome.spoils.id, outcome.spoils.options)));
+  // The pick has its own row, so the hub does not need a Spoils button under it.
+  const hubRows = (await hubButtons(env, player, day)).filter((button) => !(outcome.spoils && button.custom_id === "spoils"));
+  components.push(...buttonRows(hubRows).slice(0, 5 - components.length));
   // The session itself is in the day's thread; the receipt keeps what only
   // the player can act on.
   const threadId = await dailyThread(env, day);
@@ -595,8 +661,13 @@ export async function receiptReply(
     `**Checked in.** ${ordinalWordFor(outcome.ordinal)} this week, ${weightWordFor(outcome.weight)}.` +
       (threadId ? ` The session is in <#${threadId}>.` : ""),
     ...outcome.essentials,
+    ...(outcome.spoils ? ["", ...outcome.spoils.lines] : []),
   ];
-  return reply(lines.join("\n"), { components, scope: "ci" });
+  // The receipt is private too: what else is waiting rides under it.
+  const current = (await getPlayer(env, player.discord_id)) ?? player;
+  const todo = todoBlock(await personalTodo(env, current, day, Date.now(), { afterCheckin: true }).catch(() => []));
+  if (todo) lines.push("", todo);
+  return reply(lines.join("\n").slice(0, 1990), { components, scope: "ci" });
 }
 
 /**
@@ -817,6 +888,8 @@ export async function hub(env: Env, user: DiscordUser, day: string): Promise<Eph
   if (lamps.length > 0) lines.push(`🧞 ${lamps.length} lamp${lamps.length === 1 ? "" : "s"} to rub.`);
   if (clue) lines.push(`📜 A clue in hand — ${remainingSteps(clue).length} step${remainingSteps(clue).length === 1 ? "" : "s"} left.`);
   lines.push(`Combat style: ${STYLE_LABEL[player.combat_style]}.`);
+  const todo = todoBlock(await personalTodo(env, player, day, Date.now()).catch(() => []));
+  if (todo) lines.push("", todo);
   const styleButtons: Button[] = (["accurate", "aggressive", "defensive", "controlled"] as const).map((style) => ({
     label: STYLE_LABEL[style].split(" (")[0],
     custom_id: `style:${style}`,
@@ -943,7 +1016,11 @@ async function lampMenu(env: Env, user: DiscordUser, day: string): Promise<Answe
   });
   return reply(
     `🧞 ${lamps.length === 1 ? "One lamp" : `${lamps.length} lamps`} (${lamp.source}). Pick a skill for this one` +
-      (lamp.source === "genie" ? " — a genie's lamp is worth ten times the skill's level." : " — an antique lamp pays the same into any skill."),
+      (lamp.source === "genie"
+        ? " — a genie's lamp is worth ten times the skill's level."
+        : lamp.source === "book"
+          ? " — a Book of knowledge is worth fifteen times the skill's level."
+          : " — an antique lamp pays the same into any skill."),
     { scope: "ci", components: buttonRows(buttons) }
   );
 }
@@ -985,6 +1062,164 @@ async function rubLamp(
     if (!(next instanceof Response)) return { ...next, content: `${line}\n${next.content}` };
   }
   return reply(line, { scope: "ci", components: buttonRows(await hubButtons(env, gate.player, day)) });
+}
+
+// ── Spoils ─────────────────────────────────────────────────────────
+
+/**
+ * A press on one of the three. The pick is the player's alone, so the answer
+ * rewrites their receipt; the day's thread hears what came out, with a card.
+ */
+async function pickSpoils(
+  env: Env,
+  ctx: ExecutionContext,
+  user: DiscordUser,
+  spoilsId: number,
+  index: number,
+  day: string,
+  now: number
+): Promise<Answer> {
+  const gate = await requireFresh(env, user, day);
+  if ("refusal" in gate) return gate.refusal;
+  const row = await getSpoils(env, spoilsId);
+  if (!row || row.player_id !== user.id) return reply("Those spoils are not yours.");
+  const opened = row.picked === null ? await openSpoils(env, gate.player, row, index, day, now) : null;
+  if (!opened) {
+    return reply("Those spoils are already opened.", {
+      scope: "ci",
+      components: buttonRows(await hubButtons(env, gate.player, day)),
+    });
+  }
+  ctx.waitUntil(postSpoils(env, gate.player, row.id, opened, day));
+  return reply(opened.line, { scope: "ci", components: buttonRows(await hubButtons(env, gate.player, day)) });
+}
+
+/** The thread line and the card for a pick. Errors are logged; the pick stands. */
+export async function postSpoils(env: Env, player: Player, spoilsId: number, opened: Opened, day: string): Promise<void> {
+  try {
+    const url = await renderCard(env, `spoils/${spoilsId}.png`, (attempt) =>
+      spoilsImageUrl(
+        env,
+        spoilsId,
+        {
+          n: player.username,
+          t: opened.card.title,
+          sub: opened.card.sub,
+          big: opened.card.big,
+          ...(opened.card.tier ? { tier: opened.card.tier } : {}),
+          loot: opened.card.loot.slice(0, LOOT_CARD_CELLS),
+          ...(opened.card.v ? { v: opened.card.v } : {}),
+          d: day,
+        },
+        attempt
+      )
+    );
+    await postThreadLine(env, day, await getState(env, `daily_post:${day}`).catch(() => null), {
+      content: opened.publicLine,
+      embeds: url ? [{ color: ACCENT, image: { url } }] : [],
+      components: [],
+      allowed_mentions: allowedMentions(),
+    });
+  } catch (error) {
+    await logToDiscord(env, `Spoils line failed: ${String(error)}`);
+  }
+}
+
+// ── Gear ───────────────────────────────────────────────────────────
+
+/** "Show off": the gear card, posted to the channel for everyone. */
+async function gearShow(
+  env: Env,
+  ctx: ExecutionContext,
+  interaction: Interaction,
+  user: DiscordUser,
+  day: string
+): Promise<Answer> {
+  const gate = await requireFresh(env, user, day);
+  if ("refusal" in gate) return gate.refusal;
+  const { player } = gate;
+  ctx.waitUntil(
+    finishLater(env, interaction, "Gear card", async () => {
+      const levels = levelsOf(await getSkills(env, player.discord_id), levelForXp);
+      const owned = await ownedGear(env, player);
+      const slots = gearCardSlots(player, owned, { weapon: weaponFor(levels.attack).key, armour: armourFor(levels.defence).key });
+      const chase = gearDef(player.wishlist);
+      const url = await renderCard(env, `gear/${player.discord_id}-${Date.now()}.png`, (attempt) =>
+        gearImageUrl(
+          env,
+          player.discord_id,
+          {
+            n: player.username,
+            slots,
+            own: owned.size,
+            of: GEAR_DEFS.length,
+            ...(chase && !owned.has(chase.key) ? { chase: chase.item } : {}),
+            ...(player.title ? { ti: player.title } : {}),
+            cb: combatLevel(levels),
+            d: day,
+          },
+          attempt
+        )
+      );
+      const name = escapeMarkdown(player.username);
+      await postMessage(env, {
+        content: url
+          ? `✨ **${name}**'s gear`
+          : `✨ **${name}**'s gear: ${slots.map((slot) => `${slot.s} ${slot.n}`).join(" · ")} — wardrobe ${owned.size}/${GEAR_DEFS.length}`,
+        embeds: url ? [{ color: ACCENT, image: { url } }] : [],
+        allowed_mentions: allowedMentions(),
+      });
+      await editInteractionReply(env, interaction.application_id, interaction.token, { content: "Posted." });
+    })
+  );
+  return deferred();
+}
+
+// ── Diary ──────────────────────────────────────────────────────────
+
+/** The diary is a card, so it is deferred like the sheet; the text is the fallback. */
+async function diaryReply(
+  env: Env,
+  ctx: ExecutionContext,
+  interaction: Interaction,
+  user: DiscordUser,
+  day: string
+): Promise<Answer> {
+  const gate = await requirePlayer(env, user, day);
+  if ("refusal" in gate) return gate.refusal;
+  const { player } = gate;
+  ctx.waitUntil(
+    finishLater(env, interaction, "Diary", async () => {
+      const progress = await diaryFor(env, player);
+      const open = currentTier(progress);
+      const url = await renderCard(env, `diaries/${player.discord_id}-${Date.now()}.png`, (attempt) =>
+        diaryImageUrl(
+          env,
+          player.discord_id,
+          {
+            n: player.username,
+            tiers: progress.map((row) => ({
+              k: row.tier.key,
+              n: row.tier.name,
+              done: row.done,
+              of: row.tasks.length,
+              paid: row.paid,
+              lamp: row.tier.lamp,
+            })),
+            tasks: (open?.tasks ?? []).map((task) => ({ l: task.label, h: task.have, g: task.goal })),
+            ...(open ? { open: open.tier.key } : {}),
+            d: day,
+          },
+          attempt
+        )
+      );
+      await editInteractionReply(env, interaction.application_id, interaction.token, {
+        content: url ? "" : diaryText(escapeMarkdown(player.username), progress),
+        embeds: url ? [{ color: ACCENT, image: { url } }] : [],
+      });
+    })
+  );
+  return deferred();
 }
 
 // ── Clue ───────────────────────────────────────────────────────────

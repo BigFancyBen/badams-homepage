@@ -2,6 +2,7 @@ import { BANK_VIEW_ROWS, NOTABLE_RARITY_DENOMINATOR, NOTABLE_VALUE } from "./con
 import { bankFor, bankValue, logEntries } from "./db.ts";
 import { escapeMarkdown } from "./discord.ts";
 import { gpShort, itemName } from "./loot.ts";
+import { geBalance } from "./ge.ts";
 import type { Env, Player } from "./types.ts";
 
 /** `/bank`: the richest stacks, the total, and how many notable drops are in the log. */
@@ -16,6 +17,7 @@ export async function bankView(env: Env, player: Player): Promise<{ content: str
     for (const row of rows) {
       lines.push(`${row.qty.toLocaleString("en-US")}× ${itemName(row.item)} (${gpShort(row.value)})`);
     }
+    lines.push(`${gpShort(await geBalance(env, player))} of it is unspent: \`/ge\` buys potions, food and bones.`);
     lines.push(
       `${notable === 0 ? "No notable drops yet" : `${notable} notable drop${notable === 1 ? "" : "s"} in the log`} — ` +
         `a notable drop is 1/${NOTABLE_RARITY_DENOMINATOR.toLocaleString("en-US")} or rarer, or worth ${gpShort(NOTABLE_VALUE)}.`

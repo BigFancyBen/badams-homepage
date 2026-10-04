@@ -172,6 +172,113 @@ async function admin(env: Env, ctx: ExecutionContext, url: URL): Promise<unknown
       return { ok: true, voted: votes.map((v) => v.id) };
     }
 
+    case "spoils-as": {
+      // Picks from a player's waiting spoils (pick= is the option index), for the harness.
+      const id = url.searchParams.get("player");
+      const player = id ? await getPlayer(env, id) : null;
+      if (!player) return { ok: false, error: "no such player" };
+      const day = url.searchParams.get("day") ?? gameDay(now, rollover);
+      const { openSpoils, optionsOf, waitingSpoils } = await import("./spoils.ts");
+      const waiting = await waitingSpoils(env, player.discord_id);
+      const row = waiting[waiting.length - 1];
+      if (!row) return { ok: true, waiting: 0 };
+      const pick = url.searchParams.get("pick");
+      if (pick === null) return { ok: true, waiting: waiting.length, id: row.id, options: optionsOf(row) };
+      return { ok: true, id: row.id, options: optionsOf(row), opened: await openSpoils(env, player, row, Number(pick), day, now) };
+    }
+
+    case "ge-as": {
+      // Buys from the Grand Exchange as a player; with no item=, the menu.
+      const id = url.searchParams.get("player");
+      const player = id ? await getPlayer(env, id) : null;
+      if (!player) return { ok: false, error: "no such player" };
+      const { geBalance, geBuy, geMenu } = await import("./ge.ts");
+      const item = url.searchParams.get("item");
+      const line = item ? await geBuy(env, player, item, gameDay(now, rollover), now) : await geMenu(env, player);
+      const after = (await getPlayer(env, id!))!;
+      return { ok: true, content: line.content, balance: await geBalance(env, after), loadout: after.loadout };
+    }
+
+    case "diary": {
+      const id = url.searchParams.get("player");
+      const player = id ? await getPlayer(env, id) : null;
+      if (!player) return { ok: false, error: "no such player" };
+      const { diaryFor, diaryStats, diaryText } = await import("./diary.ts");
+      const progress = await diaryFor(env, player);
+      return { ok: true, stats: await diaryStats(env, player), text: diaryText(player.username, progress) };
+    }
+
+    case "bank-deposit": {
+      // Puts coins in a player's bank, so the harness can afford the Grand Exchange.
+      const id = url.searchParams.get("player");
+      const gp = Number(url.searchParams.get("gp") ?? "0");
+      if (!id || !(gp > 0)) return { ok: false, error: "player= and gp=" };
+      const { bankDepositStatement } = await import("./db.ts");
+      await bankDepositStatement(env, id, "coins", gp, gp, gameDay(now, rollover)).run();
+      return { ok: true };
+    }
+
+    case "farm-as": {
+      // A farm run as a player, at at= (so the harness can let the crops grow).
+      const id = url.searchParams.get("player");
+      const player = id ? await getPlayer(env, id) : null;
+      if (!player) return { ok: false, error: "no such player" };
+      const day = url.searchParams.get("day") ?? gameDay(now, rollover);
+      const { farmRun, farmView } = await import("./farm.ts");
+      const line = url.searchParams.get("run") === "1" ? await farmRun(env, player, day, now) : await farmView(env, player, day, now);
+      return { ok: true, content: line.content };
+    }
+
+    case "kingdom-as": {
+      // The kingdom as a player on day=: fund=, collect=1, or just the view.
+      const id = url.searchParams.get("player");
+      const player = id ? await getPlayer(env, id) : null;
+      if (!player) return { ok: false, error: "no such player" };
+      const day = url.searchParams.get("day") ?? gameDay(now, rollover);
+      const { kingdomCollect, kingdomFund, kingdomView, loadKingdom } = await import("./kingdom.ts");
+      const fund = url.searchParams.get("fund");
+      const line = fund
+        ? await kingdomFund(env, player, Number(fund), day, now)
+        : url.searchParams.get("collect") === "1"
+          ? await kingdomCollect(env, player, day, now)
+          : await kingdomView(env, player, day);
+      return { ok: true, content: line.content, kingdom: await loadKingdom(env, player.discord_id, day) };
+    }
+
+    case "tears-as": {
+      const id = url.searchParams.get("player");
+      const player = id ? await getPlayer(env, id) : null;
+      if (!player) return { ok: false, error: "no such player" };
+      const { tearsVisit } = await import("./farm.ts");
+      return { ok: true, content: (await tearsVisit(env, player, url.searchParams.get("day") ?? gameDay(now, rollover), now)).content };
+    }
+
+    case "bank-item": {
+      // Puts an item in a player's bank by key, so the harness can wear gear and plant seeds.
+      const id = url.searchParams.get("player");
+      const item = url.searchParams.get("item");
+      if (!id || !item) return { ok: false, error: "player= and item=" };
+      const { bankDepositStatement } = await import("./db.ts");
+      const qty = Number(url.searchParams.get("qty") ?? "1");
+      await bankDepositStatement(env, id, item, qty, Number(url.searchParams.get("gp") ?? "0"), gameDay(now, rollover)).run();
+      return { ok: true };
+    }
+
+    case "todo": {
+      // A player's private to-do list, for the harness.
+      const id = url.searchParams.get("player");
+      const player = id ? await getPlayer(env, id) : null;
+      if (!player) return { ok: false, error: "no such player" };
+      const { personalTodo } = await import("./todo.ts");
+      return { ok: true, items: await personalTodo(env, player, url.searchParams.get("day") ?? gameDay(now, rollover), now) };
+    }
+
+    case "boss": {
+      const day = url.searchParams.get("day") ?? gameDay(now, rollover);
+      const { bossView, bossWeek } = await import("./bosses.ts");
+      return { ok: true, content: (await bossView(env, day)).content, week: await bossWeek(env, gameWeek(day)) };
+    }
+
     case "sql": {
       // Read-only, for the harness: SELECT only.
       const query = url.searchParams.get("q") ?? "";

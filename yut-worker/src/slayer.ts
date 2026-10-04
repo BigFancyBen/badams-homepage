@@ -1,4 +1,7 @@
 import {
+  SLAYER_BLOCK_COST,
+  SLAYER_BLOCK_MAX,
+  SLAYER_BLOCK_QP_PER_SLOT,
   SLAYER_HELMET_COST,
   SLAYER_SKIP_COST,
   SLAYER_STREAK_BONUS,
@@ -15,6 +18,7 @@ import {
   type Levels,
   type Monster,
   type SlayerMaster,
+  MASTERS,
   MONSTERS,
 } from "./combat.ts";
 import type { Env, Player } from "./types.ts";
@@ -95,9 +99,9 @@ export async function assignTask(
   day: string,
   salt = ""
 ): Promise<SlayerTask> {
-  const master = masterFor(combat, levels.slayer);
+  const master = masterWanted(player, combat, levels.slayer);
   const rng = seededRng(`${player.discord_id}:${day}:task${salt}`);
-  const drawn = drawAssignment(rng, master, levels.slayer, combat);
+  const drawn = drawAssignment(rng, master, levels.slayer, combat, blocksOf(player));
   const inserted = await env.DB.prepare(
     "INSERT INTO slayer_tasks (player_id, master, monster, kills_needed, kills, assigned_day, due_day, status) VALUES (?, ?, ?, ?, 0, ?, ?, 'active')"
   )
@@ -115,6 +119,44 @@ export async function assignTask(
     status: "active",
     points_awarded: 0,
   };
+}
+
+/** The monsters a player has blocked, as keys into config/osrs.json. */
+export function blocksOf(player: Player): string[] {
+  try {
+    const list = JSON.parse(player.slayer_blocks || "[]");
+    return Array.isArray(list) ? (list as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** The master a player's tasks come from: the one they asked for if they still qualify, else the highest they have earned. */
+export function masterWanted(player: Player, combat: number, slayer: number): SlayerMaster {
+  const best = masterFor(combat, slayer);
+  const chosen = MASTERS.find((master) => master.key === player.slayer_master);
+  return chosen && combat >= chosen.combat && slayer >= chosen.slayer ? chosen : best;
+}
+
+/** One block slot, and one more for every 50 quest points the group holds, up to six. */
+export async function blockSlots(env: Env): Promise<number> {
+  const row = await env.DB.prepare("SELECT COALESCE(SUM(qp), 0) AS qp FROM quests WHERE status = 'done'").first<{ qp: number }>();
+  return Math.min(SLAYER_BLOCK_MAX, 1 + Math.floor((row?.qp ?? 0) / SLAYER_BLOCK_QP_PER_SLOT));
+}
+
+/** Asks for a master ("best" clears the choice). It takes effect at the next assignment. */
+export async function chooseMaster(env: Env, player: Player, key: string, levels: Levels, combat: number): Promise<string> {
+  if (key === "best") {
+    await updatePlayer(env, player.discord_id, { slayer_master: null });
+    return `Back to the highest master you qualify for: ${masterFor(combat, levels.slayer).name}. It takes effect at your next assignment.`;
+  }
+  const master = MASTERS.find((m) => m.key === key);
+  if (!master) return "That is not a Slayer master.";
+  if (combat < master.combat || levels.slayer < master.slayer) {
+    return `${master.name} wants combat level ${master.combat}${master.slayer > 1 ? ` and ${master.slayer} Slayer` : ""}.`;
+  }
+  await updatePlayer(env, player.discord_id, { slayer_master: master.key });
+  return `${master.name} assigns your tasks from now on (${master.points} points a task). It takes effect at your next assignment; skip the current one to switch now.`;
 }
 
 /** The task a check-in fights: the open one, or a fresh assignment. */
@@ -220,9 +262,13 @@ export interface TaskView {
 
 export async function taskView(env: Env, player: Player): Promise<TaskView> {
   const task = await activeTask(env, player.discord_id);
+  const blocks = blocksOf(player);
+  const slots = await blockSlots(env);
   const lines = [
     `🗡️ ${task ? taskShort(task) : "No Slayer task yet. Your first check-in gets one."}`,
     `Slayer points: ${player.slayer_points}. Tasks in a row: ${player.slayer_streak}. Tasks done: ${player.tasks_done}.`,
+    `Blocked (${blocks.length}/${slots}): ${blocks.length > 0 ? blocks.map((key) => MONSTERS[key]?.name ?? key).join(", ") : "nothing"}. Blocking the current task costs ${SLAYER_BLOCK_COST} points and it is never assigned again; \`/task unblock\` clears the list.`,
+    `Master: ${player.slayer_master ? (MASTERS.find((m) => m.key === player.slayer_master)?.name ?? "the best you qualify for") : "the best you qualify for"}. \`/task master\` picks any master you qualify for, to steer towards the monster that drops what you are chasing.`,
     "Every check-in is a training session against your task. Each kill on task pays the monster's Slayer XP; finishing pays the master's points. The 10th, 50th and 100th task in a row pay 5×, 15× and 25×.",
     `Spend points: skip the task (${SLAYER_SKIP_COST}), ${SLAYER_XP_BOUGHT.toLocaleString("en-US")} Slayer XP (${SLAYER_XP_COST}), the Slayer helmet (${SLAYER_HELMET_COST}) for +16⅔% accuracy and damage on task and the title Slayer Master.`,
   ];
@@ -235,6 +281,7 @@ export async function taskView(env: Env, player: Player): Promise<TaskView> {
           { type: 2, style: 2, label: `Skip task (${SLAYER_SKIP_COST})`, custom_id: "task:skip", disabled: !task || player.slayer_points < SLAYER_SKIP_COST },
           { type: 2, style: 1, label: `Slayer XP (${SLAYER_XP_COST})`, custom_id: "task:xp", disabled: player.slayer_points < SLAYER_XP_COST },
           { type: 2, style: 1, label: `Slayer helmet (${SLAYER_HELMET_COST})`, custom_id: "task:helmet", disabled: player.slayer_points < SLAYER_HELMET_COST },
+          { type: 2, style: 4, label: `Block task (${SLAYER_BLOCK_COST})`, custom_id: "task:block", disabled: !task || player.slayer_points < SLAYER_BLOCK_COST || blocks.length >= slots },
         ],
       },
     ],
@@ -266,6 +313,27 @@ export async function spendPoints(
     await updatePlayer(env, player.discord_id, { slayer_points: player.slayer_points - SLAYER_SKIP_COST });
     const next = await assignTask(env, player, levels, combat, day, ":skip" + now);
     return `Skipped. ${masterByKey(next.master).name} assigns you ${next.kills_needed} ${taskName(next)}. (−${SLAYER_SKIP_COST} points.)`;
+  }
+  if (what === "block") {
+    const task = await activeTask(env, player.discord_id);
+    if (!task) return "No task to block.";
+    const blocks = blocksOf(player);
+    const slots = await blockSlots(env);
+    if (blocks.includes(task.monster)) return "That one is already blocked.";
+    if (blocks.length >= slots) return `All ${slots} block slot${slots === 1 ? " is" : "s are"} in use. \`/task unblock\` clears them; the group's quest points open more.`;
+    if (player.slayer_points < SLAYER_BLOCK_COST) return `Blocking costs ${SLAYER_BLOCK_COST} points; you have ${player.slayer_points}.`;
+    const blocked = [...blocks, task.monster];
+    await env.DB.prepare("UPDATE slayer_tasks SET status = 'skipped' WHERE id = ?").bind(task.id).run();
+    await updatePlayer(env, player.discord_id, {
+      slayer_points: player.slayer_points - SLAYER_BLOCK_COST,
+      slayer_blocks: JSON.stringify(blocked),
+    });
+    const next = await assignTask(env, { ...player, slayer_blocks: JSON.stringify(blocked) }, levels, combat, day, ":block" + now);
+    return `Blocked ${taskName(task)}: never again. ${masterByKey(next.master).name} assigns you ${next.kills_needed} ${taskName(next)}. (−${SLAYER_BLOCK_COST} points.)`;
+  }
+  if (what === "unblock") {
+    await updatePlayer(env, player.discord_id, { slayer_blocks: "[]" });
+    return "Block list cleared.";
   }
   if (what === "xp") {
     if (player.slayer_points < SLAYER_XP_COST) return `${SLAYER_XP_BOUGHT.toLocaleString("en-US")} Slayer XP costs ${SLAYER_XP_COST} points; you have ${player.slayer_points}.`;

@@ -16,6 +16,8 @@ import { summaryLines, type WeekSummary } from "./weekly.ts";
 import { raidLine } from "./raids.ts";
 import { championsGuildLine, questIntro, questLine } from "./quests.ts";
 import { openVotes } from "./votes.ts";
+import { featuredFor, tierName } from "./spoils.ts";
+import { bossLine } from "./bosses.ts";
 
 /**
  * The morning post. One message a day, and the only scheduled one most days:
@@ -105,6 +107,18 @@ export async function composeDigest(env: Env, today: string): Promise<DigestPart
     const quest = await questLine(env, today);
     if (quest) lines.push(quest);
   }
+  // The boss of the week: the group's shared fight.
+  try {
+    const boss = await bossLine(env, today);
+    if (boss) lines.push(boss);
+  } catch {
+    // The post goes out without it.
+  }
+  // Today's featured container: on offer in every full-value check-in's spoils.
+  if (week > 0) {
+    const featured = featuredFor(today);
+    lines.push(`🎁 Today's spoils: **${featured.name}** (${tierName(featured.tier).toLowerCase()}) is on the table for every full-value check-in.`);
+  }
   const votes = await openVotes(env);
   if (votes.length > 0) {
     lines.push(
@@ -154,6 +168,7 @@ export function digestPayload(
         { label: "Yes", custom_id: `ci:${today}`, style: 3, emoji: "💪" },
         { label: "No, rest day", custom_id: `no:${today}`, style: 2, emoji: "😴" },
         { label: "Join the campaign", custom_id: `join:${today}`, style: 2 },
+        { label: "My to-do", custom_id: "todo", style: 2, emoji: "📋" },
       ]),
     ],
     allowed_mentions: allowedMentions(roleId),

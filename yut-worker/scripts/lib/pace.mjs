@@ -8,6 +8,8 @@ import { combatLevel, drawAssignment, masterFor, simulateSession } from "../../s
 import { levelForXp, ordinalWeight } from "../../src/xp.ts";
 import {
   ALTAR_MULTIPLIER,
+  BOOK_XP_PER_LEVEL,
+  DIARY,
   FOUNDING_LAMP_XP,
   QUEST_CALENDAR,
   QUEST_LAMP,
@@ -33,12 +35,27 @@ export function questLampFor(week) {
 }
 
 /**
+ * The week a tier of the diary is finished, by its check-in count alone (the
+ * slowest of its tasks for a steady player), or null if the year never gets there.
+ */
+function diaryWeek(tier, perWeek) {
+  const goal = tier.tasks.find((task) => task.stat === "checkins")?.goal ?? 0;
+  const week = Math.ceil(goal / perWeek);
+  return week <= 52 ? week : null;
+}
+
+/** How often the sure thing in a pick of three is the Book of knowledge: one of book, crate, clue. */
+const BOOK_SHARE = 1 / 3;
+
+/**
  * Runs one profile. `attacks` overrides SESSION_ATTACKS by scaling the weight;
  * `questLamps` adds each week's quest lamp (a 2+/week player is assumed to
  * take part in every quest). Lamps go into Attack or Defence, whichever is
- * behind, which is what a player chasing tiers does.
+ * behind, which is what a player chasing tiers does. `spoils` adds what the
+ * pick of three and the diary can pay in XP at most: a Book of knowledge
+ * taken every time one is offered, and each diary tier's lamp.
  */
-export function run(profile, { attacks = null, questLamps = true } = {}) {
+export function run(profile, { attacks = null, questLamps = true, spoils = true } = {}) {
   const xp = { hitpoints: STARTING_HITPOINTS_XP, attack: 0, strength: 0, defence: 0, prayer: 0, slayer: 0, woodcutting: 0, mining: 0, fishing: 0 };
   const levels = () => Object.fromEntries(Object.entries(xp).map(([k, v]) => [k, levelForXp(v)]));
   const lamp = (amount) => {
@@ -73,7 +90,12 @@ export function run(profile, { attacks = null, questLamps = true } = {}) {
       xp.slayer += onTask * task.monster.slayerXp;
       if (task.monster.bones) xp.prayer += Math.floor(s.kills * task.monster.bones.xp * ALTAR_MULTIPLIER[0]);
       task.left -= s.kills;
+      if (spoils) {
+        const target = levelForXp(xp.attack) <= levelForXp(xp.defence) ? "attack" : "defence";
+        xp[target] += Math.floor(BOOK_SHARE * BOOK_XP_PER_LEVEL * levelForXp(xp[target]));
+      }
     }
+    if (spoils) for (const tier of DIARY) if (diaryWeek(tier, perWeek) === week) lamp(tier.lamp);
     // Founding lamps at 13/26/39/52 for anyone at 2+/week.
     if (week % 13 === 0 && perWeek >= 2) lamp(FOUNDING_LAMP_XP);
     // The week's quest lamp, for anyone who took part (2+/week always does).

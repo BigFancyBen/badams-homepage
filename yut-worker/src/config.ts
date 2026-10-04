@@ -24,7 +24,8 @@ export type SkillKey =
   | "slayer"
   | "woodcutting"
   | "mining"
-  | "fishing";
+  | "fishing"
+  | "farming";
 
 export const SKILLS: SkillKey[] = [
   "hitpoints",
@@ -36,6 +37,7 @@ export const SKILLS: SkillKey[] = [
   "woodcutting",
   "mining",
   "fishing",
+  "farming",
 ];
 
 export const SKILL_LABEL: Record<SkillKey, string> = Object.fromEntries(
@@ -794,6 +796,176 @@ export const BANK_VIEW_ROWS = 15;
 /** The game's reading of the wiki's named rarity bands (only a handful of rows use them). */
 export const NAMED_RARITY: Record<string, number> = { Common: 1 / 16, Uncommon: 1 / 64, Rare: 1 / 256, "Very rare": 1 / 2048 };
 
+// ── Spoils ────────────────────────────────────────────────────────
+// Every check-in ends with a pick of up to three: the player's own roll (a
+// jar or a chest), today's featured container, and a sure thing. The loot
+// inside a container is the wiki's (config/spoils.json, fetch-osrs.mjs
+// --spoils). Which tier a container sits on, and how often a tier comes up,
+// are the game's own, like the session length.
+
+export type SpoilsTierKey = "common" | "uncommon" | "rare" | "very_rare" | "legendary";
+
+export const SPOILS_TIERS: { key: SpoilsTierKey; name: string; weight: number }[] = [
+  { key: "common", name: "Common", weight: 600 },
+  { key: "uncommon", name: "Uncommon", weight: 270 },
+  { key: "rare", name: "Rare", weight: 100 },
+  { key: "very_rare", name: "Very rare", weight: 25 },
+  { key: "legendary", name: "Legendary", weight: 5 },
+];
+
+/** `page` is the wiki page the loot table is read from; `icon` the item whose sprite stands for it. */
+export const SPOILS_CONTAINERS: { key: string; name: string; page: string; icon: string; tier: SpoilsTierKey }[] = [
+  { key: "baby_impling_jar", name: "Baby impling jar", page: "Baby impling jar", icon: "Baby impling jar", tier: "common" },
+  { key: "young_impling_jar", name: "Young impling jar", page: "Young impling jar", icon: "Young impling jar", tier: "common" },
+  { key: "gourmet_impling_jar", name: "Gourmet impling jar", page: "Gourmet impling jar", icon: "Gourmet impling jar", tier: "common" },
+  { key: "casket", name: "Casket", page: "Casket", icon: "Casket", tier: "common" },
+  { key: "earth_impling_jar", name: "Earth impling jar", page: "Earth impling jar", icon: "Earth impling jar", tier: "common" },
+  { key: "essence_impling_jar", name: "Essence impling jar", page: "Essence impling jar", icon: "Essence impling jar", tier: "uncommon" },
+  { key: "eclectic_impling_jar", name: "Eclectic impling jar", page: "Eclectic impling jar", icon: "Eclectic impling jar", tier: "uncommon" },
+  { key: "nature_impling_jar", name: "Nature impling jar", page: "Nature impling jar", icon: "Nature impling jar", tier: "uncommon" },
+  { key: "muddy_key", name: "Muddy chest", page: "Muddy chest", icon: "Muddy key", tier: "rare" },
+  { key: "magpie_impling_jar", name: "Magpie impling jar", page: "Magpie impling jar", icon: "Magpie impling jar", tier: "rare" },
+  { key: "crystal_key", name: "Crystal chest", page: "Crystal chest", icon: "Crystal key", tier: "rare" },
+  { key: "grubby_key", name: "Grubby chest", page: "Grubby chest", icon: "Grubby key", tier: "very_rare" },
+  { key: "ninja_impling_jar", name: "Ninja impling jar", page: "Ninja impling jar", icon: "Ninja impling jar", tier: "very_rare" },
+  { key: "enhanced_crystal_key", name: "Elven crystal chest", page: "Elven crystal chest", icon: "Enhanced crystal key", tier: "very_rare" },
+  { key: "brimstone_key", name: "Brimstone chest", page: "Brimstone chest", icon: "Brimstone key", tier: "legendary" },
+  { key: "larrans_key", name: "Larran's big chest", page: "Larran's big chest", icon: "Larran's key", tier: "legendary" },
+  { key: "dragon_impling_jar", name: "Dragon impling jar", page: "Dragon impling jar", icon: "Dragon impling jar", tier: "legendary" },
+];
+
+/** This many full-value check-ins without a rare container on offer, and the next one is rare or better. */
+export const SPOILS_PITY = 8;
+/** The week's chest: the second check-in rolls its tier this many times and keeps the best. */
+export const SPOILS_WEEK_CHEST_ROLLS = 2;
+/** A Form streak this long adds one more roll to the week's chest. */
+export const SPOILS_FORM_WEEKS_BONUS = 4;
+/** Past the second check-in of the week the roll stops here, and today's container is not on offer. */
+export const SPOILS_SLIM_CAP: SpoilsTierKey = "uncommon";
+/** Today's featured container is drawn from these tiers. */
+export const SPOILS_FEATURED_TIERS: SpoilsTierKey[] = ["uncommon", "rare"];
+/** The Book of knowledge (Surprise Exam): fifteen times the level of the skill it is read into. */
+export const BOOK_XP_PER_LEVEL = 15;
+/** A supply crate for the camp: this much of one resource, by the tier of the roll beside it. */
+export const SUPPLY_CRATE: Record<SpoilsTierKey, number> = { common: 60, uncommon: 100, rare: 160, very_rare: 250, legendary: 400 };
+/** Clue bottles, nests and geodes: the clue tier a sure-thing clue comes at, by the tier of the roll beside it. */
+export const SPOILS_CLUE_TIER: Record<SpoilsTierKey, string> = { common: "easy", uncommon: "easy", rare: "medium", very_rare: "hard", legendary: "elite" };
+
+// ── The Grand Exchange ────────────────────────────────────────────
+// The bank is spendable. Prices are the GE's at fetch time (spoils.json).
+
+export interface GeItem {
+  key: string;
+  /** The wiki's item name, which is also the price lookup. */
+  item: string;
+  /** How many one purchase is. */
+  qty: number;
+  kind: "potion" | "food" | "bones";
+  blurb: string;
+  /** A potion's boost: the wiki's flat part and fraction of the level, to these skills. */
+  boost?: { skills: ("attack" | "strength" | "defence")[]; flat: number; fraction: number };
+  /** What one of this food heals. */
+  heal?: number;
+  /** Prayer experience per bone buried. */
+  xp?: number;
+}
+
+const ALL_MELEE: ("attack" | "strength" | "defence")[] = ["attack", "strength", "defence"];
+
+/** The wiki's numbers: Strength potion +3 and 10%, the supers +5 and 15%; swordfish heals 14, shark 20; big bones 15 XP, dragon bones 72. */
+export const GE_ITEMS: GeItem[] = [
+  { key: "strength_potion4", item: "Strength potion(4)", qty: 1, kind: "potion", blurb: "Strength +3 and 10% next session", boost: { skills: ["strength"], flat: 3, fraction: 0.1 } },
+  { key: "super_strength4", item: "Super strength(4)", qty: 1, kind: "potion", blurb: "Strength +5 and 15% next session", boost: { skills: ["strength"], flat: 5, fraction: 0.15 } },
+  { key: "super_combat_potion4", item: "Super combat potion(4)", qty: 1, kind: "potion", blurb: "Attack, Strength and Defence +5 and 15% next session", boost: { skills: ALL_MELEE, flat: 5, fraction: 0.15 } },
+  { key: "swordfish", item: "Swordfish", qty: 27, kind: "food", blurb: "An inventory that heals 14 a bite, not 12, next session", heal: 14 },
+  { key: "shark", item: "Shark", qty: 27, kind: "food", blurb: "An inventory that heals 20 a bite next session", heal: 20 },
+  { key: "big_bones", item: "Big bones", qty: 25, kind: "bones", blurb: "15 Prayer XP each, more at the Chapel's altar", xp: 15 },
+  { key: "dragon_bones", item: "Dragon bones", qty: 10, kind: "bones", blurb: "72 Prayer XP each, more at the Chapel's altar", xp: 72 },
+];
+
+/** A potion drains a level a minute and has four doses, sipped evenly across the session. */
+export const POTION_DOSES = 4;
+/** A game tick is 0.6 seconds. */
+export const TICK_SECONDS = 0.6;
+
+// ── Achievement Diary ─────────────────────────────────────────────
+// Four tiers of tasks, each paying the diary's own antique lamp
+// (2,500 / 7,500 / 15,000 / 50,000). The checks live in diary.ts.
+
+export type DiaryStat =
+  | "checkins"
+  | "kills"
+  | "tasks"
+  | "bank"
+  | "combat"
+  | "total"
+  | "spoils"
+  | "containers"
+  | "form"
+  | "verified"
+  | "caskets"
+  | "spent";
+
+export interface DiaryTier {
+  key: "easy" | "medium" | "hard" | "elite";
+  name: string;
+  lamp: number;
+  tasks: { stat: DiaryStat; goal: number; label: string }[];
+}
+
+export const DIARY: DiaryTier[] = [
+  {
+    key: "easy", name: "Easy", lamp: ANTIQUE_LAMP.easy,
+    tasks: [
+      { stat: "checkins", goal: 5, label: "Check in 5 times" },
+      { stat: "kills", goal: 100, label: "Kill 100 monsters" },
+      { stat: "tasks", goal: 1, label: "Finish a Slayer task" },
+      { stat: "spoils", goal: 3, label: "Open 3 spoils" },
+      { stat: "bank", goal: 10_000, label: "Bank 10k gp of loot" },
+      { stat: "combat", goal: 10, label: "Reach combat level 10" },
+    ],
+  },
+  {
+    key: "medium", name: "Medium", lamp: ANTIQUE_LAMP.medium,
+    tasks: [
+      { stat: "checkins", goal: 25, label: "Check in 25 times" },
+      { stat: "kills", goal: 1_000, label: "Kill 1,000 monsters" },
+      { stat: "tasks", goal: 5, label: "Finish 5 Slayer tasks" },
+      { stat: "containers", goal: 5, label: "Open 5 different containers" },
+      { stat: "bank", goal: 100_000, label: "Bank 100k gp of loot" },
+      { stat: "combat", goal: 30, label: "Reach combat level 30" },
+      { stat: "form", goal: 4, label: "Hold a 4-week Form streak" },
+      { stat: "verified", goal: 3, label: "Verify 3 check-ins" },
+    ],
+  },
+  {
+    key: "hard", name: "Hard", lamp: ANTIQUE_LAMP.hard,
+    tasks: [
+      { stat: "checkins", goal: 60, label: "Check in 60 times" },
+      { stat: "kills", goal: 5_000, label: "Kill 5,000 monsters" },
+      { stat: "tasks", goal: 15, label: "Finish 15 Slayer tasks" },
+      { stat: "containers", goal: 10, label: "Open 10 different containers" },
+      { stat: "bank", goal: 500_000, label: "Bank 500k gp of loot" },
+      { stat: "combat", goal: 50, label: "Reach combat level 50" },
+      { stat: "form", goal: 10, label: "Hold a 10-week Form streak" },
+      { stat: "caskets", goal: 1, label: "Open a clue casket" },
+    ],
+  },
+  {
+    key: "elite", name: "Elite", lamp: ANTIQUE_LAMP.elite,
+    tasks: [
+      { stat: "checkins", goal: 100, label: "Check in 100 times" },
+      { stat: "kills", goal: 15_000, label: "Kill 15,000 monsters" },
+      { stat: "tasks", goal: 30, label: "Finish 30 Slayer tasks" },
+      { stat: "containers", goal: 15, label: "Open 15 different containers" },
+      { stat: "bank", goal: 2_000_000, label: "Bank 2m gp of loot" },
+      { stat: "combat", goal: 70, label: "Reach combat level 70" },
+      { stat: "form", goal: 20, label: "Hold a 20-week Form streak" },
+      { stat: "spent", goal: 250_000, label: "Spend 250k gp at the Grand Exchange" },
+    ],
+  },
+];
+
 // ── Quest of the week ─────────────────────────────────────────────
 /** One quest a week for 51 weeks, easiest first; week 52 has none. Names are wiki page names. */
 export const QUEST_CALENDAR: { week: number; quest: string }[] = [
@@ -861,3 +1033,276 @@ export const QUEST_FIGHT_ATTACKS = 450;
 export const QUEST_PROOF_SUPPLIES = 2;       // a check-in with a note or photo carries two supplies
 export const QUEST_LAMP: Record<string, number> = { Novice: ANTIQUE_LAMP.easy, Intermediate: ANTIQUE_LAMP.medium, Experienced: ANTIQUE_LAMP.hard, Master: ANTIQUE_LAMP.hard, Grandmaster: ANTIQUE_LAMP.hard, Special: ANTIQUE_LAMP.hard };
 export const CHAMPIONS_GUILD_QP = 32;
+
+// ── Gear ──────────────────────────────────────────────────────────
+// What the Slayer monsters really drop that can be worn. An item with `stats`
+// counts in the session (bonuses from config/gear.json, the wiki's); the rest
+// are looks, worn over the armour, and trophies. Requirements are the game's.
+// Owned means it is in the bank, or (for clue uniques) in the collection log.
+
+export type GearSlot = "weapon" | "head" | "cape" | "neck" | "body" | "legs" | "shield" | "gloves" | "boots" | "ring" | "trophy";
+export const GEAR_SLOTS: GearSlot[] = ["weapon", "head", "cape", "neck", "body", "legs", "shield", "gloves", "boots", "ring", "trophy"];
+
+export interface GearItem {
+  /** The wiki's item name; the key is itemKey(item). */
+  item: string;
+  slot: GearSlot;
+  /** Counts in the session. Without it the item is a look. */
+  stats?: boolean;
+  req?: Partial<Record<"attack" | "strength" | "defence" | "slayer", number>>;
+  /** Owned through the collection log (`clue:<item>`) rather than the bank. */
+  clue?: boolean;
+}
+
+export const GEAR: GearItem[] = [
+  // Weapons, with the game's requirements.
+  { item: "Brine sabre", slot: "weapon", stats: true, req: { attack: 40 } },
+  { item: "Leaf-bladed sword", slot: "weapon", stats: true, req: { attack: 50, slayer: 55 } },
+  { item: "Granite maul", slot: "weapon", stats: true, req: { attack: 50, strength: 50 } },
+  { item: "Granite longsword", slot: "weapon", stats: true, req: { attack: 50, strength: 50 } },
+  { item: "Dragon dagger", slot: "weapon", stats: true, req: { attack: 60 } },
+  { item: "Dragon mace", slot: "weapon", stats: true, req: { attack: 60 } },
+  { item: "Leaf-bladed battleaxe", slot: "weapon", stats: true, req: { attack: 65, slayer: 55 } },
+  { item: "Abyssal whip", slot: "weapon", stats: true, req: { attack: 70 } },
+  { item: "Abyssal dagger", slot: "weapon", stats: true, req: { attack: 70 } },
+  // The boss of the week's own weapon.
+  { item: "Hill giant club", slot: "weapon", stats: true, req: { attack: 40 } },
+  // Boots: the one slot the armour sets leave empty.
+  { item: "Bronze boots", slot: "boots", stats: true },
+  { item: "Iron boots", slot: "boots", stats: true },
+  { item: "Steel boots", slot: "boots", stats: true, req: { defence: 5 } },
+  { item: "Black boots", slot: "boots", stats: true, req: { defence: 10 } },
+  { item: "Mithril boots", slot: "boots", stats: true, req: { defence: 20 } },
+  { item: "Adamant boots", slot: "boots", stats: true, req: { defence: 30 } },
+  { item: "Rune boots", slot: "boots", stats: true, req: { defence: 40 } },
+  { item: "Granite boots", slot: "boots", stats: true, req: { defence: 50, strength: 50 } },
+  // The black mask: the Slayer helmet's bonus, from a drop.
+  { item: "Black mask (10)", slot: "head", stats: true, req: { defence: 10 } },
+  // Looks from the task monsters.
+  { item: "Mystic hat (light)", slot: "head" },
+  { item: "Mystic robe top (light)", slot: "body" },
+  { item: "Mystic robe bottom (light)", slot: "legs" },
+  { item: "Mystic gloves (light)", slot: "gloves" },
+  { item: "Mystic boots (light)", slot: "boots" },
+  { item: "Mystic robe top (dark)", slot: "body" },
+  { item: "Mystic robe bottom (dark)", slot: "legs" },
+  { item: "Mystic gloves (dark)", slot: "gloves" },
+  { item: "Black robe", slot: "body" },
+  { item: "Red d'hide body", slot: "body" },
+  { item: "Dragon chainbody", slot: "body" },
+  { item: "Dragon platelegs", slot: "legs" },
+  { item: "Dragon plateskirt", slot: "legs" },
+  { item: "Granite legs", slot: "legs" },
+  { item: "Rune platelegs", slot: "legs" },
+  { item: "Granite helm", slot: "head" },
+  { item: "Dragon med helm", slot: "head" },
+  { item: "Rune full helm", slot: "head" },
+  { item: "Red gloves", slot: "gloves" },
+  { item: "Purple gloves", slot: "gloves" },
+  { item: "Teal gloves", slot: "gloves" },
+  { item: "Yellow gloves", slot: "gloves" },
+  { item: "Black d'hide vambraces", slot: "gloves" },
+  { item: "Red d'hide vambraces", slot: "gloves" },
+  { item: "Blue d'hide vambraces", slot: "gloves" },
+  { item: "Flippers", slot: "boots" },
+  { item: "Red cape", slot: "cape" },
+  { item: "Rune kiteshield", slot: "shield" },
+  { item: "Occult necklace", slot: "neck" },
+  { item: "Dark bow", slot: "weapon" },
+  { item: "Dust battlestaff", slot: "weapon" },
+  { item: "Mist battlestaff", slot: "weapon" },
+  { item: "Dragon spear", slot: "weapon" },
+  // Trophies.
+  { item: "Cockatrice head", slot: "trophy" },
+  { item: "Basilisk head", slot: "trophy" },
+  { item: "Kurask head", slot: "trophy" },
+  { item: "Abyssal head", slot: "trophy" },
+  { item: "Draconic visage", slot: "trophy" },
+  { item: "Scurrius' spine", slot: "trophy" },
+  { item: "Bryophyta's essence", slot: "trophy" },
+  { item: "Scurry", slot: "trophy" },
+  { item: "Goblin champion scroll", slot: "trophy" },
+  { item: "Skeleton champion scroll", slot: "trophy" },
+  { item: "Zombie champion scroll", slot: "trophy" },
+  { item: "Giant champion scroll", slot: "trophy" },
+  { item: "Hobgoblin champion scroll", slot: "trophy" },
+  { item: "Ghoul champion scroll", slot: "trophy" },
+  { item: "Lesser demon champion scroll", slot: "trophy" },
+  // The clue uniques, worn at last.
+  { item: "Highwayman mask", slot: "head", clue: true },
+  { item: "Black cavalier", slot: "head", clue: true },
+  { item: "Cat mask", slot: "head", clue: true },
+  { item: "Robin hood hat", slot: "head", clue: true },
+  { item: "Rune helm (h1)", slot: "head", clue: true },
+  { item: "Dragon full helm ornament", slot: "head", clue: true },
+  { item: "Third-age full helm", slot: "head", clue: true },
+  { item: "Bob shirt (red)", slot: "body", clue: true },
+  { item: "Bob shirt (blue)", slot: "body", clue: true },
+  { item: "Bob shirt (green)", slot: "body", clue: true },
+  { item: "Rune (g) set", slot: "body", clue: true },
+  { item: "Rune (t) set", slot: "body", clue: true },
+  { item: "Team cape", slot: "cape", clue: true },
+  { item: "Zamorak cloak", slot: "cape", clue: true },
+  { item: "Saradomin cloak", slot: "cape", clue: true },
+  { item: "Third-age cloak", slot: "cape", clue: true },
+  { item: "Ranger boots", slot: "boots", clue: true },
+  { item: "Wizard boots", slot: "boots", clue: true },
+  { item: "Wooden shield (g)", slot: "shield", clue: true },
+  { item: "Gilded scimitar", slot: "weapon", clue: true },
+  { item: "Third-age amulet", slot: "neck", clue: true },
+  { item: "Ring of coins", slot: "ring", clue: true },
+];
+
+/**
+ * The drop tables, adapted: a wearable drop falls at this many times the
+ * wiki's rate (a player here gets two sessions a week, not two hours a
+ * night), and the one item a player is chasing at this many times that.
+ * At 2× the year simulation gave a two-a-week player two or three pieces in
+ * a year; 4× gives a wardrobe worth having.
+ */
+export const GEAR_RATE_MULTIPLIER = 4;
+export const WISHLIST_RATE_MULTIPLIER = 2;
+
+// ── Slayer choices ────────────────────────────────────────────────
+/** Blocking a task costs 100 points, as in the game. One slot, and one more for every 50 quest points the group holds, up to six. */
+export const SLAYER_BLOCK_COST = 100;
+export const SLAYER_BLOCK_QP_PER_SLOT = 50;
+export const SLAYER_BLOCK_MAX = 6;
+
+// ── Managing Miscellania ──────────────────────────────────────────
+// The wiki's kingdom at a tenth of its size: the coffer pays 10% of what it
+// holds each day up to the cap, approval falls 2.5% a day to a floor of 25%,
+// and ten subjects split across the jobs bring in a share of the real daily
+// maxima (61 herbs, 440 tuna and 132 swordfish, 546 coal, 892 maple logs,
+// 1,250 flax — each at the real 75,000 a day).
+
+export const KINGDOM_SCALE = 10;
+export const KINGDOM_SUBJECTS = 10;
+export const KINGDOM_DAILY_RATE = 0.1;
+export const KINGDOM_DAILY_CAP = 75_000 / KINGDOM_SCALE;
+export const KINGDOM_COFFER_MAX = 7_500_000 / KINGDOM_SCALE;
+export const KINGDOM_APPROVAL_DECAY = 2.5;
+export const KINGDOM_APPROVAL_FLOOR = 25;
+/** A full-value check-in is a day's good works: this much approval, scaled by the check-in's weight. */
+export const KINGDOM_CHECKIN_APPROVAL = 10;
+/** A kingdom nobody has looked at for this long stops working, as in the game. */
+export const KINGDOM_IDLE_DAYS = 30;
+
+export type KingdomJob = "herbs" | "fishing" | "mining" | "wood" | "flax";
+export const KINGDOM_JOBS: { key: KingdomJob; name: string; yields: { item: string; max: number; weight?: number }[] }[] = [
+  {
+    key: "herbs", name: "Herbs",
+    // 61 a day between them; the wiki lists dwarf weed and lantadyme as the uncommon ones.
+    yields: [
+      { item: "Grimy tarromin", max: 61, weight: 2 },
+      { item: "Grimy harralander", max: 61, weight: 2 },
+      { item: "Grimy ranarr weed", max: 61, weight: 2 },
+      { item: "Grimy irit leaf", max: 61, weight: 2 },
+      { item: "Grimy avantoe", max: 61, weight: 2 },
+      { item: "Grimy kwuarm", max: 61, weight: 2 },
+      { item: "Grimy cadantine", max: 61, weight: 2 },
+      { item: "Grimy lantadyme", max: 61, weight: 1 },
+      { item: "Grimy dwarf weed", max: 61, weight: 1 },
+    ],
+  },
+  { key: "fishing", name: "Fishing", yields: [{ item: "Raw tuna", max: 440 }, { item: "Raw swordfish", max: 132 }] },
+  { key: "mining", name: "Mining", yields: [{ item: "Coal", max: 546 }] },
+  { key: "wood", name: "Wood", yields: [{ item: "Maple logs", max: 892 }] },
+  { key: "flax", name: "Flax", yields: [{ item: "Flax", max: 1250 }] },
+];
+
+// ── Farming ───────────────────────────────────────────────────────
+// Levels, experience and growth times are the wiki's. Three patches, one run
+// a day; nothing dies.
+
+export type PatchKey = "allotment" | "herb" | "tree";
+export const PATCHES: { key: PatchKey; name: string; seeds: number }[] = [
+  { key: "allotment", name: "Allotment", seeds: 3 },
+  { key: "herb", name: "Herb patch", seeds: 1 },
+  { key: "tree", name: "Tree patch", seeds: 1 },
+];
+
+export interface Crop {
+  seed: string;
+  /** What is harvested; a tree is only checked. */
+  produce: string | null;
+  patch: PatchKey;
+  level: number;
+  plantXp: number;
+  /** Per item harvested, or for checking a tree's health. */
+  harvestXp: number;
+  minutes: number;
+}
+
+export const CROPS: Crop[] = [
+  { seed: "Potato seed", produce: "Potato", patch: "allotment", level: 1, plantXp: 8, harvestXp: 9, minutes: 40 },
+  { seed: "Onion seed", produce: "Onion", patch: "allotment", level: 5, plantXp: 9.5, harvestXp: 10.5, minutes: 40 },
+  { seed: "Cabbage seed", produce: "Cabbage", patch: "allotment", level: 7, plantXp: 10, harvestXp: 11.5, minutes: 40 },
+  { seed: "Tomato seed", produce: "Tomato", patch: "allotment", level: 12, plantXp: 12.5, harvestXp: 14, minutes: 40 },
+  { seed: "Sweetcorn seed", produce: "Sweetcorn", patch: "allotment", level: 20, plantXp: 17, harvestXp: 19, minutes: 60 },
+  { seed: "Strawberry seed", produce: "Strawberry", patch: "allotment", level: 31, plantXp: 26, harvestXp: 29, minutes: 60 },
+  { seed: "Watermelon seed", produce: "Watermelon", patch: "allotment", level: 47, plantXp: 48.5, harvestXp: 54.5, minutes: 80 },
+  { seed: "Snape grass seed", produce: "Snape grass", patch: "allotment", level: 61, plantXp: 82, harvestXp: 82, minutes: 70 },
+  { seed: "Marrentill seed", produce: "Grimy marrentill", patch: "herb", level: 14, plantXp: 13.5, harvestXp: 15, minutes: 80 },
+  { seed: "Tarromin seed", produce: "Grimy tarromin", patch: "herb", level: 19, plantXp: 16, harvestXp: 18, minutes: 80 },
+  { seed: "Harralander seed", produce: "Grimy harralander", patch: "herb", level: 26, plantXp: 21.5, harvestXp: 24, minutes: 80 },
+  { seed: "Ranarr seed", produce: "Grimy ranarr weed", patch: "herb", level: 32, plantXp: 27, harvestXp: 30.5, minutes: 80 },
+  { seed: "Toadflax seed", produce: "Grimy toadflax", patch: "herb", level: 38, plantXp: 34, harvestXp: 38.5, minutes: 80 },
+  { seed: "Irit seed", produce: "Grimy irit leaf", patch: "herb", level: 44, plantXp: 43, harvestXp: 48.5, minutes: 80 },
+  { seed: "Avantoe seed", produce: "Grimy avantoe", patch: "herb", level: 50, plantXp: 54.5, harvestXp: 61.5, minutes: 80 },
+  { seed: "Kwuarm seed", produce: "Grimy kwuarm", patch: "herb", level: 56, plantXp: 69, harvestXp: 78, minutes: 80 },
+  { seed: "Snapdragon seed", produce: "Grimy snapdragon", patch: "herb", level: 62, plantXp: 87.5, harvestXp: 98.5, minutes: 80 },
+  { seed: "Cadantine seed", produce: "Grimy cadantine", patch: "herb", level: 67, plantXp: 106.5, harvestXp: 120, minutes: 80 },
+  { seed: "Lantadyme seed", produce: "Grimy lantadyme", patch: "herb", level: 73, plantXp: 134.5, harvestXp: 151.5, minutes: 80 },
+  { seed: "Dwarf weed seed", produce: "Grimy dwarf weed", patch: "herb", level: 79, plantXp: 170.5, harvestXp: 192, minutes: 80 },
+  { seed: "Torstol seed", produce: "Grimy torstol", patch: "herb", level: 85, plantXp: 199.5, harvestXp: 224.5, minutes: 80 },
+  { seed: "Willow seed", produce: null, patch: "tree", level: 30, plantXp: 25, harvestXp: 1456.5, minutes: 280 },
+  { seed: "Maple seed", produce: null, patch: "tree", level: 45, plantXp: 45, harvestXp: 3403.4, minutes: 320 },
+  { seed: "Yew seed", produce: null, patch: "tree", level: 60, plantXp: 81, harvestXp: 7069.9, minutes: 400 },
+  { seed: "Magic seed", produce: null, patch: "tree", level: 75, plantXp: 145.5, harvestXp: 13768.3, minutes: 480 },
+];
+
+/** What a patch gives back: a herb seed 4 to 9 leaves, an allotment 6 to 14. The game's own range, standing in for the wiki's harvest lives. */
+export const HARVEST_RANGE: Record<PatchKey, [number, number]> = { allotment: [6, 14], herb: [4, 9], tree: [0, 0] };
+/** The seed anyone can always plant: Draynor's potato seeds cost next to nothing. */
+export const FREE_SEED = "Potato seed";
+
+// ── Tears of Guthix ───────────────────────────────────────────────
+// Once a week. A tear is worth 60 experience in the lowest skill, less below
+// level 30 (10 at level 1), as in the game; the time in the cave, and so the
+// tears, grow with quest points — here the group's.
+export const TEAR_XP_MAX = 60;
+export const TEAR_XP_MIN = 10;
+export const TEAR_FULL_LEVEL = 30;
+/** Tears caught per quest point: between these, seeded on the player and the week. */
+export const TEARS_PER_QP: [number, number] = [0.6, 0.9];
+/** Even a party with no quest points catches a few. */
+export const TEARS_MIN = 5;
+
+/** Everything bought, grown or gathered that needs a GE price in config/spoils.json. */
+export const PRICED_ITEMS: string[] = [
+  ...new Set([
+    ...GE_ITEMS.map((item) => item.item),
+    ...KINGDOM_JOBS.flatMap((job) => job.yields.map((y) => y.item)),
+    ...CROPS.flatMap((crop) => [crop.seed, ...(crop.produce ? [crop.produce] : [])]),
+  ]),
+];
+
+// ── The boss of the week ──────────────────────────────────────────
+// The game's early group bosses, one a week in rotation, from the first week:
+// every check-in takes a swing at it after the session, the damage is the
+// group's, and every kill rolls the boss's real drop table for whoever
+// landed it. Stats and tables are the wiki's (config/bosses.json).
+
+/** `chest` is the lair chest opened after each kill, whose table holds the boss's unique. */
+export const GROUP_BOSSES: { key: string; page: string; chest?: string; name: string; emoji: string }[] = [
+  { key: "scurrius", page: "Scurrius", name: "Scurrius", emoji: "🐀" },
+  { key: "obor", page: "Obor", chest: "Chest (Obor's lair)", name: "Obor", emoji: "👹" },
+  { key: "bryophyta", page: "Bryophyta", chest: "Chest (Bryophyta's lair)", name: "Bryophyta", emoji: "🌿" },
+];
+/** Swings at the boss per full-value check-in, after the session. */
+export const BOSS_FIGHT_ATTACKS = 200;
+/** The boss's pool: this many average full fights a head. Two a week from most of the roster clears it. */
+export const BOSS_FIGHTS_PER_HEAD = 1.6;
+/** When the boss falls, everyone who fought that week gets this many more rolls of its table. */
+export const BOSS_CHEST_KILLS = 1;

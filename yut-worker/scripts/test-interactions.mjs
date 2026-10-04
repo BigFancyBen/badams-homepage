@@ -401,10 +401,17 @@ const staleLampDay = new Date(Date.parse(`${day}T00:00:00Z`) - 13 * 86400000).to
 await admin("grant-lamp", { player: carol, day: staleLampDay });
 const reminded = await admin("tick", { reminders: "1" });
 const reminderPost = [...posts(CHANNEL)].reverse().find((e) => /Evening reminders/.test(e.body));
+// A player's own business is a count in the channel; the detail is theirs alone.
 check(
-  "the evening reminder names carol's lamp and when it rubs itself",
-  Boolean(reminderPost) && /carol\*\* — .*lamp/.test(reminderPost?.body ?? "") && /rubs itself in 2 days/.test(reminderPost?.body ?? ""),
+  "the evening reminder counts players with things waiting and names nobody's lamp",
+  Boolean(reminderPost) && /players? ha(s|ve) things waiting/.test(reminderPost?.body ?? "") && !/carol/.test(reminderPost?.body ?? "") && !/lamp/.test(reminderPost?.body ?? ""),
   { reminded, body: reminderPost?.body }
+);
+const carolTodo = await click("todo", { user: { id: carol, username: "carol" } });
+check(
+  "My to-do tells carol, privately, about the lamp and when it rubs itself",
+  carolTodo.body?.data?.flags === 64 && /For you\*\* \(only you see this\)/.test(content(carolTodo)) && /1 lamp to rub \(`\/lamp`\) — one rubs itself in 2 days/.test(content(carolTodo)),
+  carolTodo
 );
 // erin's last check-in was three days ago: erin is @mentioned as going stale; dave (four days) is
 // already stale and is not. (Players from earlier runs share the local database, so the list may be longer.)
@@ -424,6 +431,221 @@ check(
     reminderPayload.allowed_mentions?.parse?.length === 0,
   reminderPayload
 );
+
+// 22. Spoils: every check-in ends with a pick of three.
+const ivy = { user: { id: `ivy_${stamp}`, username: "ivy" } };
+const ivyJoin = await click(`join:${day}`, ivy);
+const ivySpoils = (await sql(`SELECT id, options, picked FROM spoils WHERE player_id = '${ivy.user.id}'`))[0];
+const ivyOptions = JSON.parse(ivySpoils?.options ?? "[]");
+check("a check-in draws three spoils: the roll, today's container, a sure thing",
+  ivyOptions.length === 3 && ivyOptions[0].slot === "roll" && ivyOptions[1].slot === "featured" && ivyOptions[2].kind !== "container" && ivySpoils.picked === null,
+  ivySpoils);
+check("the receipt offers the pick, above the hub",
+  /Spoils\*\* — pick one/.test(content(ivyJoin)) && JSON.stringify(ivyJoin.body).includes(`sp:${ivySpoils?.id}:0`) && JSON.stringify(ivyJoin.body).includes(`sp:${ivySpoils?.id}:2`),
+  ivyJoin);
+check("the receipt says what is next", /Next: the week's chest at your second check-in/.test(content(ivyJoin)) && /Easy diary \d\/6/.test(content(ivyJoin)), content(ivyJoin));
+check("a receipt never has more than five rows of buttons", (ivyJoin.body?.data?.components ?? []).length <= 5, ivyJoin.body?.data?.components?.length);
+const notMine = await click(`sp:${ivySpoils.id}:0`, bob);
+check("somebody else's spoils are refused", /not yours/.test(content(notMine)), notMine);
+const bankBefore = (await sql(`SELECT COALESCE(SUM(value), 0) AS v, COUNT(*) AS n FROM bank WHERE player_id = '${ivy.user.id}'`))[0];
+const picked = await click(`sp:${ivySpoils.id}:0`, ivy);
+check("picking the roll opens the container and banks it", /banked\./.test(content(picked)), picked);
+const ivyRow = (await sql(`SELECT picked, container, result, auto FROM spoils WHERE id = ${ivySpoils.id}`))[0];
+const ivyResult = JSON.parse(ivyRow?.result ?? "{}");
+const bankAfter = (await sql(`SELECT COALESCE(SUM(value), 0) AS v FROM bank WHERE player_id = '${ivy.user.id}'`))[0];
+check("the row records the pick, the container and what came out",
+  ivyRow?.picked === 0 && ivyRow?.container === ivyOptions[0].key && ivyRow?.auto === 0 && Array.isArray(ivyResult.s) && ivyResult.s.length > 0,
+  ivyRow);
+check("the bank grew by exactly the loot's worth", Math.abs(bankAfter.v - bankBefore.v - ivyResult.t) < 0.5, { before: bankBefore.v, after: bankAfter.v, loot: ivyResult.t });
+const spoilsLine = await waitFor(() => [...posts(CHANNEL), ...mockLog().filter((e) => e.method === "POST" && /\/messages$/.test(e.url))].find((e) => /ivy\*\* opened a/.test(e.body)));
+check("the pick is announced", Boolean(spoilsLine), spoilsLine);
+const twice = await click(`sp:${ivySpoils.id}:1`, ivy);
+check("a second pick is refused", /already opened/.test(content(twice)), twice);
+const bankTwice = (await sql(`SELECT COALESCE(SUM(value), 0) AS v FROM bank WHERE player_id = '${ivy.user.id}'`))[0];
+check("and banks nothing", bankTwice.v === bankAfter.v, { bankTwice, bankAfter });
+const spoilsCmd = await command("spoils", [], ivy);
+check("/spoils shows nothing waiting, today's container and the collection",
+  /nothing waiting/.test(content(spoilsCmd)) && /Today's container: \*\*/.test(content(spoilsCmd)) && /containers 1\/17/.test(content(spoilsCmd)),
+  spoilsCmd);
+
+// 23. The Grand Exchange: the bank is spendable.
+const broke = await command("ge", [], ivy);
+check("/ge shows the menu and the balance", /Grand Exchange\*\* — .* to spend/.test(content(broke)) && /Super combat potion\(4\)/.test(content(broke)), broke);
+await admin("bank-deposit", { player: ivy.user.id, gp: "20000" });
+const balanceBefore = (await admin("ge-as", { player: ivy.user.id })).balance;
+const potion = await click("ge:strength_potion4", ivy);
+const afterPotion = (await sql(`SELECT gp_spent, loadout FROM players WHERE discord_id = '${ivy.user.id}'`))[0];
+check("a potion is packed and paid for", /packed for your next session/.test(content(potion)) && JSON.parse(afterPotion.loadout).potion === "strength_potion4" && afterPotion.gp_spent > 0, { potion: content(potion), afterPotion });
+const balanceAfter = (await admin("ge-as", { player: ivy.user.id })).balance;
+check("the balance fell by the price", balanceBefore - balanceAfter === afterPotion.gp_spent, { balanceBefore, balanceAfter, spent: afterPotion.gp_spent });
+const second = await click("ge:super_strength4", ivy);
+const afterSecond = (await sql(`SELECT gp_spent FROM players WHERE discord_id = '${ivy.user.id}'`))[0];
+check("a second potion is refused and costs nothing", /already have/.test(content(second)) && afterSecond.gp_spent === afterPotion.gp_spent, { second: content(second), afterSecond });
+// bob has only what his kills dropped (and, rarely, a boss roll): sharks are out of reach unless he got lucky.
+const bobBalance = (await admin("ge-as", { player: bob.user.id })).balance;
+const tooDear = await click("ge:shark", { user: { id: bob.user.id, username: "bob" } });
+check("what cannot be afforded is refused", bobBalance >= 25000 || /costs .* you have/.test(content(tooDear)), { bobBalance, tooDear });
+const prayerBefore = (await sql(`SELECT COALESCE(SUM(xp), 0) AS xp FROM skill_xp WHERE player_id = '${ivy.user.id}' AND skill = 'prayer'`))[0].xp;
+const bones = await click("ge:big_bones", ivy);
+const prayerAfter = (await sql(`SELECT COALESCE(SUM(xp), 0) AS xp FROM skill_xp WHERE player_id = '${ivy.user.id}' AND skill = 'prayer'`))[0].xp;
+// 375 XP, or that times the Chapel's altar when the local database has a town in it.
+check("bones are buried for Prayer: 25 big bones is 375 XP", /buried/.test(content(bones)) && [375, 937, 1125, 1312].includes(prayerAfter - prayerBefore), { bones: content(bones), prayerBefore, prayerAfter });
+const bankCmd = await command("bank", [], ivy);
+check("/bank says what is unspent", /of it is unspent/.test(content(bankCmd)), bankCmd);
+
+// 24. The next check-in drinks the potion, and opens spoils nobody picked.
+const jack = `jack_${stamp}`;
+await admin("seed", { players: jack, day, [`name_${jack}`]: "jack" });
+await admin("checkin-as", { player: jack, day });
+const nextDay = new Date(Date.parse(`${day}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);
+const ivyNext = await admin("checkin-as", { player: ivy.user.id, day: nextDay });
+check("the packed potion is used on the next session", (ivyNext.outcome?.receipt ?? []).some((line) => /Strength potion\(4\): Strength \+\d+ across the session/.test(line)), (ivyNext.outcome?.receipt ?? []).slice(0, 4));
+const ivyLoadout = (await sql(`SELECT loadout FROM players WHERE discord_id = '${ivy.user.id}'`))[0];
+check("and it is gone afterwards", ivyLoadout.loadout === "{}", ivyLoadout);
+check("the second check-in of the week is the week's chest", (ivyNext.outcome?.spoils?.lines ?? []).some((line) => /The week's chest/.test(line)), ivyNext.outcome?.spoils);
+const jackNext = await admin("checkin-as", { player: jack, day: nextDay });
+const jackRows = await sql(`SELECT day, picked, auto FROM spoils WHERE player_id = '${jack}' ORDER BY id`);
+check("unpicked spoils open themselves at the next check-in",
+  jackRows.length === 2 && jackRows[0].picked === 0 && jackRows[0].auto === 1 && jackRows[1].picked === null &&
+    (jackNext.outcome?.essentials ?? []).some((line) => /opened themselves/.test(line)),
+  { jackRows, essentials: jackNext.outcome?.essentials });
+
+// 25. The diary: read off what the check-ins produced, as text when the card cannot render.
+const diaryStats = await admin("diary", { player: ivy.user.id });
+check("the diary counts check-ins, kills and spoils", diaryStats.stats?.checkins === 2 && diaryStats.stats?.kills > 0 && diaryStats.stats?.spoils === 1 && diaryStats.stats?.containers === 1 && diaryStats.stats?.spent > 0, diaryStats.stats);
+check("and shows every tier with the open one's tasks", /Easy\*\* [▰▱]{8} \d\/6/.test(diaryStats.text ?? "") && /Elite/.test(diaryStats.text ?? "") && /Check in 5 times \(2\/5\)/.test(diaryStats.text ?? ""), diaryStats.text);
+const diaryCmd = await command("diary", [], ivy);
+check("/diary defers for its card", diaryCmd.body?.type === 5, diaryCmd);
+
+// 26. The evening reminder names spoils nobody has picked.
+const spoilsReminder = await admin("tick", { reminders: "1" });
+const spoilsReminderPost = [...posts(CHANNEL)].reverse().find((e) => /Evening reminders/.test(e.body));
+check("the evening reminder keeps unpicked spoils out of the channel", /things waiting/.test(spoilsReminderPost?.body ?? "") && !/spoils/i.test(spoilsReminderPost?.body ?? ""), { spoilsReminder, body: spoilsReminderPost?.body?.slice(0, 400) });
+const jackTodo = await admin("todo", { player: jack, day: nextDay });
+check("and the player's own list has them", (jackTodo.items ?? []).some((item) => /Spoils to pick/.test(item)), jackTodo);
+
+// 27. Gear: owned pieces are worn, chased and shown off.
+await admin("bank-item", { player: ivy.user.id, item: "bronze_boots" });
+await admin("bank-item", { player: ivy.user.id, item: "abyssal_whip" });
+await admin("bank-item", { player: ivy.user.id, item: "mystic_hat_light" });
+const gearCmd = await command("gear", [{ name: "view", type: 1 }], ivy);
+check("/gear shows the wardrobe and offers what is owned", /wardrobe \d+\/\d+/.test(content(gearCmd)) && JSON.stringify(gearCmd.body).includes("gear:w:bronze_boots") && JSON.stringify(gearCmd.body).includes("gear:show"), gearCmd);
+const wearBoots = await click("gear:w:bronze_boots", ivy);
+check("boots are worn and count", /Wearing Bronze boots \(defence \+2\)/.test(content(wearBoots)), wearBoots);
+const wearWhip = await command("gear", [{ name: "wear", type: 1, options: [{ name: "item", type: 3, value: "whip" }] }], ivy);
+check("a whip at low Attack is worn for the look", /Wearing Abyssal whip for the look; it needs 70 Attack/.test(content(wearWhip)), wearWhip);
+await click("gear:w:mystic_hat_light", ivy);
+const wornRow = JSON.parse((await sql(`SELECT gear FROM players WHERE discord_id = '${ivy.user.id}'`))[0].gear);
+check("what is worn is kept by slot", wornRow.boots === "bronze_boots" && wornRow.weapon === "abyssal_whip" && wornRow.head === "mystic_hat_light", wornRow);
+const notOwned = await command("gear", [{ name: "wear", type: 1, options: [{ name: "item", type: 3, value: "granite maul" }] }], ivy);
+check("something not owned is refused, with where it drops", /do not own Granite maul: Gargoyle 1\/64/.test(content(notOwned)), notOwned);
+const chase = await command("gear", [{ name: "chase", type: 1, options: [{ name: "item", type: 3, value: "leaf-bladed sword" }] }], ivy);
+const wish = (await sql(`SELECT wishlist FROM players WHERE discord_id = '${ivy.user.id}'`))[0].wishlist;
+check("chasing an item records it and says where it drops, at the chased rate", wish === "leaf_bladed_sword" && /Chasing \*\*Leaf-bladed sword\*\*: Kurask 1\/48/.test(content(chase)), { wish, chase: content(chase) });
+const catalogue = await command("gear", [{ name: "catalogue", type: 1, options: [{ name: "slot", type: 3, value: "boots" }] }], ivy);
+check("the catalogue lists a slot with sources", /✅ Bronze boots/.test(content(catalogue)) && /▫️ Rune boots \(defence \+13, strength \+2; needs 40 Defence\) — Nechryael/.test(content(catalogue)), catalogue);
+const takeOff = await click("gear:w:bronze_boots", ivy);
+check("pressing a worn piece takes it off", /Took off Bronze boots/.test(content(takeOff)), takeOff);
+const shown = await click("gear:show", ivy);
+const gearPost = await waitFor(() => posts(CHANNEL).find((e) => /ivy\*\*'s gear/.test(e.body)), 60);
+check("Show off posts the gear to the channel", shown.body?.type === 5 && Boolean(gearPost), { shown, gearPost });
+const ivyGearNext = await admin("checkin-as", { player: ivy.user.id, day: new Date(Date.parse(`${day}T00:00:00Z`) + 2 * 86400000).toISOString().slice(0, 10) });
+check("a check-in with a look worn still fights with the scimitar", /scimitar/.test(ivyGearNext.outcome?.session ?? ""), ivyGearNext.outcome?.session);
+
+// 28. Slayer choices.
+const master = await command("task", [{ name: "master", type: 1, options: [{ name: "name", type: 3, value: "turael" }] }], ivy);
+check("/task master picks a master the player qualifies for", /Turael assigns your tasks from now on/.test(content(master)), master);
+const tooHigh = await command("task", [{ name: "master", type: 1, options: [{ name: "name", type: 3, value: "duradel" }] }], ivy);
+check("and refuses one they do not", /Duradel wants combat level 100 and 50 Slayer/.test(content(tooHigh)), tooHigh);
+const block = await command("task", [{ name: "block", type: 1 }], ivy);
+check("blocking needs the points", /Blocking costs 100 points/.test(content(block)), block);
+const taskCmd = await command("task", [{ name: "status", type: 1 }], ivy);
+check("/task shows the block list and the master", /Blocked \(0\/[1-6]\): nothing/.test(content(taskCmd)) && /Master: Turael/.test(content(taskCmd)) && JSON.stringify(taskCmd.body).includes("task:block"), taskCmd);
+
+// 29. The farm: one run a day.
+const farmCmd = await command("farm", [], ivy);
+check("/farm shows three patches", /Allotment\*\*: empty — a run plants potato seeds/.test(content(farmCmd)) && /Herb patch\*\*: empty — no seed you can plant yet/.test(content(farmCmd)) && JSON.stringify(farmCmd.body).includes("farm:run"), farmCmd);
+const run1 = await click("farm:run", ivy);
+check("the first run plants potatoes", /nothing was ready; planted potato/.test(content(run1)) && /Farming/.test(content(run1)), run1);
+const run2 = await click("farm:run", ivy);
+check("a second run the same day is refused", /already done/.test(content(run2)), run2);
+const tomorrowAt = new Date(Date.now() + 86400000).toISOString();
+const run3 = await admin("farm-as", { player: ivy.user.id, at: tomorrowAt, run: "1" });
+check("the next day's run harvests and replants", /harvested \d+× Potato \(\d+ gp, banked\); planted potato/.test(run3.content ?? ""), run3);
+const farmXp = (await sql(`SELECT xp FROM skill_xp WHERE player_id = '${ivy.user.id}' AND skill = 'farming'`))[0];
+check("Farming XP landed", (farmXp?.xp ?? 0) > 60, farmXp);
+const potatoes = (await sql(`SELECT qty FROM bank WHERE player_id = '${ivy.user.id}' AND item = 'potato'`))[0];
+check("the potatoes are in the bank", (potatoes?.qty ?? 0) >= 6, potatoes);
+
+// 30. Miscellania: fund it, wait a week, collect.
+const kingdomCmd = await command("kingdom", [{ name: "status", type: 1 }], ivy);
+check("/kingdom shows approval, the coffer and the subjects", /Miscellania\*\* — approval \d+% · coffer 0 gp/.test(content(kingdomCmd)) && /Subjects: Herbs 10/.test(content(kingdomCmd)), kingdomCmd);
+await admin("bank-deposit", { player: ivy.user.id, gp: "60000" });
+const funded = await click("kd:dep:50000", ivy);
+check("funding moves coins from the bank's balance to the coffer", /Put 50k gp in the coffer/.test(content(funded)) && /coffer 50k gp \(pays 5\.0k gp a day/.test(content(funded)), funded);
+const weekOn = new Date(Date.parse(`${day}T00:00:00Z`) + 9 * 86400000).toISOString().slice(0, 10);
+const waiting = await admin("kingdom-as", { player: ivy.user.id, day: weekOn });
+check("a week on, the subjects have gathered herbs and been paid", /Waiting.*Grimy/.test(waiting.content ?? "") && waiting.kingdom?.coffer < 50000 && waiting.kingdom?.approval < 100, waiting);
+const collected = await admin("kingdom-as", { player: ivy.user.id, day: weekOn, collect: "1" });
+const herbsBanked = (await sql(`SELECT COALESCE(SUM(qty), 0) AS n FROM bank WHERE player_id = '${ivy.user.id}' AND item LIKE 'grimy_%'`))[0];
+check("collecting banks the haul", /Collected .*Grimy/.test(collected.content ?? "") && herbsBanked.n > 0, { collected: collected.content, herbsBanked });
+const again2 = await admin("kingdom-as", { player: ivy.user.id, day: weekOn, collect: "1" });
+check("and there is nothing to collect twice", /Nothing to collect yet/.test(again2.content ?? ""), again2.content);
+const assign = await command("kingdom", [{ name: "assign", type: 1, options: [{ name: "wood", type: 4, value: 6 }, { name: "mining", type: 4, value: 4 }] }], ivy);
+check("/kingdom assign splits the subjects", /Subjects reassigned: Mining 4 · Wood 6/.test(content(assign)), assign);
+const overAssign = await command("kingdom", [{ name: "assign", type: 1, options: [{ name: "wood", type: 4, value: 8 }, { name: "mining", type: 4, value: 4 }] }], ivy);
+check("and refuses more than ten", /You have 10 subjects; that is 12/.test(content(overAssign)), overAssign);
+
+// 31. Tears of Guthix: once a week.
+const tears1 = await command("tears", [], ivy);
+check("/tears pays the lowest skill", /Tears of Guthix\*\*: \d+ tears caught/.test(content(tears1)) && /your lowest skill/.test(content(tears1)), tears1);
+const tears2 = await command("tears", [], ivy);
+check("and only once a week", /heard your story this week/.test(content(tears2)), tears2);
+
+// 32. The boss of the week: every check-in takes a swing, and the group brings it down.
+// The Monday three weeks on, so a week of fights stays inside one game week.
+// (Six weeks, so the players above have dropped off the active roster and the bar is sized for these three.)
+const threeWeeksOn = new Date(Date.parse(day + "T00:00:00Z") + 42 * 86400000);
+const bossWeekDay = new Date(threeWeeksOn.getTime() - ((threeWeeksOn.getUTCDay() + 6) % 7) * 86400000).toISOString().slice(0, 10);
+const fighters = ["kay", "lee", "moe"].map((n) => `${n}_${stamp}`);
+await admin("seed", { players: fighters.join(","), day: bossWeekDay, ...Object.fromEntries(fighters.map((id) => [`name_${id}`, id.split("_")[0]])) });
+const firstSwing = await admin("checkin-as", { player: fighters[0], day: bossWeekDay });
+const bossRow = (await admin("boss", { day: bossWeekDay })).week;
+check("the first check-in of the week opens the boss", bossRow?.status === "open" && bossRow.hp > 0 && bossRow.damage > 0 && bossRow.damage < bossRow.hp, bossRow);
+check("the receipt says what the swing did", (firstSwing.outcome?.receipt ?? []).some((line) => /kay hit \*\*(Scurrius|Obor|Bryophyta)\*\* for \d+ — [\d,]+ of [\d,]+ left\./.test(line)), firstSwing.outcome?.receipt);
+const hitRow = (await sql(`SELECT damage, kills FROM boss_hits WHERE player_id = '${fighters[0]}'`))[0];
+check("the swing is on the record", hitRow?.damage === bossRow.damage && [0, 1].includes(hitRow?.kills), hitRow);
+// Everybody turns up until it falls: day by day, never twice a day.
+let fallen = null;
+for (let d = 0; d < 7 && !fallen; d++) {
+  const fightDay = new Date(Date.parse(`${bossWeekDay}T00:00:00Z`) + d * 86400000).toISOString().slice(0, 10);
+  for (const id of fighters) {
+    if (d === 0 && id === fighters[0]) continue;
+    const out = await admin("checkin-as", { player: id, day: fightDay });
+    if ((out.outcome?.channelLines ?? []).some((line) => /is down/.test(line))) fallen = out.outcome.channelLines.find((line) => /is down/.test(line));
+    if (fallen) break;
+  }
+}
+const bossAfter = (await admin("boss", { day: bossWeekDay })).week;
+check("the group brings the boss down inside the week", Boolean(fallen) && bossAfter?.status === "done", { fallen, bossAfter });
+check("everyone who fought shares the spoils, by name", fighters.every((id) => (fallen ?? "").includes(`**${id.split("_")[0]}**`)) && /landed the last blow/.test(fallen ?? ""), fallen);
+const bossCmd = await admin("boss", { day: bossWeekDay });
+check("/boss shows who did what", /Down since/.test(bossCmd.content ?? "") && /1\. \*\*/.test(bossCmd.content ?? "") && /Next week:/.test(bossCmd.content ?? ""), bossCmd.content);
+
+// 33. Private to-do lists ride on the buttons a player already presses.
+const nia = { user: { id: `nia_${stamp}`, username: "nia" } };
+await click(`join:${day}`, nia);
+const niaTodo = await command("todo", [], nia);
+check("/todo is private and lists what is waiting",
+  niaTodo.body?.data?.flags === 64 && /Spoils to pick/.test(content(niaTodo)) && /have not planted it/.test(content(niaTodo)) && /have not funded it/.test(content(niaTodo)) && /Tears of Guthix this week/.test(content(niaTodo)) && /not chasing anything/.test(content(niaTodo)),
+  niaTodo);
+const oli = { user: { id: `oli_${stamp}`, username: "oli" } };
+await command("join", [], oli);
+const oliRest = await click(`no:${day}`, oli);
+check("a rest-day answer carries the list too", /Rest day noted/.test(content(oliRest)) && /For you\*\* \(only you see this\)/.test(content(oliRest)) && /0 of 2 check-ins this week/.test(content(oliRest)), oliRest);
+check("nothing private reaches the channel", !posts(CHANNEL).some((e) => /For you|have not planted|have not funded/.test(e.body)));
+const morning = [...posts(CHANNEL)].reverse().find((e) => /Did you work out/.test(e.body));
+check("the morning post carries the My to-do button and the boss", /"custom_id":"todo"/.test(morning?.body ?? "") && /(Scurrius|Obor|Bryophyta)/.test(morning?.body ?? ""), morning?.body?.slice(0, 600));
 
 console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) failed.`);
 process.exit(failures === 0 ? 0 : 1);

@@ -52,6 +52,7 @@ import {
   countCheckinsBetween,
   countCheckinsTotal,
   getCheckinFor,
+  getPlayer,
   getSkills,
   grantLampStatement,
   insertCheckin,
@@ -86,14 +87,20 @@ import {
 import { getRelics } from "./relics.ts";
 import { activeRaidFor, raidHit } from "./raids.ts";
 import { bingoLines, evaluateBingo } from "./bingo.ts";
-import { ensureTask, hasSlayerHelmet, progressTask, taskMonster, taskName, taskShort } from "./slayer.ts";
-import { combatLevel, levelsOf, simulateSession, weaponFor, type Session } from "./combat.ts";
+import { ensureTask, progressTask, taskMonster, taskName, taskShort } from "./slayer.ts";
+import { combatLevel, levelsOf, potionBoost, simulateSession, weaponFor, type Session } from "./combat.ts";
+import { diaryNext, evaluateDiary } from "./diary.ts";
+import { geItem, loadoutOf } from "./ge.ts";
+import { dropBoost, gearDef, ownedGear, sessionGear } from "./gear.ts";
+import { kingdomCheckin } from "./kingdom.ts";
+import { bossHit } from "./bosses.ts";
+import { createSpoils, draftLines, openSpoils, waitingSpoils, type SpoilsOption } from "./spoils.ts";
 import { TRICKSTER_POINTS, XERIC_WEIGHT } from "./config.ts";
 import { buttonRow, type Button, type Checkin, type Env, type Player } from "./types.ts";
 import {
   clueTierForMonster,
   levelForXp,
-  lampXp,
+  lampWorth,
   nextTier,
   ordinalWeight,
   tierForDefence,
@@ -140,6 +147,8 @@ export interface CheckinOutcome {
   task: string | null;
   /** The session, for the card: "23 hill giants · max hit 4 · 54% to hit". */
   session: string;
+  /** The pick this check-in ends with: the row, what is on offer, and the lines that say so. */
+  spoils: { id: number; options: SpoilsOption[]; lines: string[] } | null;
 }
 
 /** Turns an item's display name into its icon key. */
@@ -181,8 +190,8 @@ export function effectFor(env: Env, day: string): string | undefined {
 }
 
 /** "23 hill giants: max hit 4, 54% to hit, 812 damage." */
-function sessionLine(session: Session, name: string): string {
-  const ate = session.foodEaten > 0 ? ` Ate ${session.foodEaten} lobster${session.foodEaten === 1 ? "" : "s"}${session.bankTrips > 0 ? ` and banked ${session.bankTrips === 1 ? "once" : `${session.bankTrips} times`}` : ""}.` : "";
+function sessionLine(session: Session, name: string, food = "lobster"): string {
+  const ate = session.foodEaten > 0 ? ` Ate ${session.foodEaten} ${food}${session.foodEaten === 1 || food.endsWith("fish") ? "" : "s"}${session.bankTrips > 0 ? ` and banked ${session.bankTrips === 1 ? "once" : `${session.bankTrips} times`}` : ""}.` : "";
   return (
     `⚔️ ${session.kills} ${name}: max hit ${session.maxHit}, ${Math.round(session.hitChance * 100)}% to hit, ${session.damage.toLocaleString("en-US")} damage. ` +
     `${session.weapon.name}, ${session.armour.name.toLowerCase()}${session.prayers.length > 0 ? `, ${session.prayers[session.prayers.length - 1]}` : ""}.${ate}`
@@ -214,12 +223,23 @@ export async function performCheckin(
   // The Slayer task is the opponent; a player with none gets one first.
   const { task, assignedNow } = await ensureTask(env, player, levelsBefore, combatBefore, day);
   const monster = taskMonster(task);
+  // What was bought at the Grand Exchange for this session: a potion's boost
+  // (averaged across the session) and better food than lobsters.
+  const loadout = loadoutOf(player);
+  const potion = geItem(loadout.potion);
+  const food = geItem(loadout.food);
+  const boost = potion?.boost ? potionBoost(levelsBefore, potion.boost, weight) : undefined;
+  // What is worn: a dropped weapon, boots or the black mask, if owned and wieldable.
+  const wardrobe = await ownedGear(env, player);
+  const gear = sessionGear(player, levelsBefore, wardrobe, owned.has("clue:Amulet of glory (t)"));
   const session = simulateSession({
     levels: levelsBefore,
     style: player.combat_style,
-    gear: { slayerHelmet: hasSlayerHelmet(player), glory: owned.has("clue:Amulet of glory (t)") },
+    gear,
     monster,
     weight,
+    boost,
+    foodHeal: food?.heal,
   });
   const monsterName = taskName(task);
 
@@ -252,7 +272,9 @@ export async function performCheckin(
     monster.name,
     session.kills,
     seededRng(`${player.discord_id}:${day}:drops`),
-    (row) => row.item === monster.bones?.item
+    (row) => row.item === monster.bones?.item,
+    // Wearable drops fall at the game's adapted rate, the chased item at twice that.
+    dropBoost(player.wishlist)
   );
 
   const combatXpTotal = (session.xp.attack ?? 0) + (session.xp.strength ?? 0) + (session.xp.defence ?? 0);
@@ -348,7 +370,15 @@ export async function performCheckin(
   if (progress.xp > 0) gains.slayer = progress.xp;
 
   receipt.push(`**Checked in.** ${ordinalWord(ordinal)} this week, ${weightWord(weight)}.`);
-  receipt.push(sessionLine(session, monsterName));
+  receipt.push(sessionLine(session, monsterName, food ? food.item.toLowerCase() : undefined));
+  if (potion && boost) {
+    const lifted = Object.entries(boost)
+      .filter(([, levels]) => (levels ?? 0) > 0)
+      .map(([skill, levels]) => `${SKILL_LABEL[skill as SkillKey]} +${levels}`)
+      .join(", ");
+    receipt.push(`🧪 ${potion.item}: ${lifted || "no lift at this level"} across the session.`);
+    publicBits.push(`🧪 ${potion.item}${lifted ? ` (${lifted})` : ""}.`);
+  }
   if (drops.stacks.length > 0) {
     const top = drops.stacks.slice(0, 3).map((stack) => `${stack.qty.toLocaleString("en-US")}× ${stack.item}`).join(", ");
     receipt.push(
@@ -359,6 +389,13 @@ export async function performCheckin(
   else receipt.push(`🗡️ ${progress.line}`);
   publicBits.push(`⚔️ ${session.kills} ${monsterName} slain${progress.completed ? "" : ` (${progress.task.kills}/${progress.task.kills_needed} on task)`}.`);
   if (progress.publicBit) publicBits.push(progress.publicBit);
+  // Something new for the wardrobe is always said, whatever it is worth.
+  for (const stack of drops.stacks) {
+    const piece = gearDef(stack.key);
+    if (!piece || wardrobe.has(piece.key)) continue;
+    keep(`🛡️ New for your wardrobe: **${piece.item}**${player.wishlist === piece.key ? " — the one you were chasing" : ""}. \`/gear\` to wear it.`);
+    if (!stack.notable) publicBits.push(`🛡️ **${escapeMarkdown(player.username)}** — **${piece.item}** from the ${monsterName}.`);
+  }
   // A drop worth shouting about: rare by the wiki's rate, or worth a lot.
   for (const stack of drops.notable) {
     publicBits.push(
@@ -741,7 +778,7 @@ export async function performCheckin(
       player,
       levelsBefore,
       player.combat_style,
-      { slayerHelmet: hasSlayerHelmet(player), glory: owned.has("clue:Amulet of glory (t)") },
+      gear,
       checkinId,
       input,
       day,
@@ -756,15 +793,93 @@ export async function performCheckin(
     // The quest is decoration on the check-in; the check-in stands.
   }
 
+  // ── Boss of the week ───────────────────────────────────────────
+  // After the session, a swing at the group's boss; its fall is channel news.
+  try {
+    const boss = await bossHit(env, player, levelsBefore, player.combat_style, gear, checkinId, day, weight, now);
+    if (boss) {
+      for (const line of boss.lines) {
+        receipt.push(line);
+        publicBits.push(line);
+      }
+      for (const line of boss.keep) keep(line);
+      for (const item of boss.loot) addLoot(item.k, item.c, item.v);
+      channelLines.push(...boss.channelLines);
+    }
+  } catch {
+    // Same as the quest: the check-in stands.
+  }
+
   // ── Bingo ──────────────────────────────────────────────────────
   const bingo = bingoLines(await evaluateBingo(env, { ...player, last_active_day: day }, day, act, now), player.username);
   if (bingo.receipt) receipt.push(bingo.receipt);
   if (bingo.publicBit) publicBits.push(bingo.publicBit);
 
+  // ── Spoils ─────────────────────────────────────────────────────
+  // Anything left unpicked from an earlier check-in opens itself (the
+  // player's own roll), then this check-in's three are drawn.
+  let spoils: CheckinOutcome["spoils"] = null;
+  let spoilsDry = player.spoils_dry ?? 0;
+  try {
+    for (const stale of await waitingSpoils(env, player.discord_id)) {
+      const opened = await openSpoils(env, player, stale, 0, day, now, true);
+      if (!opened) continue;
+      keep(`Spoils left from ${stale.day} opened themselves — ${opened.line}`);
+      publicBits.push(opened.publicLine);
+      for (const item of opened.card.loot) addLoot(item.k, item.c);
+    }
+    const { row, draft } = await createSpoils(env, player, checkinId, day, ordinal, weight);
+    spoilsDry = draft.dryAfter;
+    const options = JSON.parse(row.options) as SpoilsOption[];
+    spoils = { id: row.id, options, lines: draftLines(options, draft, draft.pity ? 0 : draft.dryAfter) };
+  } catch {
+    // The spoils are a gift on top of the check-in; the check-in stands.
+  }
+
+  // ── Miscellania ────────────────────────────────────────────────
+  // A check-in is the good works that keep the kingdom's approval up.
+  try {
+    await kingdomCheckin(env, player.discord_id, day, weight);
+  } catch {
+    // The kingdom is its own thing; the check-in stands.
+  }
+
+  // ── Achievement Diary ──────────────────────────────────────────
+  let diaryLine: string | null = null;
+  try {
+    const current = (await getPlayer(env, player.discord_id)) ?? player;
+    const diary = await evaluateDiary(env, current, day, now);
+    for (const tier of diary.completed) {
+      gotLamp = true;
+      addLoot("lamp");
+      keep(`📘 **${tier.name} diary complete**: a ${tier.lamp.toLocaleString("en-US")} XP antique lamp.`);
+      publicBits.push(`📘 **${escapeMarkdown(player.username)} completed the ${tier.name} diary.**`);
+    }
+    diaryLine = diaryNext(diary.progress);
+  } catch {
+    // Same.
+  }
+
+  // ── Next up ────────────────────────────────────────────────────
+  // The nearest goals, with numbers: people speed up when the line is in sight.
+  const nextUp: string[] = [];
+  if (ordinal === 1) nextUp.push("the week's chest at your second check-in");
+  const closest = SKILLS.filter((skill) => (gains[skill] ?? 0) > 0 && xpToNext(skillsAfter[skill] ?? 0) > 0).sort(
+    (a, b) => xpToNext(skillsAfter[a] ?? 0) - xpToNext(skillsAfter[b] ?? 0)
+  )[0];
+  if (closest) {
+    nextUp.push(`${SKILL_LABEL[closest]} ${levelsAfter[closest] + 1} in ${xpToNext(skillsAfter[closest] ?? 0).toLocaleString("en-US")} XP`);
+  }
+  if (diaryLine) nextUp.push(diaryLine);
+  if (nextUp.length > 0) keep(`⏭️ Next: ${nextUp.join(" · ")}`);
+
   await updatePlayer(env, player.discord_id, {
     last_active_day: day,
     event_dry_streak: event ? 0 : player.event_dry_streak + 1,
     rings,
+    spoils_dry: spoilsDry,
+    // The potion and the food are used up.
+    ...(potion || food ? { loadout: "{}" } : {}),
     ...recovery,
   });
   // The answer to the morning question, for the roll call.
@@ -805,6 +920,7 @@ export async function performCheckin(
     xpGained,
     task: taskShort(progress.completed ? progress.next : progress.task),
     session: `${session.kills} ${monsterName} · max hit ${session.maxHit} · ${Math.round(session.hitChance * 100)}% to hit · ${session.weapon.name}`,
+    spoils,
   };
 }
 
@@ -875,14 +991,22 @@ export async function finishClue(
 export async function hubButtons(env: Env, player: Player, day: string): Promise<Button[]> {
   const lamps = await (await import("./db")).unspentLamps(env, player.discord_id);
   const clue = await openClue(env, player.discord_id);
+  const waiting = await waitingSpoils(env, player.discord_id);
   const buttons: Button[] = [];
   if (lamps.length > 0) buttons.push({ label: `Lamp (${lamps.length})`, custom_id: "lamp", style: 3, emoji: "🧞" });
+  if (waiting.length > 0) buttons.push({ label: "Spoils", custom_id: "spoils", style: 3, emoji: "🎁" });
   if (clue) buttons.push({ label: "Clue", custom_id: "clue", emoji: "📜" });
   buttons.push({ label: "Sheet", custom_id: `sheet:${day}`, emoji: "📋" });
   buttons.push({ label: "Town", custom_id: "town", emoji: "🏘️" });
   buttons.push({ label: "Log", custom_id: "log", emoji: "📗" });
   buttons.push({ label: "Bank", custom_id: "bank", emoji: "💰" });
+  buttons.push({ label: "Gear", custom_id: "gear", emoji: "🛡️" });
+  buttons.push({ label: "Farm", custom_id: "farm", emoji: "🌱" });
+  buttons.push({ label: "Kingdom", custom_id: "kd", emoji: "👑" });
+  buttons.push({ label: "Exchange", custom_id: "ge", emoji: "⚖️" });
+  buttons.push({ label: "Diary", custom_id: "diary", emoji: "📘" });
   buttons.push({ label: "Quest", custom_id: "quest", emoji: "🗺️" });
+  buttons.push({ label: "Boss", custom_id: "boss", emoji: "🐀" });
   buttons.push({ label: "Task", custom_id: "task", emoji: "🗡️" });
   buttons.push({ label: "Bingo", custom_id: "bingo", emoji: "🎯" });
   buttons.push({ label: "Shop", custom_id: "shop", emoji: "🛒" });
@@ -902,9 +1026,9 @@ export function quizButtons(checkinId: number, index: number) {
   );
 }
 
-/** A player's lamp value if this is a genie lamp, else the fixed amount. */
+/** What a lamp pays into a skill at this level: a genie's and a Book of knowledge scale with it, an antique lamp is fixed. */
 export function lampValue(lamp: { xp: number; source: string }, skillLevel: number): number {
-  return lamp.source === "genie" ? lampXp(skillLevel) : lamp.xp;
+  return lampWorth(lamp, skillLevel);
 }
 
 export type { Checkin };

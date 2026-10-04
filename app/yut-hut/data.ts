@@ -315,7 +315,205 @@ export const SECTIONS: RuleSection[] = [
           "A **notable drop** — 1 in 1,024 or rarer, or worth 50k — is announced in the day's thread and logged. Notable drops are counted apart from the 90-entry collection log.",
         ],
       },
-      { kind: "note", text: "The bank is a trophy case, not a currency. Its worth shows on your sheet; nothing is bought with it." },
+      { kind: "note", text: "The bank is spendable. Its worth, less what you have spent, is your balance at the Grand Exchange." },
+    ],
+  },
+  {
+    id: "spoils",
+    label: "Spoils",
+    title: "Spoils: pick one of three",
+    lede: "Every check-in ends with a choice. You take one; the other two are gone. `/spoils` shows what is waiting.",
+    blocks: [
+      {
+        kind: "table",
+        columns: ["Option", "What it is"],
+        rows: [
+          ["**Your roll**", "An impling jar or a reward chest, rolled for you on five tiers. Opening it banks its loot."],
+          ["**Today's container**", "One jar or chest a day, the same for everybody, named on the morning post."],
+          ["**A sure thing**", "A Book of knowledge (a lamp worth 15× the level of the skill you read it into), a supply crate for the camp, or a clue bottle."],
+        ],
+      },
+      {
+        kind: "table",
+        columns: ["Tier", "Odds", "Containers"],
+        rows: [
+          ["Common", "60%", "Baby, Young, Gourmet and Earth impling jars, Casket"],
+          ["Uncommon", "27%", "Essence, Eclectic and Nature impling jars"],
+          ["Rare", "10%", "Magpie impling jar, Muddy chest, Crystal chest"],
+          ["Very rare", "2.5%", "Ninja impling jar, Grubby chest, Elven crystal chest"],
+          ["Legendary", "0.5%", "Dragon impling jar, Brimstone chest, Larran's big chest"],
+        ],
+      },
+      {
+        kind: "ul",
+        items: [
+          "What comes out of a jar or a chest is the Old School wiki's loot table for it. A jar pays one item, as in the game; a chest pays what its table pays.",
+          "**The week's chest**: your second check-in of the week rolls its tier twice and keeps the better. A Form streak of four weeks makes it three rolls.",
+          "**Pity**: eight full-value check-ins without a rare roll, and the next roll is rare.",
+          "Past your second check-in of the week the roll stops at uncommon and today's container is not on offer.",
+          "Spoils you have not picked open themselves (your roll) at your next check-in. Nothing is lost.",
+          "Every pick is posted in the day's thread with a card. `/spoils` counts the containers you have opened, out of 17.",
+        ],
+      },
+    ],
+  },
+  {
+    id: "exchange",
+    label: "Grand Exchange",
+    title: "The Grand Exchange",
+    lede: "Your bank is gold, and gold buys what it buys in Old School: an edge for your next session, or Prayer. `/ge`.",
+    blocks: [
+      {
+        kind: "table",
+        columns: ["Item", "What it does"],
+        rows: [
+          ["Strength potion(4)", "Strength +3 and 10% for your next session."],
+          ["Super strength(4)", "Strength +5 and 15% for your next session."],
+          ["Super combat potion(4)", "Attack, Strength and Defence +5 and 15% for your next session."],
+          ["27 × Swordfish", "An inventory that heals 14 a bite instead of a lobster's 12."],
+          ["27 × Shark", "An inventory that heals 20 a bite."],
+          ["25 × Big bones", "15 Prayer XP each, buried on the spot."],
+          ["10 × Dragon bones", "72 Prayer XP each, buried on the spot."],
+        ],
+      },
+      {
+        kind: "ul",
+        items: [
+          "Prices are the real Grand Exchange's. Your balance is your bank's worth less what you have spent; nothing is sold or removed from the bank.",
+          "One potion and one inventory of food can be packed at a time. Your next check-in uses them up.",
+          "A potion drains a level a minute and has four doses, so across a full session a +14 boost averages +11.",
+          "Bones bought here are buried at the Chapel's altar if the town has one: 250%, 300%, 350%.",
+          "Nothing bought can make a session worse than it would have been.",
+        ],
+      },
+    ],
+  },
+  {
+    id: "boss",
+    label: "Boss of the week",
+    title: "The boss of the week",
+    lede: "One of the game's early group bosses is up every week, from the first: Scurrius, then Obor, then Bryophyta, round again. `/boss`.",
+    blocks: [
+      {
+        kind: "ul",
+        items: [
+          "After your session, every check-in takes 200 swings at the boss (fewer past your second of the week) with whatever you are wearing.",
+          "The damage goes into one bar the whole roster shares. It is sized to the roster's own damage, so most of you turning up twice empties it.",
+          "The first time your own damage for the week reaches a real kill's worth (the boss's own hitpoints), its real drop table, and its lair chest's, rolls for you. One kill of your own a week.",
+          "When the bar is empty, the channel hears who landed the last blow and who did the most damage, and **everyone who fought that week gets a roll**.",
+          "On the tables: Scurrius' spine and the pet Scurry, Obor's hill giant club (a real weapon: 40 Attack), Bryophyta's essence. All four are in the gear catalogue and can be chased.",
+          "Nothing is lost if the boss survives the week. Raid weeks still arrive in Act 3; this is the weekly fight until then and alongside them.",
+        ],
+      },
+    ],
+  },
+  {
+    id: "todo",
+    label: "Your to-do list",
+    title: "Reminders, and who sees them",
+    lede: "What is waiting on you is your business. Only you see it.",
+    blocks: [
+      {
+        kind: "ul",
+        items: [
+          "**My to-do** on the morning post, or `/todo`, shows your own list: spoils to pick, lamps, crops ready, your kingdom's haul or empty coffer, the Tears of Guthix, gear you own and are not wearing, points to spend, votes not cast, and anything you have not tried yet.",
+          "The same list rides under every private reply the bot already gives you: the receipt after a Yes, the answer to a No, and the hub.",
+          "The channel's evening message names nobody's lamps or loot. It says how many players have things waiting, names who has not voted (that is the group's business), and pings anyone on their third day without a workout.",
+          "A bot can only speak privately in the channel in reply to something you pressed, so the list cannot arrive on its own. It is always one press away.",
+        ],
+      },
+    ],
+  },
+  {
+    id: "gear",
+    label: "Gear and looks",
+    title: "Gear, looks and the chase",
+    lede: "The task monsters drop things you can wear. Some make you hit harder; most are for showing off. `/gear`.",
+    blocks: [
+      {
+        kind: "table",
+        columns: ["Kind", "What", "Where from"],
+        rows: [
+          ["Weapons", "Brine sabre (40 Attack), leaf-bladed sword (50 Attack, 55 Slayer), granite maul and longsword (50 Attack and Strength), dragon dagger and mace (60), leaf-bladed battleaxe (65), abyssal whip and dagger (70)", "Brine rats, turoth, kurask, gargoyles, dust devils, abyssal demons and friends"],
+          ["Boots", "Bronze, iron, steel, black, mithril, adamant, rune, granite", "Cave crawlers up to nechryael; the armour sets have no boots, so every pair is an upgrade"],
+          ["Black mask", "The Slayer helmet's +16⅔% on task, from a drop", "Cave horrors"],
+          ["Looks", "Mystic light and dark robes, coloured gloves, flippers, a red cape, dragon and granite pieces, and every clue unique", "Task monsters and clue caskets"],
+          ["Trophies", "Monster heads, the draconic visage, champion scrolls", "The rarest rows on the tables"],
+        ],
+      },
+      {
+        kind: "ul",
+        items: [
+          "A piece is yours when it is in your bank (or, for a clue unique, your collection log). Wear one per slot; press it again to take it off.",
+          "A weapon or boots count in your session with the wiki's bonuses once you meet the game's requirements. Until then they are a look.",
+          "A worn weapon swings with its best attack style at its real speed: a seven-tick granite maul hits harder and far less often than a four-tick whip.",
+          "**Adapted rates**: anything wearable drops at four times the wiki's rate. You get two sessions a week, not two hours a night.",
+          "**The chase**: `/gear chase` names one item and doubles its rate again. `/gear catalogue` says which monster drops what, and which masters assign it.",
+          "**Show off** posts your gear card to the channel. The wardrobe count is how many of the 89 pieces you own.",
+        ],
+      },
+    ],
+  },
+  {
+    id: "kingdom",
+    label: "Miscellania",
+    title: "Managing Miscellania",
+    lede: "A kingdom of your own, at a tenth of the game's size. Look in once a week. `/kingdom`.",
+    blocks: [
+      {
+        kind: "ul",
+        items: [
+          "Ten subjects, split however you like across herbs, fishing, mining, wood and flax.",
+          "The coffer is funded from your bank's balance. Each day it pays out 10% of what it holds, up to 7,500, and the subjects' haul scales with how much they were paid.",
+          "Approval falls 2.5% a day, to a floor of 25%, and rises 10% with every full-value check-in. The haul scales with approval too, so the kingdom pays best for the people who show up.",
+          "At full pay and full approval, ten subjects bring in a tenth of the game's daily maximum: 6 herbs, or 44 tuna and 13 swordfish, or 55 coal, or 89 maple logs, or 125 flax.",
+          "Collect whenever you are fresh. Everything goes to your bank at Grand Exchange value. A kingdom nobody has looked at for thirty days stops working until they do.",
+        ],
+      },
+      { kind: "note", text: "Herbs are where the money is, as in the game. Logs and coal lose gold." },
+    ],
+  },
+  {
+    id: "farm",
+    label: "Farming",
+    title: "Farm runs and the Tears of Guthix",
+    lede: "One farm run a day, one visit to Juna a week. Neither is required and nothing dies if you skip them.",
+    blocks: [
+      {
+        kind: "ul",
+        items: [
+          "Three patches: an allotment (three seeds), a herb patch and a tree patch. The seeds are the ones your kills already drop.",
+          "A run harvests whatever has grown and replants each empty patch with the best seed you hold that your Farming level allows. Potato seeds are always to hand.",
+          "Levels, experience and growth times are Old School's: potatoes at 1, marrentill at 14, ranarr at 32, willow trees at 30, magic trees at 75.",
+          "Farming is a tenth skill. It counts towards your total level and takes lamps like any other.",
+          "**Tears of Guthix** (`/tears`): once a week, experience in your lowest skill. A tear is worth 60 XP from level 30 and less below it; the number of tears grows with the group's quest points.",
+        ],
+      },
+    ],
+  },
+  {
+    id: "diary",
+    label: "Diary",
+    title: "Achievement Diary",
+    lede: "Four tiers of tasks, read off what your check-ins have already done. Nothing to claim. `/diary`.",
+    blocks: [
+      {
+        kind: "table",
+        columns: ["Tier", "Lamp", "Tasks"],
+        rows: [
+          ["Easy", "2,500 XP", "5 check-ins, 100 kills, a Slayer task, 3 spoils opened, 10k banked, combat 10"],
+          ["Medium", "7,500 XP", "25 check-ins, 1,000 kills, 5 tasks, 5 different containers, 100k banked, combat 30, a 4-week Form streak, 3 verifications given"],
+          ["Hard", "15,000 XP", "60 check-ins, 5,000 kills, 15 tasks, 10 containers, 500k banked, combat 50, a 10-week streak, a clue casket"],
+          ["Elite", "50,000 XP", "100 check-ins, 15,000 kills, 30 tasks, 15 containers, 2m banked, combat 70, a 20-week streak, 250k spent at the Grand Exchange"],
+        ],
+      },
+      {
+        kind: "ul",
+        items: [
+          "The lamps are the Achievement Diary's own antique lamps. A tier pays at the check-in that finishes it, and only after the tier before it.",
+          "Every receipt ends with **Next**: the nearest level, the week's chest if it is one check-in away, and the diary task you are closest to.",
+        ],
+      },
     ],
   },
   {
@@ -608,6 +806,17 @@ export const SECTIONS: RuleSection[] = [
           ["`/task skip|xp|helmet`", "Spend Slayer points: skip the task (30), 10,000 Slayer XP (100), the Slayer helmet (400)."],
           ["`/log`", "Your collection log."],
           ["`/bank`", "Your bank: what your kills have dropped, by value."],
+          ["`/spoils`", "The pick waiting for you, today's container, your dry streak, and the containers you have opened."],
+          ["`/ge`", "The Grand Exchange: spend your bank on potions, food and bones."],
+          ["`/diary`", "Your Achievement Diary."],
+          ["`/gear view|wear|chase|catalogue|show`", "What you wear, the item you are chasing, where things drop, and your gear card for the channel."],
+          ["`/task block|unblock`", "Block the current task for good (100 points), or clear the list."],
+          ["`/task master`", "Choose which Slayer master assigns your tasks."],
+          ["`/farm`", "Your three patches and the day's farm run."],
+          ["`/kingdom status|collect|assign|fund|withdraw`", "Managing Miscellania."],
+          ["`/tears`", "Tears of Guthix, once a week."],
+          ["`/boss`", "The boss of the week: the bar, who has hit it, and what it drops."],
+          ["`/todo`", "What is waiting on you. Only you see it."],
           ["`/quest status|log`", "This week's quest and the party's progress, or the quest log and the group's quest points."],
           ["`/town`", "The town: stores, workers, buildings."],
           ["`/recruit kind`", "Hire a Miner, Woodcutter, Fisher, or Merchant."],
@@ -625,7 +834,7 @@ export const SECTIONS: RuleSection[] = [
           ["`/admin …`", "Admin only."],
         ],
       },
-      { kind: "p", text: "Buttons: **Yes** and **No** on the morning post, **Join**, **Verify**, **Ping me**, **Sit out**, the hub buttons (**Lamp**, **Clue**, **Task**, **Sheet**, **Town**, **Log**, **Bank**, **Quest**, **Bingo**, **Shop**, **Votes**), the three quiz answers, the lamp skill picker, the vote options, and **Share to channel**." },
+      { kind: "p", text: "Buttons: **Yes**, **No** and **My to-do** on the morning post, **Join**, **Verify**, **Ping me**, **Sit out**, the hub buttons (**Lamp**, **Clue**, **Task**, **Sheet**, **Town**, **Log**, **Bank**, **Gear**, **Farm**, **Kingdom**, **Exchange**, **Diary**, **Spoils**, **Quest**, **Boss**, **Bingo**, **Shop**, **Votes**), the three spoils, the three quiz answers, the lamp skill picker, the vote options, and **Share to channel**." },
     ],
   },
   {
@@ -642,7 +851,8 @@ export const SECTIONS: RuleSection[] = [
           "Group harm is capped at 1% and nobody is named for it.",
           "No workout types to manage. You moved or you did not.",
           "People who have not joined are invisible. Nobody is guilted into a game they did not join.",
-          "One morning post. One line and one loot card per check-in. That is the bot's whole footprint.",
+          "One morning post. One line and one loot card per check-in, and one for the spoils you pick, both in the day's thread. That is the bot's whole footprint.",
+          "No spoils for sale and no paying to reroll. The pick is three, once.",
         ],
       },
     ],
