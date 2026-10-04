@@ -69,7 +69,7 @@ src/
   votes.ts        group votes (build, relic, raid). relics.ts the relics. raids.ts raid weeks.
   actions.ts      the town buttons and vote handlers. bingo.ts the grids. shop.ts the shop.
   db.ts           every D1 query. discord.ts the REST client. roles.ts the opt-in ping role.
-migrations/       0001 the game, 0002 the town, 0003 votes and raids, 0004 bingo and shop, 0005 sessions and answers, 0006 the bank, 0007 quests, 0008 spoils, the Grand Exchange and the diary, 0009 gear, Slayer choices, the kingdom, the farm and the tears, 0010 the boss of the week. One number per file, forever.
+migrations/       0001 the game, 0002 the town, 0003 votes and raids, 0004 bingo and shop, 0005 sessions and answers, 0006 the bank, 0007 quests, 0008 spoils, the Grand Exchange and the diary, 0009 gear, Slayer choices, the kingdom, the farm and the tears, 0010 the boss of the week, 0011 the running reply's message id. One number per file, forever.
 scripts/          the harness (below), plus fetch-osrs.mjs (the wiki pull: --osrs, --drops, --quests), export-icons.mjs (item sprites from the prog-to-img-endpoint database into the Next app) and calibrate.mjs (the pace).
 config/choices.json  option lists shared by the runtime and the registration script.
 config/osrs.json     the wiki's numbers: masters, assignments, monsters, scimitars, armour sets. Regenerate with `npm run fetch:osrs -- --osrs`.

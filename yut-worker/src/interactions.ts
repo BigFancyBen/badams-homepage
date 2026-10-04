@@ -50,6 +50,7 @@ import {
   logEventStatement,
   openClue,
   rememberEphemeralReply,
+  setEphemeralReplyMessage,
   setCheckinMessage,
   setState,
   spendLamp,
@@ -207,7 +208,13 @@ async function deliver(
   if (interaction.type === InteractionType.MESSAGE_COMPONENT) {
     const existing = await getEphemeralReply(env, key, userId);
     if (existing && now - existing.created_at < EDIT_WINDOW) {
-      const edited = await editInteractionReply(env, existing.application_id, existing.token, data);
+      const edited = await editInteractionReply(
+        env,
+        existing.application_id,
+        existing.token,
+        data,
+        existing.message_id || "@original"
+      );
       if (edited) {
         return Response.json({ type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE });
       }
@@ -276,9 +283,10 @@ export async function handleInTime(
 ): Promise<Response> {
   if (interaction.type === InteractionType.PING) return handleInteraction(env, ctx, interaction);
 
-  // Test seam: wrangler.test.toml names one command to hold back, so the
-  // harness can watch the late path work.
-  const slow = env.SLOW_COMMAND && interaction.data?.name === env.SLOW_COMMAND;
+  // Test seam: wrangler.test.toml names commands and buttons to hold back, so
+  // the harness can watch the late path work.
+  const held = (env.SLOW_COMMAND ?? "").split(",").filter(Boolean);
+  const slow = held.includes(interaction.data?.name ?? "") || held.includes((interaction.data?.custom_id ?? "").split(":")[0]);
   const work = (slow ? new Promise((r) => setTimeout(r, ACK_BUDGET_MS + 500)) : Promise.resolve()).then(() =>
     handleInteraction(env, ctx, interaction)
   );
@@ -354,8 +362,13 @@ async function deliverLate(
     case InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE:
       // A command's deferral put up a fresh ephemeral: fill it. A button was
       // only acknowledged: the reply is a new ephemeral under the same token.
-      if (isButton) await followUp(env, appId, token, body.data);
-      else await editInteractionReply(env, appId, token, body.data);
+      if (isButton) {
+        // The follow-up is the running reply from here on. Its token's
+        // "@original" is the message the button was on, so the next click
+        // must edit the follow-up by id — or it rewrites the morning post.
+        const messageId = await followUp(env, appId, token, body.data);
+        if (messageId) await setEphemeralReplyMessage(env, token, messageId);
+      } else await editInteractionReply(env, appId, token, body.data);
       return;
     case InteractionResponseType.UPDATE_MESSAGE:
       await editInteractionReply(env, appId, token, body.data);

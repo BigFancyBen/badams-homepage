@@ -502,7 +502,13 @@ const ivyNext = await admin("checkin-as", { player: ivy.user.id, day: nextDay })
 check("the packed potion is used on the next session", (ivyNext.outcome?.receipt ?? []).some((line) => /Strength potion\(4\): Strength \+\d+ across the session/.test(line)), (ivyNext.outcome?.receipt ?? []).slice(0, 4));
 const ivyLoadout = (await sql(`SELECT loadout FROM players WHERE discord_id = '${ivy.user.id}'`))[0];
 check("and it is gone afterwards", ivyLoadout.loadout === "{}", ivyLoadout);
-check("the second check-in of the week is the week's chest", (ivyNext.outcome?.spoils?.lines ?? []).some((line) => /The week's chest/.test(line)), ivyNext.outcome?.spoils);
+// Run on a Sunday, tomorrow is a new game week and the check-in is its first, not its second.
+const nextDayIsMonday = new Date(`${nextDay}T00:00:00Z`).getUTCDay() === 1;
+check(
+  "the second check-in of the week is the week's chest",
+  nextDayIsMonday ? ivyNext.outcome?.ordinal === 1 : (ivyNext.outcome?.spoils?.lines ?? []).some((line) => /The week's chest/.test(line)),
+  ivyNext.outcome?.spoils
+);
 const jackNext = await admin("checkin-as", { player: jack, day: nextDay });
 const jackRows = await sql(`SELECT day, picked, auto FROM spoils WHERE player_id = '${jack}' ORDER BY id`);
 check("unpicked spoils open themselves at the next check-in",
@@ -646,6 +652,26 @@ check("a rest-day answer carries the list too", /Rest day noted/.test(content(ol
 check("nothing private reaches the channel", !posts(CHANNEL).some((e) => /For you|have not planted|have not funded/.test(e.body)));
 const morning = [...posts(CHANNEL)].reverse().find((e) => /Did you work out/.test(e.body));
 check("the morning post carries the My to-do button and the boss", /"custom_id":"todo"/.test(morning?.body ?? "") && /(Scurrius|Obor|Bryophyta)/.test(morning?.body ?? ""), morning?.body?.slice(0, 600));
+
+// 34. A button answered late is only acknowledged, and its answer is a follow-up. The next click must
+// edit that follow-up by id: the token's "@original" is the message the button sat on (the morning post
+// for a Yes), and editing it put a player's spoils on the morning post instead of on their receipt.
+const pat = { user: { id: `pat_${stamp}`, username: "pat" } };
+await admin("seed", { players: pat.user.id, day, [`name_${pat.user.id}`]: "pat" });
+await admin("checkin-as", { player: pat.user.id, day });
+const lateButton = await click("boss", pat); // held back by SLOW_COMMAND
+check("a slow button is acknowledged, not answered", lateButton.body?.type === 6, lateButton);
+const lateFollowUp = await waitFor(() => mockLog().find((e) => e.method === "POST" && /\/webhooks\/app_yut\/tok\d+$/.test(e.url) && /Boss of the week/.test(e.body)), 40);
+check("its answer arrives as a follow-up", Boolean(lateFollowUp), lateFollowUp);
+const patRow = await waitFor(async () => null, 1).then(async () => (await sql(`SELECT message_id FROM ephemeral_replies WHERE user_discord_id = '${pat.user.id}'`))[0]);
+check("the follow-up's id is remembered as the running reply", /^\d+$/.test(patRow?.message_id ?? ""), patRow);
+const editsBefore = mockLog().filter((e) => e.method === "PATCH" && /\/webhooks\//.test(e.url)).length;
+await click("farm", pat);
+const edits = mockLog().filter((e) => e.method === "PATCH" && /\/webhooks\//.test(e.url));
+const lastEdit = edits[edits.length - 1];
+check("the next click edits the follow-up, never the message the button was on",
+  edits.length === editsBefore + 1 && new RegExp(`/messages/${patRow?.message_id}$`).test(lastEdit?.url ?? "") && !/@original/.test(lastEdit?.url ?? "") && /farm/.test(lastEdit?.body ?? ""),
+  { url: lastEdit?.url, body: lastEdit?.body?.slice(0, 120) });
 
 console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) failed.`);
 process.exit(failures === 0 ? 0 : 1);
