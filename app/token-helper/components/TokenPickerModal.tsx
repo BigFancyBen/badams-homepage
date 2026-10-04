@@ -206,6 +206,9 @@ export function TokenPickerModal({
                     <div className="relative aspect-488/680 w-full">
                       <Image
                         src={token.imageUrl}
+                        // Scryfall's CDN already serves this at a sensible size; running it
+                        // through the optimizer only spends the site's monthly allowance.
+                        unoptimized
                         alt={token.name}
                         fill
                         className="object-cover"

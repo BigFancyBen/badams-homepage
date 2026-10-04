@@ -1249,10 +1249,14 @@ keeps a web-sized copy, not the original**.
 
 **Image transformations.** Next's image optimizer makes a separate copy of a
 photograph for every screen width that asks, and each copy is one
-transformation. The allowance is shared with the rest of the site — the card
-grids in tutor-helper and token-helper spend it too — and going over does not
-cost money, it breaks things: new images answer 402 and show their alt text
-until the window rolls over, everywhere.
+transformation. The allowance is shared with the rest of the site, and going
+over does not cost money, it breaks things: new images answer 402 and show
+their alt text until the window rolls over, everywhere. The card grids in
+tutor-helper and token-helper and the hero images in dota-randomizer used to
+spend it too — a deck search is hundreds of distinct cards — and are now
+`unoptimized`, since Scryfall and Valve already serve them at a sensible size.
+What still goes through the optimizer is the handful of the site's own static
+images.
 
 The weekly game first shipped on the optimizer. Twenty photographs a puzzle at
 five or six widths each was an estimated tenth of the allowance a month at one

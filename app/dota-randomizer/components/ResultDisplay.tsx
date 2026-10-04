@@ -87,6 +87,9 @@ export default function ResultDisplay({ hero, item, show, onFanfare }: ResultDis
                 <div className="animate-fade-in-delay">
                   <Image
                     src={hero.imageUrl}
+                    // Valve's CDN already serves this at a sensible size; running it
+                    // through the optimizer only spends the site's monthly allowance.
+                    unoptimized
                     alt={hero.displayName}
                     width={128}
                     height={80}
@@ -125,6 +128,9 @@ export default function ResultDisplay({ hero, item, show, onFanfare }: ResultDis
                 <div className="animate-fade-in-delay-long">
                   <Image
                     src={item.imageUrl}
+                    // Valve's CDN already serves this at a sensible size; running it
+                    // through the optimizer only spends the site's monthly allowance.
+                    unoptimized
                     alt={item.displayName}
                     width={80}
                     height={80}

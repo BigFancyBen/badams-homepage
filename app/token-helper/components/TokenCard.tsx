@@ -192,6 +192,9 @@ export function TokenCard({
         <div className="relative w-full h-full overflow-hidden bg-[#111111]">
           <Image
             src={imageUrl}
+            // Scryfall's CDN already serves this at a sensible size; running it
+            // through the optimizer only spends the site's monthly allowance.
+            unoptimized
             alt={name}
             fill
             className="object-cover"
