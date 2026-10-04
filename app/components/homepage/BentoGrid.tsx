@@ -6,89 +6,109 @@ import Image from "next/image";
 import { BentoCard } from "./BentoCard";
 import { TabletCarousel } from "./TabletCarousel";
 import { PhoneCarousel } from "./PhoneCarousel";
+import { ShotGallery } from "./ShotGallery";
+import { DiscordFeed } from "./DiscordFeed";
 import { useReducedMotion } from "../../hooks/useReducedMotion";
+import {
+  MFRS,
+  PROGNOSTICATOR_SCREENSHOTS,
+  WAREHOUSE_SCENE,
+  SM64_SCENE,
+  RADIANCE_SCREENSHOTS,
+  MTG_SCREENSHOTS,
+  SCRANDLE_SHOTS,
+  SCRANBOT_MESSAGES,
+  YUT_MESSAGES,
+  OSRS_MESSAGES,
+} from "./projects";
 
-const PROGNOSTICATOR_SCREENSHOTS = [
-  {
-    src: "/prognosticator/01-dashboard.webp",
-    label: "Command Center Dashboard",
-    bg: "#1a1a2e",
-    description: "The dashboard links to your Spotify playlists, tag collections, and performance tools: Now Playing, Beat Visualizer, Scene Controls, DMX lighting. Import a playlist and Prognosticator downloads each track from YouTube, then pulls BPM and musical key from VirtualDJ.",
-  },
-  {
-    src: "/prognosticator/02-tags-collections.webp",
-    label: "Smart Tag Collections",
-    bg: "#1a1a2e",
-    description: "Tag songs by genre, mood, energy level, or custom categories, then browse filtered collections showing album art, BPM, key, and duration. Filter and search within tags to narrow results. Tags span playlists, so one song can belong to multiple collections.",
-  },
-  {
-    src: "/prognosticator/03-playlist-view.webp",
-    label: "Playlist Browser",
-    bg: "#1a1a2e",
-    description: "Browse imported Spotify playlists as a grid of album art. Each song shows its musical key, BPM, and duration, pulled from VirtualDJ. Filter by key or BPM for harmonically compatible tracks, or search by title and artist. Click a song to see details, edit tags, or preview.",
-  },
-  {
-    src: "/prognosticator/05-all-songs.webp",
-    label: "Full Library View",
-    bg: "#1a1a2e",
-    description: "All songs across your playlists in one searchable grid. Sort by key or BPM, search by name. Songs show metadata overlays with Camelot key notation and BPM values.",
-  },
-  {
-    src: "/prognosticator/06-now-playing.webp",
-    label: "Live DJ Integration",
-    bg: "#1a1a2e",
-    description: "Prognosticator connects to VirtualDJ in real-time, showing what's loaded on Deck 1 and Deck 2 with live BPM, key, and playback status. Below the decks, browse your library to plan your next track. It reads from VirtualDJ's TCP beat-sync protocol, so deck info updates as you mix.",
-  },
-  {
-    src: "/prognosticator/07-smart-recommendations.webp",
-    label: "Smart Track Recommendations",
-    bg: "#1a1a2e",
-    description: "Click a deck to filter your library. Prognosticator highlights tracks that are harmonically compatible and BPM-matched with what's playing. Compatible keys follow Camelot wheel logic, and BPM ranges keep transitions smooth.",
-  },
-  {
-    src: "/prognosticator/08-scene-controls.webp",
-    label: "Beat-Synced Scene Controls",
-    bg: "#1a1a2e",
-    description: "Control your live stream production from one panel. Toggle OBS scenes, camera angles, and visual effects, all synced to the beat. Choose timing intervals (1 beat, 1 bar, 2 bars, 4 bars) for automatic scene switching. Includes Fourside 3D visualizer controls, webcam probability for camera cuts, and DMX beat-sync patterns.",
-  },
-  {
-    src: "/prognosticator/09-dmx-lighting.webp",
-    label: "DMX Lighting Control",
-    bg: "#1a1a2e",
-    description: "DMX lighting control with a Quick Command Pad for sending commands to any fixture or universe, plus per-channel sliders for fine adjustments. Supports Art-Net, ENTTEC USB, and virtual backends. The fixture library has 2000+ OpenFixtureLibrary definitions with named channels, so you use readable names instead of raw channel numbers.",
-  },
-];
+const ACCENT = "#81a1c1";
 
-const RADIANCE_SCREENSHOTS = [
-  { src: "/radiance/lights.webp", label: "Smart light controls", bg: "#161616" },
-  { src: "/radiance/games-idle.webp", label: "Game launcher", bg: "#161616" },
-  { src: "/radiance/games-playing.webp", label: "Game touchpad", bg: "#161616" },
-  { src: "/radiance/games-kodi.webp", label: "Kodi remote", bg: "#161616" },
-  { src: "/radiance/tunes.webp", label: "Music player", bg: "#161616" },
-  { src: "/radiance/settings-system.webp", label: "System settings", bg: "#080808" },
-  { src: "/radiance/settings-stats.webp", label: "System stats", bg: "#080808" },
-  { src: "/radiance/settings-camera.webp", label: "Camera", bg: "#080808" },
-  { src: "/radiance/wifi.webp", label: "Wi-Fi settings", bg: "#161616" },
-];
+function Tags({ tags }: { tags: string[] }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {tags.map((tag) => (
+        <span
+          key={tag}
+          className="px-1.5 py-0.5 text-[10px]"
+          style={{
+            color: ACCENT,
+            borderWidth: 1,
+            borderColor: `${ACCENT}30`,
+            backgroundColor: `${ACCENT}12`,
+          }}
+        >
+          {tag}
+        </span>
+      ))}
+    </div>
+  );
+}
 
-const MTG_SCREENSHOTS = [
-  { src: "/magic/tutor-helper.webp", label: "Tutor Helper", bg: "#1a1a1a" },
-  { src: "/magic/commander.webp", label: "Commander", bg: "#1a1a1a" },
-  { src: "/magic/token-helper.webp", label: "Token Helper", bg: "#1a1a1a" },
-];
+interface BentoSectionProps {
+  dimmed: boolean;
+  onHover: () => void;
+  onMouseLeave?: () => void;
+  delay?: number;
+  children: React.ReactNode;
+}
+
+/** A full-width frosted group, for projects that need more room than a card. */
+function BentoSection({ dimmed, onHover, onMouseLeave, delay = 0.15, children }: BentoSectionProps) {
+  const reducedMotion = useReducedMotion();
+
+  return (
+    <motion.div
+      className="col-span-1 md:col-span-2 lg:col-span-4 p-4 md:p-6"
+      style={{
+        background: "rgba(255,255,255,0.03)",
+        border: "1px solid rgba(255,255,255,0.06)",
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
+      }}
+      initial={reducedMotion ? false : { opacity: 0, y: 30 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.1 }}
+      transition={
+        reducedMotion
+          ? { duration: 0 }
+          : { delay, duration: 0.5, ease: [0.25, 0.1, 0.25, 1] }
+      }
+      animate={{ opacity: dimmed ? 0.55 : 1 }}
+      onMouseEnter={onHover}
+      onMouseLeave={onMouseLeave}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+function SectionLink({ href, children }: { href: string; children: React.ReactNode }) {
+  const external = href.startsWith("http");
+  return (
+    <a
+      href={href}
+      className="group/link text-xs font-medium text-white inline-flex items-center gap-1.5 relative"
+      {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+    >
+      {children}
+      <span className="absolute bottom-0 left-0 h-px w-0 bg-white transition-all duration-300 ease-out group-hover/link:w-full" />
+    </a>
+  );
+}
 
 export function BentoGrid() {
   const [progSlide, setProgSlide] = useState(0);
   const [progControlledIndex, setProgControlledIndex] = useState<number | null>(null);
   const [mtgControlledIndex, setMtgControlledIndex] = useState<number | null>(null);
   const [hoveredIndex, setHoveredIndex] = useState<number | string | null>(null);
-  const reducedMotion = useReducedMotion();
 
   const handleProgSlideChange = useCallback((index: number) => {
     setProgSlide(index);
   }, []);
 
   const handleGridMouseLeave = () => setHoveredIndex(null);
+  const isDimmed = (key: number | string) => hoveredIndex !== null && hoveredIndex !== key;
 
   return (
     <div
@@ -96,19 +116,56 @@ export function BentoGrid() {
       style={{ gridAutoRows: "minmax(180px, auto)" }}
       onMouseLeave={handleGridMouseLeave}
     >
+      {/* MFRS — full-width feature */}
+      <BentoSection dimmed={isDimmed("mfrs")} onHover={() => setHoveredIndex("mfrs")} delay={0}>
+        <div className="flex flex-col lg:flex-row gap-5 lg:gap-8">
+          <div className="w-full lg:w-[62%]">
+            <ShotGallery
+              shots={MFRS.shots}
+              accentColor={ACCENT}
+              autoPlayInterval={5000}
+              sizes="(max-width: 1024px) 100vw, 760px"
+              priority
+            />
+          </div>
+          <div className="w-full lg:w-[38%] flex flex-col">
+            <p className="text-[10px] font-mono uppercase tracking-widest mb-2" style={{ color: ACCENT }}>
+              {MFRS.kicker}
+            </p>
+            <h3 className="text-2xl md:text-3xl font-bold text-white leading-tight">{MFRS.title}</h3>
+            <p className="text-gray-300 text-sm mt-2">{MFRS.tagline}</p>
+            <p className="text-gray-400 text-sm leading-relaxed mt-3">{MFRS.description}</p>
+            <ul className="mt-4 flex flex-col gap-2">
+              {MFRS.features.map((f) => (
+                <li key={f.label} className="text-xs leading-relaxed text-gray-400">
+                  <span className="text-white font-medium">{f.label}.</span> {f.text}
+                </li>
+              ))}
+            </ul>
+            <div className="mt-4">
+              <Tags tags={MFRS.tags} />
+            </div>
+            <div className="mt-auto pt-5 flex flex-wrap gap-x-6 gap-y-2">
+              <SectionLink href="/river">Meet at the put-in &rarr;</SectionLink>
+              <SectionLink href={MFRS.itchUrl}>itch.io page</SectionLink>
+            </div>
+          </div>
+        </div>
+      </BentoSection>
+
       {/* Prognosticator — 3 col, 2 row */}
       <BentoCard
         title="Prognosticator"
         subtitle={PROGNOSTICATOR_SCREENSHOTS[progSlide].label}
         description={PROGNOSTICATOR_SCREENSHOTS[progSlide].description}
-        accentColor="#81a1c1"
+        accentColor={ACCENT}
         colSpan={3}
         rowSpan={2}
         index={0}
         fixedDescriptionHeight="7.5rem"
-        dimmed={hoveredIndex !== null && hoveredIndex !== 0}
+        dimmed={isDimmed(0)}
         onHover={() => setHoveredIndex(0)}
-        tags={["Electron", "React", "TypeScript", "Node", "C++", "DMX", "Tailwind", "VirtualDJ"]}
+        tags={["Electron", "React", "TypeScript", "Node", "Godot", "DMX", "OBS", "Tailwind", "VirtualDJ"]}
       >
         <div className="flex flex-col gap-3 flex-1">
           <TabletCarousel
@@ -134,9 +191,9 @@ export function BentoGrid() {
                   className="px-2 py-1 text-[10px] font-mono transition-colors"
                   style={{
                     borderWidth: 1,
-                    color: active ? "#81a1c1" : "#9ca3af",
-                    borderColor: active ? "#81a1c160" : "rgba(255,255,255,0.08)",
-                    backgroundColor: active ? "#81a1c118" : "rgba(255,255,255,0.02)",
+                    color: active ? ACCENT : "#9ca3af",
+                    borderColor: active ? `${ACCENT}60` : "rgba(255,255,255,0.08)",
+                    backgroundColor: active ? `${ACCENT}18` : "rgba(255,255,255,0.02)",
                   }}
                 >
                   {s.label}
@@ -150,57 +207,117 @@ export function BentoGrid() {
       {/* hobbit.house — 1 col, 2 row */}
       <BentoCard
         title="hobbit.house"
-        description="Mobile control app for a living room mini PC. Launch games, manage Kodi, adjust smart lights, and monitor IoT devices (laundry, security cameras)."
+        description="Phone control app for a living room mini PC. Launch games and streaming apps, run a music visualizer on the TV, and control lights, Kodi and cameras. A QR code turns a guest's phone into a game controller."
         href="https://github.com/BigFancyBen/hobbit-ccp"
-        accentColor="#81a1c1"
+        accentColor={ACCENT}
         rowSpan={2}
         index={1}
-        dimmed={hoveredIndex !== null && hoveredIndex !== 1}
+        dimmed={isDimmed(1)}
         onHover={() => setHoveredIndex(1)}
-        tags={["React", "Docker", "Linux"]}
+        tags={["React", "Docker", "Linux", "MQTT"]}
       >
         <PhoneCarousel screenshots={RADIANCE_SCREENSHOTS} autoPlayInterval={4500} autoPlayDelay={1500} />
       </BentoCard>
 
+      {/* Prognosticator's visualizer scenes */}
+      <BentoSection dimmed={isDimmed("scenes")} onHover={() => setHoveredIndex("scenes")}>
+        <h3 className="text-sm font-bold text-white">Prognosticator: visualizer scenes</h3>
+        <p className="text-gray-400 text-xs mb-4 mt-1">
+          The lighting rig has a second home. Prognosticator sends its beat grid and DMX output to a Godot
+          visualizer, so every light cue also plays in a venue that does not exist.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {[WAREHOUSE_SCENE, SM64_SCENE].map((scene, i) => (
+            <div key={scene.title} className="flex flex-col gap-3">
+              <ShotGallery shots={scene.shots} accentColor={ACCENT} autoPlayInterval={5000} autoPlayDelay={i * 2500} />
+              <div>
+                <h4 className="text-base font-bold text-white">{scene.title}</h4>
+                <p className="text-gray-400 text-sm leading-relaxed mt-1 mb-3">{scene.description}</p>
+                <Tags tags={scene.tags} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </BentoSection>
+
+      {/* Scrandle + Scranbot row */}
+      <BentoCard
+        title="Scrandle"
+        description="A weekly game built from my friends' dinner photos. Ten pairs of plates: pick the one the channel rated higher, then see the ratings and who cooked each."
+        href="/scrandle/play"
+        accentColor={ACCENT}
+        colSpan={2}
+        index={2}
+        dimmed={isDimmed(2)}
+        onHover={() => setHoveredIndex(2)}
+        tags={["Next.js", "TypeScript", "Tailwind", "Cloudflare R2"]}
+      >
+        <ShotGallery shots={SCRANDLE_SHOTS} accentColor={ACCENT} aspect="16 / 10" autoPlayInterval={4500} />
+      </BentoCard>
+
+      <BentoCard
+        title="Scranbot"
+        description="The Discord bot behind Scrandle. It posts a daily food photo matchup in a friends' channel, keeps votes private until the round closes, reveals the result, and posts weekly standings with rank changes."
+        accentColor={ACCENT}
+        colSpan={2}
+        index={3}
+        dimmed={isDimmed(3)}
+        onHover={() => setHoveredIndex(3)}
+        tags={["Cloudflare Workers", "D1", "R2", "Discord", "TypeScript"]}
+      >
+        <DiscordFeed botName="Scranbot" messages={SCRANBOT_MESSAGES} maxHeight="26rem" />
+      </BentoCard>
+
+      {/* Yut Hut */}
+      <BentoSection dimmed={isDimmed("yut")} onHover={() => setHoveredIndex("yut")}>
+        <div className="flex flex-col md:flex-row gap-5 md:gap-8">
+          <div className="w-full md:w-[38%] flex flex-col">
+            <h3 className="text-lg font-bold text-white">Yut Hut</h3>
+            <p className="text-gray-400 text-sm leading-relaxed mt-2">
+              A Discord bot that turns workout check-ins into Old School RuneScape progress for a friend
+              group. Each check-in is a Slayer session run on the game&apos;s real XP table and drop tables,
+              and the results come back as OSRS-style cards.
+            </p>
+            <ul className="mt-4 flex flex-col gap-2 text-xs leading-relaxed text-gray-400">
+              <li>
+                <span className="text-white font-medium">Two a week.</span> The first two check-ins count in
+                full, then half, then a fifth. A rest day is written down and never punished.
+              </li>
+              <li>
+                <span className="text-white font-medium">The bot asks.</span> Every morning it posts one
+                question with a Yes and a No, and edits the roll call into the post as people answer.
+              </li>
+              <li>
+                <span className="text-white font-medium">Numbers from the wiki.</span> Monsters, Slayer
+                masters, drop rates and gear come from the OSRS Wiki. Only the session length is tuned.
+              </li>
+              <li>
+                <span className="text-white font-medium">Something to chase.</span> Clue caskets, a pick of
+                three spoils, gear drops, an Achievement Diary, a quest and a group boss each week.
+              </li>
+            </ul>
+            <div className="mt-4">
+              <Tags tags={["Cloudflare Workers", "D1", "R2", "Discord", "Next.js", "TypeScript"]} />
+            </div>
+            <div className="mt-auto pt-5">
+              <SectionLink href="/yut-hut">Read the rules &rarr;</SectionLink>
+            </div>
+          </div>
+          <div className="w-full md:w-[62%] flex">
+            <DiscordFeed botName="Yut Hut" messages={YUT_MESSAGES} maxHeight="34rem" imageWidth={440} />
+          </div>
+        </div>
+      </BentoSection>
+
       {/* MTG section — frosted glass group */}
-      <motion.div
-        className="col-span-1 md:col-span-2 lg:col-span-4 p-4 md:p-6"
-        style={{
-          background: "rgba(255,255,255,0.03)",
-          border: "1px solid rgba(255,255,255,0.06)",
-          backdropFilter: "blur(12px)",
-          WebkitBackdropFilter: "blur(12px)",
-        }}
-        initial={reducedMotion ? false : { opacity: 0, y: 30 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, amount: 0.1 }}
-        transition={
-          reducedMotion
-            ? { duration: 0 }
-            : { delay: 0.15, duration: 0.5, ease: [0.25, 0.1, 0.25, 1] }
-        }
-        animate={{ opacity: hoveredIndex !== null && hoveredIndex !== "mtg" ? 0.55 : 1 }}
-        onMouseEnter={() => setHoveredIndex("mtg")}
+      <BentoSection
+        dimmed={isDimmed("mtg")}
+        onHover={() => setHoveredIndex("mtg")}
         onMouseLeave={() => setMtgControlledIndex(null)}
       >
         <div className="flex items-center gap-3 mb-1">
           <h3 className="text-sm font-bold text-white">Magic: The Gathering</h3>
-          <div className="flex flex-wrap gap-1.5">
-            {["Next.js", "React", "Vercel"].map((tag) => (
-              <span
-                key={tag}
-                className="px-1.5 py-0.5 text-[10px]"
-                style={{
-                  color: "#81a1c1",
-                  borderWidth: 1,
-                  borderColor: "#81a1c130",
-                  backgroundColor: "#81a1c112",
-                }}
-              >
-                {tag}
-              </span>
-            ))}
-          </div>
+          <Tags tags={["Next.js", "React", "Vercel"]} />
         </div>
         <p className="text-gray-400 text-xs mb-4">Tools for Commander players and deck builders</p>
 
@@ -209,26 +326,26 @@ export function BentoGrid() {
           <div className="w-full md:w-[30%] flex flex-col gap-4">
             <BentoCard
               title="MTG Commander Scorekeeper"
-              description="Full-screen, touch-friendly scorekeeper for Commander format. 4-player quadrant layout, life tracking, and commander damage."
+              description="Touch-friendly scorekeeper for Commander. Four-player quadrant layout with life, poison, and commander damage tracking."
               href="/commander"
-              accentColor="#81a1c1"
-              index={2}
+              accentColor={ACCENT}
+              index={4}
               onHover={() => setMtgControlledIndex(1)}
             />
             <BentoCard
               title="Magic Tutor Helper"
-              description="Card filtering tool for decklists. Import decks, filter by mana cost and card types with Scryfall integration."
+              description="Import a decklist from Archidekt and filter it by mana cost and card type, with Scryfall card images."
               href="/tutor-helper"
-              accentColor="#81a1c1"
-              index={3}
+              accentColor={ACCENT}
+              index={5}
               onHover={() => setMtgControlledIndex(0)}
             />
             <BentoCard
               title="MTG Token Helper"
-              description="Import a deck, discover all tokens it produces, and track them on the battlefield with tap/untap, counters, and buffs."
+              description="Import a deck and it finds every token the deck can make. Track them on the battlefield with tap/untap, counters, and buffs."
               href="/token-helper"
-              accentColor="#81a1c1"
-              index={4}
+              accentColor={ACCENT}
+              index={6}
               onHover={() => setMtgControlledIndex(2)}
             />
           </div>
@@ -243,30 +360,52 @@ export function BentoGrid() {
             />
           </div>
         </div>
-      </motion.div>
+      </BentoSection>
 
       {/* FloatWise + Dota row */}
       <BentoCard
         title="FloatWise"
-        description="NOAA weather tracker for multiple locations. Hourly forecasts, temperature and wind tracking for float trip planning."
+        description="Float trip planner. Hourly forecast tables for multiple locations with the live Yellowstone River flow, and a map for pinning put-ins, take-outs, and swim spots."
         href="/floatwise"
-        accentColor="#81a1c1"
+        accentColor={ACCENT}
         colSpan={2}
-        index={5}
-        dimmed={hoveredIndex !== null && hoveredIndex !== 5}
-        onHover={() => setHoveredIndex(5)}
-      />
+        index={7}
+        dimmed={isDimmed(7)}
+        onHover={() => setHoveredIndex(7)}
+        tags={["Next.js", "Leaflet", "Open-Meteo", "USGS"]}
+      >
+        <div className="relative aspect-video w-full overflow-hidden">
+          <Image
+            src="/floatwise/forecast.webp"
+            alt="FloatWise forecast table with hourly temperature, wind, and precipitation for eight Yellowstone River towns, plus the live river flow"
+            fill
+            className="object-cover"
+            sizes="(max-width: 768px) 100vw, 50vw"
+          />
+        </div>
+      </BentoCard>
 
       <BentoCard
         title="Dota 2 Randomizer"
-        description="Spin two wheels for a random hero and item challenge. Canvas-based animations with real-time OpenDota API data."
+        description="Spin two wheels to get a random hero and a random item to build. Canvas-animated wheels fed by live OpenDota data, with sound and confetti."
         href="/dota-randomizer"
-        accentColor="#81a1c1"
+        accentColor={ACCENT}
         colSpan={2}
-        index={6}
-        dimmed={hoveredIndex !== null && hoveredIndex !== 6}
-        onHover={() => setHoveredIndex(6)}
-      />
+        index={8}
+        dimmed={isDimmed(8)}
+        onHover={() => setHoveredIndex(8)}
+        tags={["Next.js", "Canvas", "OpenDota"]}
+      >
+        <div className="relative aspect-video w-full overflow-hidden">
+          <Image
+            src="/dota-randomizer/wheels.webp"
+            alt="Dota 2 Randomizer showing the hero and item wheels with Phantom Lancer and Urn of Shadows selected"
+            fill
+            className="object-cover"
+            sizes="(max-width: 768px) 100vw, 50vw"
+          />
+        </div>
+      </BentoCard>
 
       {/* IRLScape */}
       <div className="md:col-span-2 self-start">
@@ -274,11 +413,11 @@ export function BentoGrid() {
           title="IRLScape"
           description="Old School RuneScape streaming overlay. Game UI on a live camera feed with Twitch chat integration and Joycon controls."
           href="https://www.youtube.com/watch?v=gCofVhR5HUQ"
-          accentColor="#81a1c1"
+          accentColor={ACCENT}
           colSpan={2}
-          index={7}
-          dimmed={hoveredIndex !== null && hoveredIndex !== 7}
-          onHover={() => setHoveredIndex(7)}
+          index={9}
+          dimmed={isDimmed(9)}
+          onHover={() => setHoveredIndex(9)}
         >
           <div className="relative aspect-video w-full overflow-hidden">
             <Image
@@ -296,45 +435,13 @@ export function BentoGrid() {
       <BentoCard
         title="OSRS Progress Generator"
         description="API for generating progress report images for Old School RuneScape players. Collection log items, OSRS Wiki integration."
-        accentColor="#81a1c1"
+        accentColor={ACCENT}
         colSpan={2}
-        index={8}
-        dimmed={hoveredIndex !== null && hoveredIndex !== 8}
-        onHover={() => setHoveredIndex(8)}
+        index={10}
+        dimmed={isDimmed(10)}
+        onHover={() => setHoveredIndex(10)}
       >
-        <div className="flex flex-col gap-0.5 flex-1" style={{ backgroundColor: "#313338", padding: "8px 0" }}>
-          {[
-            { src: "/osrsprogs/progresspic.webp", alt: "OSRS progress report", w: 330, h: 285 },
-            { src: "/osrsprogs/collectionlog.webp", alt: "OSRS collection log", w: 396, h: 221 },
-          ].map((img, i) => (
-            <div key={img.src} className="flex gap-2 px-3 py-1 hover:bg-[#2e3035]">
-              {/* Avatar */}
-              <div className="w-10 h-10 shrink-0 mt-0.5" style={{ backgroundColor: "#5865f2", borderRadius: "50%" }}>
-                <svg viewBox="0 0 127.14 96.36" className="w-5 h-5 m-2.5" fill="white">
-                  <path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,46,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,46,96.12,53,91.08,65.69,84.69,65.69Z" />
-                </svg>
-              </div>
-              {/* Message */}
-              <div className="min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-medium" style={{ color: "#5865f2" }}>OSRS Progress</span>
-                  <span className="text-[9px] font-medium px-1 py-px" style={{ backgroundColor: "#5865f2", color: "white", borderRadius: "3px" }}>BOT</span>
-                  <span className="text-[10px] text-gray-500">{i === 0 ? "01/08/2025 9:14 PM" : "10/14/2025 11:11 PM"}</span>
-                </div>
-                <div className="mt-1">
-                  <Image
-                    src={img.src}
-                    alt={img.alt}
-                    width={img.w}
-                    height={img.h}
-                    unoptimized
-                    style={{ borderRadius: "8px" }}
-                  />
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+        <DiscordFeed botName="OSRS Progress" messages={OSRS_MESSAGES} />
       </BentoCard>
     </div>
   );
