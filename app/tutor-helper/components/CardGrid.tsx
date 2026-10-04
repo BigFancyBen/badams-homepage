@@ -48,6 +48,9 @@ export function CardGrid({ cards, loading, cardQuantities = {} }: CardGridProps)
             <div className="aspect-488/680 relative overflow-hidden">
               <Image
                 src={getCardImage(card)}
+                // Scryfall's CDN already serves this at a sensible size; running it
+                // through the optimizer only spends the site's monthly allowance.
+                unoptimized
                 alt={card.name}
                 fill
                 className="object-cover"

@@ -161,6 +161,15 @@ export function standingsImageUrl(
   });
 }
 
+/**
+ * A web-sized copy of a photograph, to be written over the original in the
+ * bucket — see compress.ts. No retry field: the pass that asks comes round
+ * again next tick, and the answer is never cached.
+ */
+export function compressImageUrl(env: Env, dish: Dish): Promise<string> {
+  return signedUrl(env, "compress", { u: dishUrl(env, dish) });
+}
+
 /** How many times to ask for a card before posting without one. */
 const RENDER_ATTEMPTS = 3;
 

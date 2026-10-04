@@ -660,6 +660,39 @@ running it twice is a no-op.
 
 ## Behaviour notes
 
+- **The bucket keeps a web-sized copy, not the original.** Nothing in the game
+  shows a photograph at the size the phone made it: the cards crop to a few
+  hundred pixels, the site's game to 960, and the original is still on
+  Discord, one jump link away. So after ingest a compress pass
+  (`src/compress.ts`) swaps each stored photograph for a copy with its long
+  edge at 1600 and JPEG quality 80, written over the original under the same
+  key. The same key is the point — every card, every URL already handed out
+  and the weekly puzzle's frozen file keep working without knowing.
+  The Worker cannot shrink anything on ten milliseconds of CPU, so like the
+  cards it asks the site: `/api/scrandle/compress`, signed, which fetches the
+  photograph from the bucket and hands back the smaller one.
+  Ingest itself is untouched and still stores what arrived, because the hash a
+  photograph is deduplicated on has to be the hash of what was posted. The
+  pass runs straight after it, newest first, so this hour's photographs are
+  small by the end of the tick and six of the backlog go with them. It runs
+  before the classifier, which is therefore sent the small copy.
+  The overwrite cannot be taken back, so it is guarded: the answer has to say
+  it is a JPEG, start like one, and be smaller than what is there. A
+  photograph the copy would not shrink is left alone and marked done. One the
+  site could not shrink gets three tries (migration 0013) and is then left as
+  it arrived. A failure that is the site's rather than the photograph's — the
+  route not deployed yet, the secret missing, the site down — stops the run
+  and is counted against nothing, because the Worker deploys before the site
+  does and three ticks of a missing route would otherwise write off the newest
+  photographs for good.
+  Two side effects, both wanted. The copy has its EXIF orientation applied and
+  its metadata dropped, and a phone photograph's metadata says where it was
+  taken. And a PNG becomes a JPEG under its `.png` key; readers go by the
+  object's content type, which is right.
+  What it costs: if somebody deletes their Discord message, the full-size
+  original is gone and the 1600-pixel copy is all there is.
+  Hurry the backlog with `/admin/compress?secret=…&limit=25` in a loop; it
+  reports `savedBytes` and `remaining`.
 - **Only JPEG and PNG are ingested.** satori rasterizes those two; a WebP or
   GIF would ingest fine and then fail to render mid-matchup. They are dropped
   while the page is being read, before they can take up a slot in the ten-image
@@ -742,7 +775,7 @@ running it twice is a no-op.
   from thirteenth is a climb and not an appearance from nowhere. "Past" is
   worked out, not assumed from the gap: a place gained because the chef above
   dropped out names nobody.
-- **The weekly Scrandle is a file.** Once a week the Worker draws ten pairs of
+- **The weekly Scrandle is a file.** Twice a week the Worker draws ten pairs of
   voted-on plates, writes them to `weekly/<n>.json` and `weekly/current.json`
   in the public bucket, and posts a link. The page at `/scrandle/play` reads
   `current.json` and nothing else — it never talks to the Worker or to D1.
@@ -761,7 +794,8 @@ running it twice is a no-op.
   the channel preferred is not a question. Under five drawable pairs it posts
   nothing.
   It is gated like the standings rather than like the rounds: any tick on
-  `WEEKLY_WEEKDAY` at or after `WEEKLY_HOUR_UTC`, once six days have passed.
+  one of the `WEEKLY_WEEKDAY` days at or after `WEEKLY_HOUR_UTC`, once per day
+  — Sunday and Wednesday. It kept the name from when it was one a week.
   The order is publish, announce, record, and a puzzle is read back from its
   numbered file if it is already there — so a tick that published and then
   failed to post announces the same puzzle an hour later instead of drawing a
@@ -1204,14 +1238,26 @@ Check this before raising a cadence or adding something that shows photographs.
 | --- | --- | --- |
 | 5,000 image transformations a month | Vercel Hobby, site-wide | Nothing in Scrandle. See below. |
 | 10ms CPU per invocation | Workers Free | Every tick. It is why cards are rendered on Vercel. |
-| 50 subrequests per invocation | Workers Free | Ingest downloads, classifier calls, Discord posts, card renders. |
+| 50 subrequests per invocation | Workers Free | Ingest downloads, classifier calls, Discord posts, card renders, six compress calls. |
+| 10 GB stored | R2 free tier | Every photograph in the catalog. See below. |
+
+**Bucket storage.** The bucket used to hold every photograph as the phone made
+it. Twenty sampled from the live catalog on 4 October 2026 averaged 1.67 MB,
+the largest 9.8 MB, which puts a thousand photographs somewhere under 2 GB of
+the 10 and growing with every dinner. It now holds a web-sized copy instead —
+those same twenty came to 209 KB each, an eighth of the size. See **The bucket
+keeps a web-sized copy, not the original**.
 
 **Image transformations.** Next's image optimizer makes a separate copy of a
 photograph for every screen width that asks, and each copy is one
-transformation. The allowance is shared with the rest of the site — the card
-grids in tutor-helper and token-helper spend it too — and going over does not
-cost money, it breaks things: new images answer 402 and show their alt text
-until the window rolls over, everywhere.
+transformation. The allowance is shared with the rest of the site, and going
+over does not cost money, it breaks things: new images answer 402 and show
+their alt text until the window rolls over, everywhere. The card grids in
+tutor-helper and token-helper and the hero images in dota-randomizer used to
+spend it too — a deck search is hundreds of distinct cards — and are now
+`unoptimized`, since Scryfall and Valve already serve them at a sensible size.
+What still goes through the optimizer is the handful of the site's own static
+images.
 
 The weekly game first shipped on the optimizer. Twenty photographs a puzzle at
 five or six widths each was an estimated tenth of the allowance a month at one
@@ -1229,8 +1275,8 @@ Usage → Image Optimization.
 **How often the weekly game can reset** is therefore not an image question any
 more. What limits it is the catalog — a puzzle spends twenty voted-on plates,
 and once the backlog has been swept the pool grows by about one a day — and
-the channel, which gets a bot post per reset. Twice a week is comfortable;
-daily repeats plates about monthly.
+the channel, which gets a bot post per reset. It runs twice a week, which is
+comfortable on both; daily would repeat plates about monthly.
 
 ## Worth verifying before scaling the per-tick cap
 

@@ -15,7 +15,7 @@ import {
   previousRanks,
   standingsRows,
 } from "../src/standings.ts";
-import { drawRounds } from "../src/weekly-draw.ts";
+import { drawRounds, weeklyDue } from "../src/weekly-draw.ts";
 
 let failures = 0;
 function check(name, actual, expected) {
@@ -230,6 +230,49 @@ check(
   drawRounds(catalog.slice(0, 8), new Set(), 10, seeded(11)).length <= 4,
   true
 );
+
+// ── When it draws ──────────────────────────────────────────────────
+console.log("Weekly Scrandle: the schedule");
+
+const at = (iso) => Date.parse(iso);
+const twice = { weekdays: [0, 3], hourUtc: 18 };
+// 4 October 2026 is a Sunday; the first puzzle went out that day at 18:11.
+const firstDraw = at("2026-10-04T18:11:00Z");
+
+check("draws on a listed day once the hour has come",
+  weeklyDue(at("2026-10-04T18:00:00Z"), { ...twice, lastAt: 0 }), true);
+check("not before the hour",
+  weeklyDue(at("2026-10-04T17:11:00Z"), { ...twice, lastAt: 0 }), false);
+check("not twice in a day",
+  weeklyDue(at("2026-10-04T19:00:00Z"), { ...twice, lastAt: firstDraw }), false);
+check("not on a day that is not listed",
+  weeklyDue(at("2026-10-06T18:00:00Z"), { ...twice, lastAt: firstDraw }), false);
+check("the second day of the week draws three days after the first",
+  weeklyDue(at("2026-10-07T18:00:00Z"), { ...twice, lastAt: firstDraw }), true);
+check("a tick that failed is retried later the same day",
+  weeklyDue(at("2026-10-07T23:11:00Z"), { ...twice, lastAt: firstDraw }), true);
+check("and Sunday comes round again four days after Wednesday",
+  weeklyDue(at("2026-10-11T18:00:00Z"), { ...twice, lastAt: at("2026-10-07T18:00:00Z") }), true);
+
+// A fortnight of ticks at :00 and :11, drawing whenever one is due.
+let draws = [];
+let last = firstDraw;
+for (let t = at("2026-10-04T19:00:00Z"); t < at("2026-10-18T17:00:00Z"); t += 60e3) {
+  const minute = new Date(t).getUTCMinutes();
+  if (minute !== 0 && minute !== 11) continue;
+  if (weeklyDue(t, { ...twice, lastAt: last })) {
+    draws.push(new Date(t).toISOString().slice(0, 16));
+    last = t;
+  }
+}
+check("two weeks of ticks draw exactly on the listed days", draws, [
+  "2026-10-07T18:00",
+  "2026-10-11T18:00",
+  "2026-10-14T18:00",
+]);
+
+check("an empty list is the slot switched off",
+  weeklyDue(at("2026-10-04T18:00:00Z"), { weekdays: [], hourUtc: 18, lastAt: 0 }), false);
 
 if (failures > 0) {
   console.log(`\n${failures} failed`);

@@ -1,5 +1,6 @@
 import { logToDiscord } from "./discord";
 import { classify } from "./classify";
+import { compress } from "./compress";
 import { forgetStaleEphemeralReplies } from "./db";
 import { backfill, ingest } from "./ingest";
 import { handleInteraction } from "./interactions";
@@ -298,6 +299,23 @@ export default {
       }
     }
 
+    // Shrinks photographs still stored as they arrived. The tick does a few
+    // at a time; this is for draining the backlog without waiting for it.
+    // Loop it until `remaining` is zero.
+    if (url.pathname === "/admin/compress") {
+      if (url.searchParams.get("secret") !== env.BACKFILL_SECRET) {
+        return new Response("Nope", { status: 403 });
+      }
+      try {
+        const limit = Number(url.searchParams.get("limit") ?? "10");
+        return Response.json(await compress(env, limit));
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        await logToDiscord(env, `Compress failed: ${reason}`);
+        return Response.json({ ok: false, error: reason }, { status: 502 });
+      }
+    }
+
     // Who the catalog thinks it knows. `?q=` matches part of a username; the
     // point of it is finding the id of somebody's old account before merging
     // it away, which is otherwise a trip through Discord's developer mode.
@@ -390,6 +408,22 @@ export default {
       }
     } catch (error) {
       await logToDiscord(env, `Ingest failed: ${String(error)}`);
+    }
+
+    // Shrink what ingest just stored, and a few of the backlog behind it.
+    // Before the classifier, so it is sent the small copy rather than the
+    // original — which is also the only way a photograph over the vision
+    // API's size limit ever gets a label.
+    try {
+      const shrunk = await compress(env);
+      if (shrunk.failed > 0) {
+        await logToDiscord(
+          env,
+          `Compress: ${shrunk.failed} failed, ${shrunk.remaining} left. First: ${shrunk.firstFailure}`
+        );
+      }
+    } catch (error) {
+      await logToDiscord(env, `Compress failed: ${String(error)}`);
     }
 
     // Classify before anything else touches the catalog — matchmaking skips

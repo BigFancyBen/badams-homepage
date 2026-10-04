@@ -126,6 +126,12 @@ export interface Dish {
    */
   focus_x: number | null;
   focus_y: number | null;
+  /**
+   * When the bucket's copy was swapped for a web-sized one. Null while it is
+   * still stored as it arrived — see migration 0013 and compress.ts.
+   */
+  compressed_at: number | null;
+  compress_attempts: number;
 }
 
 export interface Matchup {

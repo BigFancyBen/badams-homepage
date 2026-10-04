@@ -6,7 +6,7 @@ import { isWeeklyPuzzle, type WeeklyPuzzle } from "./types";
 
 /**
  * The week's puzzle is a JSON file the Scrandle Worker writes into its public
- * bucket once a week — see scrandle-worker/src/weekly.ts. The site only ever
+ * bucket on its days — see scrandle-worker/src/weekly.ts. The site only ever
  * reads it. SCRANDLE_WEEKLY_URL points it somewhere else for local work, where
  * the Worker serves the same file at /weekly.
  */
@@ -14,7 +14,7 @@ const WEEKLY_URL =
   process.env.SCRANDLE_WEEKLY_URL ?? `${BUCKET_BASE}/weekly/current.json`;
 
 /**
- * Five minutes. The puzzle changes once a week, so nearly every check finds
+ * Five minutes. The puzzle changes twice a week, so nearly every check finds
  * the file it already had; the short window is for the one that does not, so
  * the page has caught up by the time anyone follows the bot's link.
  */
@@ -22,7 +22,7 @@ const REVALIDATE_SECONDS = 300;
 
 const title = "Scrandle | benadams.dev";
 const description =
-  "Ten pairs of plates off the board. Pick the one the channel rated higher. A new one every week.";
+  "Ten pairs of plates off the board. Pick the one the channel rated higher. A new one twice a week.";
 
 export const metadata: Metadata = {
   title,
@@ -65,7 +65,7 @@ export default async function ScrandlePlayPage() {
       >
         <h1 className="text-4xl font-bold text-white tracking-tight">Scrandle</h1>
         <p className="max-w-md text-sm text-gray-400">
-          No puzzle is up right now. A new one is drawn every week, and the bot
+          No puzzle is up right now. A new one is drawn twice a week, and the bot
           says so in the channel when it lands.
         </p>
         <Link

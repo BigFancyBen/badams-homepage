@@ -17,6 +17,10 @@ const PNG = Buffer.from(
   "base64"
 );
 
+// 600 bytes that start like a JPEG — enough to pass for the smaller copy the
+// compress route hands back.
+const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(596)]);
+
 /**
  * Discord's reply to a post or an edit echoes the embeds with the image
  * resolved: a proxy URL and a size. The size is whatever the proxy has
@@ -79,6 +83,15 @@ createServer((req, res) => {
 
     // The render endpoints, when IMAGE_BASE_URL points here. The real ones
     // are on Vercel and want real photographs; a seeded dish has none.
+    // The compress route answers with a JPEG and the Worker checks that it
+    // did. MOCK_COMPRESS_STATUS makes it fail instead: 502 is "this photograph
+    // cannot be shrunk", anything else is the site being down.
+    if (req.method === "GET" && req.url.startsWith("/api/scrandle/compress")) {
+      const status = Number(process.env.MOCK_COMPRESS_STATUS ?? 200);
+      res.writeHead(status, { "Content-Type": status === 200 ? "image/jpeg" : "text/plain" });
+      res.end(status === 200 ? JPEG : "no");
+      return;
+    }
     if (req.method === "GET" && req.url.startsWith("/api/scrandle/")) {
       res.writeHead(200, { "Content-Type": "image/png" });
       res.end(PNG);

@@ -2,7 +2,7 @@ import { allowedMentions, postMessage } from "./discord";
 import { getState, setState } from "./db";
 import { dishFocus, dishUrl } from "./images";
 import { parseWeekdays } from "./schedule";
-import { drawRounds } from "./weekly-draw";
+import { drawRounds, weeklyDue } from "./weekly-draw";
 import type { Dish, Env } from "./types";
 
 /**
@@ -14,7 +14,7 @@ import type { Dish, Env } from "./types";
  * think everybody else thought, which only became a question worth asking once
  * the ratings meant something — see "Ratings carry a deviation" in the README.
  *
- * The Worker's whole part in it is to draw the pairs once a week, freeze them
+ * The Worker's whole part in it is to draw the pairs on its days, freeze them
  * into a JSON file in the public bucket, and say so in the channel. The site
  * reads that file; it never talks to the Worker or the database. A file rather
  * than a route for two reasons: the bucket is already public and the site
@@ -22,8 +22,6 @@ import type { Dish, Env } from "./types";
  * somebody half way through it. The ratings in it are the ratings on the day
  * it was drawn, whatever the board does afterwards.
  */
-
-const HOUR = 60 * 60 * 1000;
 
 /** How many pairs a puzzle holds. */
 export const WEEKLY_ROUNDS = 10;
@@ -126,12 +124,16 @@ function putJson(env: Env, key: string, body: string): Promise<unknown> {
 }
 
 /**
- * Draws this week's puzzle, publishes it, and tells the channel.
+ * Draws the next puzzle, publishes it, and tells the channel.
  *
- * Gated like the standings rather than like the rounds: any tick on the day,
- * at or after the hour, once six days have passed since the last one. A round
- * that misses its minute skips its week; this retries every tick until it
- * lands, because a week with no puzzle is a week the site shows a stale one.
+ * Gated like the standings rather than like the rounds: any tick on one of
+ * the days, at or after the hour, that has not already drawn that day. A
+ * round that misses its minute skips its week; this retries every tick until
+ * it lands, because a day with no puzzle is a day the site shows a stale one.
+ *
+ * It began as one a week, which is where the name comes from, and went to
+ * two once the photographs stopped going through the site's image allowance
+ * — see "Usage limits" in the README. The days are WEEKLY_WEEKDAY.
  *
  * The order is publish, then announce, then record. A puzzle is written under
  * its number before anything else and read back from there if it exists, so a
@@ -148,14 +150,12 @@ export async function postWeeklyIfDue(
   { force = false }: { force?: boolean } = {}
 ): Promise<boolean> {
   if (!force) {
-    const date = new Date(now);
-    if (!parseWeekdays(env.WEEKLY_WEEKDAY).includes(date.getUTCDay())) {
-      return false;
-    }
-    if (date.getUTCHours() < Number(env.WEEKLY_HOUR_UTC || "18")) return false;
-
-    const lastAt = Number(await getState(env, "last_weekly_at")) || 0;
-    if (now - lastAt < 6 * 24 * HOUR) return false;
+    const due = weeklyDue(now, {
+      weekdays: parseWeekdays(env.WEEKLY_WEEKDAY),
+      hourUtc: Number(env.WEEKLY_HOUR_UTC || "18"),
+      lastAt: Number(await getState(env, "last_weekly_at")) || 0,
+    });
+    if (!due) return false;
   }
 
   const number = (Number(await getState(env, "weekly_number")) || 0) + 1;
