@@ -21,6 +21,7 @@ import {
   MASTERS,
   MONSTERS,
 } from "./combat.ts";
+import { cardText, panelCard, type ViewCard } from "./cards.ts";
 import { selectRow, type Env, type Player } from "./types.ts";
 
 /**
@@ -258,6 +259,7 @@ export function taskShort(task: SlayerTask | null): string | null {
 export interface TaskView {
   content: string;
   components?: unknown[];
+  card?: ViewCard;
 }
 
 export async function taskView(env: Env, player: Player): Promise<TaskView> {
@@ -272,8 +274,39 @@ export async function taskView(env: Env, player: Player): Promise<TaskView> {
     "Every check-in is a training session against your task. Each kill on task pays the monster's Slayer XP; finishing pays the master's points. The 10th, 50th and 100th task in a row pay 5×, 15× and 25×.",
     `Spend points: skip the task (${SLAYER_SKIP_COST}), ${SLAYER_XP_BOUGHT.toLocaleString("en-US")} Slayer XP (${SLAYER_XP_COST}), the Slayer helmet (${SLAYER_HELMET_COST}) for +16⅔% accuracy and damage on task and the title Slayer Master.`,
   ];
+  const master = task ? masterByKey(task.master) : null;
   return {
     content: lines.join("\n"),
+    card: panelCard(env, "task", {
+      t: task ? capitalise(taskName(task)) : "No task",
+      sub: task && master ? `${cardText(player.username)} - assigned by ${master.name}` : "Assigned at your first check-in",
+      big: "slayer",
+      sections: [
+        ...(task ? [{ s: "bar" as const, l: "Kills", h: task.kills, g: task.kills_needed, r: `${task.kills} / ${task.kills_needed}` }] : []),
+        {
+          s: "stats",
+          items: [
+            { l: "Points", v: player.slayer_points.toLocaleString("en-US") },
+            { l: "Streak", v: String(player.slayer_streak) },
+            { l: "Tasks done", v: String(player.tasks_done) },
+            { l: "Blocked", v: `${blocks.length} / ${slots}` },
+          ],
+        },
+        {
+          s: "rows",
+          l: "Rewards:",
+          rows: [
+            { k: "slayer", l: "Skip task", r: `${SLAYER_SKIP_COST} points`, ...(player.slayer_points < SLAYER_SKIP_COST ? { c: "dim" as const } : {}) },
+            { k: "slayer", l: `${SLAYER_XP_BOUGHT.toLocaleString("en-US")} Slayer XP`, r: `${SLAYER_XP_COST} points`, ...(player.slayer_points < SLAYER_XP_COST ? { c: "dim" as const } : {}) },
+            { k: "slayer", l: "Block task", r: `${SLAYER_BLOCK_COST} points`, ...(player.slayer_points < SLAYER_BLOCK_COST ? { c: "dim" as const } : {}) },
+            hasSlayerHelmet(player)
+              ? { k: "black_mask_10", l: "Slayer helmet", r: "Owned", c: "good" as const }
+              : { k: "black_mask_10", l: "Slayer helmet", r: `${SLAYER_HELMET_COST} points`, ...(player.slayer_points < SLAYER_HELMET_COST ? { c: "dim" as const } : {}) },
+          ],
+        },
+      ],
+      d: new Date().toISOString().slice(0, 10),
+    }),
     components: [
       {
         type: 1,

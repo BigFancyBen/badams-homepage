@@ -73,6 +73,11 @@ import {
   postMessageWithFile,
   replyTo,
 } from "./discord.ts";
+import { cardText, panelCard, viewCard, type ViewCard } from "./cards.ts";
+import { activeTask, taskName } from "./slayer.ts";
+import { bossFor, bossWeek } from "./bosses.ts";
+import { bankValue } from "./db.ts";
+import { gpShort } from "./loot.ts";
 import { checkinWith, expeditionCommand, freezeCommand, helpCommand, leaveCommand, runCommand, standingsCommand } from "./commands.ts";
 import { playersRoleId, setPing } from "./roles.ts";
 import { dailyThread, refreshDailyPost } from "./digest.ts";
@@ -165,6 +170,57 @@ export interface Ephemeral {
   scope?: string;
   /** Rewrite the ephemeral the button is on, rather than reply. */
   update?: boolean;
+  /** The view's picture. It rides on the answer if it is already drawn, and follows it if not. */
+  card?: ViewCard;
+}
+
+/**
+ * A card still to be drawn for an answer already given. The answer went out
+ * in text; when the picture is ready the same message is edited to carry it.
+ * `messageId` is null while the message is the one this interaction's own
+ * response creates, which only handleInTime knows how it was delivered.
+ */
+interface CardJob {
+  card: ViewCard;
+  data: { content: string; flags: number; components: unknown[]; embeds: unknown[] };
+  appId: string;
+  token: string;
+  messageId: string | null;
+  /** The edit has already landed, so the picture need not wait for it. */
+  settled: boolean;
+  userId: string;
+  stamp: string;
+}
+
+const cardJobs = new WeakMap<Interaction, CardJob>();
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** How long a fresh answer is given to reach Discord before its picture is edited in. */
+const CARD_SETTLE_MS = 750;
+
+/**
+ * Draws the card and edits it onto the answer. A player who has already moved
+ * on to another view keeps that view: the stamp says whose answer is showing.
+ */
+async function runCard(env: Env, job: CardJob, messageId: string, wait: number): Promise<void> {
+  try {
+    const [url] = await Promise.all([job.card.render(), wait > 0 ? pause(wait) : null]);
+    if (!url) return;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if ((await getState(env, `view:${job.userId}`)) !== job.stamp) return;
+      const edited = await editInteractionReply(
+        env,
+        job.appId,
+        job.token,
+        { ...job.data, embeds: [...job.data.embeds, { color: ACCENT, image: { url } }] },
+        messageId
+      );
+      if (edited) return;
+      await pause(500);
+    }
+  } catch (error) {
+    await logToDiscord(env, `View card failed: ${String(error)}`);
+  }
 }
 
 export type Answer = Ephemeral | Response;
@@ -193,8 +249,21 @@ async function deliver(
     components: answer.components ?? [],
     embeds: answer.embeds ?? [],
   };
+  const userId = (interaction.member?.user ?? interaction.user)?.id;
+
+  // A card that is already drawn goes out with the answer. One that is not is
+  // drawn afterwards and edited in; the stamp lets that edit tell whether the
+  // player is still looking at this answer.
+  const drawn = answer.card ? await answer.card.cached().catch(() => null) : null;
+  if (drawn) data.embeds = [...data.embeds, { color: ACCENT, image: { url: drawn } }];
+  const pending = answer.card && !drawn && userId && interaction.token && interaction.application_id ? answer.card : null;
+  if (userId) await setState(env, `view:${userId}`, interaction.id).catch(() => undefined);
+  const later = (token: string, appId: string, messageId: string | null, settled: boolean) => {
+    if (pending && userId) cardJobs.set(interaction, { card: pending, data, appId, token, messageId, settled, userId, stamp: interaction.id });
+  };
 
   if (answer.update && interaction.message && (interaction.message.flags ?? 0) & EPHEMERAL) {
+    later(interaction.token, interaction.application_id, "@original", false);
     return Response.json({ type: InteractionResponseType.UPDATE_MESSAGE, data });
   }
 
@@ -203,7 +272,6 @@ async function deliver(
     data,
   });
 
-  const userId = (interaction.member?.user ?? interaction.user)?.id;
   const key = answer.scope ?? interaction.data?.name ?? interaction.message?.id;
   if (!userId || !key || !interaction.token || !interaction.application_id) return fresh;
 
@@ -222,12 +290,14 @@ async function deliver(
         existing.message_id || "@original"
       );
       if (edited) {
+        later(existing.token, existing.application_id, existing.message_id || "@original", true);
         return Response.json({ type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE });
       }
     }
   }
 
   await rememberEphemeralReply(env, key, userId, interaction.application_id, interaction.token, now);
+  later(interaction.token, interaction.application_id, null, false);
   return fresh;
 }
 
@@ -340,13 +410,19 @@ export async function handleInTime(
   const first = await Promise.race([work, late]);
   if (first !== "late") {
     clearTimeout(timer);
+    const job = cardJobs.get(interaction);
+    if (job) ctx.waitUntil(runCard(env, job, job.messageId ?? "@original", job.settled ? 0 : CARD_SETTLE_MS));
     return first;
   }
 
   const isButton = interaction.type === InteractionType.MESSAGE_COMPONENT;
   ctx.waitUntil(
     work
-      .then((response) => deliverLate(env, interaction, isButton, response))
+      .then(async (response) => {
+        const messageId = await deliverLate(env, interaction, isButton, response);
+        const job = cardJobs.get(interaction);
+        if (job) await runCard(env, job, job.messageId ?? messageId, 0);
+      })
       .catch(async (error) => {
         await logToDiscord(env, `Late delivery failed: ${String(error)}`);
         await tellFailure(env, interaction, isButton);
@@ -389,17 +465,20 @@ export async function finishLater(
   }
 }
 
-/** What the handler would have answered, sent through the token instead. */
+/**
+ * What the handler would have answered, sent through the token instead.
+ * Returns the id of the message the answer landed on, for a card to follow it.
+ */
 async function deliverLate(
   env: Env,
   interaction: Interaction,
   isButton: boolean,
   response: Response
-): Promise<void> {
+): Promise<string> {
   const body = (await response.json()) as { type: number; data?: unknown };
   const appId = interaction.application_id;
   const token = interaction.token;
-  if (!appId || !token) return;
+  if (!appId || !token) return "@original";
   switch (body.type) {
     case InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE:
       // A command's deferral put up a fresh ephemeral: fill it. A button was
@@ -410,19 +489,20 @@ async function deliverLate(
         // must edit the follow-up by id — or it rewrites the morning post.
         const messageId = await followUp(env, appId, token, body.data);
         if (messageId) await setEphemeralReplyMessage(env, token, messageId);
+        return messageId ?? "@original";
       } else await editInteractionReply(env, appId, token, body.data);
-      return;
+      return "@original";
     case InteractionResponseType.UPDATE_MESSAGE:
       await editInteractionReply(env, appId, token, body.data);
-      return;
+      return "@original";
     case InteractionResponseType.DEFERRED_UPDATE_MESSAGE:
       // The handler already edited an earlier running reply. A command's
       // placeholder would sit there "thinking" forever: take it down.
       if (!isButton) await deleteInteractionReply(env, appId, token);
-      return;
+      return "@original";
     default:
       // The handler deferred itself and owns the token from here.
-      return;
+      return "@original";
   }
 }
 
@@ -558,19 +638,19 @@ async function route(
                 ? await chooseMaster(env, p, b ?? "", levels, combatLevel(levels))
                 : await spendPoints(env, p, a, levels, combatLevel(levels), day, now);
             const view = await taskView(env, (await getPlayer(env, p.discord_id)) ?? p);
-            return { content: `${line}\n\n${view.content}`.slice(0, 1990), components: view.components };
+            return { content: `${line}\n\n${view.content}`.slice(0, 1990), components: view.components, card: view.card };
           })
         : playerAction(env, user, day, (p) => taskView(env, p));
     case "gear":
       if (a === "show") return gearShow(env, ctx, interaction, user, day);
       if (/^w\d*$/.test(a ?? "")) {
-        return freshAction(env, user, day, async (p) => gearWear(env, p, levelsOf(await getSkills(env, p.discord_id), levelForXp), b ?? ""));
+        return freshAction(env, user, day, async (p) => geared(env, p, day, await gearWear(env, p, levelsOf(await getSkills(env, p.discord_id), levelForXp), b ?? "")));
       }
       if (a === "c") {
-        return freshAction(env, user, day, async (p) => gearChase(env, p, levelsOf(await getSkills(env, p.discord_id), levelForXp), b ?? ""));
+        return freshAction(env, user, day, async (p) => geared(env, p, day, await gearChase(env, p, levelsOf(await getSkills(env, p.discord_id), levelForXp), b ?? "")));
       }
       if (a === "cat") return playerAction(env, user, day, (p) => gearCatalogue(env, p, b ?? ""));
-      return playerAction(env, user, day, async (p) => gearView(env, p, levelsOf(await getSkills(env, p.discord_id), levelForXp)));
+      return playerAction(env, user, day, async (p) => geared(env, p, day, await gearView(env, p, levelsOf(await getSkills(env, p.discord_id), levelForXp))));
     case "boss":
       return playerAction(env, user, day, () => bossView(env, day));
     case "todo":
@@ -1005,7 +1085,80 @@ export async function hub(env: Env, user: DiscordUser, day: string): Promise<Eph
   if (!isFresh(player, day)) lines.push(`Most of this needs a check-in in the last ${FRESH_WINDOW_DAYS} days. Looking is free.`);
   const todo = todoBlock(await personalTodo(env, player, day, Date.now()).catch(() => []));
   if (todo) lines.push("", todo);
-  return reply(lines.join("\n"), { scope: "ci", components: await hubRows(env, player, day) });
+  return reply(lines.join("\n"), {
+    scope: "ci",
+    components: await hubRows(env, player, day),
+    card: await menuCard(env, player, day).catch(() => undefined),
+  });
+}
+
+/** The menu's card: where the week stands, at a glance. Two check-ins, the task, the boss. */
+async function menuCard(env: Env, player: Player, day: string): Promise<ViewCard> {
+  const levels = levelsOf(await getSkills(env, player.discord_id), levelForXp);
+  const week = gameWeek(day);
+  const done = await countCheckinsBetween(env, player.discord_id, week, day);
+  const task = await activeTask(env, player.discord_id);
+  const boss = bossFor(campaignWeek(day, env.CAMPAIGN_START));
+  const fight = boss ? await bossWeek(env, week) : null;
+  const left = fight ? Math.max(0, fight.hp - fight.damage) : 0;
+  return panelCard(env, "menu", {
+    t: cardText(player.username) + (player.title ? `, ${cardText(player.title)}` : ""),
+    sub: `${STYLE_LABEL[player.combat_style].split(" (")[0]} style`,
+    big: `${weaponFor(levels.attack).key}_scimitar`,
+    sections: [
+      {
+        s: "stats",
+        items: [
+          { l: "Combat", v: String(combatLevel(levels)) },
+          { l: "Form weeks", v: String(player.form_weeks) },
+          { l: "Slayer points", v: player.slayer_points.toLocaleString("en-US") },
+          { l: "Bank", v: gpShort(await bankValue(env, player.discord_id)).replace(/ gp$/, "") },
+        ],
+      },
+      { s: "bar", l: "Check-ins this week", h: Math.min(2, done), g: 2, r: `${done} of 2`, c: done >= 2 ? "good" : "warn" },
+      ...(task
+        ? [{ s: "bar" as const, l: `${taskName(task)[0].toUpperCase()}${taskName(task).slice(1)}`, h: task.kills, g: task.kills_needed, r: `${task.kills} / ${task.kills_needed} kills` }]
+        : []),
+      ...(boss
+        ? [
+            fight
+              ? {
+                  s: "bar" as const,
+                  l: boss.name,
+                  h: left,
+                  g: fight.hp,
+                  r: fight.status === "done" ? "Defeated" : `${left.toLocaleString("en-US")} / ${fight.hp.toLocaleString("en-US")}`,
+                  c: "bad" as const,
+                }
+              : { s: "bar" as const, l: boss.name, h: 1, g: 1, r: "Unfought", c: "bad" as const },
+          ]
+        : []),
+    ],
+    d: day,
+  });
+}
+
+/** The gear card, for the player's own eyes: the same picture Show off posts. */
+async function gearCard(env: Env, player: Player, day: string): Promise<ViewCard> {
+  const levels = levelsOf(await getSkills(env, player.discord_id), levelForXp);
+  const owned = await ownedGear(env, player);
+  const chase = gearDef(player.wishlist);
+  return viewCard(env, `gear/${player.discord_id}`, {
+    n: player.username,
+    slots: gearCardSlots(player, owned, { weapon: weaponFor(levels.attack).key, armour: armourFor(levels.defence).key }),
+    own: owned.size,
+    of: GEAR_DEFS.length,
+    ...(chase && !owned.has(chase.key) ? { chase: chase.item } : {}),
+    ...(player.title ? { ti: player.title } : {}),
+    cb: combatLevel(levels),
+    d: day,
+  });
+}
+
+/** A gear answer with the card under it, drawn from the player as they now stand. */
+async function geared(env: Env, player: Player, day: string, line: Line): Promise<Line> {
+  const current = (await getPlayer(env, player.discord_id)) ?? player;
+  return { ...line, card: await gearCard(env, current, day).catch(() => undefined) };
 }
 
 /** Settings and the rarer things: combat style, pings, Rings of Life, an expedition, retiring. */
@@ -1452,7 +1605,7 @@ export async function freshAction(
   const gate = await requireFresh(env, user, day);
   if ("refusal" in gate) return gate.refusal;
   const line = await run(gate.player);
-  return reply(line.content, { scope: "ci", components: line.components });
+  return reply(line.content, { scope: "ci", components: line.components, card: line.card });
 }
 
 /** A view any player may open, fresh or not. */
@@ -1465,7 +1618,7 @@ export async function playerAction(
   const gate = await requirePlayer(env, user, day);
   if ("refusal" in gate) return gate.refusal;
   const line = await run(gate.player);
-  return reply(line.content, { scope: "ci", components: line.components });
+  return reply(line.content, { scope: "ci", components: line.components, card: line.card });
 }
 
 async function townReply(env: Env, user: DiscordUser, day: string, now: number): Promise<Answer> {

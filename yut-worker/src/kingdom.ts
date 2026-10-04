@@ -16,6 +16,7 @@ import { seededRng, weightedPick } from "./events.ts";
 import { geBalance } from "./ge.ts";
 import { gpShort, itemKeyOf, itemValue } from "./loot.ts";
 import { addDays, daysBetween } from "./schedule.ts";
+import { cardText, panelCard, type ViewCard } from "./cards.ts";
 import { buttonRow, selectRow, type Button, type Env, type Player } from "./types.ts";
 
 /**
@@ -158,6 +159,7 @@ export async function kingdomCheckin(env: Env, playerId: string, day: string, we
 export interface Line {
   content: string;
   components?: unknown[];
+  card?: ViewCard;
 }
 
 function workersLine(kingdom: Kingdom): string {
@@ -167,7 +169,14 @@ function workersLine(kingdom: Kingdom): string {
   return parts.join(" · ");
 }
 
-export async function kingdomView(env: Env, player: Player, day: string, lead?: string): Promise<Line> {
+export async function kingdomView(
+  env: Env,
+  player: Player,
+  day: string,
+  lead?: string,
+  /** A collection just made, for the card. */
+  collected?: { item: string; qty: number }[]
+): Promise<Line> {
   const kingdom = await loadKingdom(env, player.discord_id, day);
   kingdom.visited_day = day;
   await save(env, kingdom);
@@ -192,8 +201,39 @@ export async function kingdomView(env: Env, player: Player, day: string, lead?: 
     style: 1,
     disabled: balance < gp || kingdom.coffer + gp > KINGDOM_COFFER_MAX,
   });
+  const idle = KINGDOM_SUBJECTS - KINGDOM_JOBS.reduce((sum, job) => sum + (kingdom.workers[job.key] ?? 0), 0);
   return {
     content: lines.join("\n"),
+    card: panelCard(env, "kingdom", {
+      t: `${cardText(player.username)}'s Miscellania`,
+      sub: collected ? `Collected ${gpShort(worth(collected))}` : kingdom.coffer > 0 ? `Wages ${gpShort(dailyWage(kingdom.coffer))} a day` : "Coffer empty",
+      big: "coins",
+      sections: [
+        ...(collected
+          ? [{ s: "grid" as const, l: "Collected:", items: [...collected].sort((a, b) => b.qty - a.qty).slice(0, 14).map((stack) => ({ k: itemKeyOf(stack.item), c: stack.qty })) }]
+          : []),
+        { s: "bar", l: "Approval", h: kingdom.approval, g: 100, r: `${Math.round(kingdom.approval)}%`, c: kingdom.approval >= 75 ? "good" : kingdom.approval >= 50 ? "warn" : "bad" },
+        { s: "bar", l: "Coffer", h: kingdom.coffer, g: KINGDOM_COFFER_MAX, r: `${gpShort(kingdom.coffer)} / ${gpShort(KINGDOM_COFFER_MAX)}`, c: "warn" },
+        {
+          s: "rows",
+          l: "Subjects:",
+          rows: [
+            ...KINGDOM_JOBS.filter((job) => (kingdom.workers[job.key] ?? 0) > 0).map((job) => ({
+              k: itemKeyOf(job.yields[0].item),
+              l: job.name,
+              r: `${kingdom.workers[job.key]} of ${KINGDOM_SUBJECTS}`,
+            })),
+            ...(idle > 0 ? [{ l: "Idle", r: `${idle} of ${KINGDOM_SUBJECTS}`, c: "dim" as const }] : []),
+          ],
+        },
+        {
+          s: "grid",
+          l: stacks.length > 0 ? `Uncollected - ${gpShort(worth(stacks))}:` : undefined,
+          items: [...stacks].sort((a, b) => b.qty - a.qty).slice(0, 14).map((stack) => ({ k: itemKeyOf(stack.item), c: stack.qty })),
+        },
+      ],
+      d: day,
+    }),
     components: [
       buttonRow([
         { label: "Collect", custom_id: "kd:collect", style: 3, emoji: "📦", disabled: stacks.length === 0 },
@@ -243,7 +283,8 @@ export async function kingdomCollect(env: Env, player: Player, day: string, now:
     env,
     player,
     day,
-    `📦 Collected ${stacks.map((s) => `${s.qty.toLocaleString("en-US")}× ${s.item}`).join(", ")} — ${gpShort(total)}, banked.`
+    `📦 Collected ${stacks.map((s) => `${s.qty.toLocaleString("en-US")}× ${s.item}`).join(", ")} — ${gpShort(total)}, banked.`,
+    stacks
   );
 }
 

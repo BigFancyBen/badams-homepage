@@ -123,7 +123,7 @@ export async function GET(request: Request) {
                 whiteSpace: "nowrap",
               }}
             >
-              {loot.length ? "Banked. One of three taken; the others are gone." : "One of three taken; the others are gone."}
+              {loot.length ? "Banked" : ""}
             </div>
           </div>
         </div>

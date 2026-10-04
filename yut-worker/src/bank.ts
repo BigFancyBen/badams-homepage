@@ -3,10 +3,11 @@ import { bankFor, bankValue, logEntries } from "./db.ts";
 import { escapeMarkdown } from "./discord.ts";
 import { gpShort, itemName } from "./loot.ts";
 import { geBalance } from "./ge.ts";
+import { cardText, panelCard, type ViewCard } from "./cards.ts";
 import type { Env, Player } from "./types.ts";
 
 /** `/bank`: the richest stacks, the total, and how many notable drops are in the log. */
-export async function bankView(env: Env, player: Player): Promise<{ content: string }> {
+export async function bankView(env: Env, player: Player): Promise<{ content: string; card?: ViewCard }> {
   const rows = await bankFor(env, player.discord_id, BANK_VIEW_ROWS);
   const total = await bankValue(env, player.discord_id);
   const notable = (await logEntries(env, player.discord_id)).filter((entry) => entry.startsWith("drop:")).length;
@@ -23,5 +24,19 @@ export async function bankView(env: Env, player: Player): Promise<{ content: str
         `a notable drop is 1/${NOTABLE_RARITY_DENOMINATOR.toLocaleString("en-US")} or rarer, or worth ${gpShort(NOTABLE_VALUE)}.`
     );
   }
-  return { content: lines.join("\n") };
+  const unspent = await geBalance(env, player);
+  const stacks = await bankFor(env, player.discord_id, 21);
+  return {
+    content: lines.join("\n"),
+    card: panelCard(env, "bank", {
+      t: `${cardText(player.username)}'s bank`,
+      sub: rows.length === 0 ? "Nothing banked yet" : "",
+      big: "coins",
+      sections: [
+        { s: "stats", items: [{ l: "Worth", v: gpShort(total) }, { l: "Unspent", v: gpShort(unspent) }, { l: "Notable drops", v: String(notable) }] },
+        { s: "grid", l: "Most valuable:", items: stacks.map((row) => ({ k: row.item, c: row.qty })) },
+      ],
+      d: new Date().toISOString().slice(0, 10),
+    }),
+  };
 }

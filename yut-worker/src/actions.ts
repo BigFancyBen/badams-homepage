@@ -33,6 +33,7 @@ import {
   workerRate,
   workerTierDef,
 } from "./town.ts";
+import type { ViewCard } from "./cards.ts";
 import { buttonRow, buttonRows, type Button, type DiscordUser, type Env, type Player } from "./types.ts";
 import { castBallot, getOptions, getVote, voteSummary } from "./votes.ts";
 import { levelForXp } from "./xp.ts";
@@ -47,6 +48,7 @@ import { combatLevel, levelsOf } from "./combat.ts";
 export interface Line {
   content: string;
   components?: unknown[];
+  card?: ViewCard;
 }
 
 function actNow(env: Env, day: string): number {
