@@ -304,7 +304,7 @@ export default {
     // at a time; this is for draining the backlog without waiting for it.
     // Loop it until `remaining` is zero.
     if (url.pathname === "/admin/compress") {
-      if (url.searchParams.get("secret") !== env.BACKFILL_SECRET) {
+      if (!(await authorized(request, env.BACKFILL_SECRET))) {
         return new Response("Nope", { status: 403 });
       }
       try {
