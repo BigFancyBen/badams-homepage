@@ -692,7 +692,7 @@ running it twice is a no-op.
   object's content type, which is right.
   What it costs: if somebody deletes their Discord message, the full-size
   original is gone and the 1600-pixel copy is all there is.
-  Hurry the backlog with `/admin/compress?secret=…&limit=25` in a loop; it
+  Hurry the backlog with `/admin/compress?limit=25` in a loop (with the `Authorization` header); it
   reports `savedBytes` and `remaining`.
 - **Only JPEG and PNG are ingested.** satori rasterizes those two; a WebP or
   GIF would ingest fine and then fail to render mid-matchup. They are dropped

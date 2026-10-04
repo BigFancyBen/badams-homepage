@@ -53,7 +53,6 @@ export function CardGrid({ cards, loading, cardQuantities = {} }: CardGridProps)
                 unoptimized
                 alt={card.name}
                 fill
-                unoptimized
                 className="object-cover"
                 sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, (max-width: 1280px) 20vw, 16vw"
               />

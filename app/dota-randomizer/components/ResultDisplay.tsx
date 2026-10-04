@@ -93,7 +93,6 @@ export default function ResultDisplay({ hero, item, show, onFanfare }: ResultDis
                     alt={hero.displayName}
                     width={128}
                     height={80}
-                    unoptimized
                     className="w-32 h-20 object-cover mx-auto mb-3"
                   />
                 </div>
@@ -135,7 +134,6 @@ export default function ResultDisplay({ hero, item, show, onFanfare }: ResultDis
                     alt={item.displayName}
                     width={80}
                     height={80}
-                    unoptimized
                     className="w-20 h-20 object-contain mx-auto mb-3"
                   />
                 </div>
