@@ -13,7 +13,7 @@ import { escapeMarkdown } from "./discord.ts";
 import { dropTable, oneIn } from "./loot.ts";
 import { hasSlayerHelmet } from "./slayer.ts";
 import { bossKeys, bossTable } from "./bosses.ts";
-import { buttonRow, buttonRows, type Button, type Env, type Player } from "./types.ts";
+import { buttonRow, selectRow, type Env, type Player } from "./types.ts";
 
 /**
  * Gear. The equipment the Slayer monsters really drop can be worn: a weapon,
@@ -201,24 +201,51 @@ export async function gearView(env: Env, player: Player, levels: Levels, lead?: 
   if (chase) {
     lines.push(
       owned.has(chase.key)
-        ? `🎯 Chasing **${chase.item}** — you have it. \`/gear chase\` picks the next.`
+        ? `🎯 Chasing **${chase.item}** — you have it. The catalogue below picks the next.`
         : `🎯 Chasing **${chase.item}**: ${sourceLine(chase, true)}.`
     );
   } else {
-    lines.push("🎯 Not chasing anything. `/gear chase` doubles one item's drop rate; `/gear catalogue` lists what there is.");
+    lines.push("🎯 Not chasing anything. Chasing a piece doubles its drop rate for you: browse the catalogue below to pick one.");
   }
 
+  // The wardrobe as dropdowns, 25 to each: picking a piece wears it, or takes it off if it is on.
   const spare = GEAR_DEFS.filter((def) => owned.has(def.key));
-  const buttons: Button[] = spare.slice(0, 20).map((def) => ({
-    label: `${worn[def.slot] === def.key ? "Take off" : "Wear"} ${def.item}`.slice(0, 80),
-    custom_id: `gear:w:${def.key}`,
-    style: worn[def.slot] === def.key ? 2 : def.stats ? 3 : 1,
-  }));
-  if (spare.length > 20) lines.push(`${spare.length - 20} more in the wardrobe than fit here: \`/gear wear\` takes a name.`);
+  const wardrobe: unknown[] = [];
+  for (let i = 0; i < spare.length && wardrobe.length < 3; i += 25) {
+    wardrobe.push(
+      selectRow(
+        // Two selects on one message need two ids; the trailing number is ignored by the router.
+        i === 0 ? "gear:w" : `gear:w${i / 25}`,
+        i === 0 ? "Wear or take off…" : "Wear or take off (more)…",
+        spare.slice(i, i + 25).map((def) => ({
+          label: `${worn[def.slot] === def.key ? "Take off" : "Wear"} ${def.item}`,
+          value: def.key,
+          description: `${SLOT_LABEL[def.slot]}${def.stats ? ` · ${statText(def)}` : ""}`,
+        }))
+      )
+    );
+  }
   return {
     content: lines.join("\n"),
-    components: [...buttonRows(buttons).slice(0, 4), buttonRow([{ label: "Show off", custom_id: "gear:show", style: 2, emoji: "✨" }])],
+    components: [
+      ...wardrobe,
+      catalogueSelect(),
+      buttonRow([{ label: "Show off", custom_id: "gear:show", style: 2, emoji: "✨" }]),
+    ],
   };
+}
+
+function catalogueSelect(current?: string) {
+  return selectRow(
+    "gear:cat",
+    "Browse the catalogue and pick something to chase…",
+    GEAR_SLOTS.map((slot) => ({
+      label: SLOT_LABEL[slot],
+      value: slot,
+      description: `${GEAR_DEFS.filter((def) => def.slot === slot).length} pieces`,
+      default: slot === current,
+    }))
+  );
 }
 
 /** A fuzzy match on the catalogue: the whole name, then the start, then anywhere. */
@@ -279,8 +306,24 @@ export async function gearCatalogue(env: Env, player: Player, slot: string): Pro
       lines.push(`${owned.has(def.key) ? "✅" : "▫️"} ${def.item}${def.stats ? ` (${statText(def)}${def.req ? `; needs ${reqText(def)}` : ""})` : ""} — ${sourceLine(def)}`);
     }
   }
-  if (slots.length > 1) lines.push("`/gear catalogue slot:` shows where one slot's pieces drop.");
-  return { content: lines.join("\n").slice(0, 1950) };
+  if (slots.length > 1) lines.push("Pick a slot to see where its pieces drop, and to chase one.");
+  const chaseable = slots.length === 1 ? GEAR_DEFS.filter((def) => def.slot === slots[0] && !def.clue && !owned.has(def.key)) : [];
+  return {
+    content: lines.join("\n").slice(0, 1950),
+    components: [
+      catalogueSelect(slots.length === 1 ? slots[0] : undefined),
+      ...(chaseable.length > 0
+        ? [
+            selectRow(
+              "gear:c",
+              "Chase one of these (doubles its drop rate)…",
+              chaseable.map((def) => ({ label: def.item, value: def.key, default: player.wishlist === def.key }))
+            ),
+          ]
+        : []),
+      buttonRow([{ label: "My gear", custom_id: "gear", style: 2, emoji: "🛡️" }]),
+    ],
+  };
 }
 
 /** What the gear card draws: every slot's item key, worn look first, else the armour underneath. */

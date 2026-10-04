@@ -16,7 +16,7 @@ import { seededRng, weightedPick } from "./events.ts";
 import { geBalance } from "./ge.ts";
 import { gpShort, itemKeyOf, itemValue } from "./loot.ts";
 import { addDays, daysBetween } from "./schedule.ts";
-import { buttonRow, type Button, type Env, type Player } from "./types.ts";
+import { buttonRow, selectRow, type Button, type Env, type Player } from "./types.ts";
 
 /**
  * Managing Miscellania, at a tenth of its size. Ten subjects are split across
@@ -184,7 +184,7 @@ export async function kingdomView(env: Env, player: Player, day: string, lead?: 
       : kingdom.coffer > 0
         ? "Nothing gathered yet. The subjects are paid and bring their haul in at each day's rollover."
         : "The coffer is empty, so nobody is working. Fund it from your bank.",
-    `Approval falls ${KINGDOM_APPROVAL_DECAY}% a day and rises ${KINGDOM_CHECKIN_APPROVAL}% with a check-in; the haul scales with it. You have ${gpShort(balance)} to spend. \`/kingdom assign\` splits the ten subjects.`,
+    `Approval falls ${KINGDOM_APPROVAL_DECAY}% a day and rises ${KINGDOM_CHECKIN_APPROVAL}% with a check-in; the haul scales with it. You have ${gpShort(balance)} to spend. The dropdowns split the ten subjects.`,
   ];
   const fund = (gp: number): Button => ({
     label: `Fund ${gpShort(gp)}`,
@@ -199,8 +199,20 @@ export async function kingdomView(env: Env, player: Player, day: string, lead?: 
         { label: "Collect", custom_id: "kd:collect", style: 3, emoji: "📦", disabled: stacks.length === 0 },
         fund(10_000),
         fund(50_000),
+        { label: "Withdraw 10k", custom_id: "kd:dep:-10000", style: 2, disabled: kingdom.coffer < 10_000 },
+        { label: "Withdraw all", custom_id: `kd:dep:-${Math.floor(kingdom.coffer)}`, style: 2, disabled: kingdom.coffer < 1 },
       ]),
-      buttonRow(KINGDOM_JOBS.map((job) => ({ label: `All on ${job.name.toLowerCase()}`, custom_id: `kd:job:${job.key}`, style: 2 }))),
+      selectRow(
+        "kd:split",
+        "Split the ten subjects evenly between…",
+        KINGDOM_JOBS.map((job) => ({ label: job.name, value: job.key, description: `${kingdom.workers[job.key] ?? 0} there now` })),
+        KINGDOM_JOBS.length
+      ),
+      selectRow(
+        "kd:add",
+        "Move one subject onto…",
+        KINGDOM_JOBS.map((job) => ({ label: job.name, value: job.key, description: `${kingdom.workers[job.key] ?? 0} there now` }))
+      ),
     ],
   };
 }
@@ -282,6 +294,34 @@ export async function kingdomAssign(
   kingdom.visited_day = day;
   await save(env, kingdom);
   return kingdomView(env, player, day, `Subjects reassigned: ${workersLine(kingdom)}.`);
+}
+
+/** The ten subjects shared out evenly between the jobs picked; the odd ones go to the first picked. */
+export async function kingdomSplit(env: Env, player: Player, jobs: string[], day: string): Promise<Line> {
+  const picked = KINGDOM_JOBS.filter((job) => jobs.includes(job.key)).sort((a, b) => jobs.indexOf(a.key) - jobs.indexOf(b.key));
+  if (picked.length === 0) return kingdomView(env, player, day, "Pick at least one job.");
+  const share = Math.floor(KINGDOM_SUBJECTS / picked.length);
+  const workers: Partial<Record<KingdomJob, number>> = {};
+  picked.forEach((job, i) => (workers[job.key] = share + (i < KINGDOM_SUBJECTS - share * picked.length ? 1 : 0)));
+  return kingdomAssign(env, player, workers, day);
+}
+
+/** One subject onto a job: an idle one if there is one, otherwise one from the busiest other job. */
+export async function kingdomMove(env: Env, player: Player, to: string, day: string): Promise<Line> {
+  const target = KINGDOM_JOBS.find((job) => job.key === to);
+  if (!target) return kingdomView(env, player, day, "That is not a job.");
+  const kingdom = await loadKingdom(env, player.discord_id, day);
+  const workers: Partial<Record<KingdomJob, number>> = { ...kingdom.workers };
+  const idle = KINGDOM_SUBJECTS - KINGDOM_JOBS.reduce((sum, job) => sum + (workers[job.key] ?? 0), 0);
+  if (idle <= 0) {
+    const from = KINGDOM_JOBS.filter((job) => job.key !== target.key && (workers[job.key] ?? 0) > 0).sort(
+      (a, b) => (workers[b.key] ?? 0) - (workers[a.key] ?? 0)
+    )[0];
+    if (!from) return kingdomView(env, player, day, `All ${KINGDOM_SUBJECTS} are on ${target.name.toLowerCase()} already.`);
+    workers[from.key] = (workers[from.key] ?? 0) - 1;
+  }
+  workers[target.key] = (workers[target.key] ?? 0) + 1;
+  return kingdomAssign(env, player, workers, day);
 }
 
 /** Kingdoms with at least a week's haul waiting, or a dry coffer, for the evening reminders. */

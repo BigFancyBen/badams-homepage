@@ -166,9 +166,13 @@ export function digestPayload(
     components: [
       buttonRow([
         { label: "Yes", custom_id: `ci:${today}`, style: 3, emoji: "💪" },
+        { label: "Yes, with a note or photo", custom_id: `cin:${today}`, style: 3, emoji: "📸" },
         { label: "No, rest day", custom_id: `no:${today}`, style: 2, emoji: "😴" },
-        { label: "Join the campaign", custom_id: `join:${today}`, style: 2 },
+      ]),
+      buttonRow([
+        { label: "Menu", custom_id: "hub", style: 1, emoji: "🏠" },
         { label: "My to-do", custom_id: "todo", style: 2, emoji: "📋" },
+        { label: "Join the campaign", custom_id: `join:${today}`, style: 2 },
       ]),
     ],
     allowed_mentions: allowedMentions(roleId),

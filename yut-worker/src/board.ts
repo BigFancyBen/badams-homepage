@@ -59,8 +59,10 @@ export function boardPayload(description: string) {
     components: [
       buttonRow([
         { label: "Join the campaign", custom_id: "join", style: 3 },
+        { label: "Menu", custom_id: "hub", style: 1, emoji: "🏠" },
         { label: "Ping me", custom_id: "ping:on", style: 2, emoji: "🔔" },
         { label: "Stop pinging me", custom_id: "ping:off", style: 2 },
+        { label: "Help", custom_id: "help", style: 2, emoji: "❓" },
       ]),
     ],
     allowed_mentions: allowedMentions(),

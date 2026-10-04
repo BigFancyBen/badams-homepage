@@ -354,9 +354,12 @@ function hpBar(left: number, pool: number): string {
 
 // ── /quest ─────────────────────────────────────────────────────────
 
-export async function questView(env: Env, day: string): Promise<{ content: string }> {
+const LOG_ROW = [{ type: 1, components: [{ type: 2, style: 2, label: "Quest log", custom_id: "quest:log", emoji: { name: "📖" } }] }];
+const WEEK_ROW = [{ type: 1, components: [{ type: 2, style: 2, label: "This week's quest", custom_id: "quest", emoji: { name: "🗺️" } }] }];
+
+export async function questView(env: Env, day: string): Promise<{ content: string; components?: unknown[] }> {
   const quest = questFor(campaignWeek(day, env.CAMPAIGN_START));
-  if (!quest) return { content: "No quest this week. The quest log is `/quest log`." };
+  if (!quest) return { content: "No quest this week.", components: LOG_ROW };
   const { name, data } = quest;
   const row = await questRow(env, gameWeek(day));
   const lines = [`📜 **${name}** — ${data.difficulty}, ${data.qp} QP. ${data.description}`, data.start];
@@ -377,10 +380,10 @@ export async function questView(env: Env, day: string): Promise<{ content: strin
     if (hits.results.length > 0) lines.push(`Party: ${hits.results.length} adventurer${hits.results.length === 1 ? "" : "s"}, ${hits.results.reduce((s, h) => s + h.n, 0)} check-ins.`);
   }
   lines.push(`Reward: ${questLampXp(data).toLocaleString("en-US")} XP antique lamp for everyone who checked in this week. Quest points so far: ${await totalQp(env)}.`);
-  return { content: lines.join("\n") };
+  return { content: lines.join("\n"), components: LOG_ROW };
 }
 
-export async function questLog(env: Env): Promise<{ content: string }> {
+export async function questLog(env: Env): Promise<{ content: string; components?: unknown[] }> {
   const { results } = await env.DB.prepare("SELECT campaign_week, quest, status, qp FROM quests ORDER BY campaign_week").all<{ campaign_week: number; quest: string; status: string; qp: number }>();
   const total = await totalQp(env);
   const lines = [`📖 **Quest log** — ${total} quest point${total === 1 ? "" : "s"}${total >= CHAMPIONS_GUILD_QP ? " · Champions' Guild member" : ` · Champions' Guild at ${CHAMPIONS_GUILD_QP}`}`];
@@ -388,5 +391,5 @@ export async function questLog(env: Env): Promise<{ content: string }> {
     lines.push(`Week ${row.campaign_week}: ${escapeMarkdown(row.quest)} — ${row.status === "done" ? `✅ ${row.qp} QP` : row.status === "unfinished" ? "unfinished" : "in progress"}`);
   }
   if (results.length === 0) lines.push("Nothing yet. The first check-in of a week starts its quest.");
-  return { content: lines.join("\n").slice(0, 1900) };
+  return { content: lines.join("\n").slice(0, 1900), components: WEEK_ROW };
 }
