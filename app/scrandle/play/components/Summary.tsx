@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useState } from "react";
+import { plateSrc } from "../../../api/scrandle/_lib/bucket";
 import { answer, type Side, type WeeklyPuzzle } from "../types";
 import { LOSS, WIN } from "./Plate";
 
@@ -106,10 +107,11 @@ export function Summary({ puzzle, picks, score }: SummaryProps) {
                       }}
                     >
                       <Image
-                        src={plate.image}
+                        src={plateSrc(plate.image)}
                         alt=""
                         fill
-                        sizes="56px"
+                        // The same file the tile showed, already in the cache.
+                        unoptimized
                         className="object-cover"
                         style={{
                           objectPosition: `${x * 100}% ${y * 100}%`,

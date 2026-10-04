@@ -1195,6 +1195,43 @@ running it twice is a no-op.
   category holds only one person's photos, that draw is skipped rather than
   bent.
 
+## Usage limits
+
+Everything here runs on free plans, and two of their limits shape the design.
+Check this before raising a cadence or adding something that shows photographs.
+
+| Limit | Plan | What spends it here |
+| --- | --- | --- |
+| 5,000 image transformations a month | Vercel Hobby, site-wide | Nothing in Scrandle. See below. |
+| 10ms CPU per invocation | Workers Free | Every tick. It is why cards are rendered on Vercel. |
+| 50 subrequests per invocation | Workers Free | Ingest downloads, classifier calls, Discord posts, card renders. |
+
+**Image transformations.** Next's image optimizer makes a separate copy of a
+photograph for every screen width that asks, and each copy is one
+transformation. The allowance is shared with the rest of the site — the card
+grids in tutor-helper and token-helper spend it too — and going over does not
+cost money, it breaks things: new images answer 402 and show their alt text
+until the window rolls over, everywhere.
+
+The weekly game first shipped on the optimizer. Twenty photographs a puzzle at
+five or six widths each was an estimated tenth of the allowance a month at one
+puzzle a week, and most of it at one a day. So the game's photographs go
+through `/api/scrandle/plate/<hash>.jpg` instead (`app/api/scrandle/plate`):
+one 960px JPEG per photograph, the same for every screen, cached by the CDN
+for a year, and rendered with `unoptimized` so the optimizer never sees it.
+That costs a function run per photograph rather than a transformation, which
+is a different and much larger allowance.
+
+Anything new that shows bucket photographs on the site should use that route
+rather than a bare `next/image`. Vercel's dashboard has the live count under
+Usage → Image Optimization.
+
+**How often the weekly game can reset** is therefore not an image question any
+more. What limits it is the catalog — a puzzle spends twenty voted-on plates,
+and once the backlog has been swept the pool grows by about one a day — and
+the channel, which gets a bot post per reset. Twice a week is comfortable;
+daily repeats plates about monthly.
+
 ## Worth verifying before scaling the per-tick cap
 
 `MAX_IMAGES_PER_TICK` is 15, sized against the 50-subrequest limit on Workers

@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { plateSrc } from "../../../api/scrandle/_lib/bucket";
 import type { WeeklyPlate } from "../types";
 
 export const WIN = "#a3be8c";
@@ -46,11 +47,13 @@ export function Plate({ plate, label, reveal, onPick, priority }: PlateProps) {
     >
       <div className="relative w-full aspect-[3/4] sm:aspect-square overflow-hidden">
         <Image
-          src={plate.image}
+          src={plateSrc(plate.image)}
           alt={plate.name || "A plate of food"}
           fill
           priority={priority}
-          sizes="(min-width: 896px) 440px, 50vw"
+          // One pre-sized copy per photograph, served by the site itself, so
+          // none of these go through the image optimizer and its allowance.
+          unoptimized
           className="object-cover transition-opacity duration-300"
           style={{
             objectPosition: `${x * 100}% ${y * 100}%`,
