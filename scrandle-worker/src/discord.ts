@@ -14,12 +14,50 @@ function apiBase(env: Env): string {
   return env.DISCORD_API_BASE || DISCORD_API;
 }
 
+/** 250ms then 500ms — three tries in under a second. */
+const READ_ATTEMPTS = 3;
+const READ_RETRY_BASE_MS = 250;
+
+/**
+ * Discord's edge drops the odd request with a 5xx — "upstream connect error or
+ * disconnect/reset before headers" is its proxy failing to reach the API behind
+ * it — and an hourly ingest failed whole on one. A second try a moment later
+ * almost always lands.
+ *
+ * **Reads only.** A POST whose reply went missing may well have posted, and a
+ * retry would post it twice; a GET can be asked again for free. A 4xx is not
+ * retried either: a bad token or a missing channel says the same thing on
+ * every attempt.
+ *
+ * Each retry is a subrequest. Ingest reads one page a run, so the worst case
+ * is two more against a budget that has room for them.
+ */
+async function fetchWithRetry(url: string, init: RequestInit): Promise<Response> {
+  const method = (init.method ?? "GET").toUpperCase();
+  const attempts = method === "GET" ? READ_ATTEMPTS : 1;
+
+  for (let attempt = 0; ; attempt++) {
+    const last = attempt >= attempts - 1;
+    try {
+      const response = await fetch(url, init);
+      if (response.status < 500 || last) return response;
+      // Let go of the failed body so the connection can be reused.
+      await response.body?.cancel();
+    } catch (error) {
+      if (last) throw error;
+    }
+    await new Promise((resolve) =>
+      setTimeout(resolve, READ_RETRY_BASE_MS * 2 ** attempt)
+    );
+  }
+}
+
 async function botFetch(
   env: Env,
   path: string,
   init: RequestInit = {}
 ): Promise<Response> {
-  const response = await fetch(`${apiBase(env)}${path}`, {
+  const response = await fetchWithRetry(`${apiBase(env)}${path}`, {
     ...init,
     headers: {
       Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`,
