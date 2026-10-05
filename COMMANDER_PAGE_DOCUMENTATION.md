@@ -272,7 +272,6 @@ interface SavedSettings {
 - **Sound Effects**: Audio feedback for actions
 - **Themes**: Multiple color schemes
 - **Export Data**: Game history export functionality
-- **Multiplayer Sync**: Real-time sync across devices
 
 ### Technical Debt
 - **Component Splitting**: Consider splitting large PlayerQuadrant component

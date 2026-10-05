@@ -69,7 +69,7 @@ src/
   votes.ts        group votes (build, relic, raid). relics.ts the relics. raids.ts raid weeks.
   actions.ts      the town buttons and vote handlers. bingo.ts the grids. shop.ts the shop.
   db.ts           every D1 query. discord.ts the REST client. roles.ts the opt-in ping role.
-migrations/       0001 the game, 0002 the town, 0003 votes and raids, 0004 bingo and shop, 0005 sessions and answers, 0006 the bank, 0007 quests, 0008 spoils, the Grand Exchange and the diary, 0009 gear, Slayer choices, the kingdom, the farm and the tears, 0010 the boss of the week. One number per file, forever.
+migrations/       0001 the game, 0002 the town, 0003 votes and raids, 0004 bingo and shop, 0005 sessions and answers, 0006 the bank, 0007 quests, 0008 spoils, the Grand Exchange and the diary, 0009 gear, Slayer choices, the kingdom, the farm and the tears, 0010 the boss of the week, 0011 the running reply's message id. One number per file, forever.
 scripts/          the harness (below), plus fetch-osrs.mjs (the wiki pull: --osrs, --drops, --quests), export-icons.mjs (item sprites from the prog-to-img-endpoint database into the Next app) and calibrate.mjs (the pace).
 config/choices.json  option lists shared by the runtime and the registration script.
 config/osrs.json     the wiki's numbers: masters, assignments, monsters, scimitars, armour sets. Regenerate with `npm run fetch:osrs -- --osrs`.
@@ -173,7 +173,7 @@ an empty D1 id even locally; it is gitignored.
   from a fresh local database: `rm -rf .wrangler/state && npm run migrate:local`.
 
 There is no way to fire a cron by hand, so the `/admin/*` routes (all gated
-on `?secret=ADMIN_SECRET`) are the test seams: `tick?at=<ISO>` runs the tick
+on an `Authorization: Bearer <ADMIN_SECRET>` header) are the test seams: `tick?at=<ISO>` runs the tick
 with a synthetic clock (`daily=1`, `post=1`, `lastcall=1` force a phase),
 `seed?players=a,b`, `checkin-as?player=&day=&photo=1&post=1`,
 `resolve-week?day=`, `render-sheet?player=`, `register-commands`,

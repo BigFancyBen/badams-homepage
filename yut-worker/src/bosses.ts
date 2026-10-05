@@ -7,6 +7,7 @@ import { seededRng } from "./events.ts";
 import { dropBoost, gearDef } from "./gear.ts";
 import { decodeRows, gpShort, rollRows, type DropRow, type Drops } from "./loot.ts";
 import { campaignWeek, gameWeek } from "./schedule.ts";
+import { cardText, panelCard, type ViewCard } from "./cards.ts";
 import type { Env, Player } from "./types.ts";
 import { levelForXp } from "./xp.ts";
 
@@ -245,7 +246,10 @@ export async function bossLine(env: Env, day: string): Promise<string | null> {
 }
 
 /** `/boss`: the week's boss, the pool, who has hit it, and what it drops. */
-export async function bossView(env: Env, day: string): Promise<{ content: string }> {
+/** The sprite a boss's card leads with: the thing it is fought for. */
+const BOSS_SPRITE: Record<string, string> = { scurrius: "scurrius_spine", obor: "hill_giant_club", bryophyta: "bryophytas_essence" };
+
+export async function bossView(env: Env, day: string): Promise<{ content: string; card?: ViewCard }> {
   const boss = bossFor(campaignWeek(day, env.CAMPAIGN_START));
   if (!boss) return { content: "No boss yet: the first one arrives with the campaign's first week." };
   const week = gameWeek(day);
@@ -258,12 +262,14 @@ export async function bossView(env: Env, day: string): Promise<{ content: string
         : `${bar(row.damage, row.hp)} ${row.damage.toLocaleString("en-US")} / ${row.hp.toLocaleString("en-US")} — sized for a roster of ${row.roster}.`
       : "Nobody has hit it yet this week. The first check-in opens the fight.",
   ];
+  let fighters: { username: string; damage: number; fights: number }[] = [];
   if (row) {
     const { results } = await env.DB.prepare(
       "SELECT h.player_id, p.username, SUM(h.damage) AS damage, COUNT(*) AS fights FROM boss_hits h JOIN players p ON p.discord_id = h.player_id WHERE h.week = ? GROUP BY h.player_id ORDER BY damage DESC"
     )
       .bind(week)
       .all<{ username: string; damage: number; fights: number }>();
+    fighters = results;
     results.forEach((r, i) => lines.push(`${i + 1}. **${escapeMarkdown(r.username)}** — ${r.damage.toLocaleString("en-US")} over ${r.fights} fight${r.fights === 1 ? "" : "s"}`));
   }
   const rare = bossTable(boss.key)
@@ -276,5 +282,38 @@ export async function bossView(env: Env, day: string): Promise<{ content: string
   );
   const next = bossFor(campaignWeek(day, env.CAMPAIGN_START) + 1);
   if (next) lines.push(`Next week: ${next.emoji} ${next.name}.`);
-  return { content: lines.join("\n") };
+  const left = row ? Math.max(0, row.hp - row.damage) : 0;
+  const table = [...new Set(bossTable(boss.key).filter((r) => gearDef(r.key)).map((r) => r.key))];
+  return {
+    content: lines.join("\n"),
+    card: panelCard(env, "boss", {
+      t: boss.name,
+      sub: `This week's boss - combat ${boss.stats.combat}`,
+      big: BOSS_SPRITE[boss.key] ?? "giant_key",
+      sections: [
+        row
+          ? {
+              s: "bar",
+              l: "Hitpoints",
+              h: left,
+              g: row.hp,
+              r: row.status === "done" ? "Defeated" : `${left.toLocaleString("en-US")} / ${row.hp.toLocaleString("en-US")}`,
+              c: "bad",
+            }
+          : { s: "bar", l: "Hitpoints", h: 1, g: 1, r: "Unfought", c: "bad" },
+        {
+          s: "rows",
+          l: "Damage:",
+          rows: fighters.slice(0, 8).map((f, i) => ({
+            k: "attack",
+            l: `${i + 1}. ${cardText(f.username)}`,
+            r: f.damage.toLocaleString("en-US"),
+            ...(f.damage >= boss.stats.hitpoints ? { c: "good" as const } : {}),
+          })),
+        },
+        { s: "grid", l: "Drops:", items: table.map((k) => ({ k, c: 1 })) },
+      ],
+      d: day,
+    }),
+  };
 }

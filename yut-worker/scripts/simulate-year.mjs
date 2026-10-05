@@ -19,8 +19,8 @@ const ADMIN = process.env.ADMIN_SECRET ?? "dev-only-admin-secret";
 const START = "2026-09-14";
 
 async function admin(path, params = {}) {
-  const query = new URLSearchParams({ secret: ADMIN, ...params });
-  const response = await fetch(`${url}/admin/${path}?${query}`);
+  const query = new URLSearchParams(params);
+  const response = await fetch(`${url}/admin/${path}?${query}`, { headers: { authorization: `Bearer ${ADMIN}` } });
   return response.json();
 }
 const sql = async (q) => (await admin("sql", { q })).results ?? [];

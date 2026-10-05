@@ -772,6 +772,8 @@ export interface EphemeralReply {
   application_id: string;
   token: string;
   created_at: number;
+  /** The reply's own id when it was sent as a follow-up; null when it is the token's "@original". */
+  message_id: string | null;
 }
 
 export async function getEphemeralReply(
@@ -780,7 +782,7 @@ export async function getEphemeralReply(
   userId: string
 ): Promise<EphemeralReply | null> {
   const row = await env.DB.prepare(
-    "SELECT application_id, token, created_at FROM ephemeral_replies " +
+    "SELECT application_id, token, created_at, message_id FROM ephemeral_replies " +
       "WHERE scope = ? AND user_discord_id = ?"
   )
     .bind(scope, userId)
@@ -803,10 +805,22 @@ export async function rememberEphemeralReply(
         "VALUES (?, ?, ?, ?, ?) " +
         "ON CONFLICT (scope, user_discord_id) DO UPDATE SET " +
         "application_id = excluded.application_id, " +
-        "token = excluded.token, created_at = excluded.created_at"
+        "token = excluded.token, created_at = excluded.created_at, message_id = NULL"
     )
       .bind(scope, userId, applicationId, token, now)
       .run()
+  );
+}
+
+/**
+ * Records that the reply under this token went out as a follow-up message.
+ * A button answered late is only acknowledged, so its token's "@original" is
+ * the message the button sat on (the morning post, for a Yes); the running
+ * reply has to be edited by this id instead.
+ */
+export async function setEphemeralReplyMessage(env: Env, token: string, messageId: string): Promise<void> {
+  await retryWrite(() =>
+    env.DB.prepare("UPDATE ephemeral_replies SET message_id = ? WHERE token = ?").bind(messageId, token).run()
   );
 }
 
@@ -845,6 +859,11 @@ export async function answersOn(env: Env, day: string): Promise<{ player_id: str
 }
 
 /** Adds a photo or video to a check-in made without one. */
+/** A note written after the check-in. The first one stands. */
+export async function setCheckinNote(env: Env, checkinId: number, note: string): Promise<void> {
+  await env.DB.prepare("UPDATE checkins SET note = ? WHERE id = ? AND note IS NULL").bind(note, checkinId).run();
+}
+
 export async function attachProof(env: Env, checkinId: number, key: string, url: string, kind: "image" | "video"): Promise<void> {
   await env.DB.prepare("UPDATE checkins SET attachment_r2_key = ?, attachment_url = ?, attachment_kind = ? WHERE id = ?")
     .bind(key, url, kind, checkinId)

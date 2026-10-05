@@ -328,7 +328,7 @@ export const PHASES: Phase[] = [
       },
       {
         kind: "p",
-        text: "`/backfill?secret=...&pages=5` walks history backwards for the one-time import. Run it by hand.",
+        text: "`/backfill?pages=5` (with the secret in an `Authorization` header) walks history backwards for the one-time import. Run it by hand.",
       },
     ],
   },

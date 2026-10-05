@@ -21,7 +21,8 @@ import {
   MASTERS,
   MONSTERS,
 } from "./combat.ts";
-import type { Env, Player } from "./types.ts";
+import { cardText, panelCard, type ViewCard } from "./cards.ts";
+import { selectRow, type Env, type Player } from "./types.ts";
 
 /**
  * Slayer tasks, the way Old School does them. Every player always holds a
@@ -258,6 +259,7 @@ export function taskShort(task: SlayerTask | null): string | null {
 export interface TaskView {
   content: string;
   components?: unknown[];
+  card?: ViewCard;
 }
 
 export async function taskView(env: Env, player: Player): Promise<TaskView> {
@@ -267,13 +269,44 @@ export async function taskView(env: Env, player: Player): Promise<TaskView> {
   const lines = [
     `🗡️ ${task ? taskShort(task) : "No Slayer task yet. Your first check-in gets one."}`,
     `Slayer points: ${player.slayer_points}. Tasks in a row: ${player.slayer_streak}. Tasks done: ${player.tasks_done}.`,
-    `Blocked (${blocks.length}/${slots}): ${blocks.length > 0 ? blocks.map((key) => MONSTERS[key]?.name ?? key).join(", ") : "nothing"}. Blocking the current task costs ${SLAYER_BLOCK_COST} points and it is never assigned again; \`/task unblock\` clears the list.`,
-    `Master: ${player.slayer_master ? (MASTERS.find((m) => m.key === player.slayer_master)?.name ?? "the best you qualify for") : "the best you qualify for"}. \`/task master\` picks any master you qualify for, to steer towards the monster that drops what you are chasing.`,
+    `Blocked (${blocks.length}/${slots}): ${blocks.length > 0 ? blocks.map((key) => MONSTERS[key]?.name ?? key).join(", ") : "nothing"}. Blocking the current task costs ${SLAYER_BLOCK_COST} points and it is never assigned again.`,
+    `Master: ${player.slayer_master ? (MASTERS.find((m) => m.key === player.slayer_master)?.name ?? "the best you qualify for") : "the best you qualify for"}. The dropdown picks any master you qualify for, to steer towards the monster that drops what you are chasing.`,
     "Every check-in is a training session against your task. Each kill on task pays the monster's Slayer XP; finishing pays the master's points. The 10th, 50th and 100th task in a row pay 5×, 15× and 25×.",
     `Spend points: skip the task (${SLAYER_SKIP_COST}), ${SLAYER_XP_BOUGHT.toLocaleString("en-US")} Slayer XP (${SLAYER_XP_COST}), the Slayer helmet (${SLAYER_HELMET_COST}) for +16⅔% accuracy and damage on task and the title Slayer Master.`,
   ];
+  const master = task ? masterByKey(task.master) : null;
   return {
     content: lines.join("\n"),
+    card: panelCard(env, "task", {
+      t: task ? capitalise(taskName(task)) : "No task",
+      sub: task && master ? `${cardText(player.username)} - assigned by ${master.name}` : "Assigned at your first check-in",
+      big: "slayer",
+      sections: [
+        ...(task ? [{ s: "bar" as const, l: "Kills", h: task.kills, g: task.kills_needed, r: `${task.kills} / ${task.kills_needed}` }] : []),
+        {
+          s: "stats",
+          items: [
+            { l: "Points", v: player.slayer_points.toLocaleString("en-US") },
+            { l: "Streak", v: String(player.slayer_streak) },
+            { l: "Tasks done", v: String(player.tasks_done) },
+            { l: "Blocked", v: `${blocks.length} / ${slots}` },
+          ],
+        },
+        {
+          s: "rows",
+          l: "Rewards:",
+          rows: [
+            { k: "slayer", l: "Skip task", r: `${SLAYER_SKIP_COST} points`, ...(player.slayer_points < SLAYER_SKIP_COST ? { c: "dim" as const } : {}) },
+            { k: "slayer", l: `${SLAYER_XP_BOUGHT.toLocaleString("en-US")} Slayer XP`, r: `${SLAYER_XP_COST} points`, ...(player.slayer_points < SLAYER_XP_COST ? { c: "dim" as const } : {}) },
+            { k: "slayer", l: "Block task", r: `${SLAYER_BLOCK_COST} points`, ...(player.slayer_points < SLAYER_BLOCK_COST ? { c: "dim" as const } : {}) },
+            hasSlayerHelmet(player)
+              ? { k: "black_mask_10", l: "Slayer helmet", r: "Owned", c: "good" as const }
+              : { k: "black_mask_10", l: "Slayer helmet", r: `${SLAYER_HELMET_COST} points`, ...(player.slayer_points < SLAYER_HELMET_COST ? { c: "dim" as const } : {}) },
+          ],
+        },
+      ],
+      d: new Date().toISOString().slice(0, 10),
+    }),
     components: [
       {
         type: 1,
@@ -282,8 +315,18 @@ export async function taskView(env: Env, player: Player): Promise<TaskView> {
           { type: 2, style: 1, label: `Slayer XP (${SLAYER_XP_COST})`, custom_id: "task:xp", disabled: player.slayer_points < SLAYER_XP_COST },
           { type: 2, style: 1, label: `Slayer helmet (${SLAYER_HELMET_COST})`, custom_id: "task:helmet", disabled: player.slayer_points < SLAYER_HELMET_COST },
           { type: 2, style: 4, label: `Block task (${SLAYER_BLOCK_COST})`, custom_id: "task:block", disabled: !task || player.slayer_points < SLAYER_BLOCK_COST || blocks.length >= slots },
+          { type: 2, style: 2, label: "Clear block list", custom_id: "task:unblock", disabled: blocks.length === 0 },
         ],
       },
+      selectRow("task:master", "Choose your Slayer master…", [
+        { label: "The best I qualify for", value: "best", default: !player.slayer_master },
+        ...MASTERS.map((master) => ({
+          label: master.name,
+          value: master.key,
+          description: `Combat ${master.combat}${master.slayer > 1 ? `, Slayer ${master.slayer}` : ""} · ${master.points} points a task`,
+          default: player.slayer_master === master.key,
+        })),
+      ]),
     ],
   };
 }

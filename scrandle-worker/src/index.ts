@@ -1,5 +1,7 @@
+import { authorized } from "./auth";
 import { logToDiscord } from "./discord";
 import { classify } from "./classify";
+import { compress } from "./compress";
 import { forgetStaleEphemeralReplies } from "./db";
 import { backfill, ingest } from "./ingest";
 import { handleInteraction } from "./interactions";
@@ -66,7 +68,7 @@ export default {
     }
 
     if (url.pathname === "/backfill") {
-      if (url.searchParams.get("secret") !== env.BACKFILL_SECRET) {
+      if (!(await authorized(request, env.BACKFILL_SECRET))) {
         return new Response("Nope", { status: 403 });
       }
       const pages = Math.min(Number(url.searchParams.get("pages") ?? "1"), 5);
@@ -88,7 +90,7 @@ export default {
     // `count=` overrides MATCHUPS_PER_SLOT for the one call. A bonus post never
     // claims the hour's slot, so the schedule carries on untouched.
     if (url.pathname === "/admin/post-matchup") {
-      if (url.searchParams.get("secret") !== env.BACKFILL_SECRET) {
+      if (!(await authorized(request, env.BACKFILL_SECRET))) {
         return new Response("Nope", { status: 403 });
       }
       try {
@@ -197,7 +199,7 @@ export default {
     // meant here. Same reason as the manual post: a cron cannot be fired by
     // hand, and the close path is the one most worth exercising on demand.
     if (url.pathname === "/admin/close-matchup") {
-      if (url.searchParams.get("secret") !== env.BACKFILL_SECRET) {
+      if (!(await authorized(request, env.BACKFILL_SECRET))) {
         return new Response("Nope", { status: 403 });
       }
       try {
@@ -222,7 +224,7 @@ export default {
     // shut it in the same request, which is no use to anybody wanting to see
     // the thing work.
     if (url.pathname === "/admin/open-vote") {
-      if (url.searchParams.get("secret") !== env.BACKFILL_SECRET) {
+      if (!(await authorized(request, env.BACKFILL_SECRET))) {
         return new Response("Nope", { status: 403 });
       }
       try {
@@ -241,7 +243,7 @@ export default {
     // Puts a card back on a message that went out without one, or with one
     // Discord failed to fetch. Uploads it, so there is nothing to fetch.
     if (url.pathname === "/admin/repair-card") {
-      if (url.searchParams.get("secret") !== env.BACKFILL_SECRET) {
+      if (!(await authorized(request, env.BACKFILL_SECRET))) {
         return new Response("Nope", { status: 403 });
       }
       // Either an id or the Discord message it went out as. The message id is
@@ -285,7 +287,7 @@ export default {
     }
 
     if (url.pathname === "/admin/classify") {
-      if (url.searchParams.get("secret") !== env.BACKFILL_SECRET) {
+      if (!(await authorized(request, env.BACKFILL_SECRET))) {
         return new Response("Nope", { status: 403 });
       }
       try {
@@ -298,11 +300,28 @@ export default {
       }
     }
 
+    // Shrinks photographs still stored as they arrived. The tick does a few
+    // at a time; this is for draining the backlog without waiting for it.
+    // Loop it until `remaining` is zero.
+    if (url.pathname === "/admin/compress") {
+      if (!(await authorized(request, env.BACKFILL_SECRET))) {
+        return new Response("Nope", { status: 403 });
+      }
+      try {
+        const limit = Number(url.searchParams.get("limit") ?? "10");
+        return Response.json(await compress(env, limit));
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        await logToDiscord(env, `Compress failed: ${reason}`);
+        return Response.json({ ok: false, error: reason }, { status: 502 });
+      }
+    }
+
     // Who the catalog thinks it knows. `?q=` matches part of a username; the
     // point of it is finding the id of somebody's old account before merging
     // it away, which is otherwise a trip through Discord's developer mode.
     if (url.pathname === "/admin/players") {
-      if (url.searchParams.get("secret") !== env.BACKFILL_SECRET) {
+      if (!(await authorized(request, env.BACKFILL_SECRET))) {
         return new Response("Nope", { status: 403 });
       }
       try {
@@ -320,7 +339,7 @@ export default {
     // becomes `to`'s, and `from` disappears. Dry by default — pass `confirm=1`
     // to actually write. See src/players.ts.
     if (url.pathname === "/admin/merge-player") {
-      if (url.searchParams.get("secret") !== env.BACKFILL_SECRET) {
+      if (!(await authorized(request, env.BACKFILL_SECRET))) {
         return new Response("Nope", { status: 403 });
       }
       const from = url.searchParams.get("from") ?? "";
@@ -390,6 +409,22 @@ export default {
       }
     } catch (error) {
       await logToDiscord(env, `Ingest failed: ${String(error)}`);
+    }
+
+    // Shrink what ingest just stored, and a few of the backlog behind it.
+    // Before the classifier, so it is sent the small copy rather than the
+    // original — which is also the only way a photograph over the vision
+    // API's size limit ever gets a label.
+    try {
+      const shrunk = await compress(env);
+      if (shrunk.failed > 0) {
+        await logToDiscord(
+          env,
+          `Compress: ${shrunk.failed} failed, ${shrunk.remaining} left. First: ${shrunk.firstFailure}`
+        );
+      }
+    } catch (error) {
+      await logToDiscord(env, `Compress failed: ${String(error)}`);
     }
 
     // Classify before anything else touches the catalog — matchmaking skips

@@ -27,18 +27,31 @@ import { BUCKET_BASE, PLATE_FILE } from "../../_lib/bucket";
 /** Twice the widest tile, for a dense screen. */
 const MAX_EDGE = 960;
 
+/**
+ * A miss is cached as well, briefly. Uncached, every made-up hash is a
+ * function run and a read against the bucket, and there are 2^256 of them to
+ * ask for. A day is short enough that a photograph which turns up later is
+ * not locked out for long — and the bucket is written before the puzzle that
+ * names it, so in practice a real one is never asked for early.
+ */
+const MISS = {
+  status: 404,
+  headers: { "cache-control": "public, max-age=3600, s-maxage=86400" },
+};
+
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ file: string }> }
 ) {
   const { file } = await params;
   if (!PLATE_FILE.test(file)) {
-    return new Response("Not a plate", { status: 404 });
+    return new Response("Not a plate", MISS);
   }
 
   try {
     const source = await fetch(`${BUCKET_BASE}/dishes/${file}`);
-    if (!source.ok) return new Response("Not found", { status: 404 });
+    if (source.status === 404) return new Response("Not found", MISS);
+    if (!source.ok) return new Response("Bucket unavailable", { status: 502 });
 
     // `rotate()` with no angle applies the EXIF orientation, which is how a
     // phone records a portrait photograph in the first place.

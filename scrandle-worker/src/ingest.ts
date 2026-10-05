@@ -29,11 +29,22 @@ const BATCH_SIZE = 5;
  */
 const RENDERABLE = new Set(["image/jpeg", "image/jpg", "image/png"]);
 
+/**
+ * The largest attachment worth keeping. A phone photograph is three or four
+ * megabytes; Discord lets a subscriber post five hundred. The bucket is the
+ * one thing here that bills past its free allowance rather than failing, and
+ * the bytes are read into memory whole before they are stored, so something
+ * that size is refused on what Discord says it weighs — before the download.
+ */
+const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+
 export interface IngestReport {
   scanned: number;
   stored: number;
   duplicates: number;
   skippedFormat: number;
+  /** Over MAX_ATTACHMENT_BYTES, and so never downloaded. */
+  skippedSize: number;
   failed: number;
   /**
    * Why the first failure failed. A bare count cannot tell a transient D1 blip
@@ -56,6 +67,7 @@ function emptyReport(): IngestReport {
     stored: 0,
     duplicates: 0,
     skippedFormat: 0,
+    skippedSize: 0,
     failed: 0,
     firstFailure: null,
     more: false,
@@ -81,6 +93,10 @@ function imageAttachments(
     if (!contentType.startsWith("image/")) continue;
     if (!RENDERABLE.has(contentType)) {
       report.skippedFormat++;
+      continue;
+    }
+    if (attachment.size > MAX_ATTACHMENT_BYTES) {
+      report.skippedSize++;
       continue;
     }
     candidates.push({ message, attachment, contentType });
@@ -166,6 +182,10 @@ async function storeOne(
   }
 
   const bytes = await response.arrayBuffer();
+  if (bytes.byteLength > MAX_ATTACHMENT_BYTES) {
+    report.skippedSize++;
+    return;
+  }
   const hash = await sha256Hex(bytes);
   const extension = contentType === "image/png" ? "png" : "jpg";
   const key = `dishes/${hash}.${extension}`;

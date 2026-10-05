@@ -17,7 +17,10 @@ import { raidLine } from "./raids.ts";
 import { championsGuildLine, questIntro, questLine } from "./quests.ts";
 import { openVotes } from "./votes.ts";
 import { featuredFor, tierName } from "./spoils.ts";
-import { bossLine } from "./bosses.ts";
+import { bossFor, bossLine, bossWeek } from "./bosses.ts";
+import { cardText, viewCard, type PanelSection } from "./cards.ts";
+import { logToDiscord } from "./discord.ts";
+import { questFor, questRow } from "./quests.ts";
 
 /**
  * The morning post. One message a day, and the only scheduled one most days:
@@ -33,6 +36,69 @@ export interface DigestParts {
   header: string;
   lines: string[];
   imageUrl: string | null;
+  /** The day's card, plain enough for a picture: "Act 1 - Week 3 - Day 21 - Lumbridge". */
+  cardSub?: string;
+}
+
+const CARD_ROSTER = 14;
+
+/**
+ * The day's card: the question and the group's shared bars. On Thursday and
+ * Sunday, the middle and the end of the week, it also carries the roll call:
+ * two slots a player for the week's two check-ins. It is drawn again whenever
+ * a check-in changes it, and kept under what is on it.
+ */
+const ROLL_CALL_DAYS: Record<number, string> = { 3: "Midweek", 6: "Week's end" };
+export async function dailyCardUrl(env: Env, today: string, sub: string): Promise<string | null> {
+  try {
+    const roster = await activeRoster(env, today);
+    if (roster.length === 0) return null;
+    const counts = new Map<string, number>();
+    for (const c of await allCheckinsBetween(env, gameWeek(today), today)) counts.set(c.player_id, (counts.get(c.player_id) ?? 0) + 1);
+    const players = [...roster]
+      .sort((a, b) => (counts.get(b.discord_id) ?? 0) - (counts.get(a.discord_id) ?? 0) || a.username.localeCompare(b.username))
+      .map((p) => ({ n: cardText(p.username) || "someone", c: counts.get(p.discord_id) ?? 0 }));
+    const rollCall = ROLL_CALL_DAYS[daysBetween(gameWeek(today), today)];
+
+    const sections: PanelSection[] = [];
+    const inForm = players.filter((p) => p.c >= 2).length;
+    sections.push({ s: "bar", l: "In form", h: inForm, g: players.length, r: `${inForm} of ${players.length}`, c: "good" });
+    const week = campaignWeek(today, env.CAMPAIGN_START);
+    const boss = bossFor(week);
+    if (boss) {
+      const fight = await bossWeek(env, gameWeek(today));
+      const left = fight ? Math.max(0, fight.hp - fight.damage) : 0;
+      sections.push(
+        fight
+          ? { s: "bar", l: boss.name, h: left, g: fight.hp, r: fight.status === "done" ? "Defeated" : `${left.toLocaleString("en-US")} / ${fight.hp.toLocaleString("en-US")}`, c: "bad" }
+          : { s: "bar", l: boss.name, h: 1, g: 1, r: "Unfought", c: "bad" }
+      );
+    }
+    const quest = questFor(week);
+    const row = quest ? await questRow(env, gameWeek(today)) : null;
+    if (quest && row) {
+      const name = cardText(quest.name);
+      if (row.status === "done") sections.push({ s: "bar", l: name, h: 1, g: 1, r: "Complete", c: "good" });
+      else if (row.supplies < row.supplies_needed) sections.push({ s: "bar", l: name, h: row.supplies, g: row.supplies_needed, r: `Supplies ${row.supplies} / ${row.supplies_needed}`, c: "warn" });
+      else if (row.hp_total > 0) sections.push({ s: "bar", l: name, h: Math.min(row.damage, row.hp_total), g: row.hp_total, r: `Fight ${Math.min(row.damage, row.hp_total).toLocaleString("en-US")} / ${row.hp_total.toLocaleString("en-US")}`, c: "warn" });
+    }
+
+    const featured = week > 0 ? featuredFor(today) : null;
+    const card = viewCard(env, `daily/${today}`, {
+      t: "Did you work out?",
+      sub,
+      ...(featured ? { big: featured.key } : {}),
+      players: rollCall ? players.slice(0, CARD_ROSTER) : [],
+      ...(rollCall ? { rc: rollCall } : {}),
+      ...(rollCall && players.length > CARD_ROSTER ? { more: players.length - CARD_ROSTER } : {}),
+      sections,
+      d: today,
+    });
+    return (await card.cached()) ?? (await card.render());
+  } catch (error) {
+    await logToDiscord(env, `Daily card failed: ${String(error)}`).catch(() => undefined);
+    return null;
+  }
 }
 
 export async function composeDigest(env: Env, today: string): Promise<DigestParts> {
@@ -144,7 +210,8 @@ export async function composeDigest(env: Env, today: string): Promise<DigestPart
     if (intro) lines.push(intro);
   }
 
-  return { header, lines, imageUrl };
+  const cardSub = week > 0 ? `Act ${act} - Week ${week} - Day ${dayNumber} - ${actName}` : `Pre-season - ${shortDate(today)}`;
+  return { header, lines, imageUrl, cardSub };
 }
 
 export function digestPayload(
@@ -152,23 +219,31 @@ export function digestPayload(
   today: string,
   roleId: string | null,
   activeCount: number,
-  rollCall: string | null = null
+  rollCall: string | null = null,
+  /** The day's card. Monday's standings, when there are any, follow it in an embed of their own. */
+  cardUrl: string | null = null
 ) {
+  const lead = cardUrl ?? parts.imageUrl;
   return {
     content: roleId && activeCount > 0 ? `<@&${roleId}>` : "",
     embeds: [
       {
         color: ACCENT,
         description: [parts.header, QUESTION, ...parts.lines, ...(rollCall ? ["", rollCall] : [])].join("\n"),
-        ...(parts.imageUrl ? { image: { url: parts.imageUrl } } : {}),
+        ...(lead ? { image: { url: lead } } : {}),
       },
+      ...(cardUrl && parts.imageUrl ? [{ color: ACCENT, image: { url: parts.imageUrl } }] : []),
     ],
     components: [
       buttonRow([
         { label: "Yes", custom_id: `ci:${today}`, style: 3, emoji: "💪" },
+        { label: "Yes, with a note or photo", custom_id: `cin:${today}`, style: 3, emoji: "📸" },
         { label: "No, rest day", custom_id: `no:${today}`, style: 2, emoji: "😴" },
-        { label: "Join the campaign", custom_id: `join:${today}`, style: 2 },
+      ]),
+      buttonRow([
+        { label: "Menu", custom_id: "hub", style: 1, emoji: "🏠" },
         { label: "My to-do", custom_id: "todo", style: 2, emoji: "📋" },
+        { label: "Join the campaign", custom_id: `join:${today}`, style: 2 },
       ]),
     ],
     allowed_mentions: allowedMentions(roleId),
@@ -219,7 +294,8 @@ export async function refreshDailyPost(env: Env, today: string, roleId: string |
   const parts = JSON.parse(raw) as DigestParts;
   const roster = await activeRoster(env, today);
   const rollCall = await composeRollCall(env, today);
-  await editMessage(env, messageId, digestPayload(parts, today, roleId, roster.length, rollCall));
+  const cardUrl = parts.cardSub ? await dailyCardUrl(env, today, parts.cardSub) : null;
+  await editMessage(env, messageId, digestPayload(parts, today, roleId, roster.length, rollCall, cardUrl));
 }
 
 /** Yesterday's post, cut down to its header, its first line and the final roll call, with no buttons. */

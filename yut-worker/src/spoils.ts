@@ -466,7 +466,7 @@ export async function openSpoils(
         publicLine: `🎁 **${name}** opened a ${what.toLowerCase()} (${tier}): ${list} — ${gp(total)}.${shout}`,
         card: {
           title: `${player.username} opened a ${what.toLowerCase()}`,
-          sub: `${tierName(container?.tier ?? "common")} spoils - worth ${gp(total)}`,
+          sub: `Worth ${gp(total)}`,
           big: option.key,
           tier: container?.tier,
           loot: stacks.map((stack) => ({ k: stack.key, c: stack.qty })),
@@ -483,7 +483,7 @@ export async function openSpoils(
       opened = {
         line: "📖 **Book of knowledge**: it is with your lamps. Read it into a skill with `/lamp` for 15× that skill's level.",
         publicLine: `🎁 **${name}** took the Book of knowledge.`,
-        card: { title: `${player.username} took a Book of knowledge`, sub: "Spoils - 15 XP per level, any skill", big: "book_of_knowledge", loot: [] },
+        card: { title: `${player.username} took a Book of knowledge`, sub: "15 XP per level, in any skill", big: "book_of_knowledge", loot: [] },
         hasLamp: true,
       };
       result = { kind: "book" };
@@ -495,7 +495,7 @@ export async function openSpoils(
         publicLine: `🎁 **${name}** sent a supply crate to the camp: ${option.amount} ${option.resource}.`,
         card: {
           title: `${player.username} sent a supply crate`,
-          sub: `Spoils - ${option.amount} ${option.resource} for the camp`,
+          sub: `${option.amount} ${option.resource} for the camp`,
           big: "crate",
           loot: [{ k: option.resource, c: option.amount }],
         },
@@ -513,7 +513,7 @@ export async function openSpoils(
         publicLine: `🎁 **${name}** fished out a clue bottle: a${tier.key === "easy" || tier.key === "elite" ? "n" : ""} ${tier.name.toLowerCase()} clue scroll.`,
         card: {
           title: `${player.username} found a clue bottle`,
-          sub: `Spoils - ${tier.name} clue scroll, ${steps.length} steps`,
+          sub: `${tier.name} clue scroll, ${steps.length} steps`,
           big: `clue_${tier.key}`,
           loot: [],
         },

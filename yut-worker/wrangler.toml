@@ -59,5 +59,5 @@ bucket_name = "yut-hut-images"
 # Secrets (wrangler secret put <NAME>), never in this file:
 #   DISCORD_BOT_TOKEN
 #   YUT_IMAGE_SECRET          must byte-match the Vercel env of the same name
-#   ADMIN_SECRET              gates /admin/* routes
+#   ADMIN_SECRET              gates /admin/* routes, as `Authorization: Bearer …`
 #   DISCORD_LOG_WEBHOOK_URL   (optional)

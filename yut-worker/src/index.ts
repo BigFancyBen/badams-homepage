@@ -1,3 +1,4 @@
+import { authorized } from "./auth.ts";
 import { performCheckin } from "./checkins.ts";
 import { getPlayer, grantLampStatement, joinPlayer } from "./db.ts";
 import { logToDiscord, registerGuildCommands } from "./discord.ts";
@@ -39,7 +40,7 @@ export default {
     }
 
     if (url.pathname.startsWith("/admin/")) {
-      if (url.searchParams.get("secret") !== env.ADMIN_SECRET) {
+      if (!(await authorized(request, env.ADMIN_SECRET))) {
         return new Response("Nope", { status: 403 });
       }
       try {
@@ -280,9 +281,13 @@ async function admin(env: Env, ctx: ExecutionContext, url: URL): Promise<unknown
     }
 
     case "sql": {
-      // Read-only, for the harness: SELECT only.
-      const query = url.searchParams.get("q") ?? "";
-      if (!/^\s*select/i.test(query)) return { ok: false, error: "SELECT only" };
+      // Read-only, for the harness: one SELECT and nothing after it. "Starts
+      // with SELECT" alone lets a second statement ride in behind a
+      // semicolon, and that second statement can be anything.
+      const query = (url.searchParams.get("q") ?? "").trim().replace(/;\s*$/, "");
+      if (!/^select\b/i.test(query) || query.includes(";")) {
+        return { ok: false, error: "one SELECT only" };
+      }
       const { results } = await env.DB.prepare(query).all();
       return { ok: true, results };
     }

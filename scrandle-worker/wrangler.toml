@@ -60,13 +60,20 @@ LOCAL_TIME_ZONE = "America/Denver"
 STANDINGS_WEEKDAY = "0"
 STANDINGS_HOUR_UTC = "17"
 
-# The weekly Scrandle: ten pairs of voted-on plates, frozen into a JSON file
-# in the public bucket for the site to read, and announced in the channel.
-# 0 = Sunday, 18:00 UTC = noon Mountain while MDT is in effect (shift to 19 in
-# November with the rest) — an hour after the standings, so the table goes up
-# first. Unlike the rounds this is "at or after" the hour rather than on it,
-# and retries every tick until it lands. Set WEEKLY_WEEKDAY to -1 to disable.
-WEEKLY_WEEKDAY = "0"
+# The Scrandle on the site: ten pairs of voted-on plates, frozen into a JSON
+# file in the public bucket for the site to read, and announced in the channel.
+# Twice a week — 0 = Sunday and 3 = Wednesday, three and four days apart —
+# at 18:00 UTC = noon Mountain while MDT is in effect (shift to 19 in November
+# with the rest). On Sunday that is an hour after the standings, so the table
+# goes up first; on Wednesday it shares the tick with the themed food round.
+# Unlike the rounds this is "at or after" the hour rather than on it, one draw
+# per listed day, retried every tick until it lands. -1 disables it.
+#
+# It was once a week until the photographs stopped costing the site's image
+# allowance. Each puzzle spends twenty plates and steers around the last six
+# puzzles' worth; daily would repeat plates about monthly. The vars keep the
+# WEEKLY_ name they shipped with.
+WEEKLY_WEEKDAY = "0,3"
 WEEKLY_HOUR_UTC = "18"
 WEEKLY_URL = "https://www.benadams.dev/scrandle/play"
 
@@ -198,4 +205,5 @@ bucket_name = "scrandle-images"
 #   DISCORD_PUBLIC_KEY
 #   DISCORD_LOG_WEBHOOK_URL      (optional)
 #   SCRANDLE_IMAGE_SECRET
-#   BACKFILL_SECRET
+#   BACKFILL_SECRET              sent as `Authorization: Bearer …` to /backfill and /admin/*
+#   ANTHROPIC_API_KEY            the classifier's; the one paid service here

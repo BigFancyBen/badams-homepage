@@ -22,7 +22,7 @@ export interface Env {
   /** The Monday the campaign starts, YYYY-MM-DD. */
   CAMPAIGN_START: string;
   TOWN_TICK_ENABLED: string;
-  /** Test only: a command name the Worker holds back past the ack budget. */
+  /** Test only: command names and button prefixes, comma-separated, that the Worker holds back past the ack budget. */
   SLOW_COMMAND?: string;
 
   // Secrets (wrangler secret put)
@@ -189,7 +189,11 @@ export interface InteractionComponent {
   type: number;
   custom_id?: string;
   value?: string;
+  /** A file upload's attachment ids, or a select's picks. */
+  values?: string[];
   components?: InteractionComponent[];
+  /** A modal's Label wraps one component. */
+  component?: InteractionComponent;
 }
 
 export interface InteractionOption {
@@ -217,6 +221,8 @@ export interface Interaction {
       users?: Record<string, { id: string; username: string }>;
     };
     custom_id?: string;
+    /** What was picked in a select menu, on type 3. */
+    values?: string[];
     components?: InteractionComponent[];
   };
   message?: { id: string; flags?: number };
@@ -250,6 +256,46 @@ export function buttonRow(buttons: Button[]) {
       ...(button.disabled ? { disabled: true } : {}),
     })),
   };
+}
+
+export interface SelectOption {
+  label: string;
+  value: string;
+  description?: string;
+  emoji?: string;
+  default?: boolean;
+}
+
+/**
+ * A dropdown, which takes a whole row. Its custom_id and the value picked are
+ * read together as one button id: a select "gear:w" answering "abyssal_whip"
+ * routes exactly as the button "gear:w:abyssal_whip" would.
+ */
+export function selectRow(customId: string, placeholder: string, options: SelectOption[], max = 1) {
+  return {
+    type: 1,
+    components: [
+      {
+        type: 3,
+        custom_id: customId,
+        placeholder: placeholder.slice(0, 150),
+        min_values: 1,
+        max_values: Math.max(1, Math.min(max, options.length)),
+        options: options.slice(0, 25).map((option) => ({
+          label: option.label.slice(0, 100),
+          value: option.value,
+          ...(option.description ? { description: option.description.slice(0, 100) } : {}),
+          ...(option.emoji ? { emoji: { name: option.emoji } } : {}),
+          ...(option.default ? { default: true } : {}),
+        })),
+      },
+    ],
+  };
+}
+
+/** A dropdown of the server's members. */
+export function userSelectRow(customId: string, placeholder: string) {
+  return { type: 1, components: [{ type: 5, custom_id: customId, placeholder: placeholder.slice(0, 150), min_values: 1, max_values: 1 }] };
 }
 
 /** Up to 25 buttons, five to a row. */

@@ -104,7 +104,8 @@ async function seed(dishes) {
 /** Forces the placement slot and returns what the route said it did. */
 async function post() {
   const response = await fetch(
-    `${WORKER}/admin/post-matchup?placement=1&secret=${encodeURIComponent(SECRET)}`
+    `${WORKER}/admin/post-matchup?placement=1`,
+    { headers: { authorization: `Bearer ${SECRET}` } }
   );
   if (!response.ok) throw new Error(`post failed: ${response.status}`);
   return response.json();
@@ -256,7 +257,8 @@ check(
 );
 
 const everyday = await fetch(
-  `${WORKER}/admin/post-matchup?secret=${encodeURIComponent(SECRET)}`
+  `${WORKER}/admin/post-matchup`,
+  { headers: { authorization: `Bearer ${SECRET}` } }
 );
 const everydayResult = await everyday.json();
 check(

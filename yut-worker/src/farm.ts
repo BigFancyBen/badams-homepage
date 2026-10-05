@@ -18,6 +18,7 @@ import { addXpStatement, bankDepositStatement, getSkills, logEventStatement } fr
 import { seededRng } from "./events.ts";
 import { gpShort, itemKeyOf, itemValue } from "./loot.ts";
 import { gameWeek } from "./schedule.ts";
+import { cardText, panelCard, type PanelTone, type ViewCard } from "./cards.ts";
 import { buttonRow, type Env, type Player } from "./types.ts";
 import { levelForXp } from "./xp.ts";
 
@@ -83,16 +84,37 @@ async function seedStock(env: Env, playerId: string): Promise<Map<string, number
 export interface Line {
   content: string;
   components?: unknown[];
+  card?: ViewCard;
 }
 
-export async function farmView(env: Env, player: Player, day: string, now: number, lead?: string): Promise<Line> {
+export async function farmView(
+  env: Env,
+  player: Player,
+  day: string,
+  now: number,
+  lead?: string,
+  /** A run just made: what came out of the ground, for the card. */
+  haul?: { items: { k: string; c: number }[]; xp: number }
+): Promise<Line> {
   const rows = new Map((await patchesOf(env, player.discord_id)).map((row) => [row.patch, row]));
   const level = levelForXp((await getSkills(env, player.discord_id)).farming ?? 0);
   const stock = await seedStock(env, player.discord_id);
   const lines = [...(lead ? [lead] : []), `🌱 **${player.username}'s farm** — ${SKILL_LABEL.farming} ${level}`];
+  const patchRows: { k?: string; l: string; r?: string; c?: PanelTone }[] = [];
   for (const patch of PATCHES) {
     const row = rows.get(patch.key);
     const crop = row ? cropFor(row.seed) : undefined;
+    if (!row || !crop) {
+      patchRows.push({ k: "seed_dibber", l: patch.name, r: "Empty", c: "dim" });
+    } else {
+      const minutes = Math.ceil((row.planted_at + crop.minutes * 60_000 - now) / 60_000);
+      patchRows.push({
+        k: itemKeyOf(crop.produce ?? crop.seed),
+        l: `${patch.name}: ${crop.seed.replace(/ seed$/, "")}`,
+        r: minutes <= 0 ? "Ready" : minutes >= 60 ? `${Math.floor(minutes / 60)}h ${minutes % 60}m` : `${minutes}m`,
+        c: minutes <= 0 ? "good" : "warn",
+      });
+    }
     if (!row || !crop) {
       const next = bestSeed(patch.key, level, stock, patch.seeds);
       lines.push(`**${patch.name}**: empty${next ? ` — a run plants ${next.seed.toLowerCase()}s` : " — no seed you can plant yet"}`);
@@ -113,6 +135,26 @@ export async function farmView(env: Env, player: Player, day: string, now: numbe
   return {
     content: lines.join("\n"),
     components: [buttonRow([{ label: ran ? "Run done today" : "Farm run", custom_id: "farm:run", style: 3, emoji: "🌱", disabled: ran }])],
+    card: panelCard(env, "farm", {
+      t: `${cardText(player.username)}'s farm`,
+      sub: haul ? `Farming ${level} - +${haul.xp.toLocaleString("en-US")} XP` : `Farming ${level}`,
+      big: haul?.items[0]?.k ?? "seed_dibber",
+      sections: [
+        ...(haul ? [{ s: "grid" as const, l: "Harvested:", items: haul.items }] : []),
+        { s: "rows", rows: patchRows },
+        {
+          s: "grid",
+          l: "Seeds:",
+          items: [...stock.entries()]
+            .map(([key, qty]) => ({ crop: cropFor(key)!, qty }))
+            .sort((a, b) => b.crop.level - a.crop.level)
+            .slice(0, 14)
+            .map(({ crop, qty }) => ({ k: itemKeyOf(crop.seed), c: qty })),
+        },
+      ],
+      // A patch's time left moves by the minute; the card is redrawn at most every ten.
+      d: `${day}T${Math.floor(now / 600_000)}`,
+    }),
   };
 }
 
@@ -132,6 +174,7 @@ export async function farmRun(env: Env, player: Player, day: string, now: number
   const stock = await seedStock(env, player.discord_id);
   const statements: D1PreparedStatement[] = [];
   const bits: string[] = [];
+  const harvested: { k: string; c: number }[] = [];
   let xp = 0;
   let worth = 0;
 
@@ -147,6 +190,7 @@ export async function farmRun(env: Env, player: Player, day: string, now: number
       worth += value;
       statements.push(bankDepositStatement(env, player.discord_id, key, harvest.qty, value, day));
       bits.push(`${harvest.qty}× ${crop.produce}`);
+      harvested.push({ k: key, c: harvest.qty });
     } else {
       bits.push(`checked the ${crop.seed.replace(/ seed$/, "").toLowerCase()} tree`);
     }
@@ -191,7 +235,7 @@ export async function farmRun(env: Env, player: Player, day: string, now: number
     `🌱 Farm run: ${bits.length > 0 ? `harvested ${bits.join(", ")}${worth > 0 ? ` (${gpShort(worth)}, banked)` : ""}` : "nothing was ready"}` +
     `${planted.length > 0 ? `; planted ${planted.join(", ")}` : ""}. +${gained.toLocaleString("en-US")} ${SKILL_LABEL.farming}` +
     (after > levelForXp(before) ? ` — **${SKILL_LABEL.farming} ${after}!**` : ".");
-  return farmView(env, { ...player, farm_day: day }, day, now, lead);
+  return farmView(env, { ...player, farm_day: day }, day, now, lead, { items: harvested, xp: gained });
 }
 
 /** Players with something grown and no run yet today, for the evening reminders. */
@@ -247,6 +291,19 @@ export async function tearsVisit(env: Env, player: Player, day: string, now: num
   ]);
   const after = levelForXp((skills[skill] ?? 0) + xp);
   return {
+    card: panelCard(env, "tears", {
+      t: "Tears of Guthix",
+      sub: `${cardText(player.username)} - ${tears} tears`,
+      big: "frozen_tear",
+      sections: [
+        { s: "stats", items: [{ l: "Tears", v: String(tears) }, { l: "Quest points", v: String(qp) }, { l: `${SKILL_LABEL[skill]} level`, v: String(after) }] },
+        {
+          s: "rows",
+          rows: [{ k: skill, l: SKILL_LABEL[skill], r: `+${xp.toLocaleString("en-US")} XP`, c: "good" }],
+        },
+      ],
+      d: day,
+    }),
     content:
       `💧 **Tears of Guthix**: ${tears} tears caught (the party's ${qp} quest points buy the time). ` +
       `+${xp.toLocaleString("en-US")} ${SKILL_LABEL[skill]}, your lowest skill` +

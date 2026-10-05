@@ -988,30 +988,76 @@ export async function finishClue(
 }
 
 /** The buttons under a receipt: the play hub. */
-export async function hubButtons(env: Env, player: Player, day: string): Promise<Button[]> {
-  const lamps = await (await import("./db")).unspentLamps(env, player.discord_id);
+/**
+ * What is waiting on the player, as buttons: lamps, a pick, a clue, proof for
+ * today's check-in. A receipt leads with these and a way into the menu.
+ */
+export async function waitingButtons(env: Env, player: Player, day: string): Promise<Button[]> {
+  const db = await import("./db");
+  const lamps = await db.unspentLamps(env, player.discord_id);
   const clue = await openClue(env, player.discord_id);
   const waiting = await waitingSpoils(env, player.discord_id);
+  const checkin = await db.getCheckinFor(env, player.discord_id, day);
   const buttons: Button[] = [];
   if (lamps.length > 0) buttons.push({ label: `Lamp (${lamps.length})`, custom_id: "lamp", style: 3, emoji: "🧞" });
   if (waiting.length > 0) buttons.push({ label: "Spoils", custom_id: "spoils", style: 3, emoji: "🎁" });
   if (clue) buttons.push({ label: "Clue", custom_id: "clue", emoji: "📜" });
-  buttons.push({ label: "Sheet", custom_id: `sheet:${day}`, emoji: "📋" });
-  buttons.push({ label: "Town", custom_id: "town", emoji: "🏘️" });
-  buttons.push({ label: "Log", custom_id: "log", emoji: "📗" });
-  buttons.push({ label: "Bank", custom_id: "bank", emoji: "💰" });
-  buttons.push({ label: "Gear", custom_id: "gear", emoji: "🛡️" });
-  buttons.push({ label: "Farm", custom_id: "farm", emoji: "🌱" });
-  buttons.push({ label: "Kingdom", custom_id: "kd", emoji: "👑" });
-  buttons.push({ label: "Exchange", custom_id: "ge", emoji: "⚖️" });
-  buttons.push({ label: "Diary", custom_id: "diary", emoji: "📘" });
-  buttons.push({ label: "Quest", custom_id: "quest", emoji: "🗺️" });
-  buttons.push({ label: "Boss", custom_id: "boss", emoji: "🐀" });
-  buttons.push({ label: "Task", custom_id: "task", emoji: "🗡️" });
-  buttons.push({ label: "Bingo", custom_id: "bingo", emoji: "🎯" });
-  buttons.push({ label: "Shop", custom_id: "shop", emoji: "🛒" });
-  buttons.push({ label: "Votes", custom_id: "vote", emoji: "🗳️" });
+  if (checkin && (!checkin.attachment_r2_key || !checkin.note)) {
+    const label = checkin.attachment_r2_key ? "Add a note" : checkin.note ? "Add a photo" : "Add a note or photo";
+    buttons.push({ label, custom_id: `cin:${day}`, emoji: checkin.attachment_r2_key ? "📝" : "📸" });
+  }
   return buttons;
+}
+
+/**
+ * The menu. Every command has a button somewhere under it, so nobody has to
+ * type one: what is waiting, then you, the adventure, the things between
+ * check-ins, and the group. Settings and the rarer things sit behind More.
+ */
+export const MENU: Button[][] = [
+  [
+    { label: "Sheet", custom_id: "sheet", emoji: "📋" },
+    { label: "Gear", custom_id: "gear", emoji: "🛡️" },
+    { label: "Bank", custom_id: "bank", emoji: "💰" },
+    { label: "Log", custom_id: "log", emoji: "📗" },
+    { label: "Diary", custom_id: "diary", emoji: "📘" },
+  ],
+  [
+    { label: "Task", custom_id: "task", emoji: "🗡️" },
+    { label: "Boss", custom_id: "boss", emoji: "🐀" },
+    { label: "Quest", custom_id: "quest", emoji: "🗺️" },
+    { label: "Raid", custom_id: "raid", emoji: "🐉" },
+    { label: "Bingo", custom_id: "bingo", emoji: "🎯" },
+  ],
+  [
+    { label: "Farm", custom_id: "farm", emoji: "🌱" },
+    { label: "Kingdom", custom_id: "kd", emoji: "👑" },
+    { label: "Tears", custom_id: "tears", emoji: "💧" },
+    { label: "Exchange", custom_id: "ge", emoji: "⚖️" },
+    { label: "Shop", custom_id: "shop", emoji: "🛒" },
+  ],
+  [
+    { label: "Town", custom_id: "town", emoji: "🏘️" },
+    { label: "Votes", custom_id: "vote", emoji: "🗳️" },
+    { label: "Standings", custom_id: "standings", emoji: "🏆" },
+    { label: "Relics", custom_id: "relics", emoji: "🔮" },
+    { label: "Help", custom_id: "help", emoji: "❓" },
+  ],
+];
+
+export const MENU_BUTTON: Button = { label: "Menu", custom_id: "hub", style: 2, emoji: "🏠" };
+const MORE_BUTTON: Button = { label: "More", custom_id: "hub:more", style: 2, emoji: "⚙️" };
+
+/**
+ * The menu as rows. `rows` is how many the message has room for (a receipt
+ * spends some on the pick and the quiz); when the whole menu does not fit, the
+ * first row carries a Menu button so nothing is ever out of reach.
+ */
+export async function hubRows(env: Env, player: Player, day: string, rows = 5, without: string[] = []): Promise<unknown[]> {
+  const waiting = (await waitingButtons(env, player, day)).filter((button) => !without.includes(button.custom_id));
+  const whole = rows >= MENU.length + 1;
+  const first = [...waiting.slice(0, 4), whole ? MORE_BUTTON : MENU_BUTTON];
+  return [buttonRow(first), ...MENU.map(buttonRow)].slice(0, Math.max(1, rows));
 }
 
 /** A quiz's three answers as buttons. */

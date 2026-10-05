@@ -19,7 +19,8 @@ import {
 } from "./config.ts";
 import {
   finishClue,
-  hubButtons,
+  hubRows,
+  MENU_BUTTON,
   lampValue,
   performCheckin,
   quizButtons,
@@ -50,6 +51,7 @@ import {
   logEventStatement,
   openClue,
   rememberEphemeralReply,
+  setEphemeralReplyMessage,
   setCheckinMessage,
   setState,
   spendLamp,
@@ -71,7 +73,12 @@ import {
   postMessageWithFile,
   replyTo,
 } from "./discord.ts";
-import { runCommand } from "./commands.ts";
+import { cardText, panelCard, viewCard, type ViewCard } from "./cards.ts";
+import { activeTask, taskName } from "./slayer.ts";
+import { bossFor, bossWeek } from "./bosses.ts";
+import { bankValue } from "./db.ts";
+import { gpShort } from "./loot.ts";
+import { checkinWith, expeditionCommand, freezeCommand, helpCommand, leaveCommand, runCommand, standingsCommand } from "./commands.ts";
 import { playersRoleId, setPing } from "./roles.ts";
 import { dailyThread, refreshDailyPost } from "./digest.ts";
 import { addDays, daysBetween, gameDay, gameWeek, parseHour } from "./schedule.ts";
@@ -88,13 +95,13 @@ import {
 } from "./sheet.ts";
 import { getSpoils, openSpoils, spoilsButtons, spoilsView, optionsOf, type Opened } from "./spoils.ts";
 import { geBuy, geMenu } from "./ge.ts";
-import { GEAR_DEFS, gearCardSlots, gearDef, gearView, gearWear, ownedGear } from "./gear.ts";
-import { farmRun, farmView } from "./farm.ts";
+import { GEAR_DEFS, gearCardSlots, gearCatalogue, gearChase, gearDef, gearView, gearWear, ownedGear } from "./gear.ts";
+import { farmRun, farmView, tearsVisit } from "./farm.ts";
 import { bossView } from "./bosses.ts";
 import { personalTodo, todoBlock } from "./todo.ts";
-import { kingdomAssign, kingdomCollect, kingdomFund, kingdomView } from "./kingdom.ts";
+import { kingdomAssign, kingdomCollect, kingdomFund, kingdomMove, kingdomSplit, kingdomView } from "./kingdom.ts";
 import { armourFor, weaponFor } from "./combat.ts";
-import { KINGDOM_JOBS, KINGDOM_SUBJECTS } from "./config.ts";
+import { EXPEDITION_MAX_WEEKS, EXPEDITION_MIN_WEEKS, KINGDOM_JOBS, KINGDOM_SUBJECTS, MAX_NOTE_LENGTH } from "./config.ts";
 import { currentTier, diaryFor, diaryText } from "./diary.ts";
 import { isLevelMilestone } from "./xp.ts";
 import { chooseMaster, spendPoints, taskView } from "./slayer.ts";
@@ -114,7 +121,10 @@ import {
   doRepair,
   doUpgrade,
   doVote,
+  raidPropose,
+  raidStatus,
   recruitMenu,
+  relicsView,
   repairMenu,
   townView,
   upgradeMenu,
@@ -124,7 +134,7 @@ import {
 import { getRelics } from "./relics.ts";
 import { ACTS, ACT_WEEKS, LOOT_CARD_CELLS, TREASURE_SEEKER_MULTIPLIER } from "./config.ts";
 import { bankView } from "./bank.ts";
-import { questView } from "./quests.ts";
+import { questLog, questView } from "./quests.ts";
 import { bingoLines, bingoView, evaluateBingo } from "./bingo.ts";
 import { shopMenu, shopPress } from "./shop.ts";
 import { actForWeek, campaignWeek } from "./schedule.ts";
@@ -135,6 +145,7 @@ export function actOf(env: Env, day: string): number {
 import {
   buttonRow,
   buttonRows,
+  selectRow,
   EPHEMERAL,
   InteractionResponseType,
   InteractionType,
@@ -142,6 +153,7 @@ import {
   type DiscordUser,
   type Env,
   type Interaction,
+  type InteractionComponent,
   type Player,
 } from "./types.ts";
 import { levelForXp } from "./xp.ts";
@@ -158,6 +170,57 @@ export interface Ephemeral {
   scope?: string;
   /** Rewrite the ephemeral the button is on, rather than reply. */
   update?: boolean;
+  /** The view's picture. It rides on the answer if it is already drawn, and follows it if not. */
+  card?: ViewCard;
+}
+
+/**
+ * A card still to be drawn for an answer already given. The answer went out
+ * in text; when the picture is ready the same message is edited to carry it.
+ * `messageId` is null while the message is the one this interaction's own
+ * response creates, which only handleInTime knows how it was delivered.
+ */
+interface CardJob {
+  card: ViewCard;
+  data: { content: string; flags: number; components: unknown[]; embeds: unknown[] };
+  appId: string;
+  token: string;
+  messageId: string | null;
+  /** The edit has already landed, so the picture need not wait for it. */
+  settled: boolean;
+  userId: string;
+  stamp: string;
+}
+
+const cardJobs = new WeakMap<Interaction, CardJob>();
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** How long a fresh answer is given to reach Discord before its picture is edited in. */
+const CARD_SETTLE_MS = 750;
+
+/**
+ * Draws the card and edits it onto the answer. A player who has already moved
+ * on to another view keeps that view: the stamp says whose answer is showing.
+ */
+async function runCard(env: Env, job: CardJob, messageId: string, wait: number): Promise<void> {
+  try {
+    const [url] = await Promise.all([job.card.render(), wait > 0 ? pause(wait) : null]);
+    if (!url) return;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if ((await getState(env, `view:${job.userId}`)) !== job.stamp) return;
+      const edited = await editInteractionReply(
+        env,
+        job.appId,
+        job.token,
+        { ...job.data, embeds: [...job.data.embeds, { color: ACCENT, image: { url } }] },
+        messageId
+      );
+      if (edited) return;
+      await pause(500);
+    }
+  } catch (error) {
+    await logToDiscord(env, `View card failed: ${String(error)}`);
+  }
 }
 
 export type Answer = Ephemeral | Response;
@@ -186,8 +249,21 @@ async function deliver(
     components: answer.components ?? [],
     embeds: answer.embeds ?? [],
   };
+  const userId = (interaction.member?.user ?? interaction.user)?.id;
+
+  // A card that is already drawn goes out with the answer. One that is not is
+  // drawn afterwards and edited in; the stamp lets that edit tell whether the
+  // player is still looking at this answer.
+  const drawn = answer.card ? await answer.card.cached().catch(() => null) : null;
+  if (drawn) data.embeds = [...data.embeds, { color: ACCENT, image: { url: drawn } }];
+  const pending = answer.card && !drawn && userId && interaction.token && interaction.application_id ? answer.card : null;
+  if (userId) await setState(env, `view:${userId}`, interaction.id).catch(() => undefined);
+  const later = (token: string, appId: string, messageId: string | null, settled: boolean) => {
+    if (pending && userId) cardJobs.set(interaction, { card: pending, data, appId, token, messageId, settled, userId, stamp: interaction.id });
+  };
 
   if (answer.update && interaction.message && (interaction.message.flags ?? 0) & EPHEMERAL) {
+    later(interaction.token, interaction.application_id, "@original", false);
     return Response.json({ type: InteractionResponseType.UPDATE_MESSAGE, data });
   }
 
@@ -196,7 +272,6 @@ async function deliver(
     data,
   });
 
-  const userId = (interaction.member?.user ?? interaction.user)?.id;
   const key = answer.scope ?? interaction.data?.name ?? interaction.message?.id;
   if (!userId || !key || !interaction.token || !interaction.application_id) return fresh;
 
@@ -207,14 +282,22 @@ async function deliver(
   if (interaction.type === InteractionType.MESSAGE_COMPONENT) {
     const existing = await getEphemeralReply(env, key, userId);
     if (existing && now - existing.created_at < EDIT_WINDOW) {
-      const edited = await editInteractionReply(env, existing.application_id, existing.token, data);
+      const edited = await editInteractionReply(
+        env,
+        existing.application_id,
+        existing.token,
+        data,
+        existing.message_id || "@original"
+      );
       if (edited) {
+        later(existing.token, existing.application_id, existing.message_id || "@original", true);
         return Response.json({ type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE });
       }
     }
   }
 
   await rememberEphemeralReply(env, key, userId, interaction.application_id, interaction.token, now);
+  later(interaction.token, interaction.application_id, null, false);
   return fresh;
 }
 
@@ -233,7 +316,43 @@ export async function handleInteraction(
 ): Promise<Response> {
   const now = Date.now();
   const answer = await route(env, ctx, interaction, now);
-  return answer instanceof Response ? answer : deliver(env, now, interaction, answer);
+  return answer instanceof Response ? answer : deliver(env, now, interaction, withMenu(answer));
+}
+
+/** A command's answer, given from a button: it rewrites the player's running reply instead of adding a message. */
+async function inPlace(answer: Promise<Answer>): Promise<Answer> {
+  const settled = await answer;
+  return settled instanceof Response ? settled : { ...settled, scope: "ci" };
+}
+
+/** Every custom_id on a message's rows. */
+function customIds(components: unknown[]): string[] {
+  return (components as { components?: { custom_id?: string }[] }[]).flatMap((row) =>
+    (row.components ?? []).map((component) => component.custom_id ?? "")
+  );
+}
+
+/**
+ * A view replaces the menu it was opened from, so every answer that does not
+ * already lead somewhere gets a Menu button: nobody should have to type a
+ * command to get back. Refusals that ask for a join or a check-in are left
+ * alone; the button on them is the way forward.
+ */
+export function withMenu(answer: Ephemeral): Ephemeral {
+  const rows = [...(answer.components ?? [])] as { type?: number; components?: { type?: number }[] }[];
+  const ids = customIds(rows);
+  if (ids.some((id) => id === "hub" || id.startsWith("hub:") || id === "join" || id.startsWith("join:") || id.startsWith("ci:"))) return answer;
+  const menu = buttonRow([MENU_BUTTON]).components[0];
+  const last = rows[rows.length - 1];
+  // Room on the last row of buttons: sit there. Otherwise a row of its own, if there is one to spare.
+  if (last && (last.components ?? []).length < 5 && (last.components ?? []).every((component) => component.type === 2)) {
+    rows[rows.length - 1] = { ...last, components: [...(last.components ?? []), menu] };
+  } else if (rows.length < 5) {
+    rows.push({ type: 1, components: [menu] });
+  } else {
+    return answer;
+  }
+  return { ...answer, components: rows };
 }
 
 /**
@@ -276,9 +395,10 @@ export async function handleInTime(
 ): Promise<Response> {
   if (interaction.type === InteractionType.PING) return handleInteraction(env, ctx, interaction);
 
-  // Test seam: wrangler.test.toml names one command to hold back, so the
-  // harness can watch the late path work.
-  const slow = env.SLOW_COMMAND && interaction.data?.name === env.SLOW_COMMAND;
+  // Test seam: wrangler.test.toml names commands and buttons to hold back, so
+  // the harness can watch the late path work.
+  const held = (env.SLOW_COMMAND ?? "").split(",").filter(Boolean);
+  const slow = held.includes(interaction.data?.name ?? "") || held.includes((interaction.data?.custom_id ?? "").split(":")[0]);
   const work = (slow ? new Promise((r) => setTimeout(r, ACK_BUDGET_MS + 500)) : Promise.resolve()).then(() =>
     handleInteraction(env, ctx, interaction)
   );
@@ -290,13 +410,19 @@ export async function handleInTime(
   const first = await Promise.race([work, late]);
   if (first !== "late") {
     clearTimeout(timer);
+    const job = cardJobs.get(interaction);
+    if (job) ctx.waitUntil(runCard(env, job, job.messageId ?? "@original", job.settled ? 0 : CARD_SETTLE_MS));
     return first;
   }
 
   const isButton = interaction.type === InteractionType.MESSAGE_COMPONENT;
   ctx.waitUntil(
     work
-      .then((response) => deliverLate(env, interaction, isButton, response))
+      .then(async (response) => {
+        const messageId = await deliverLate(env, interaction, isButton, response);
+        const job = cardJobs.get(interaction);
+        if (job) await runCard(env, job, job.messageId ?? messageId, 0);
+      })
       .catch(async (error) => {
         await logToDiscord(env, `Late delivery failed: ${String(error)}`);
         await tellFailure(env, interaction, isButton);
@@ -339,35 +465,44 @@ export async function finishLater(
   }
 }
 
-/** What the handler would have answered, sent through the token instead. */
+/**
+ * What the handler would have answered, sent through the token instead.
+ * Returns the id of the message the answer landed on, for a card to follow it.
+ */
 async function deliverLate(
   env: Env,
   interaction: Interaction,
   isButton: boolean,
   response: Response
-): Promise<void> {
+): Promise<string> {
   const body = (await response.json()) as { type: number; data?: unknown };
   const appId = interaction.application_id;
   const token = interaction.token;
-  if (!appId || !token) return;
+  if (!appId || !token) return "@original";
   switch (body.type) {
     case InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE:
       // A command's deferral put up a fresh ephemeral: fill it. A button was
       // only acknowledged: the reply is a new ephemeral under the same token.
-      if (isButton) await followUp(env, appId, token, body.data);
-      else await editInteractionReply(env, appId, token, body.data);
-      return;
+      if (isButton) {
+        // The follow-up is the running reply from here on. Its token's
+        // "@original" is the message the button was on, so the next click
+        // must edit the follow-up by id — or it rewrites the morning post.
+        const messageId = await followUp(env, appId, token, body.data);
+        if (messageId) await setEphemeralReplyMessage(env, token, messageId);
+        return messageId ?? "@original";
+      } else await editInteractionReply(env, appId, token, body.data);
+      return "@original";
     case InteractionResponseType.UPDATE_MESSAGE:
       await editInteractionReply(env, appId, token, body.data);
-      return;
+      return "@original";
     case InteractionResponseType.DEFERRED_UPDATE_MESSAGE:
       // The handler already edited an earlier running reply. A command's
       // placeholder would sit there "thinking" forever: take it down.
       if (!isButton) await deleteInteractionReply(env, appId, token);
-      return;
+      return "@original";
     default:
       // The handler deferred itself and owns the token from here.
-      return;
+      return "@original";
   }
 }
 
@@ -403,13 +538,34 @@ async function route(
     return runCommand(env, ctx, interaction, user, now);
   }
 
+  const day = today(env, now);
+  if (interaction.type === InteractionType.MODAL_SUBMIT) {
+    if ((interaction.data?.custom_id ?? "").startsWith("cin:")) {
+      const photoId = modalField(interaction, "photo")?.values?.[0];
+      return checkinWith(
+        env,
+        ctx,
+        interaction,
+        user,
+        day,
+        now,
+        modalField(interaction, "note")?.value ?? null,
+        (photoId && interaction.data?.resolved?.attachments?.[photoId]) || null,
+        "ci"
+      );
+    }
+    return reply("That form is not one of mine.");
+  }
+
   if (interaction.type !== InteractionType.MESSAGE_COMPONENT) {
     return reply("Unsupported interaction.");
   }
 
+  // A dropdown's pick is read as the rest of its id, so "gear:w" answering
+  // "abyssal_whip" is the button "gear:w:abyssal_whip".
   const customId = interaction.data?.custom_id ?? "";
-  const [prefix, a, b, c] = customId.split(":");
-  const day = today(env, now);
+  const picked = interaction.data?.values ?? [];
+  const [prefix, a, b, c] = [...customId.split(":"), ...picked];
 
   switch (prefix) {
     case "ci":
@@ -421,9 +577,35 @@ async function route(
     case "ping":
       return togglePing(env, user, a === "on", day);
     case "hub":
-      return hub(env, user, day);
+      return a === "more" ? more(env, user, day) : hub(env, user, day);
+    case "cin":
+      // The form has to be the answer itself: a modal cannot follow a deferral.
+      if (a !== day) return reply("That was yesterday's question. Today's is on the morning post.");
+      return checkinModal(day);
     case "sheet":
-      return sheetReply(env, ctx, interaction, user, user.id, day, now);
+      return sheetReply(env, ctx, interaction, user, a === "of" && b ? b : user.id, day, now);
+    case "tears":
+      return freshAction(env, user, day, (p) => tearsVisit(env, p, day, now));
+    case "standings":
+      return inPlace(standingsCommand(env, day));
+    case "relics":
+      return playerAction(env, user, day, () => relicsView(env));
+    case "help":
+      return inPlace(helpCommand(env));
+    case "rings":
+      return inPlace(freezeCommand(env, user, day));
+    case "raid":
+      return a === "propose"
+        ? freshAction(env, user, day, (p) => raidPropose(env, p, day, now))
+        : playerAction(env, user, day, () => raidStatus(env, day));
+    case "exp":
+      return inPlace(expedition(env, ctx, user, Number(a), b === "yes", day));
+    case "leave":
+      if (a === "yes") return inPlace(leaveCommand(env, ctx, user, day));
+      return playerAction(env, user, day, async () => ({
+        content: "Retire from the campaign? Your levels and your sheet are kept, and joining again picks up where you left off.",
+        components: [buttonRow([{ label: "Yes, retire", custom_id: "leave:yes", style: 4 }, MENU_BUTTON])],
+      }));
     case "share":
       return share(env, ctx, user, a, b, day);
     case "lamp":
@@ -450,16 +632,25 @@ async function route(
       return a
         ? freshAction(env, user, day, async (p) => {
             const levels = levelsOf(await getSkills(env, p.discord_id), levelForXp);
-            if (a === "master") return { content: await chooseMaster(env, p, b ?? "", levels, combatLevel(levels)) };
-            return { content: await spendPoints(env, p, a, levels, combatLevel(levels), day, now) };
+            // The answer leads the task view, so the next thing to press is under it.
+            const line =
+              a === "master"
+                ? await chooseMaster(env, p, b ?? "", levels, combatLevel(levels))
+                : await spendPoints(env, p, a, levels, combatLevel(levels), day, now);
+            const view = await taskView(env, (await getPlayer(env, p.discord_id)) ?? p);
+            return { content: `${line}\n\n${view.content}`.slice(0, 1990), components: view.components, card: view.card };
           })
         : playerAction(env, user, day, (p) => taskView(env, p));
     case "gear":
       if (a === "show") return gearShow(env, ctx, interaction, user, day);
-      if (a === "w") {
-        return freshAction(env, user, day, async (p) => gearWear(env, p, levelsOf(await getSkills(env, p.discord_id), levelForXp), b ?? ""));
+      if (/^w\d*$/.test(a ?? "")) {
+        return freshAction(env, user, day, async (p) => geared(env, p, day, await gearWear(env, p, levelsOf(await getSkills(env, p.discord_id), levelForXp), b ?? "")));
       }
-      return playerAction(env, user, day, async (p) => gearView(env, p, levelsOf(await getSkills(env, p.discord_id), levelForXp)));
+      if (a === "c") {
+        return freshAction(env, user, day, async (p) => geared(env, p, day, await gearChase(env, p, levelsOf(await getSkills(env, p.discord_id), levelForXp), b ?? "")));
+      }
+      if (a === "cat") return playerAction(env, user, day, (p) => gearCatalogue(env, p, b ?? ""));
+      return playerAction(env, user, day, async (p) => geared(env, p, day, await gearView(env, p, levelsOf(await getSkills(env, p.discord_id), levelForXp))));
     case "boss":
       return playerAction(env, user, day, () => bossView(env, day));
     case "todo":
@@ -473,6 +664,8 @@ async function route(
     case "kd":
       if (a === "collect") return freshAction(env, user, day, (p) => kingdomCollect(env, p, day, now));
       if (a === "dep") return freshAction(env, user, day, (p) => kingdomFund(env, p, Number(b), day, now));
+      if (a === "split") return freshAction(env, user, day, (p) => kingdomSplit(env, p, [b, c, ...picked.slice(2)].filter(Boolean), day));
+      if (a === "add") return freshAction(env, user, day, (p) => kingdomMove(env, p, b ?? "", day));
       if (a === "job" && KINGDOM_JOBS.some((job) => job.key === b)) {
         return freshAction(env, user, day, (p) => kingdomAssign(env, p, { [b]: KINGDOM_SUBJECTS }, day));
       }
@@ -502,7 +695,7 @@ async function route(
     case "diary":
       return diaryReply(env, ctx, interaction, user, day);
     case "quest":
-      return playerAction(env, user, day, () => questView(env, day));
+      return playerAction(env, user, day, () => (a === "log" ? questLog(env) : questView(env, day)));
     case "vf":
       return verify(env, ctx, user, Number(a), day, now);
     case "quiz":
@@ -635,7 +828,7 @@ export async function runCheckin(
 ): Promise<Ephemeral> {
   const outcome = await performCheckin(env, player, day, now, input);
   if (!outcome.ok) {
-    return reply(outcome.reason, { scope, components: buttonRows(await hubButtons(env, player, day)) });
+    return reply(outcome.reason, { scope, components: await hubRows(env, player, day) });
   }
   ctx.waitUntil(postCheckinLine(env, player, day, outcome, input));
   return receiptReply(env, player, day, outcome);
@@ -651,9 +844,8 @@ export async function receiptReply(
   if (outcome.quiz) components.push(quizButtons(outcome.checkinId, outcome.quiz.index));
   // The pick sits above the hub: it is the one thing the receipt asks for.
   if (outcome.spoils) components.push(buttonRow(spoilsButtons(outcome.spoils.id, outcome.spoils.options)));
-  // The pick has its own row, so the hub does not need a Spoils button under it.
-  const hubRows = (await hubButtons(env, player, day)).filter((button) => !(outcome.spoils && button.custom_id === "spoils"));
-  components.push(...buttonRows(hubRows).slice(0, 5 - components.length));
+  // The pick has its own row, so the menu does not need a Spoils button under it.
+  components.push(...(await hubRows(env, player, day, 5 - components.length, outcome.spoils ? ["spoils"] : [])));
   // The session itself is in the day's thread; the receipt keeps what only
   // the player can act on.
   const threadId = await dailyThread(env, day);
@@ -873,13 +1065,16 @@ async function togglePing(env: Env, user: DiscordUser, on: boolean, day: string)
   const ok = await setPing(env, user.id, on);
   await updatePlayer(env, user.id, { ping_opt_in: on ? 1 : 0 });
   if (!ok) return reply("Could not change the role — the bot may be missing Manage Roles. Your preference is saved.");
-  return reply(on ? "You will be pinged on the morning post and Sunday's last call. Nowhere else." : "No more pings.");
+  return reply(on ? "You will be pinged on the morning post and Sunday's last call. Nowhere else." : "No more pings.", {
+    components: [buttonRow([MENU_BUTTON, { label: "Settings", custom_id: "hub:more", style: 2, emoji: "⚙️" }])],
+  });
 }
 
 // ── The hub ────────────────────────────────────────────────────────
 
 export async function hub(env: Env, user: DiscordUser, day: string): Promise<Ephemeral> {
-  const gate = await requireFresh(env, user, day);
+  // The menu opens for any player; what needs a recent check-in says so when pressed.
+  const gate = await requirePlayer(env, user, day);
   if ("refusal" in gate) return gate.refusal;
   const { player } = gate;
   const lamps = await unspentLamps(env, player.discord_id);
@@ -887,18 +1082,177 @@ export async function hub(env: Env, user: DiscordUser, day: string): Promise<Eph
   const lines = [`**${escapeMarkdown(player.username)}** — what would you like to do?`];
   if (lamps.length > 0) lines.push(`🧞 ${lamps.length} lamp${lamps.length === 1 ? "" : "s"} to rub.`);
   if (clue) lines.push(`📜 A clue in hand — ${remainingSteps(clue).length} step${remainingSteps(clue).length === 1 ? "" : "s"} left.`);
-  lines.push(`Combat style: ${STYLE_LABEL[player.combat_style]}.`);
+  if (!isFresh(player, day)) lines.push(`Most of this needs a check-in in the last ${FRESH_WINDOW_DAYS} days. Looking is free.`);
   const todo = todoBlock(await personalTodo(env, player, day, Date.now()).catch(() => []));
   if (todo) lines.push("", todo);
+  return reply(lines.join("\n"), {
+    scope: "ci",
+    components: await hubRows(env, player, day),
+    card: await menuCard(env, player, day).catch(() => undefined),
+  });
+}
+
+/** The menu's card: where the week stands, at a glance. Two check-ins, the task, the boss. */
+async function menuCard(env: Env, player: Player, day: string): Promise<ViewCard> {
+  const levels = levelsOf(await getSkills(env, player.discord_id), levelForXp);
+  const week = gameWeek(day);
+  const done = await countCheckinsBetween(env, player.discord_id, week, day);
+  const task = await activeTask(env, player.discord_id);
+  const boss = bossFor(campaignWeek(day, env.CAMPAIGN_START));
+  const fight = boss ? await bossWeek(env, week) : null;
+  const left = fight ? Math.max(0, fight.hp - fight.damage) : 0;
+  return panelCard(env, "menu", {
+    t: cardText(player.username) + (player.title ? `, ${cardText(player.title)}` : ""),
+    sub: `${STYLE_LABEL[player.combat_style].split(" (")[0]} style`,
+    big: `${weaponFor(levels.attack).key}_scimitar`,
+    sections: [
+      {
+        s: "stats",
+        items: [
+          { l: "Combat", v: String(combatLevel(levels)) },
+          { l: "Form weeks", v: String(player.form_weeks) },
+          { l: "Slayer points", v: player.slayer_points.toLocaleString("en-US") },
+          { l: "Bank", v: gpShort(await bankValue(env, player.discord_id)).replace(/ gp$/, "") },
+        ],
+      },
+      { s: "bar", l: "Check-ins this week", h: Math.min(2, done), g: 2, r: `${done} of 2`, c: done >= 2 ? "good" : "warn" },
+      ...(task
+        ? [{ s: "bar" as const, l: `${taskName(task)[0].toUpperCase()}${taskName(task).slice(1)}`, h: task.kills, g: task.kills_needed, r: `${task.kills} / ${task.kills_needed} kills` }]
+        : []),
+      ...(boss
+        ? [
+            fight
+              ? {
+                  s: "bar" as const,
+                  l: boss.name,
+                  h: left,
+                  g: fight.hp,
+                  r: fight.status === "done" ? "Defeated" : `${left.toLocaleString("en-US")} / ${fight.hp.toLocaleString("en-US")}`,
+                  c: "bad" as const,
+                }
+              : { s: "bar" as const, l: boss.name, h: 1, g: 1, r: "Unfought", c: "bad" as const },
+          ]
+        : []),
+    ],
+    d: day,
+  });
+}
+
+/** The gear card, for the player's own eyes: the same picture Show off posts. */
+async function gearCard(env: Env, player: Player, day: string): Promise<ViewCard> {
+  const levels = levelsOf(await getSkills(env, player.discord_id), levelForXp);
+  const owned = await ownedGear(env, player);
+  const chase = gearDef(player.wishlist);
+  return viewCard(env, `gear/${player.discord_id}`, {
+    n: player.username,
+    slots: gearCardSlots(player, owned, { weapon: weaponFor(levels.attack).key, armour: armourFor(levels.defence).key }),
+    own: owned.size,
+    of: GEAR_DEFS.length,
+    ...(chase && !owned.has(chase.key) ? { chase: chase.item } : {}),
+    ...(player.title ? { ti: player.title } : {}),
+    cb: combatLevel(levels),
+    d: day,
+  });
+}
+
+/** A gear answer with the card under it, drawn from the player as they now stand. */
+async function geared(env: Env, player: Player, day: string, line: Line): Promise<Line> {
+  const current = (await getPlayer(env, player.discord_id)) ?? player;
+  return { ...line, card: await gearCard(env, current, day).catch(() => undefined) };
+}
+
+/** Settings and the rarer things: combat style, pings, Rings of Life, an expedition, retiring. */
+async function more(env: Env, user: DiscordUser, day: string, lead?: string): Promise<Ephemeral> {
+  const gate = await requirePlayer(env, user, day);
+  if ("refusal" in gate) return gate.refusal;
+  const { player } = gate;
   const styleButtons: Button[] = (["accurate", "aggressive", "defensive", "controlled"] as const).map((style) => ({
     label: STYLE_LABEL[style].split(" (")[0],
     custom_id: `style:${style}`,
     style: player.combat_style === style ? 1 : 2,
   }));
-  return reply(lines.join("\n"), {
+  const weeks = [];
+  for (let n = EXPEDITION_MIN_WEEKS; n <= EXPEDITION_MAX_WEEKS; n++) weeks.push({ label: `${n} week${n === 1 ? "" : "s"}`, value: String(n) });
+  return reply(
+    [
+      ...(lead ? [lead] : []),
+      `⚙️ **${escapeMarkdown(player.username)}** — settings`,
+      `Combat style: ${STYLE_LABEL[player.combat_style]}. Every check-in's combat XP goes where the style points.`,
+      `Pings: ${player.ping_opt_in ? "on (the morning post and Sunday's last call)" : "off"}.`,
+      "An expedition takes you out of the group maths for a holiday or an injury; any check-in brings you back early.",
+    ].join("\n"),
+    {
+      scope: "ci",
+      components: [
+        buttonRow(styleButtons),
+        buttonRow([
+          player.ping_opt_in
+            ? { label: "Stop pinging me", custom_id: "ping:off", style: 2, emoji: "🔕" }
+            : { label: "Ping me", custom_id: "ping:on", style: 2, emoji: "🔔" },
+          { label: "Rings of Life", custom_id: "rings", style: 2, emoji: "💍" },
+          { label: "My to-do", custom_id: "todo", style: 2, emoji: "📋" },
+          { label: "Help", custom_id: "help", style: 2, emoji: "❓" },
+        ]),
+        selectRow("exp", "Go on expedition for…", weeks),
+        buttonRow([MENU_BUTTON, { label: "Retire", custom_id: "leave", style: 4 }]),
+      ],
+    }
+  );
+}
+
+/** An expedition is asked for, then confirmed: a slip of the thumb should not bench anybody. */
+async function expedition(env: Env, ctx: ExecutionContext, user: DiscordUser, weeks: number, confirmed: boolean, day: string): Promise<Answer> {
+  if (confirmed) return expeditionCommand(env, ctx, user, day, weeks);
+  const gate = await requirePlayer(env, user, day);
+  if ("refusal" in gate) return gate.refusal;
+  if (!Number.isInteger(weeks) || weeks < EXPEDITION_MIN_WEEKS || weeks > EXPEDITION_MAX_WEEKS) {
+    return reply(`Expeditions run ${EXPEDITION_MIN_WEEKS} to ${EXPEDITION_MAX_WEEKS} weeks.`);
+  }
+  return reply(`Go on expedition for ${weeks} week${weeks === 1 ? "" : "s"}? You are out of the group maths until then; any check-in brings you back early.`, {
     scope: "ci",
-    components: [...buttonRows(await hubButtons(env, player, day)), buttonRow(styleButtons)],
+    components: [buttonRow([{ label: `Yes, ${weeks} week${weeks === 1 ? "" : "s"}`, custom_id: `exp:${weeks}:yes`, style: 3 }, MENU_BUTTON])],
   });
+}
+
+/**
+ * The check-in form: a note and a photo, both optional. It is what /checkin
+ * takes, behind a button. Labels (18) wrap a text input (4) and a file upload (19).
+ */
+function checkinModal(day: string): Response {
+  return Response.json({
+    type: InteractionResponseType.MODAL,
+    data: {
+      custom_id: `cin:${day}`,
+      title: "Check in",
+      components: [
+        {
+          type: 18,
+          label: "A note",
+          description: "One line, optional. It goes to the channel with your check-in.",
+          component: { type: 4, custom_id: "note", style: 1, required: false, max_length: MAX_NOTE_LENGTH },
+        },
+        {
+          type: 18,
+          label: "A photo or video",
+          description: "Optional proof. Friends can verify it, which pays you both.",
+          component: { type: 19, custom_id: "photo", min_values: 0, max_values: 1, required: false },
+        },
+      ],
+    },
+  });
+}
+
+/** One field of a submitted form, wherever the form nested it. */
+function modalField(interaction: Interaction, id: string): InteractionComponent | undefined {
+  const walk = (nodes: InteractionComponent[]): InteractionComponent | undefined => {
+    for (const node of nodes) {
+      if (node.custom_id === id) return node;
+      const found = walk([...(node.components ?? []), ...(node.component ? [node.component] : [])]);
+      if (found) return found;
+    }
+    return undefined;
+  };
+  return walk(interaction.data?.components ?? []);
 }
 
 async function setStyle(env: Env, user: DiscordUser, style: string, day: string): Promise<Answer> {
@@ -906,7 +1260,7 @@ async function setStyle(env: Env, user: DiscordUser, style: string, day: string)
   if ("refusal" in gate) return gate.refusal;
   if (!isCombatStyle(style)) return reply("That is not a combat style.");
   await updatePlayer(env, user.id, { combat_style: style });
-  return reply(`Combat style set to ${STYLE_LABEL[style]}. Every check-in's combat XP goes there from now.`, { scope: "ci" });
+  return more(env, user, day, `Combat style set to ${STYLE_LABEL[style]}.`);
 }
 
 // ── Sheet ──────────────────────────────────────────────────────────
@@ -965,8 +1319,8 @@ async function renderSheetInto(
       content: url ? "" : text,
       embeds: url ? [{ color: ACCENT, image: { url } }] : [],
       components: url
-        ? [buttonRow([{ label: "Share to channel", custom_id: `share:${target.discord_id}:${stamp}`, style: 2 }])]
-        : [],
+        ? [buttonRow([{ label: "Share to channel", custom_id: `share:${target.discord_id}:${stamp}`, style: 2 }, MENU_BUTTON])]
+        : [buttonRow([MENU_BUTTON])],
     });
   } catch (error) {
     await logToDiscord(env, `Sheet failed: ${String(error)}`);
@@ -1061,7 +1415,7 @@ async function rubLamp(
     const next = await lampMenu(env, user, day);
     if (!(next instanceof Response)) return { ...next, content: `${line}\n${next.content}` };
   }
-  return reply(line, { scope: "ci", components: buttonRows(await hubButtons(env, gate.player, day)) });
+  return reply(line, { scope: "ci", components: await hubRows(env, gate.player, day) });
 }
 
 // ── Spoils ─────────────────────────────────────────────────────────
@@ -1087,11 +1441,11 @@ async function pickSpoils(
   if (!opened) {
     return reply("Those spoils are already opened.", {
       scope: "ci",
-      components: buttonRows(await hubButtons(env, gate.player, day)),
+      components: await hubRows(env, gate.player, day),
     });
   }
   ctx.waitUntil(postSpoils(env, gate.player, row.id, opened, day));
-  return reply(opened.line, { scope: "ci", components: buttonRows(await hubButtons(env, gate.player, day)) });
+  return reply(opened.line, { scope: "ci", components: await hubRows(env, gate.player, day) });
 }
 
 /** The thread line and the card for a pick. Errors are logged; the pick stands. */
@@ -1216,6 +1570,7 @@ async function diaryReply(
       await editInteractionReply(env, interaction.application_id, interaction.token, {
         content: url ? "" : diaryText(escapeMarkdown(player.username), progress),
         embeds: url ? [{ color: ACCENT, image: { url } }] : [],
+        components: [buttonRow([MENU_BUTTON])],
       });
     })
   );
@@ -1250,7 +1605,7 @@ export async function freshAction(
   const gate = await requireFresh(env, user, day);
   if ("refusal" in gate) return gate.refusal;
   const line = await run(gate.player);
-  return reply(line.content, { scope: "ci", components: line.components });
+  return reply(line.content, { scope: "ci", components: line.components, card: line.card });
 }
 
 /** A view any player may open, fresh or not. */
@@ -1263,7 +1618,7 @@ export async function playerAction(
   const gate = await requirePlayer(env, user, day);
   if ("refusal" in gate) return gate.refusal;
   const line = await run(gate.player);
-  return reply(line.content, { scope: "ci", components: line.components });
+  return reply(line.content, { scope: "ci", components: line.components, card: line.card });
 }
 
 async function townReply(env: Env, user: DiscordUser, day: string, now: number): Promise<Answer> {
@@ -1478,6 +1833,6 @@ async function answerQuiz(
     right
       ? `✅ Right: ${question.o[question.a]}. +${QUIZ_RIGHT_XP} combat XP.`
       : `❌ It was "${question.o[question.a]}". The Quiz Master took ${QUIZ_WRONG_COINS} coins for the camp anyway.`,
-    { update: true, components: buttonRows(await hubButtons(env, gate.player, day)) }
+    { update: true, components: await hubRows(env, gate.player, day) }
   );
 }

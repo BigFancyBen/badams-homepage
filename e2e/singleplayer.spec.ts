@@ -107,6 +107,13 @@ test.describe('Single Player Commander', () => {
   });
 
   test('poison counter starts at 0', async ({ page }) => {
+    // The counters live in each player's "Cmdr / Poison" drawer, which starts
+    // shut — open all four before looking for them.
+    const drawers = page.getByRole('button', { name: /Cmdr \/ Poison/ });
+    await expect(drawers).toHaveCount(4);
+    for (const drawer of await drawers.all()) {
+      await drawer.click();
+    }
     await page.waitForSelector('[data-testid="poison-counter-0"]');
 
     // Verify all players start at 0 poison

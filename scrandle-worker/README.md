@@ -209,7 +209,7 @@ real hours and redeploy.
 Run once by hand to pull in the channel's history:
 
 ```bash
-curl "https://<your-worker>.workers.dev/backfill?secret=<BACKFILL_SECRET>&pages=5"
+curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/backfill?pages=5"
 ```
 
 ## Running it locally
@@ -239,7 +239,7 @@ trigger would.
 Put a real `DISCORD_BOT_TOKEN` in `.dev.vars`, start `npm run dev:local`, then:
 
 ```bash
-curl "http://localhost:8787/backfill?secret=dev-only-backfill-secret&pages=1"
+curl -H "Authorization: Bearer dev-only-backfill-secret" "http://localhost:8787/backfill?pages=1"
 ```
 
 That returns a JSON report — `scanned`, `stored`, `duplicates`,
@@ -539,10 +539,11 @@ after 18:00 UTC or with `/admin/post-matchup?weekly=1` on any day, and
 ### Forcing a post by hand
 
 There is no way to fire a cron on demand, so three admin routes stand in. All
-take `?secret=<BACKFILL_SECRET>`.
+take the secret as a header, `Authorization: Bearer <BACKFILL_SECRET>` — never in
+the URL, which is the part every log keeps.
 
 ```bash
-curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>"
+curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/admin/post-matchup"
 ```
 
 Posts an ordinary matchup now, ignoring the schedule. Refuses while one is
@@ -551,13 +552,13 @@ of refusing — it draws around whatever is already live, so no photograph
 appears in two matchups at once, and it does not claim the hour's slot.
 
 ```bash
-curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&place=1"
-curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&placement=1"
-curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&person=1"
-curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&drink=1"
-curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&caption=1"
-curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&foodround=1"
-curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&drinkround=1"
+curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/admin/post-matchup?place=1"
+curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/admin/post-matchup?placement=1"
+curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/admin/post-matchup?person=1"
+curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/admin/post-matchup?drink=1"
+curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/admin/post-matchup?caption=1"
+curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/admin/post-matchup?foodround=1"
+curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/admin/post-matchup?drinkround=1"
 ```
 
 Posts one of the other slots on demand — `place=1` for the five-photo place
@@ -576,7 +577,7 @@ The flags are read in the order they are listed in `index.ts`, and the first
 one set wins — passing two is a request nobody meant to make, not two posts.
 
 ```bash
-curl "https://<your-worker>.workers.dev/admin/post-matchup?secret=<BACKFILL_SECRET>&weekly=1"
+curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/admin/post-matchup?weekly=1"
 ```
 
 Draws a new weekly Scrandle now, publishes it and announces it. It replaces the
@@ -588,7 +589,7 @@ forced or not, because two open contests would ask people to write and to
 rank at the same time on two photographs in one channel.
 
 ```bash
-curl "https://<your-worker>.workers.dev/admin/open-vote?secret=<BACKFILL_SECRET>"
+curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/admin/open-vote"
 ```
 
 Ends a contest's writing phase early and puts the vote up. Its own route
@@ -597,7 +598,7 @@ separately — forcing them together would open a vote and shut it in the same
 request. Answers `{"opened":0}` when nothing is collecting captions.
 
 ```bash
-curl "https://<your-worker>.workers.dev/admin/close-matchup?secret=<BACKFILL_SECRET>"
+curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/admin/close-matchup"
 ```
 
 Closes everything open right now, ignoring `closes_at` — matchups, ranking
@@ -606,9 +607,9 @@ rounds and contests being voted on. Answers `{"closed":N,"rounds":N,
 alone; `/admin/open-vote` is what moves those on.
 
 ```bash
-curl "https://<your-worker>.workers.dev/admin/repair-card?secret=<BACKFILL_SECRET>&message=<discord message id>"
-curl "https://<your-worker>.workers.dev/admin/repair-card?secret=<BACKFILL_SECRET>&matchup=<id>"
-curl "https://<your-worker>.workers.dev/admin/repair-card?secret=<BACKFILL_SECRET>&round=<id>"
+curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/admin/repair-card?message=<discord message id>"
+curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/admin/repair-card?matchup=<id>"
+curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/admin/repair-card?round=<id>"
 ```
 
 Takes the Discord message id — the last segment of the message link, and the
@@ -634,7 +635,7 @@ standings, their votes count as a stranger's, and the one-vote-each rule stops
 applying to them. Two routes fix that.
 
 ```bash
-curl "https://<your-worker>.workers.dev/admin/players?secret=<BACKFILL_SECRET>&q=edwards"
+curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/admin/players?q=edwards"
 ```
 
 Everybody whose username matches, with the id and the counts beside it —
@@ -642,8 +643,8 @@ dishes, votes, ballots, contest entries. This is how you find the old id;
 `q=` is optional and lists everyone without it.
 
 ```bash
-curl "https://<your-worker>.workers.dev/admin/merge-player?secret=<BACKFILL_SECRET>&from=<old id>&to=<new id>"
-curl "https://<your-worker>.workers.dev/admin/merge-player?secret=<BACKFILL_SECRET>&from=<old id>&to=<new id>&confirm=1"
+curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/admin/merge-player?from=<old id>&to=<new id>"
+curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/admin/merge-player?from=<old id>&to=<new id>&confirm=1"
 ```
 
 The first is a dry run — it reports what would move and what would be dropped
@@ -660,6 +661,39 @@ running it twice is a no-op.
 
 ## Behaviour notes
 
+- **The bucket keeps a web-sized copy, not the original.** Nothing in the game
+  shows a photograph at the size the phone made it: the cards crop to a few
+  hundred pixels, the site's game to 960, and the original is still on
+  Discord, one jump link away. So after ingest a compress pass
+  (`src/compress.ts`) swaps each stored photograph for a copy with its long
+  edge at 1600 and JPEG quality 80, written over the original under the same
+  key. The same key is the point — every card, every URL already handed out
+  and the weekly puzzle's frozen file keep working without knowing.
+  The Worker cannot shrink anything on ten milliseconds of CPU, so like the
+  cards it asks the site: `/api/scrandle/compress`, signed, which fetches the
+  photograph from the bucket and hands back the smaller one.
+  Ingest itself is untouched and still stores what arrived, because the hash a
+  photograph is deduplicated on has to be the hash of what was posted. The
+  pass runs straight after it, newest first, so this hour's photographs are
+  small by the end of the tick and six of the backlog go with them. It runs
+  before the classifier, which is therefore sent the small copy.
+  The overwrite cannot be taken back, so it is guarded: the answer has to say
+  it is a JPEG, start like one, and be smaller than what is there. A
+  photograph the copy would not shrink is left alone and marked done. One the
+  site could not shrink gets three tries (migration 0013) and is then left as
+  it arrived. A failure that is the site's rather than the photograph's — the
+  route not deployed yet, the secret missing, the site down — stops the run
+  and is counted against nothing, because the Worker deploys before the site
+  does and three ticks of a missing route would otherwise write off the newest
+  photographs for good.
+  Two side effects, both wanted. The copy has its EXIF orientation applied and
+  its metadata dropped, and a phone photograph's metadata says where it was
+  taken. And a PNG becomes a JPEG under its `.png` key; readers go by the
+  object's content type, which is right.
+  What it costs: if somebody deletes their Discord message, the full-size
+  original is gone and the 1600-pixel copy is all there is.
+  Hurry the backlog with `/admin/compress?limit=25` in a loop (with the `Authorization` header); it
+  reports `savedBytes` and `remaining`.
 - **Only JPEG and PNG are ingested.** satori rasterizes those two; a WebP or
   GIF would ingest fine and then fail to render mid-matchup. They are dropped
   while the page is being read, before they can take up a slot in the ten-image
@@ -742,7 +776,7 @@ running it twice is a no-op.
   from thirteenth is a climb and not an appearance from nowhere. "Past" is
   worked out, not assumed from the gap: a place gained because the chef above
   dropped out names nobody.
-- **The weekly Scrandle is a file.** Once a week the Worker draws ten pairs of
+- **The weekly Scrandle is a file.** Twice a week the Worker draws ten pairs of
   voted-on plates, writes them to `weekly/<n>.json` and `weekly/current.json`
   in the public bucket, and posts a link. The page at `/scrandle/play` reads
   `current.json` and nothing else — it never talks to the Worker or to D1.
@@ -761,7 +795,8 @@ running it twice is a no-op.
   the channel preferred is not a question. Under five drawable pairs it posts
   nothing.
   It is gated like the standings rather than like the rounds: any tick on
-  `WEEKLY_WEEKDAY` at or after `WEEKLY_HOUR_UTC`, once six days have passed.
+  one of the `WEEKLY_WEEKDAY` days at or after `WEEKLY_HOUR_UTC`, once per day
+  — Sunday and Wednesday. It kept the name from when it was one a week.
   The order is publish, announce, record, and a puzzle is read back from its
   numbered file if it is already there — so a tick that published and then
   failed to post announces the same puzzle an hour later instead of drawing a
@@ -1166,7 +1201,7 @@ running it twice is a no-op.
   and a better one than the middle. A box the model fails to draw becomes the
   centre of the frame rather than a null, so the row leaves the queue instead
   of coming back every tick on a call that succeeded. Hurry the backfill with
-  `/admin/classify?secret=…&limit=20` in a loop; it reports `remaining`.
+  `/admin/classify?limit=20` in a loop; it reports `remaining`.
 
   Handing satori a tile-sized JPEG rather than a multi-megapixel original also
   takes most of the rasterizing out of a render, which is where the seconds
@@ -1204,14 +1239,26 @@ Check this before raising a cadence or adding something that shows photographs.
 | --- | --- | --- |
 | 5,000 image transformations a month | Vercel Hobby, site-wide | Nothing in Scrandle. See below. |
 | 10ms CPU per invocation | Workers Free | Every tick. It is why cards are rendered on Vercel. |
-| 50 subrequests per invocation | Workers Free | Ingest downloads, classifier calls, Discord posts, card renders. |
+| 50 subrequests per invocation | Workers Free | Ingest downloads, classifier calls, Discord posts, card renders, six compress calls. |
+| 10 GB stored | R2 free tier | Every photograph in the catalog. See below. |
+
+**Bucket storage.** The bucket used to hold every photograph as the phone made
+it. Twenty sampled from the live catalog on 4 October 2026 averaged 1.67 MB,
+the largest 9.8 MB, which puts a thousand photographs somewhere under 2 GB of
+the 10 and growing with every dinner. It now holds a web-sized copy instead —
+those same twenty came to 209 KB each, an eighth of the size. See **The bucket
+keeps a web-sized copy, not the original**.
 
 **Image transformations.** Next's image optimizer makes a separate copy of a
 photograph for every screen width that asks, and each copy is one
-transformation. The allowance is shared with the rest of the site — the card
-grids in tutor-helper and token-helper spend it too — and going over does not
-cost money, it breaks things: new images answer 402 and show their alt text
-until the window rolls over, everywhere.
+transformation. The allowance is shared with the rest of the site, and going
+over does not cost money, it breaks things: new images answer 402 and show
+their alt text until the window rolls over, everywhere. The card grids in
+tutor-helper and token-helper and the hero images in dota-randomizer used to
+spend it too — a deck search is hundreds of distinct cards — and are now
+`unoptimized`, since Scryfall and Valve already serve them at a sensible size.
+What still goes through the optimizer is the handful of the site's own static
+images.
 
 The weekly game first shipped on the optimizer. Twenty photographs a puzzle at
 five or six widths each was an estimated tenth of the allowance a month at one
@@ -1229,8 +1276,8 @@ Usage → Image Optimization.
 **How often the weekly game can reset** is therefore not an image question any
 more. What limits it is the catalog — a puzzle spends twenty voted-on plates,
 and once the backlog has been swept the pool grows by about one a day — and
-the channel, which gets a bot post per reset. Twice a week is comfortable;
-daily repeats plates about monthly.
+the channel, which gets a bot post per reset. It runs twice a week, which is
+comfortable on both; daily would repeat plates about monthly.
 
 ## Worth verifying before scaling the per-tick cap
 
