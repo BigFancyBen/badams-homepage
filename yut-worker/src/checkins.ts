@@ -1002,7 +1002,10 @@ export async function waitingButtons(env: Env, player: Player, day: string): Pro
   if (lamps.length > 0) buttons.push({ label: `Lamp (${lamps.length})`, custom_id: "lamp", style: 3, emoji: "🧞" });
   if (waiting.length > 0) buttons.push({ label: "Spoils", custom_id: "spoils", style: 3, emoji: "🎁" });
   if (clue) buttons.push({ label: "Clue", custom_id: "clue", emoji: "📜" });
-  if (checkin && !checkin.attachment_r2_key) buttons.push({ label: "Add a photo", custom_id: `cin:${day}`, emoji: "📸" });
+  if (checkin && (!checkin.attachment_r2_key || !checkin.note)) {
+    const label = checkin.attachment_r2_key ? "Add a note" : checkin.note ? "Add a photo" : "Add a note or photo";
+    buttons.push({ label, custom_id: `cin:${day}`, emoji: checkin.attachment_r2_key ? "📝" : "📸" });
+  }
   return buttons;
 }
 
