@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { motion, AnimatePresence } from "motion/react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { motion, AnimatePresence, useInView } from "motion/react";
 import Image from "next/image";
 import { useReducedMotion } from "../../hooks/useReducedMotion";
 
@@ -21,8 +21,6 @@ interface ShotGalleryProps {
   autoPlayDelay?: number;
   /** CSS aspect-ratio of the frame. The stills are cropped to cover it. */
   aspect?: string;
-  sizes?: string;
-  priority?: boolean;
 }
 
 /** How long a loop holds the frame before the gallery moves on. */
@@ -31,6 +29,11 @@ const VIDEO_HOLD_MS = 10000;
 /**
  * A 16:9 still with a row of label chips under it. Hovering or focusing a chip
  * previews that shot, clicking one (or the image halves) stops the autoplay.
+ *
+ * The stills are served as the files they are (`unoptimized`): they are
+ * already WebP at display size, and every optimizer variant would count
+ * against the site's monthly image transformations. Nothing rotates and no
+ * loop is fetched until the gallery is on screen.
  */
 export function ShotGallery({
   shots,
@@ -38,13 +41,13 @@ export function ShotGallery({
   autoPlayInterval = 5000,
   autoPlayDelay = 0,
   aspect = "16 / 9",
-  sizes = "(max-width: 768px) 100vw, 50vw",
-  priority = false,
 }: ShotGalleryProps) {
   const [current, setCurrent] = useState(0);
   const [preview, setPreview] = useState<number | null>(null);
   const [userClicked, setUserClicked] = useState(false);
   const reducedMotion = useReducedMotion();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const inView = useInView(rootRef, { margin: "200px 0px" });
 
   const next = useCallback(() => {
     setCurrent((i) => (i + 1) % shots.length);
@@ -61,11 +64,11 @@ export function ShotGallery({
   }, [started, autoPlayDelay]);
 
   useEffect(() => {
-    if (!started || userClicked || preview !== null || reducedMotion || shots.length < 2) return;
+    if (!started || !inView || userClicked || preview !== null || reducedMotion || shots.length < 2) return;
     const hold = shots[current].video ? VIDEO_HOLD_MS : autoPlayInterval;
     const timeoutId = setTimeout(next, hold);
     return () => clearTimeout(timeoutId);
-  }, [started, userClicked, preview, reducedMotion, shots, current, next, autoPlayInterval]);
+  }, [started, inView, userClicked, preview, reducedMotion, shots, current, next, autoPlayInterval]);
 
   const select = (index: number) => {
     setUserClicked(true);
@@ -79,7 +82,7 @@ export function ShotGallery({
   };
 
   return (
-    <div className="flex flex-col gap-2 w-full">
+    <div ref={rootRef} className="flex flex-col gap-2 w-full">
       <div
         className="relative w-full overflow-hidden cursor-pointer bg-black"
         style={{ aspectRatio: aspect, border: "1px solid rgba(255,255,255,0.08)" }}
@@ -94,7 +97,7 @@ export function ShotGallery({
             exit={{ opacity: 0 }}
             transition={{ duration: reducedMotion ? 0 : 0.35 }}
           >
-            {shot.video && !reducedMotion ? (
+            {shot.video && !reducedMotion && inView ? (
               <video
                 src={shot.video}
                 poster={shot.src}
@@ -104,7 +107,7 @@ export function ShotGallery({
                 muted
                 loop
                 playsInline
-                preload="metadata"
+                preload="none"
               />
             ) : (
               <Image
@@ -112,8 +115,7 @@ export function ShotGallery({
                 alt={shot.alt}
                 fill
                 className="object-cover"
-                sizes={sizes}
-                priority={priority && active === 0}
+                unoptimized
               />
             )}
           </motion.div>

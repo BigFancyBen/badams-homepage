@@ -2,6 +2,15 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   images: {
+    /**
+     * The Hobby plan allows 5,000 image transformations a month, site-wide,
+     * and every (image, width) pair the optimizer serves is one. Fewer widths
+     * and a month-long cache keep the pages that still use it (/river, the
+     * card tools) well inside that. The homepage screenshots skip the
+     * optimizer altogether: they are committed at display size.
+     */
+    deviceSizes: [640, 828, 1200, 1920],
+    minimumCacheTTL: 2678400,
     remotePatterns: [
       {
         protocol: 'https',
@@ -40,6 +49,15 @@ const nextConfig: NextConfig = {
    */
   outputFileTracingIncludes: {
     '/api/yut/**': ['./app/api/yut/_assets/**'],
+  },
+  async headers() {
+    return [
+      {
+        /* The homepage loops. Not fingerprinted, so a day and no longer. */
+        source: '/:path*/loop.mp4',
+        headers: [{ key: 'Cache-Control', value: 'public, max-age=86400, stale-while-revalidate=604800' }],
+      },
+    ];
   },
   async rewrites() {
     return [

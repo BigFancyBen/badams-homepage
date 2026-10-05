@@ -124,8 +124,6 @@ export function BentoGrid() {
               shots={MFRS.shots}
               accentColor={ACCENT}
               autoPlayInterval={5000}
-              sizes="(max-width: 1024px) 100vw, 760px"
-              priority
             />
           </div>
           <div className="w-full lg:w-[38%] flex flex-col">
@@ -380,7 +378,7 @@ export function BentoGrid() {
             alt="FloatWise forecast table with hourly temperature, wind, and precipitation for eight Yellowstone River towns, plus the live river flow"
             fill
             className="object-cover"
-            sizes="(max-width: 768px) 100vw, 50vw"
+            unoptimized
           />
         </div>
       </BentoCard>
@@ -402,7 +400,7 @@ export function BentoGrid() {
             alt="Dota 2 Randomizer showing the hero and item wheels with Phantom Lancer and Urn of Shadows selected"
             fill
             className="object-cover"
-            sizes="(max-width: 768px) 100vw, 50vw"
+            unoptimized
           />
         </div>
       </BentoCard>
@@ -425,7 +423,7 @@ export function BentoGrid() {
               alt="IRLScape YouTube video thumbnail"
               fill
               className="object-cover"
-              sizes="(max-width: 768px) 100vw, 50vw"
+              unoptimized
             />
           </div>
         </BentoCard>

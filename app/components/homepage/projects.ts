@@ -211,8 +211,8 @@ export const SCRANBOT_MESSAGES: DiscordMessage[] = [
     image: {
       src: "/scranbot/01-matchup.webp",
       alt: "Bot card with two numbered food photos side by side, a Detroit-style pizza and fried chicken with fries, each with its name underneath and the matchup number in the corner",
-      width: 1200,
-      height: 630,
+      width: 800,
+      height: 420,
     },
     buttons: ["1", "2"],
   },
@@ -222,8 +222,8 @@ export const SCRANBOT_MESSAGES: DiscordMessage[] = [
     image: {
       src: "/scranbot/02-result.webp",
       alt: "Result card: the same two photos with vote shares of 67 and 33 percent, vote counts, and each cook's name, with the winner outlined in green and the loser dimmed",
-      width: 1200,
-      height: 630,
+      width: 800,
+      height: 420,
     },
   },
   {
@@ -233,8 +233,8 @@ export const SCRANBOT_MESSAGES: DiscordMessage[] = [
     image: {
       src: "/scranbot/03-ballot.webp",
       alt: "Ranking card with five numbered food photos in a grid under the header Rank the plates",
-      width: 1200,
-      height: 796,
+      width: 800,
+      height: 531,
     },
     buttons: ["1", "2", "3", "4", "5"],
   },
@@ -244,8 +244,8 @@ export const SCRANBOT_MESSAGES: DiscordMessage[] = [
     image: {
       src: "/scranbot/04-ballot-result.webp",
       alt: "The five photos in finishing order, from 1st to 5th, each with its rating change and the number of ballots in the corner",
-      width: 1200,
-      height: 796,
+      width: 800,
+      height: 531,
     },
   },
   {
@@ -254,8 +254,8 @@ export const SCRANBOT_MESSAGES: DiscordMessage[] = [
     image: {
       src: "/scranbot/05-standings.webp",
       alt: "Chef standings card: a ranked table with places gained or lost, a NEW tag, the rating, and the rating change for each cook",
-      width: 1200,
-      height: 600,
+      width: 800,
+      height: 400,
     },
   },
 ];
