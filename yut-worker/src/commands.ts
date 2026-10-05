@@ -23,6 +23,7 @@ import {
   getPlayers,
   joinPlayer,
   setCheckinMessage,
+  setCheckinNote,
   updatePlayer,
 } from "./db.ts";
 import { allowedMentions, editInteractionReply, escapeMarkdown, postMessage } from "./discord.ts";
@@ -365,53 +366,68 @@ export async function checkinWith(
 
   const note = (rawNote ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_NOTE_LENGTH) || null;
 
-  if (!attachment) {
-    return runCheckin(env, ctx, player, day, now, { note, attachment: null }, scope);
+  const kind = attachment ? attachmentKind(attachment) : null;
+  if (attachment) {
+    if (!kind) return reply("That file is not an image or a video.");
+    if (attachment.size > MAX_ATTACHMENT_BYTES) return reply("That file is too big — 25 MB is the cap.");
   }
 
-  const kind = attachmentKind(attachment);
-  if (!kind) return reply("That file is not an image or a video.");
-  if (attachment.size > MAX_ATTACHMENT_BYTES) return reply("That file is too big — 25 MB is the cap.");
-
-  // Already said Yes today: the photo becomes that check-in's proof.
+  // Already said Yes today: the note and the photo are added to that check-in.
   const existing = await getCheckinFor(env, user.id, day);
   if (existing) {
-    if (existing.attachment_r2_key) return reply("Today's check-in already carries proof.");
+    const proofFrom = attachment && kind && !existing.attachment_r2_key ? { attachment, kind } : null;
+    if (!proofFrom && (!note || existing.note)) {
+      if (attachment) return reply(`Today's check-in already carries proof${note ? " and a note" : ""}.`, { scope });
+      if (note) return reply("Today's check-in already has a note.", { scope });
+      return reply("You are already in for today. A note or a photo on `/checkin` is added to today's check-in.", { scope });
+    }
     ctx.waitUntil(
-      finishLater(env, interaction, "Attaching proof", async () => {
+      finishLater(env, interaction, proofFrom ? "Attaching proof" : "Adding a note", async () => {
         // The bytes come down from Discord's CDN once and go back up as the
         // bot's own attachment on the channel post; Discord keeps the file.
-        const file = await fetchAttachment(user.id, day, attachment);
-        const proof = { key: `discord:${attachment.id}`, url: attachment.url, kind, ...(file ? { file } : {}) };
-        await attachProof(env, existing.id, proof.key, proof.url, kind);
-        // The proof is attached either way; the channel line is the part that
+        const file = proofFrom ? await fetchAttachment(user.id, day, proofFrom.attachment) : null;
+        const proof = proofFrom
+          ? { key: `discord:${proofFrom.attachment.id}`, url: proofFrom.attachment.url, kind: proofFrom.kind, ...(file ? { file } : {}) }
+          : null;
+        if (proof) await attachProof(env, existing.id, proof.key, proof.url, proof.kind);
+        if (note) await setCheckinNote(env, existing.id, note);
+        // What was added is saved either way; the channel line is the part that
         // can fail (the bot may be locked out of the channel), and it says so.
         const posted = await postMedia(
           env,
-          `📸 **${escapeMarkdown(user.username)}** added proof to today's check-in.`,
+          proof
+            ? `📸 **${escapeMarkdown(user.username)}** added proof to today's check-in.`
+            : `📝 **${escapeMarkdown(user.username)}** added a note to today's check-in.`,
           proof,
           note,
-          [buttonRow([{ label: "Verify", custom_id: `vf:${existing.id}`, style: 3, emoji: "💪" }])],
+          proof ? [buttonRow([{ label: "Verify", custom_id: `vf:${existing.id}`, style: 3, emoji: "💪" }])] : [],
           await getState(env, `daily_post:${day}`)
         ).then(
           async (message) => {
-            // Verify edits "verified by …" into the message that carries the proof.
-            await setCheckinMessage(env, existing.id, message.id);
+            // Verify edits "verified by …" into the message that carries the proof;
+            // a note alone only takes that place when nothing holds it yet.
+            if (proof || !existing.message_id) await setCheckinMessage(env, existing.id, message.id);
             const url = message.attachments?.[0]?.url;
-            if (url) await attachProof(env, existing.id, proof.key, url, kind);
+            if (proof && url) await attachProof(env, existing.id, proof.key, url, proof.kind);
             return true;
           },
           () => false
         );
+        const done = proof ? "Proof attached" : "Note added";
+        const kept = !proof && attachment ? " Today's check-in already carried proof, so the photo was left out." : "";
         await editInteractionReply(env, interaction.application_id, interaction.token, {
           content: posted
-            ? "Proof attached. Friends have 72 hours to press Verify."
-            : "Proof attached, but the channel line could not be posted: the bot cannot write to the channel right now.",
+            ? `${done}.${proof ? " Friends have 72 hours to press Verify." : ""}${kept}`
+            : `${done}, but the channel line could not be posted: the bot cannot write to the channel right now.${kept}`,
           flags: EPHEMERAL,
         });
       })
     );
     return deferred();
+  }
+
+  if (!attachment || !kind) {
+    return runCheckin(env, ctx, player, day, now, { note, attachment: null }, scope);
   }
 
   // Mirroring the file first is a fetch, and a fetch does not fit inside

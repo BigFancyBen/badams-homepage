@@ -859,6 +859,11 @@ export async function answersOn(env: Env, day: string): Promise<{ player_id: str
 }
 
 /** Adds a photo or video to a check-in made without one. */
+/** A note written after the check-in. The first one stands. */
+export async function setCheckinNote(env: Env, checkinId: number, note: string): Promise<void> {
+  await env.DB.prepare("UPDATE checkins SET note = ? WHERE id = ? AND note IS NULL").bind(note, checkinId).run();
+}
+
 export async function attachProof(env: Env, checkinId: number, key: string, url: string, kind: "image" | "video"): Promise<void> {
   await env.DB.prepare("UPDATE checkins SET attachment_r2_key = ?, attachment_url = ?, attachment_kind = ? WHERE id = ?")
     .bind(key, url, kind, checkinId)

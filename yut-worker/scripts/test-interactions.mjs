@@ -351,6 +351,23 @@ const alicePost = mockLog().find((e) => e.id === aliceRow?.message_id);
 check("message_id points at the proof post", Boolean(alicePost) && alicePost.channel === CHANNEL && /added proof/.test(alicePost.body), { aliceRow, alicePost });
 check("the photo is re-uploaded to Discord as a real attachment, not linked", alicePost?.multipart === true && /name="files\[0\]"/.test(alicePost?.body ?? "") && !/image":\{"url"/.test(alicePost?.body ?? ""), alicePost);
 check("the check-in keeps Discord's attachment as its proof", /^discord:/.test(aliceRow?.attachment_r2_key ?? "") && /\/cdn\/att_/.test(aliceRow?.attachment_url ?? "") && aliceRow?.attachment_kind === "image", aliceRow);
+// A note after a Yes is added to the check-in too, and leaves the proof post as the one Verify edits.
+const bare = await command("checkin", [], alice);
+check("a bare /checkin after a Yes says what it can still take", bare.body?.type === 4 && /already in for today\. A note or a photo/.test(content(bare)), bare);
+const lateNote = await command("checkin", [{ name: "note", type: 3, value: "squats, added later" }], alice);
+const lateNoteToken = `tok${seq}`;
+check("a note after a Yes is deferred", lateNote.body?.type === 5, lateNote);
+const lateNoteEdit = await waitFor(
+  () => mockLog().find((e) => e.method === "PATCH" && e.url.includes(`/${lateNoteToken}/`) && /Note added\./.test(e.body)),
+  40
+);
+check("the note is added", Boolean(lateNoteEdit), lateNoteEdit);
+const lateNotePost = posts(CHANNEL).find((e) => /\*\*alice\*\* added a note/.test(e.body));
+check("and reaches the channel, quoted, with no Verify button", /> squats, added later/.test(lateNotePost?.body ?? "") && !/vf:/.test(lateNotePost?.body ?? ""), lateNotePost);
+const aliceNoted = (await sql(`SELECT note, message_id FROM checkins WHERE player_id = '${alice.user.id}'`))[0];
+check("the note is on the check-in and the proof post is still Verify's", aliceNoted?.note === "squats, added later" && aliceNoted?.message_id === aliceRow?.message_id, aliceNoted);
+const secondNote = await command("checkin", [{ name: "note", type: 3, value: "one more" }], alice);
+check("a second note is refused", /already has a note/.test(content(secondNote)), secondNote);
 const standings = await command("standings", [], bob);
 check("/standings lists the roster", /alice|bob/.test(content(standings)), standings);
 // The kills' drops went to the bank and onto the check-in row. (A Turael task can be ghosts or
