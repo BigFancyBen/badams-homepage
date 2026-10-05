@@ -153,13 +153,13 @@ function Gallery() {
       <div className="grid sm:grid-cols-2">
         <Shot
           src="/river/shot-cargo.jpg"
-          alt="Six otters paddling a raft with a wedding cake lashed aboard, the distance to the take-out on the sign above"
+          alt="Six otters paddling a raft with a wedding cake aboard, a tag above reading take-out 450 m, wedding cake 69%"
           className="aspect-[4/3]"
           sizes="(max-width: 640px) 100vw, 50vw"
         />
         <Shot
           src="/river/shot-takeout.jpg"
-          alt="A raft coming in to the take-out sign on a gravel beach, a beehive aboard"
+          alt="A raft with its cargo aboard coming in toward the take-out sign on a gravel beach, rubber ducks floating by"
           className="aspect-[4/3]"
           sizes="(max-width: 640px) 100vw, 50vw"
         />
