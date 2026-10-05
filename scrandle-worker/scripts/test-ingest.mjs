@@ -10,7 +10,8 @@
  * invariant the cursor arithmetic depends on across every budget.
  *
  * `retryWrite` exists because an hourly ingest died on `D1_ERROR: Network
- * connection lost`, which Cloudflare documents as "retry the operation".
+ * connection lost`, which Cloudflare documents as "retry the operation". The
+ * Discord read retry exists for the same reason one hop earlier.
  *
  * Node >= 22 strips the types from the imported .ts on the fly, so this needs
  * no build step and no test dependency.
@@ -18,6 +19,7 @@
 import assert from "node:assert/strict";
 import { takeWholeMessages } from "../src/batching.ts";
 import { retryWrite } from "../src/db.ts";
+import { fetchMessages, postMessage } from "../src/discord.ts";
 
 let failures = 0;
 function check(name, actual, expected) {
@@ -139,6 +141,65 @@ console.log("retryWrite");
   });
   check("stops after three attempts", calls, 3);
   check("rethrows the last failure", thrown?.message, "D1_ERROR: Network connection lost.");
+}
+
+// An hourly ingest died on `Discord GET /channels/…/messages → 503: upstream
+// connect error`, Discord's edge failing to reach the API behind it.
+console.log("Discord reads");
+{
+  const env = { DISCORD_API_BASE: "http://discord.test", DISCORD_CHANNEL_ID: "1" };
+  const realFetch = globalThis.fetch;
+  const page = [{ id: "2" }, { id: "1" }];
+  const edge503 = () =>
+    new Response("upstream connect error or disconnect/reset before headers", {
+      status: 503,
+    });
+
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls++;
+    return calls < 3 ? edge503() : Response.json(page);
+  };
+  const messages = await fetchMessages(env, null);
+  check("retries a 5xx read until it lands", calls, 3);
+  check("returns the page it finally got", messages.map((m) => m.id), ["1", "2"]);
+
+  calls = 0;
+  globalThis.fetch = async () => {
+    calls++;
+    if (calls === 1) throw new TypeError("Network connection lost.");
+    return Response.json(page);
+  };
+  await fetchMessages(env, null);
+  check("retries a read the network dropped", calls, 2);
+
+  // A bad token or a missing channel reads the same on every attempt.
+  calls = 0;
+  globalThis.fetch = async () => {
+    calls++;
+    return new Response("Missing Access", { status: 403 });
+  };
+  await assert.rejects(fetchMessages(env, null), /403/);
+  check("does not retry a 4xx", calls, 1);
+
+  calls = 0;
+  globalThis.fetch = async () => {
+    calls++;
+    return edge503();
+  };
+  await assert.rejects(fetchMessages(env, null), /→ 503: upstream connect error/);
+  check("stops after three attempts and reports the last", calls, 3);
+
+  // A POST that timed out may have posted; asking again could post it twice.
+  calls = 0;
+  globalThis.fetch = async () => {
+    calls++;
+    return edge503();
+  };
+  await assert.rejects(postMessage(env, { content: "hi" }), /503/);
+  check("never retries a write", calls, 1);
+
+  globalThis.fetch = realFetch;
 }
 
 console.log(failures === 0 ? "\nall pass" : `\n${failures} failing`);
