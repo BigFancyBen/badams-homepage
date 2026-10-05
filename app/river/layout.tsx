@@ -17,7 +17,7 @@ const plexMono = IBM_Plex_Mono({
 
 const title = "Middle Fork Rafting Simulator";
 const description =
-  "Multiplayer whitewater. You and your friends crew one boat down an endless, procedurally generated river canyon.";
+  "Multiplayer whitewater. You and your friends crew one boat down a procedurally generated river canyon, carrying a job's cargo to the take-out.";
 
 export const metadata: Metadata = {
   /* Discord unfurls these links in chat, so the card art has to resolve to an
@@ -30,7 +30,7 @@ export const metadata: Metadata = {
     description,
     type: "website",
     siteName: "benadams.dev",
-    images: [{ url: "/river/og.jpg", width: 1200, height: 630, alt: "A paddle raft dropping into a whitewater reach" }],
+    images: [{ url: "/river/og.jpg", width: 1200, height: 630, alt: "A paddle raft launching off a wave in a whitewater reach, an inner tube in the foreground" }],
   },
   twitter: {
     card: "summary_large_image",

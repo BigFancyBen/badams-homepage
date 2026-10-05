@@ -41,6 +41,16 @@ const nextConfig: NextConfig = {
    * instead, straight from a source that already serves them sized, which
    * leaves the optimizer with the finite set of files in /public.
    */
+  images: {
+    /**
+     * Every (image, width) pair the optimizer serves is one transformation.
+     * Fewer widths and a month-long cache keep the pages that still use it
+     * (/river) well inside the allowance. The homepage screenshots skip the
+     * optimizer altogether: they are committed at display size.
+     */
+    deviceSizes: [640, 828, 1200, 1920],
+    minimumCacheTTL: 2678400,
+  },
   /**
    * The Yut Hut render routes read RuneScape fonts and skill icons off disk.
    * The paths are literal strings so the tracer should find them on its own;
@@ -50,7 +60,14 @@ const nextConfig: NextConfig = {
     '/api/yut/**': ['./app/api/yut/_assets/**'],
   },
   async headers() {
-    return [{ source: "/:path*", headers: SECURITY_HEADERS }];
+    return [
+      { source: "/:path*", headers: SECURITY_HEADERS },
+      {
+        /* The homepage loops. Not fingerprinted, so a day and no longer. */
+        source: "/:path*/loop.mp4",
+        headers: [{ key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" }],
+      },
+    ];
   },
   async rewrites() {
     return [

@@ -35,7 +35,7 @@ function Hero({ code }: { code?: string }) {
     <section className="relative isolate min-h-[90svh] overflow-hidden">
       <Image
         src="/river/hero.jpg"
-        alt="A raft dropping into green water below a waterfall while a swimmer takes a throw rope"
+        alt="A flipped raft in the pour below a ledge, its crew in the water around it and one otter on a rock holding a rope out to the boat"
         fill
         priority
         sizes="100vw"
@@ -126,26 +126,40 @@ function Hero({ code }: { code?: string }) {
   );
 }
 
-/** Three screenshots, no captions. They carry the pitch. */
+/** Five screenshots, no captions. They carry the pitch. */
 function Gallery() {
   return (
     <section>
       <Shot
         src="/river/shot-wrap.jpg"
-        alt="Two otters on a rock holding a rope out to a raft pinned in the current"
+        alt="Two otters on a rock holding a rope out to a raft pinned in the current, a golden rubber duck floating past"
         className="aspect-[4/3] sm:aspect-[21/9]"
         sizes="100vw"
       />
       <div className="grid sm:grid-cols-2">
         <Shot
           src="/river/shot-wave.jpg"
-          alt="A raft crossing a sunlit reach with two swimmers alongside"
+          alt="A raft launching off a standing wave with two of the crew thrown over the stern, an inner tube floating in the foreground"
           className="aspect-[4/3]"
           sizes="(max-width: 640px) 100vw, 50vw"
         />
         <Shot
           src="/river/shot-keeper.jpg"
-          alt="A raft stood on end against a midstream rock, crew spilling toward the tube"
+          alt="A raft stood on end against a midstream rock, the crew spilling off the high tube"
+          className="aspect-[4/3]"
+          sizes="(max-width: 640px) 100vw, 50vw"
+        />
+      </div>
+      <div className="grid sm:grid-cols-2">
+        <Shot
+          src="/river/shot-cargo.jpg"
+          alt="Six otters paddling a raft with a wedding cake aboard, a tag above reading take-out 450 m, wedding cake 69%"
+          className="aspect-[4/3]"
+          sizes="(max-width: 640px) 100vw, 50vw"
+        />
+        <Shot
+          src="/river/shot-takeout.jpg"
+          alt="A raft with its cargo aboard coming in toward the take-out sign on a gravel beach, rubber ducks floating by"
           className="aspect-[4/3]"
           sizes="(max-width: 640px) 100vw, 50vw"
         />
@@ -174,7 +188,7 @@ function Shot({
 
 const FACTS = [
   "One boat, every blade",
-  "A canyon with no end",
+  "A cargo and a take-out",
   "Throw bags and swimmers",
   "No account, no launcher",
 ];

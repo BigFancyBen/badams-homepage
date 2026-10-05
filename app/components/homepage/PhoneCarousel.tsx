@@ -99,7 +99,7 @@ export function PhoneCarousel({ screenshots, autoPlayInterval = 2000, autoPlayDe
                 alt={screenshots[current].label}
                 fill
                 className="object-contain"
-                sizes="280px"
+                unoptimized
               />
             </motion.div>
           </AnimatePresence>
