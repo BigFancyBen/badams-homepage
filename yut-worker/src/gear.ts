@@ -13,6 +13,7 @@ import { escapeMarkdown } from "./discord.ts";
 import { dropTable, oneIn } from "./loot.ts";
 import { hasSlayerHelmet } from "./slayer.ts";
 import { bossKeys, bossTable } from "./bosses.ts";
+import type { ViewCard } from "./cards.ts";
 import { buttonRow, selectRow, type Env, type Player } from "./types.ts";
 
 /**
@@ -174,6 +175,7 @@ function statText(def: GearDef): string {
 export interface Line {
   content: string;
   components?: unknown[];
+  card?: ViewCard;
 }
 
 const SLOT_LABEL: Record<GearSlot, string> = {
