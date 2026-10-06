@@ -274,6 +274,25 @@ async function admin(env: Env, ctx: ExecutionContext, url: URL): Promise<unknown
       return { ok: true, items: await personalTodo(env, player, url.searchParams.get("day") ?? gameDay(now, rollover), now) };
     }
 
+    case "toast": {
+      // Posts a rare-drop toast for a player and an item key, for the harness.
+      const id = url.searchParams.get("player");
+      const item = url.searchParams.get("item");
+      const player = id ? await getPlayer(env, id) : null;
+      if (!player || !item) return { ok: false, error: "player= and item=" };
+      const { toastRareDrops } = await import("./toast.ts");
+      const { itemName, itemValue } = await import("./loot.ts");
+      const rate = Number(url.searchParams.get("rate") ?? "0");
+      await toastRareDrops(
+        env,
+        player.username,
+        [{ key: item, item: itemName(item), qty: 1, value: itemValue(item), ...(rate > 0 ? { rate } : {}), source: url.searchParams.get("source") ?? "the harness" }],
+        gameDay(now, rollover),
+        `admin-${now}`
+      );
+      return { ok: true };
+    }
+
     case "boss": {
       const day = url.searchParams.get("day") ?? gameDay(now, rollover);
       const { bossView, bossWeek } = await import("./bosses.ts");

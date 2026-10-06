@@ -1,3 +1,4 @@
+import type { RareDrop } from "./toast.ts";
 import spoils from "../config/spoils.json" with { type: "json" };
 import {
   ACTS,
@@ -414,6 +415,8 @@ export interface Opened {
   /** The card: a headline, the icon drawn large, and the loot under it. */
   card: { title: string; sub: string; big: string; tier?: string; loot: { k: string; c: number }[]; v?: number };
   hasLamp: boolean;
+  /** What came out that the channel should hear about. */
+  rare?: RareDrop[];
 }
 
 /**
@@ -473,6 +476,14 @@ export async function openSpoils(
           v: Math.round(total),
         },
         hasLamp: false,
+        rare: notable.map((stack) => ({
+          key: stack.key,
+          item: stack.item,
+          qty: stack.qty,
+          value: stack.value,
+          rate: stack.rate,
+          source: `a${/^[aeiou]/i.test(what) ? "n" : ""} ${what.toLowerCase()}`,
+        })),
       };
       result = { kind: "container", container: option.key, s: stacks.map((stack) => [stack.key, stack.qty, stack.value]), t: total };
       for (const stack of notable) await logEntry(env, player.discord_id, `drop:${stack.key}`, day);

@@ -145,7 +145,8 @@ check("non-player gets a Join button", /not in the campaign/.test(content(strang
 // 4. Joining from that button also checks in.
 const joined = await click(`join:${day}`, alice);
 check("join + check-in in one press", /Checked in\.\*\* 1st this week, full value/.test(content(joined)), joined);
-check("the receipt carries the menu", JSON.stringify(joined.body).includes('"custom_id":"sheet"') && JSON.stringify(joined.body).includes('"custom_id":"hub'), joined);
+check("the receipt carries the menu's sections", JSON.stringify(joined.body).includes('"custom_id":"hub:me"') && JSON.stringify(joined.body).includes('"custom_id":"hub:more"'), joined);
+check("the receipt says what to do next, and offers it", /\*\*Farm run\*\* — ready now/.test(content(joined)) && /\*\*Tears of Guthix\*\*/.test(content(joined)) && JSON.stringify(joined.body).includes('"custom_id":"farm:run"') && JSON.stringify(joined.body).includes('"custom_id":"tears"'), joined);
 check("the receipt points at the thread", content(joined).includes(`<#${threadId}>`), joined);
 const aliceThread = await waitFor(() => posts(threadId).find((e) => /alice\*\* checked in/.test(e.body)));
 check("the check-in line lands in the thread", Boolean(aliceThread) && /⚔️ \d+ [A-Za-z' ]+ slain/.test(aliceThread?.body ?? ""), aliceThread);
@@ -698,9 +699,19 @@ check("the next click edits the follow-up, never the message the button was on",
 const ids = (r) => [...JSON.stringify(r.body).matchAll(/"custom_id":"([^"]+)"/g)].map((m) => m[1]);
 const menu = await click("hub", ivy);
 const menuIds = ids(menu);
-check("the menu fits Discord's five rows", menu.body?.data?.components?.length === 5, menu.body?.data?.components?.length);
-const wanted = ["sheet", "gear", "bank", "log", "diary", "task", "boss", "quest", "raid", "bingo", "farm", "kd", "tears", "ge", "shop", "town", "vote", "standings", "relics", "help", "hub:more"];
-check("the menu has a button for every place a command goes", wanted.every((id) => menuIds.includes(id)), wanted.filter((id) => !menuIds.includes(id)));
+check("the menu is three rows at most: what is waiting, the day and the week, the sections", (menu.body?.data?.components ?? []).length <= 3, menu.body?.data?.components?.length);
+check(
+  "the menu leads with the dailies and the weeklies",
+  ["hub:me", "hub:adv", "hub:town", "hub:more", "help"].every((id) => menuIds.includes(id)) &&
+    menuIds.some((id) => id.split(":")[0] === "ci") && menuIds.some((id) => id.split(":")[0] === "farm") && menuIds.some((id) => id.split(":")[0] === "tears") &&
+    /\*\*Today\*\*/.test(content(menu)) && /\*\*This week\*\*/.test(content(menu)),
+  { menuIds, content: content(menu) }
+);
+const youSection = await click("hub:me", ivy);
+const deepIds = [...menuIds, ...ids(youSection), ...ids(await click("hub:adv", ivy)), ...ids(await click("hub:town", ivy))];
+const wanted = ["sheet", "gear", "bank", "log", "diary", "todo", "task", "boss", "quest", "raid", "bingo", "clue", "spoils", "farm", "kd", "ge", "shop", "town", "vote", "standings", "relics", "help", "hub:more"];
+check("every place a command goes is at most a press below the menu", wanted.every((id) => deepIds.includes(id)), wanted.filter((id) => !deepIds.includes(id)));
+check("a section leads back to the menu", /\*\*You\*\*/.test(content(youSection)) && ids(youSection).includes("hub"), youSection);
 const settings = await click("hub:more", ivy);
 const settingsIds = ids(settings);
 check(
@@ -709,7 +720,7 @@ check(
   settingsIds
 );
 const staleMenu = await click("hub", { user: { id: dave, username: "dave" } });
-check("the menu opens for a stale player, and says what it takes", /Most of this needs a check-in/.test(content(staleMenu)) && ids(staleMenu).includes("sheet"), staleMenu);
+check("the menu opens for a stale player, and says what it takes", /Most of this needs a check-in/.test(content(staleMenu)) && ids(staleMenu).includes("hub:me"), staleMenu);
 
 const bankView = await click("bank", ivy);
 check("a view carries a way back to the menu", ids(bankView).includes("hub"), bankView);
@@ -777,6 +788,38 @@ check("and then it happens", /Retired/.test(content(retired)), retired);
 
 const morningNow = [...posts(CHANNEL)].reverse().find((e) => /Did you work out/.test(e.body));
 check("the morning post leads into the menu and the form", /"custom_id":"hub"/.test(morningNow?.body ?? "") && /"custom_id":"cin:/.test(morningNow?.body ?? ""), morningNow?.body?.slice(-700));
+
+// 36. The menu is a checklist: a daily or a weekly is offered while it is open and greyed out once done.
+const zed = { user: { id: `zed_${stamp}`, username: "zed" } };
+const button = (r, id) => (r.body?.data?.components ?? []).flatMap((row) => row.components ?? []).find((c) => c.custom_id === id);
+const zedJoin = await click(`join:${day}`, zed);
+check(
+  "after a check-in the farm run and the Tears are offered, and the check-in is ticked off",
+  button(zedJoin, "farm:run") && !button(zedJoin, "farm:run").disabled && button(zedJoin, "tears") && !button(zedJoin, "tears").disabled &&
+    button(zedJoin, "ci:done")?.disabled === true && /~~Check in~~ — 1 of 2 this week/.test(content(zedJoin)),
+  { ids: ids(zedJoin), content: content(zedJoin) }
+);
+await click("farm:run", zed);
+await click("tears", zed);
+const zedMenu = await click("hub", zed);
+check(
+  "once done they are greyed out and struck through",
+  button(zedMenu, "farm:done")?.disabled === true && button(zedMenu, "tears:done")?.disabled === true &&
+    /~~Farm run~~/.test(content(zedMenu)) && /~~Tears of Guthix~~/.test(content(zedMenu)),
+  { ids: ids(zedMenu), content: content(zedMenu) }
+);
+const daveMenu = await click("hub", { user: { id: dave, username: "dave" } });
+const daveLocked = [button(daveMenu, "farm:run"), button(daveMenu, "tears")].filter(Boolean);
+check(
+  "a stale player sees them greyed out until a check-in, with the check-in offered",
+  daveLocked.length > 0 && daveLocked.every((b) => b.disabled === true) && button(daveMenu, `ci:${day}`) && !button(daveMenu, `ci:${day}`).disabled,
+  { ids: ids(daveMenu), daveLocked }
+);
+
+// 37. A rare drop is toasted in the channel itself, not the thread.
+await admin("toast", { player: zed.user.id, item: "abyssal_whip", rate: String(1 / 512), source: "the abyssal demons" });
+const toast = posts(CHANNEL).find((e) => /zed\*\* got a rare drop/.test(e.body));
+check("a rare drop posts a toast to the channel", /got a rare drop: \*\*Abyssal whip\*\* from the abyssal demons \(1\/512/.test(toast?.body ?? ""), toast?.body);
 
 console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) failed.`);
 process.exit(failures === 0 ? 0 : 1);

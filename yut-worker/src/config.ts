@@ -791,6 +791,7 @@ export const SLAYER_HELMET_COST = 400;
 // 1/1,024 keeps it to the rare drop table and the real uniques.
 export const NOTABLE_RARITY_DENOMINATOR = 1024;  // a drop at 1/1,024 or rarer
 export const NOTABLE_VALUE = 50_000;             // ...or one worth this much gp
+export const RARE_TOASTS_PER_POST = 3;            // channel toasts one check-in or pick may post
 export const LOOT_CARD_CELLS = 13;               // plus one "+N more" cell = two rows of seven
 export const BANK_VIEW_ROWS = 15;
 /** The game's reading of the wiki's named rarity bands (only a handful of rows use them). */

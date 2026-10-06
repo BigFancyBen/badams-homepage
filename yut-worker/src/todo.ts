@@ -25,6 +25,8 @@ const SHOP_FLOOR = SHOP.find((item) => item.key === "small_lamp")?.points ?? Mat
 export interface TodoOptions {
   /** On a check-in's receipt: the spoils, the lamps and the week's count are already on it. */
   afterCheckin?: boolean;
+  /** Under the menu's checklist, which already says the check-ins, the farm run, the Tears, the kingdom's haul and the votes. */
+  skipCore?: boolean;
 }
 
 export async function personalTodo(env: Env, player: Player, day: string, now: number, options: TodoOptions = {}): Promise<string[]> {
@@ -33,10 +35,11 @@ export async function personalTodo(env: Env, player: Player, day: string, now: n
   const fresh = isFresh(player, day);
   const week = gameWeek(day);
 
+  const core = !options.skipCore;
   if (!options.afterCheckin) {
     const done = await countCheckinsBetween(env, id, week, day);
     const daysLeft = 6 - daysBetween(week, day);
-    if (done < 2) items.push(`${done} of 2 check-ins this week${daysLeft > 0 ? `, ${daysLeft} day${daysLeft === 1 ? "" : "s"} left` : ", and it closes at 3am"}.`);
+    if (core && done < 2) items.push(`${done} of 2 check-ins this week${daysLeft > 0 ? `, ${daysLeft} day${daysLeft === 1 ? "" : "s"} left` : ", and it closes at 3am"}.`);
 
     const lamps = await unspentLamps(env, id);
     if (lamps.length > 0) {
@@ -54,7 +57,7 @@ export async function personalTodo(env: Env, player: Player, day: string, now: n
 
   // The farm: crops ready, or never started.
   const { results: patches } = await env.DB.prepare("SELECT * FROM farm_patches WHERE player_id = ?").bind(id).all<PatchRow>();
-  if (player.farm_day !== day) {
+  if (core && player.farm_day !== day) {
     const ready = patches.filter((row) => isGrown(row, now)).map((row) => (cropFor(row.seed)?.seed ?? row.seed).replace(/ seed$/, "").toLowerCase());
     if (ready.length > 0) items.push(`Crops ready: ${ready.join(", ")} (\`/farm\`).`);
     else if (patches.length === 0 && !player.farm_day) items.push("You have a farm and have not planted it: `/farm`. Potato seeds are free; one run a day.");
@@ -65,7 +68,7 @@ export async function personalTodo(env: Env, player: Player, day: string, now: n
     const kingdom = await loadKingdom(env, id, day);
     const stacks = pendingStacks(kingdom, `${id}:${kingdom.collected_day ?? "first"}`);
     const count = stacks.reduce((sum, stack) => sum + stack.qty, 0);
-    if (count > 0) items.push(`Miscellania has ${count.toLocaleString("en-US")} items to collect (\`/kingdom\`).`);
+    if (core && count > 0) items.push(`Miscellania has ${count.toLocaleString("en-US")} items to collect (\`/kingdom\`).`);
     if (dailyWage(kingdom.coffer) === 0) {
       items.push(
         kingdom.collected_day || count > 0
@@ -79,7 +82,7 @@ export async function personalTodo(env: Env, player: Player, day: string, now: n
     // The list goes out without it.
   }
 
-  if (player.tears_week !== week) items.push("Tears of Guthix this week: XP in your lowest skill (`/tears`).");
+  if (core && player.tears_week !== week) items.push("Tears of Guthix this week: XP in your lowest skill (`/tears`).");
 
   // Gear: something owned that would count if it were worn, and the chase.
   try {
@@ -104,7 +107,7 @@ export async function personalTodo(env: Env, player: Player, day: string, now: n
   }
   if (player.bingo_points >= SHOP_FLOOR) items.push(`${player.bingo_points} bingo points to spend (\`/shop\`).`);
 
-  const votes = await openVotes(env);
+  const votes = core ? await openVotes(env) : [];
   if (votes.length > 0) {
     const ballots = await ballotsFor(env, votes.map((vote) => vote.id));
     const missing = votes.filter((vote) => !ballots.some((ballot) => ballot.vote_id === vote.id && ballot.player_id === id));
