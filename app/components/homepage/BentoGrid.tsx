@@ -14,6 +14,7 @@ import {
   PROGNOSTICATOR_SCREENSHOTS,
   WAREHOUSE_SCENE,
   SM64_SCENE,
+  TESTQ,
   RADIANCE_SCREENSHOTS,
   MTG_SCREENSHOTS,
   SCRANDLE_SHOTS,
@@ -235,6 +236,41 @@ export function BentoGrid() {
               </div>
             </div>
           ))}
+        </div>
+      </BentoSection>
+
+      {/* testq — the queue the scenes above are tested and captured through */}
+      <BentoSection dimmed={isDimmed("testq")} onHover={() => setHoveredIndex("testq")}>
+        <div className="flex flex-col lg:flex-row gap-5 lg:gap-8">
+          <div className="w-full lg:w-[62%]">
+            <Image
+              src={TESTQ.image.src}
+              alt={TESTQ.image.alt}
+              width={TESTQ.image.width}
+              height={TESTQ.image.height}
+              className="w-full h-auto"
+              style={{ border: "1px solid rgba(255,255,255,0.06)" }}
+              unoptimized
+            />
+          </div>
+          <div className="w-full lg:w-[38%] flex flex-col">
+            <h3 className="text-lg font-bold text-white font-mono">{TESTQ.title}</h3>
+            <p className="text-gray-300 text-sm mt-2">{TESTQ.tagline}</p>
+            <p className="text-gray-400 text-sm leading-relaxed mt-3">{TESTQ.description}</p>
+            <ul className="mt-4 flex flex-col gap-2">
+              {TESTQ.features.map((f) => (
+                <li key={f.label} className="text-xs leading-relaxed text-gray-400">
+                  <span className="text-white font-medium">{f.label}.</span> {f.text}
+                </li>
+              ))}
+            </ul>
+            <div className="mt-4">
+              <Tags tags={TESTQ.tags} />
+            </div>
+            <div className="mt-auto pt-5">
+              <SectionLink href={TESTQ.repoUrl}>Source on GitHub &rarr;</SectionLink>
+            </div>
+          </div>
         </div>
       </BentoSection>
 
