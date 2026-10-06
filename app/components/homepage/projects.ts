@@ -158,6 +158,27 @@ export const SM64_SCENE = {
   ] satisfies Shot[],
 };
 
+export const TESTQ = {
+  title: "testq",
+  tagline: "One queue for every Godot run on the machine.",
+  description:
+    "The warehouse, the SM64 scene and the rafting game all test and capture on one PC, from a couple of dozen worktrees that each think they have it to themselves. Two suites starting in the same minute slowed each other enough to fail anything timed against the wall clock, and those failures read exactly like real ones. testq is a small daemon that holds the machine's slots, and every run script asks it before launching an engine.",
+  features: [
+    { label: "Outside every project", text: "A capture in the DJ app and a physics suite in the game are two engines on one box, and neither repo can see the other's. The queue belongs to neither." },
+    { label: "Shortest first", text: "Estimates come from each job's own history, so a twenty-second test does not sit behind two eleven-minute suites. A job that has waited long enough ages to the front." },
+    { label: "Hung runs get killed", text: "An engine that stalls or overruns its limit is stopped and its slot handed back. A client that dies has its slots reclaimed in about five seconds." },
+    { label: "A page and a tray dot", text: "What is running, what is queued and roughly when it starts, with every finished run kept in SQLite to pick out the jobs that only sometimes pass." },
+  ],
+  tags: ["Python", "SQLite", "Node", "Bash", "PowerShell", "Godot"],
+  repoUrl: "https://github.com/BigFancyBen/testq",
+  image: {
+    src: "/testq/page.webp",
+    alt: "The testq status page: eight CPU slots and two GPU slots all in use, five running jobs across mfrs and prognosticator worktrees with progress bars, five queued jobs with estimated start times and what each is waiting for, and recent results including one marked killed: stalled",
+    width: 1600,
+    height: 1166,
+  },
+};
+
 export const RADIANCE_SCREENSHOTS = [
   { src: "/radiance/lights.webp", label: "Smart light controls", bg: "#161616" },
   { src: "/radiance/games-idle.webp", label: "TV launcher", bg: "#161616" },
