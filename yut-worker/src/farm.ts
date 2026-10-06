@@ -238,6 +238,21 @@ export async function farmRun(env: Env, player: Player, day: string, now: number
   return farmView(env, { ...player, farm_day: day }, day, now, lead, { items: harvested, xp: gained });
 }
 
+/**
+ * Where today's run stands, for the menu: done, worth making (something has
+ * grown, or a patch is empty and there is a seed for it), or still growing.
+ * A run with nothing to do spends the day's run, so the menu does not offer it.
+ */
+export async function farmStatus(env: Env, player: Player, day: string, now: number): Promise<"done" | "ready" | "growing"> {
+  if (player.farm_day === day) return "done";
+  const rows = new Map((await patchesOf(env, player.discord_id)).map((row) => [row.patch, row]));
+  if ([...rows.values()].some((row) => isGrown(row, now))) return "ready";
+  if (rows.size >= PATCHES.length) return "growing";
+  const level = levelForXp((await getSkills(env, player.discord_id)).farming ?? 0);
+  const stock = await seedStock(env, player.discord_id);
+  return PATCHES.some((patch) => !rows.has(patch.key) && bestSeed(patch.key, level, stock, patch.seeds)) ? "ready" : "growing";
+}
+
 /** Players with something grown and no run yet today, for the evening reminders. */
 export async function farmNudges(env: Env, today: string, now: number): Promise<Set<string>> {
   const { results } = await env.DB.prepare(
