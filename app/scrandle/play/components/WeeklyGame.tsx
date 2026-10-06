@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ACCENT } from "../../data";
 import { useWeeklyProgress } from "../hooks/useWeeklyProgress";
 import { answer, type Side, type WeeklyPuzzle } from "../types";
@@ -18,11 +18,17 @@ interface WeeklyGameProps {
  *
  * Picks live in localStorage against the puzzle's number, so closing the tab
  * half way through picks up where it left off, a finished puzzle stays
- * finished, and a pick cannot be taken back by reloading.
+ * finished, and a pick cannot be taken back by reloading. Coming back to a
+ * finished one says so, and earlier puzzles' scores are kept alongside.
  */
 export function WeeklyGame({ puzzle }: WeeklyGameProps) {
   const total = puzzle.rounds.length;
-  const { picks, pick } = useWeeklyProgress(puzzle.number, total);
+  const answers = useMemo(() => puzzle.rounds.map(answer), [puzzle]);
+  const { picks, pick, past } = useWeeklyProgress(puzzle.number, answers);
+
+  // Whether a pick was made on this visit. A finished puzzle without one was
+  // finished some other time, which is worth telling the player.
+  const [playedNow, setPlayedNow] = useState(false);
 
   // The round on screen. Null means "the first one not answered yet", which is
   // where a reload should land; it is pinned to a number only while a reveal
@@ -42,6 +48,7 @@ export function WeeklyGame({ puzzle }: WeeklyGameProps) {
   const choose = (side: Side) => {
     if (picked !== undefined) return;
     setPinned(index);
+    setPlayedNow(true);
     pick(side);
   };
 
@@ -170,7 +177,13 @@ export function WeeklyGame({ puzzle }: WeeklyGameProps) {
             </div>
           </>
         ) : (
-          <Summary puzzle={puzzle} picks={picks} score={score} />
+          <Summary
+            puzzle={puzzle}
+            picks={picks}
+            score={score}
+            past={past}
+            returning={!playedNow}
+          />
         )}
       </main>
     </div>

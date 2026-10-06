@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useState } from "react";
 import { plateSrc } from "../../../api/scrandle/_lib/bucket";
+import type { PastResult } from "../hooks/useWeeklyProgress";
 import { answer, type Side, type WeeklyPuzzle } from "../types";
 import { LOSS, WIN } from "./Plate";
 
@@ -12,6 +13,10 @@ interface SummaryProps {
   puzzle: WeeklyPuzzle;
   picks: Side[];
   score: number;
+  /** Earlier puzzles this browser played, newest first. */
+  past: PastResult[];
+  /** The puzzle was finished on an earlier visit, not just now. */
+  returning: boolean;
 }
 
 /**
@@ -26,7 +31,7 @@ function shareText(puzzle: WeeklyPuzzle, picks: Side[], score: number): string {
   return `Scrandle #${puzzle.number} — ${score}/${puzzle.rounds.length}\n${squares}\n${SHARE_URL}`;
 }
 
-export function Summary({ puzzle, picks, score }: SummaryProps) {
+export function Summary({ puzzle, picks, score, past, returning }: SummaryProps) {
   const [copied, setCopied] = useState(false);
   const total = puzzle.rounds.length;
 
@@ -51,7 +56,7 @@ export function Summary({ puzzle, picks, score }: SummaryProps) {
       >
         <div>
           <p className="font-mono text-[10px] uppercase tracking-widest text-gray-500">
-            You got
+            {returning ? `You've already played #${puzzle.number} — you got` : "You got"}
           </p>
           <p className="mt-1 text-6xl md:text-7xl font-bold text-white tabular-nums">
             {score}
@@ -140,6 +145,45 @@ export function Summary({ puzzle, picks, score }: SummaryProps) {
           );
         })}
       </ol>
+
+      {past.length > 0 ? (
+        <>
+          <h2 className="mt-10 mb-3 font-mono text-[10px] uppercase tracking-widest text-gray-500">
+            Earlier puzzles
+          </h2>
+          <ol className="flex flex-col gap-px" style={{ backgroundColor: "rgba(255,255,255,0.08)" }}>
+            {past.map((each) => {
+              const got = each.right.filter(Boolean).length;
+              return (
+                <li
+                  key={each.number}
+                  className="flex items-center justify-between gap-3 p-3"
+                  style={{ backgroundColor: "#0a0a0a" }}
+                >
+                  <span className="font-mono text-xs text-gray-400 tabular-nums w-10 shrink-0">
+                    #{each.number}
+                  </span>
+                  <span
+                    className="flex flex-wrap items-center gap-1"
+                    aria-hidden="true"
+                  >
+                    {each.right.map((right, i) => (
+                      <span
+                        key={i}
+                        className="w-3 h-3"
+                        style={{ backgroundColor: right ? WIN : LOSS }}
+                      />
+                    ))}
+                  </span>
+                  <span className="font-mono text-xs text-gray-400 tabular-nums shrink-0">
+                    {got}/{each.right.length}
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+        </>
+      ) : null}
     </section>
   );
 }
