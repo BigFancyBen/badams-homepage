@@ -96,7 +96,8 @@ import { kingdomCheckin } from "./kingdom.ts";
 import { bossHit } from "./bosses.ts";
 import { createSpoils, draftLines, openSpoils, waitingSpoils, type SpoilsOption } from "./spoils.ts";
 import { TRICKSTER_POINTS, XERIC_WEIGHT } from "./config.ts";
-import { buttonRow, type Button, type Checkin, type Env, type Player } from "./types.ts";
+import { buttonRow, type Checkin, type Env, type Player } from "./types.ts";
+import type { RareDrop } from "./toast.ts";
 import {
   clueTierForMonster,
   levelForXp,
@@ -149,6 +150,8 @@ export interface CheckinOutcome {
   session: string;
   /** The pick this check-in ends with: the row, what is on offer, and the lines that say so. */
   spoils: { id: number; options: SpoilsOption[]; lines: string[] } | null;
+  /** Drops the channel itself hears about, each with a card. */
+  rareDrops: RareDrop[];
 }
 
 /** Turns an item's display name into its icon key. */
@@ -320,6 +323,7 @@ export async function performCheckin(
   };
   const publicBits: string[] = [];
   const channelLines: string[] = [];
+  const rareDrops: RareDrop[] = [];
   const statements: D1PreparedStatement[] = [];
   const loot: { k: string; c: number; v?: number }[] = [];
   const addLoot = (key: string, count = 1, value?: number) => {
@@ -395,9 +399,11 @@ export async function performCheckin(
     if (!piece || wardrobe.has(piece.key)) continue;
     keep(`🛡️ New for your wardrobe: **${piece.item}**${player.wishlist === piece.key ? " — the one you were chasing" : ""}. \`/gear\` to wear it.`);
     if (!stack.notable) publicBits.push(`🛡️ **${escapeMarkdown(player.username)}** — **${piece.item}** from the ${monsterName}.`);
+    rareDrops.push({ key: stack.key, item: stack.item, qty: stack.qty, value: stack.value, rate: stack.rate, source: `the ${monsterName}` });
   }
   // A drop worth shouting about: rare by the wiki's rate, or worth a lot.
   for (const stack of drops.notable) {
+    rareDrops.push({ key: stack.key, item: stack.item, qty: stack.qty, value: stack.value, rate: stack.rate, source: `the ${monsterName}` });
     publicBits.push(
       `💎 **${escapeMarkdown(player.username)}** — **${stack.item}**${stack.qty > 1 ? ` ×${stack.qty}` : ""} from the ${monsterName} (${oneIn(stack.rate)}).`
     );
@@ -646,6 +652,7 @@ export async function performCheckin(
           publicBits.push(opened.publicBit);
           if (opened.newEntry) publicBits.push(opened.newEntry);
           for (const item of opened.loot) addLoot(item.k, item.c);
+          if (opened.rare) rareDrops.push(opened.rare);
           gotLamp = true;
           held = null;
         } else {
@@ -804,6 +811,7 @@ export async function performCheckin(
       }
       for (const line of boss.keep) keep(line);
       for (const item of boss.loot) addLoot(item.k, item.c, item.v);
+      rareDrops.push(...boss.rare);
       channelLines.push(...boss.channelLines);
     }
   } catch {
@@ -826,6 +834,7 @@ export async function performCheckin(
       if (!opened) continue;
       keep(`Spoils left from ${stale.day} opened themselves — ${opened.line}`);
       publicBits.push(opened.publicLine);
+      rareDrops.push(...(opened.rare ?? []));
       for (const item of opened.card.loot) addLoot(item.k, item.c);
     }
     const { row, draft } = await createSpoils(env, player, checkinId, day, ordinal, weight);
@@ -921,6 +930,7 @@ export async function performCheckin(
     task: taskShort(progress.completed ? progress.next : progress.task),
     session: `${session.kills} ${monsterName} · max hit ${session.maxHit} · ${Math.round(session.hitChance * 100)}% to hit · ${session.weapon.name}`,
     spoils,
+    rareDrops,
   };
 }
 
@@ -956,7 +966,7 @@ export async function finishClue(
   tierKey: string,
   day: string,
   now: number
-): Promise<{ receipt: string; publicBit: string; newEntry: string | null; loot: { k: string; c: number }[]; xp: number }> {
+): Promise<{ receipt: string; publicBit: string; newEntry: string | null; loot: { k: string; c: number }[]; xp: number; rare: RareDrop | null }> {
   const tier = clueTier(tierKey);
   const owned = new Set(await logEntries(env, player.discord_id));
   const rng = seededRng(`${player.discord_id}:${clueId}:casket`);
@@ -984,80 +994,10 @@ export async function finishClue(
     (first ? ` ${logLine("First casket", await logCountFor(env, player.discord_id))}` : "");
   const items: { k: string; c: number }[] = [{ k: "casket", c: 1 }, { k: "lamp", c: 1 }, { k: "coins", c: loot.coins }];
   if (loot.unique) items.push({ k: itemKey(loot.unique), c: 1 });
-  return { receipt, publicBit, newEntry, loot: items, xp: loot.xp };
-}
-
-/** The buttons under a receipt: the play hub. */
-/**
- * What is waiting on the player, as buttons: lamps, a pick, a clue, proof for
- * today's check-in. A receipt leads with these and a way into the menu.
- */
-export async function waitingButtons(env: Env, player: Player, day: string): Promise<Button[]> {
-  const db = await import("./db");
-  const lamps = await db.unspentLamps(env, player.discord_id);
-  const clue = await openClue(env, player.discord_id);
-  const waiting = await waitingSpoils(env, player.discord_id);
-  const checkin = await db.getCheckinFor(env, player.discord_id, day);
-  const buttons: Button[] = [];
-  if (lamps.length > 0) buttons.push({ label: `Lamp (${lamps.length})`, custom_id: "lamp", style: 3, emoji: "🧞" });
-  if (waiting.length > 0) buttons.push({ label: "Spoils", custom_id: "spoils", style: 3, emoji: "🎁" });
-  if (clue) buttons.push({ label: "Clue", custom_id: "clue", emoji: "📜" });
-  if (checkin && (!checkin.attachment_r2_key || !checkin.note)) {
-    const label = checkin.attachment_r2_key ? "Add a note" : checkin.note ? "Add a photo" : "Add a note or photo";
-    buttons.push({ label, custom_id: `cin:${day}`, emoji: checkin.attachment_r2_key ? "📝" : "📸" });
-  }
-  return buttons;
-}
-
-/**
- * The menu. Every command has a button somewhere under it, so nobody has to
- * type one: what is waiting, then you, the adventure, the things between
- * check-ins, and the group. Settings and the rarer things sit behind More.
- */
-export const MENU: Button[][] = [
-  [
-    { label: "Sheet", custom_id: "sheet", emoji: "📋" },
-    { label: "Gear", custom_id: "gear", emoji: "🛡️" },
-    { label: "Bank", custom_id: "bank", emoji: "💰" },
-    { label: "Log", custom_id: "log", emoji: "📗" },
-    { label: "Diary", custom_id: "diary", emoji: "📘" },
-  ],
-  [
-    { label: "Task", custom_id: "task", emoji: "🗡️" },
-    { label: "Boss", custom_id: "boss", emoji: "🐀" },
-    { label: "Quest", custom_id: "quest", emoji: "🗺️" },
-    { label: "Raid", custom_id: "raid", emoji: "🐉" },
-    { label: "Bingo", custom_id: "bingo", emoji: "🎯" },
-  ],
-  [
-    { label: "Farm", custom_id: "farm", emoji: "🌱" },
-    { label: "Kingdom", custom_id: "kd", emoji: "👑" },
-    { label: "Tears", custom_id: "tears", emoji: "💧" },
-    { label: "Exchange", custom_id: "ge", emoji: "⚖️" },
-    { label: "Shop", custom_id: "shop", emoji: "🛒" },
-  ],
-  [
-    { label: "Town", custom_id: "town", emoji: "🏘️" },
-    { label: "Votes", custom_id: "vote", emoji: "🗳️" },
-    { label: "Standings", custom_id: "standings", emoji: "🏆" },
-    { label: "Relics", custom_id: "relics", emoji: "🔮" },
-    { label: "Help", custom_id: "help", emoji: "❓" },
-  ],
-];
-
-export const MENU_BUTTON: Button = { label: "Menu", custom_id: "hub", style: 2, emoji: "🏠" };
-const MORE_BUTTON: Button = { label: "More", custom_id: "hub:more", style: 2, emoji: "⚙️" };
-
-/**
- * The menu as rows. `rows` is how many the message has room for (a receipt
- * spends some on the pick and the quiz); when the whole menu does not fit, the
- * first row carries a Menu button so nothing is ever out of reach.
- */
-export async function hubRows(env: Env, player: Player, day: string, rows = 5, without: string[] = []): Promise<unknown[]> {
-  const waiting = (await waitingButtons(env, player, day)).filter((button) => !without.includes(button.custom_id));
-  const whole = rows >= MENU.length + 1;
-  const first = [...waiting.slice(0, 4), whole ? MORE_BUTTON : MENU_BUTTON];
-  return [buttonRow(first), ...MENU.map(buttonRow)].slice(0, Math.max(1, rows));
+  const rare: RareDrop | null = loot.unique
+    ? { key: itemKey(loot.unique), item: loot.unique, qty: 1, value: 0, source: `a${/^[aeiou]/i.test(tier.name) ? "n" : ""} ${tier.name.toLowerCase()} casket` }
+    : null;
+  return { receipt, publicBit, newEntry, loot: items, xp: loot.xp, rare };
 }
 
 /** A quiz's three answers as buttons. */

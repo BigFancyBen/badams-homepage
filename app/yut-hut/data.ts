@@ -312,7 +312,7 @@ export const SECTIONS: RuleSection[] = [
           "The drop tables are the Old School wiki's, sub-tables and all: 60 Ankou pay death runes at 10/100, herbs from the herb table, gems from the gem table, and a 1-in-273,067 shot at a dragon spear off the rare drop table.",
           "Every kill rolls every row at its rate, so the expected drops match the wiki exactly. The rolls are seeded on you and the day: a retried check-in banks the same loot.",
           "Everything goes to **your bank** at its Grand Exchange value; the loot card shows the richest stacks and what the session was worth. Nothing goes to the town, and bones are buried for Prayer rather than banked.",
-          "A **notable drop** — 1 in 1,024 or rarer, or worth 50k — is announced in the day's thread and logged. Notable drops are counted apart from the 90-entry collection log.",
+          "A **notable drop** — 1 in 1,024 or rarer, or worth 50k — is logged and announced in the channel itself, with the item on a card, so everyone can see it. So is a wearable you did not own yet, a boss's unique and a casket's. Notable drops are counted apart from the 90-entry collection log.",
         ],
       },
       { kind: "note", text: "The bank is spendable. Its worth, less what you have spent, is your balance at the Grand Exchange." },
@@ -788,7 +788,7 @@ export const SECTIONS: RuleSection[] = [
     label: "Commands",
     title: "Commands",
     blocks: [
-      { kind: "note", text: "You never have to type one of these. The **Menu** button on the morning post, on the pinned board and on every check-in receipt opens the same places, with dropdowns where a command takes an option; **Yes, with a note or photo** opens a form for what `/checkin` takes. The commands are shortcuts." },
+      { kind: "note", text: "You never have to type one of these. The **Menu** button on the morning post, on the pinned board and on every check-in receipt opens the same places, with dropdowns where a command takes an option. The menu leads with the day and the week as a checklist — check in, farm run, Tears of Guthix, votes — green while open, greyed out once done; everything else is one press deeper under **You**, **Adventure**, **Town & trade** and **Settings**. **Yes, with a note or photo** opens a form for what `/checkin` takes. The commands are shortcuts." },
       {
         kind: "table",
         columns: ["Command", "What it does"],
