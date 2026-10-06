@@ -127,7 +127,7 @@ export function TabletCarousel({ screenshots, autoPlayInterval = 2000, autoPlayD
                   alt={screenshots[effectiveCurrent].label}
                   fill
                   className="object-contain"
-                  sizes="(max-width: 1024px) 100vw, 1024px"
+                  unoptimized
                 />
               </motion.div>
             </AnimatePresence>
