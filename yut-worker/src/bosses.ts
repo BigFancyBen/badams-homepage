@@ -1,10 +1,11 @@
+import type { RareDrop } from "./toast.ts";
 import bossData from "../config/bosses.json" with { type: "json" };
 import { BOSS_CHEST_KILLS, BOSS_FIGHTS_PER_HEAD, BOSS_FIGHT_ATTACKS, GROUP_BOSSES, type CombatStyle } from "./config.ts";
 import { levelsOf, questFight, type Gear, type Levels, type Monster } from "./combat.ts";
 import { activeRoster, bankDepositStatement, getAllSkills, getPlayers, logEventStatement } from "./db.ts";
 import { escapeMarkdown } from "./discord.ts";
 import { seededRng } from "./events.ts";
-import { dropBoost, gearDef } from "./gear.ts";
+import { dropBoost, gearDef, ownedGear } from "./gear.ts";
 import { decodeRows, gpShort, rollRows, type DropRow, type Drops } from "./loot.ts";
 import { campaignWeek, gameWeek } from "./schedule.ts";
 import { cardText, panelCard, type ViewCard } from "./cards.ts";
@@ -135,6 +136,17 @@ export interface BossHit {
   /** Group news for the channel itself: the boss has fallen. */
   channelLines: string[];
   loot: { k: string; c: number; v: number }[];
+  /** Drops the channel hears about with a card: anything notable, and a wearable somebody did not have. */
+  rare: RareDrop[];
+}
+
+/** What in a roll is worth a toast for this player. `who` names them when the toast is posted under somebody else's check-in. */
+async function rareIn(env: Env, owner: Player | undefined, drops: Drops, source: string, who?: string): Promise<RareDrop[]> {
+  const wearable = drops.stacks.filter((stack) => gearDef(stack.key));
+  const owned = owner && wearable.length > 0 ? await ownedGear(env, owner) : new Set<string>();
+  return drops.stacks
+    .filter((stack) => stack.notable || (gearDef(stack.key) && !owned.has(stack.key)))
+    .map((stack) => ({ key: stack.key, item: stack.item, qty: stack.qty, value: stack.value, rate: stack.rate, source, ...(who ? { who } : {}) }));
 }
 
 /**
@@ -167,7 +179,7 @@ export async function bossHit(
   await env.DB.prepare("UPDATE boss_weeks SET damage = damage + ? WHERE week = ?").bind(damage, week).run();
   const after = (await bossWeek(env, week))!;
   const name = escapeMarkdown(player.username);
-  const hit: BossHit = { lines: [], keep: [], channelLines: [], loot: [] };
+  const hit: BossHit = { lines: [], keep: [], channelLines: [], loot: [], rare: [] };
 
   // A kill of the player's own: the first time their damage for the week
   // reaches the boss's real hitpoints, the table rolls for them. Once a week.
@@ -178,6 +190,8 @@ export async function bossHit(
     .first<{ damage: number; kills: number }>();
   if ((mine?.kills ?? 0) === 0 && (mine?.damage ?? 0) >= boss.stats.hitpoints) {
     const drops = bossLoot(boss.key, 1, `${player.discord_id}:${day}:boss`, player.wishlist);
+    // Read before the roll is banked, so a piece is new to the wardrobe exactly once.
+    hit.rare.push(...(await rareIn(env, player, drops, boss.name)));
     statements.push(...bankStatements(env, player.discord_id, drops, day));
     await env.DB.prepare("UPDATE boss_hits SET kills = 1 WHERE checkin_id = ?").bind(checkinId).run();
     for (const stack of drops.stacks) hit.loot.push({ k: stack.key, c: stack.qty, v: stack.value });
@@ -207,6 +221,9 @@ export async function bossHit(
       for (const fighter of results) {
         const who = players.get(fighter.player_id);
         const drops = bossLoot(boss.key, BOSS_CHEST_KILLS, `${fighter.player_id}:${week}:bosschest`, who?.wishlist ?? null);
+        hit.rare.push(
+          ...(await rareIn(env, who, drops, `${boss.name}'s chest`, fighter.player_id === player.discord_id ? undefined : who?.username))
+        );
         statements.push(...bankStatements(env, fighter.player_id, drops, day));
         const found = uniques(drops);
         shares.push(

@@ -19,8 +19,6 @@ import {
 } from "./config.ts";
 import {
   finishClue,
-  hubRows,
-  MENU_BUTTON,
   lampValue,
   performCheckin,
   quizButtons,
@@ -99,6 +97,8 @@ import { GEAR_DEFS, gearCardSlots, gearCatalogue, gearChase, gearDef, gearView, 
 import { farmRun, farmView, tearsVisit } from "./farm.ts";
 import { bossView } from "./bosses.ts";
 import { personalTodo, todoBlock } from "./todo.ts";
+import { hubRows, MENU_BUTTON, nextLines, playerStatus, STALE_LINE, submenu } from "./menu.ts";
+import { toastRareDrops } from "./toast.ts";
 import { kingdomAssign, kingdomCollect, kingdomFund, kingdomMove, kingdomSplit, kingdomView } from "./kingdom.ts";
 import { armourFor, weaponFor } from "./combat.ts";
 import { EXPEDITION_MAX_WEEKS, EXPEDITION_MIN_WEEKS, KINGDOM_JOBS, KINGDOM_SUBJECTS, MAX_NOTE_LENGTH } from "./config.ts";
@@ -577,7 +577,7 @@ async function route(
     case "ping":
       return togglePing(env, user, a === "on", day);
     case "hub":
-      return a === "more" ? more(env, user, day) : hub(env, user, day);
+      return a === "more" ? more(env, user, day) : a ? section(env, user, day, a) : hub(env, user, day);
     case "cin":
       // The form has to be the answer itself: a modal cannot follow a deferral.
       if (a !== day) return reply("That was yesterday's question. Today's is on the morning post.");
@@ -845,7 +845,10 @@ export async function receiptReply(
   // The pick sits above the hub: it is the one thing the receipt asks for.
   if (outcome.spoils) components.push(buttonRow(spoilsButtons(outcome.spoils.id, outcome.spoils.options)));
   // The pick has its own row, so the menu does not need a Spoils button under it.
-  components.push(...(await hubRows(env, player, day, 5 - components.length, outcome.spoils ? ["spoils"] : [])));
+  // Under it, what to do next: the farm run, the week's Tears, anything else open.
+  const current = (await getPlayer(env, player.discord_id)) ?? player;
+  const status = await playerStatus(env, current, day, Date.now());
+  components.push(...(await hubRows(env, current, day, 5 - components.length, outcome.spoils ? ["spoils"] : [], status)));
   // The session itself is in the day's thread; the receipt keeps what only
   // the player can act on.
   const threadId = await dailyThread(env, day);
@@ -854,10 +857,11 @@ export async function receiptReply(
       (threadId ? ` The session is in <#${threadId}>.` : ""),
     ...outcome.essentials,
     ...(outcome.spoils ? ["", ...outcome.spoils.lines] : []),
+    "",
+    ...nextLines(status),
   ];
   // The receipt is private too: what else is waiting rides under it.
-  const current = (await getPlayer(env, player.discord_id)) ?? player;
-  const todo = todoBlock(await personalTodo(env, current, day, Date.now(), { afterCheckin: true }).catch(() => []));
+  const todo = todoBlock(await personalTodo(env, current, day, Date.now(), { afterCheckin: true, skipCore: true }).catch(() => []));
   if (todo) lines.push("", todo);
   return reply(lines.join("\n").slice(0, 1990), { components, scope: "ci" });
 }
@@ -929,7 +933,10 @@ export async function postCheckinLine(
     await logToDiscord(env, `Check-in line failed: ${String(error)}`);
   }
 
-  // Group news — a quest completed — is the one thing a check-in says in the channel itself.
+  // A rare drop is for everybody: a post of its own in the channel, with the item on a card.
+  if (outcome.rareDrops.length > 0) await toastRareDrops(env, player.username, outcome.rareDrops, day, `ci-${outcome.checkinId}`);
+
+  // Group news — a quest completed, a boss down — is the other thing a check-in says in the channel itself.
   if (outcome.channelLines.length > 0) {
     try {
       await postMessage(env, {
@@ -1082,14 +1089,24 @@ export async function hub(env: Env, user: DiscordUser, day: string): Promise<Eph
   const lines = [`**${escapeMarkdown(player.username)}** — what would you like to do?`];
   if (lamps.length > 0) lines.push(`🧞 ${lamps.length} lamp${lamps.length === 1 ? "" : "s"} to rub.`);
   if (clue) lines.push(`📜 A clue in hand — ${remainingSteps(clue).length} step${remainingSteps(clue).length === 1 ? "" : "s"} left.`);
-  if (!isFresh(player, day)) lines.push(`Most of this needs a check-in in the last ${FRESH_WINDOW_DAYS} days. Looking is free.`);
-  const todo = todoBlock(await personalTodo(env, player, day, Date.now()).catch(() => []));
+  const status = await playerStatus(env, player, day, Date.now());
+  lines.push("", ...nextLines(status));
+  if (!status.fresh) lines.push(STALE_LINE);
+  const todo = todoBlock(await personalTodo(env, player, day, Date.now(), { skipCore: true }).catch(() => []));
   if (todo) lines.push("", todo);
-  return reply(lines.join("\n"), {
+  return reply(lines.join("\n").slice(0, 1990), {
     scope: "ci",
-    components: await hubRows(env, player, day),
+    components: await hubRows(env, player, day, 5, [], status),
     card: await menuCard(env, player, day).catch(() => undefined),
   });
+}
+
+/** One of the menu's sections: the views that are not a daily or a weekly, a press below the menu. */
+async function section(env: Env, user: DiscordUser, day: string, key: string): Promise<Answer> {
+  const gate = await requirePlayer(env, user, day);
+  if ("refusal" in gate) return gate.refusal;
+  const view = submenu(key);
+  return view ? reply(view.content, { scope: "ci", components: view.components }) : hub(env, user, day);
 }
 
 /** The menu's card: where the week stands, at a glance. Two check-ins, the task, the boss. */
@@ -1445,7 +1462,11 @@ async function pickSpoils(
     });
   }
   ctx.waitUntil(postSpoils(env, gate.player, row.id, opened, day));
-  return reply(opened.line, { scope: "ci", components: await hubRows(env, gate.player, day) });
+  const status = await playerStatus(env, gate.player, day, now);
+  return reply([opened.line, "", ...nextLines(status)].join("\n").slice(0, 1990), {
+    scope: "ci",
+    components: await hubRows(env, gate.player, day, 5, [], status),
+  });
 }
 
 /** The thread line and the card for a pick. Errors are logged; the pick stands. */
@@ -1477,6 +1498,7 @@ export async function postSpoils(env: Env, player: Player, spoilsId: number, ope
   } catch (error) {
     await logToDiscord(env, `Spoils line failed: ${String(error)}`);
   }
+  if (opened.rare && opened.rare.length > 0) await toastRareDrops(env, player.username, opened.rare, day, `sp-${spoilsId}`);
 }
 
 // ── Gear ───────────────────────────────────────────────────────────
@@ -1711,6 +1733,7 @@ export async function verify(
       if (done.length >= clueSteps(clue).length) {
         const opened = await finishClue(env, author, clue.id, clue.tier, day, now);
         lines.push(opened.publicBit);
+        if (opened.rare) ctx.waitUntil(toastRareDrops(env, author.username, [opened.rare], day, `clue-${clue.id}`));
       } else {
         await markStep(env, clue.id, done);
       }
@@ -1732,6 +1755,7 @@ export async function verify(
     if (done.length >= clueSteps(myClue).length) {
       const opened = await finishClue(env, gate.player, myClue.id, myClue.tier, day, now);
       lines.push(opened.receipt);
+      if (opened.rare) ctx.waitUntil(toastRareDrops(env, gate.player.username, [opened.rare], day, `clue-${myClue.id}`));
     } else {
       await markStep(env, myClue.id, done);
       lines.push("📜 That was one of your clue's steps.");
