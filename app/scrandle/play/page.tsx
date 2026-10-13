@@ -20,7 +20,7 @@ const WEEKLY_URL =
  */
 const REVALIDATE_SECONDS = 300;
 
-const title = "Scrandle | benadams.dev";
+const title = "Scrandle";
 const description =
   "Ten pairs of plates off the board. Pick the one the channel rated higher. A new one twice a week.";
 

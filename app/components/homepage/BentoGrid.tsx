@@ -21,6 +21,7 @@ import {
   SCRANBOT_MESSAGES,
   YUT_MESSAGES,
   OSRS_MESSAGES,
+  SUMMARIES,
 } from "./projects";
 
 const ACCENT = "#81a1c1";
@@ -131,7 +132,7 @@ export function BentoGrid() {
             <p className="text-[10px] font-mono uppercase tracking-widest mb-2" style={{ color: ACCENT }}>
               {MFRS.kicker}
             </p>
-            <h3 className="text-2xl md:text-3xl font-bold text-white leading-tight">{MFRS.title}</h3>
+            <h2 className="text-2xl md:text-3xl font-bold text-white leading-tight">{MFRS.title}</h2>
             <p className="text-gray-300 text-sm mt-2">{MFRS.tagline}</p>
             <p className="text-gray-400 text-sm leading-relaxed mt-3">{MFRS.description}</p>
             <ul className="mt-4 flex flex-col gap-2">
@@ -206,7 +207,7 @@ export function BentoGrid() {
       {/* hobbit.house — 1 col, 2 row */}
       <BentoCard
         title="hobbit.house"
-        description="Phone control app for a living room mini PC. Launch games and streaming apps, run a music visualizer on the TV, and control lights, Kodi and cameras. A QR code turns a guest's phone into a game controller."
+        description={SUMMARIES.hobbitHouse}
         href="https://github.com/BigFancyBen/hobbit-ccp"
         accentColor={ACCENT}
         rowSpan={2}
@@ -220,7 +221,7 @@ export function BentoGrid() {
 
       {/* Prognosticator's visualizer scenes */}
       <BentoSection dimmed={isDimmed("scenes")} onHover={() => setHoveredIndex("scenes")}>
-        <h3 className="text-sm font-bold text-white">Prognosticator: visualizer scenes</h3>
+        <h2 className="text-sm font-bold text-white">Prognosticator: visualizer scenes</h2>
         <p className="text-gray-400 text-xs mb-4 mt-1">
           The lighting rig has a second home. Prognosticator sends its beat grid and DMX output to a Godot
           visualizer, so every light cue also plays in a venue that does not exist.
@@ -230,7 +231,7 @@ export function BentoGrid() {
             <div key={scene.title} className="flex flex-col gap-3">
               <ShotGallery shots={scene.shots} accentColor={ACCENT} autoPlayInterval={5000} autoPlayDelay={i * 2500} />
               <div>
-                <h4 className="text-base font-bold text-white">{scene.title}</h4>
+                <h3 className="text-base font-bold text-white">{scene.title}</h3>
                 <p className="text-gray-400 text-sm leading-relaxed mt-1 mb-3">{scene.description}</p>
                 <Tags tags={scene.tags} />
               </div>
@@ -254,7 +255,7 @@ export function BentoGrid() {
             />
           </div>
           <div className="w-full lg:w-[38%] flex flex-col">
-            <h3 className="text-lg font-bold text-white font-mono">{TESTQ.title}</h3>
+            <h2 className="text-lg font-bold text-white font-mono">{TESTQ.title}</h2>
             <p className="text-gray-300 text-sm mt-2">{TESTQ.tagline}</p>
             <p className="text-gray-400 text-sm leading-relaxed mt-3">{TESTQ.description}</p>
             <ul className="mt-4 flex flex-col gap-2">
@@ -277,7 +278,7 @@ export function BentoGrid() {
       {/* Scrandle + Scranbot row */}
       <BentoCard
         title="Scrandle"
-        description="A weekly game built from my friends' dinner photos. Ten pairs of plates: pick the one the channel rated higher, then see the ratings and who cooked each."
+        description={SUMMARIES.scrandle}
         href="/scrandle/play"
         accentColor={ACCENT}
         colSpan={2}
@@ -291,7 +292,7 @@ export function BentoGrid() {
 
       <BentoCard
         title="Scranbot"
-        description="The Discord bot behind Scrandle. It posts a daily food photo matchup in a friends' channel, keeps votes private until the round closes, reveals the result, and posts weekly standings with rank changes."
+        description={SUMMARIES.scranbot}
         accentColor={ACCENT}
         colSpan={2}
         index={3}
@@ -306,11 +307,9 @@ export function BentoGrid() {
       <BentoSection dimmed={isDimmed("yut")} onHover={() => setHoveredIndex("yut")}>
         <div className="flex flex-col md:flex-row gap-5 md:gap-8">
           <div className="w-full md:w-[38%] flex flex-col">
-            <h3 className="text-lg font-bold text-white">Yut Hut</h3>
+            <h2 className="text-lg font-bold text-white">Yut Hut</h2>
             <p className="text-gray-400 text-sm leading-relaxed mt-2">
-              A Discord bot that turns workout check-ins into Old School RuneScape progress for a friend
-              group. Each check-in is a Slayer session run on the game&apos;s real XP table and drop tables,
-              and the results come back as OSRS-style cards.
+              {SUMMARIES.yutHut}
             </p>
             <ul className="mt-4 flex flex-col gap-2 text-xs leading-relaxed text-gray-400">
               <li>
@@ -350,7 +349,7 @@ export function BentoGrid() {
         onMouseLeave={() => setMtgControlledIndex(null)}
       >
         <div className="flex items-center gap-3 mb-1">
-          <h3 className="text-sm font-bold text-white">Magic: The Gathering</h3>
+          <h2 className="text-sm font-bold text-white">Magic: The Gathering</h2>
           <Tags tags={["Next.js", "React", "Vercel"]} />
         </div>
         <p className="text-gray-400 text-xs mb-4">Tools for Commander players and deck builders</p>
@@ -360,7 +359,8 @@ export function BentoGrid() {
           <div className="w-full md:w-[30%] flex flex-col gap-4">
             <BentoCard
               title="MTG Commander Scorekeeper"
-              description="Touch-friendly scorekeeper for Commander. Four-player quadrant layout with life, poison, and commander damage tracking."
+              headingLevel={3}
+              description={SUMMARIES.commander}
               href="/commander"
               accentColor={ACCENT}
               index={4}
@@ -368,7 +368,8 @@ export function BentoGrid() {
             />
             <BentoCard
               title="Magic Tutor Helper"
-              description="Import a decklist from Archidekt and filter it by mana cost and card type, with Scryfall card images."
+              headingLevel={3}
+              description={SUMMARIES.tutorHelper}
               href="/tutor-helper"
               accentColor={ACCENT}
               index={5}
@@ -376,7 +377,8 @@ export function BentoGrid() {
             />
             <BentoCard
               title="MTG Token Helper"
-              description="Import a deck and it finds every token the deck can make. Track them on the battlefield with tap/untap, counters, and buffs."
+              headingLevel={3}
+              description={SUMMARIES.tokenHelper}
               href="/token-helper"
               accentColor={ACCENT}
               index={6}
@@ -399,7 +401,7 @@ export function BentoGrid() {
       {/* FloatWise + Dota row */}
       <BentoCard
         title="FloatWise"
-        description="Float trip planner. Hourly forecast tables for multiple locations with the live Yellowstone River flow, and a map for pinning put-ins, take-outs, and swim spots."
+        description={SUMMARIES.floatwise}
         href="/floatwise"
         accentColor={ACCENT}
         colSpan={2}
@@ -421,7 +423,7 @@ export function BentoGrid() {
 
       <BentoCard
         title="Dota 2 Randomizer"
-        description="Spin two wheels to get a random hero and a random item to build. Canvas-animated wheels fed by live OpenDota data, with sound and confetti."
+        description={SUMMARIES.dotaRandomizer}
         href="/dota-randomizer"
         accentColor={ACCENT}
         colSpan={2}
@@ -445,7 +447,7 @@ export function BentoGrid() {
       <div className="md:col-span-2 self-start">
         <BentoCard
           title="IRLScape"
-          description="Old School RuneScape streaming overlay. Game UI on a live camera feed with Twitch chat integration and Joycon controls."
+          description={SUMMARIES.irlscape}
           href="https://www.youtube.com/watch?v=gCofVhR5HUQ"
           accentColor={ACCENT}
           colSpan={2}
@@ -468,7 +470,7 @@ export function BentoGrid() {
       {/* OSRS Progress */}
       <BentoCard
         title="OSRS Progress Generator"
-        description="API for generating progress report images for Old School RuneScape players. Collection log items, OSRS Wiki integration."
+        description={SUMMARIES.osrsProgress}
         accentColor={ACCENT}
         colSpan={2}
         index={10}
