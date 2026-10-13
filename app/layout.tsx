@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { GeistMono } from "geist/font/mono";
 import "./globals.css";
+import { AUTHOR, DEFAULT_OG_IMAGE, SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "./site";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -9,32 +10,38 @@ const inter = Inter({
   display: "swap",
 });
 
+/* The card already shows the site name on its own line; the title says who and what. */
+const SHARE_TITLE = `${AUTHOR.name}: games, light shows and tools built for fun`;
+
 export const metadata: Metadata = {
-  title: "benadams.dev",
-  description:
-    "I'm always tinkering with something",
-  keywords: "web development, portfolio, tools, utilities",
+  /* Canonicals and card images are written as paths; this is what makes them
+     absolute, on a preview deployment as much as on the real host. */
+  metadataBase: new URL(SITE_URL),
+  title: { default: `${SITE_NAME} | Projects by ${AUTHOR.name}`, template: `%s | ${SITE_NAME}` },
+  description: SITE_DESCRIPTION,
+  applicationName: SITE_NAME,
+  authors: [{ name: AUTHOR.name, url: AUTHOR.url }],
+  creator: AUTHOR.name,
+  /* Indexing is each page's own call (the noindex pages replace this whole
+     field). Where a page is indexed, let a result quote and preview it in full. */
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { "max-snippet": -1, "max-image-preview": "large", "max-video-preview": -1 },
+  },
   openGraph: {
-    title: "benadams.dev",
-    description:
-      "I'm always tinkering with something",
+    title: SHARE_TITLE,
+    description: SITE_DESCRIPTION,
     type: "website",
-    siteName: "benadams.dev",
-    images: [
-      {
-        url: "/og-homepage.png",
-        width: 1200,
-        height: 630,
-        alt: "benadams.dev project showcase",
-      },
-    ],
+    locale: "en_US",
+    siteName: SITE_NAME,
+    images: [DEFAULT_OG_IMAGE],
   },
   twitter: {
     card: "summary_large_image",
-    title: "benadams.dev",
-    description:
-      "I'm always tinkering with something",
-    images: ["/og-homepage.png"],
+    title: SHARE_TITLE,
+    description: SITE_DESCRIPTION,
+    images: [DEFAULT_OG_IMAGE.url],
   },
 };
 

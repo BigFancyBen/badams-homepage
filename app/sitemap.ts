@@ -1,17 +1,11 @@
 import type { MetadataRoute } from "next";
+import { INDEXED_PAGES, absoluteUrl } from "./site";
 
+/**
+ * No `lastModified`: the only date available here is the build's, and a
+ * sitemap that says every page changed on every deploy teaches a crawler to
+ * ignore the field.
+ */
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = "https://benadams.dev";
-
-  return [
-    { url: baseUrl, lastModified: new Date(), changeFrequency: "monthly", priority: 1 },
-    { url: `${baseUrl}/resume`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.8 },
-    { url: `${baseUrl}/commander`, lastModified: new Date(), changeFrequency: "yearly", priority: 0.5 },
-    { url: `${baseUrl}/tutor-helper`, lastModified: new Date(), changeFrequency: "yearly", priority: 0.5 },
-    { url: `${baseUrl}/token-helper`, lastModified: new Date(), changeFrequency: "yearly", priority: 0.5 },
-    { url: `${baseUrl}/floatwise`, lastModified: new Date(), changeFrequency: "yearly", priority: 0.5 },
-    { url: `${baseUrl}/dota-randomizer`, lastModified: new Date(), changeFrequency: "yearly", priority: 0.5 },
-    { url: `${baseUrl}/scrandle`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.6 },
-    { url: `${baseUrl}/river`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.7 },
-  ];
+  return INDEXED_PAGES.map((page) => ({ url: absoluteUrl(page.path) }));
 }

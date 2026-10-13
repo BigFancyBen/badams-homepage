@@ -415,3 +415,34 @@ export const MFRS = {
     { src: "/mfrs/07-ledge-drop.webp", label: "Ledge drop", caption: "A flipped raft in the pour, one otter on the rock with a rope.", alt: "A flipped raft in the pour below a ledge, its crew in the water around it and one otter on a rock holding a rope out to the boat" },
   ] satisfies Shot[],
 };
+
+/**
+ * One paragraph per project. The homepage cards render these and /llms.txt
+ * lists them, so a crawler that never runs the carousels reads the same copy.
+ */
+export const SUMMARIES = {
+  prognosticator:
+    "A DJ companion app that runs alongside VirtualDJ. It imports Spotify playlists, tags every track with key, BPM, energy and vibe, filters the library to what mixes harmonically with the playing deck, and drives DMX lighting and a Godot visualizer in time with the music.",
+  hobbitHouse:
+    "Phone control app for a living room mini PC. Launch games and streaming apps, run a music visualizer on the TV, and control lights, Kodi and cameras. A QR code turns a guest's phone into a game controller.",
+  scrandle:
+    "A weekly game built from my friends' dinner photos. Ten pairs of plates: pick the one the channel rated higher, then see the ratings and who cooked each.",
+  scranbot:
+    "The Discord bot behind Scrandle. It posts a daily food photo matchup in a friends' channel, keeps votes private until the round closes, reveals the result, and posts weekly standings with rank changes.",
+  yutHut:
+    "A Discord bot that turns workout check-ins into Old School RuneScape progress for a friend group. Each check-in is a Slayer session run on the game's real XP table and drop tables, and the results come back as OSRS-style cards.",
+  commander:
+    "Touch-friendly scorekeeper for Commander. Four-player quadrant layout with life, poison, and commander damage tracking.",
+  tutorHelper:
+    "Import a decklist from Archidekt and filter it by mana cost and card type, with Scryfall card images.",
+  tokenHelper:
+    "Import a deck and it finds every token the deck can make. Track them on the battlefield with tap/untap, counters, and buffs.",
+  floatwise:
+    "Float trip planner. Hourly forecast tables for multiple locations with the live Yellowstone River flow, and a map for pinning put-ins, take-outs, and swim spots.",
+  dotaRandomizer:
+    "Spin two wheels to get a random hero and a random item to build. Canvas-animated wheels fed by live OpenDota data, with sound and confetti.",
+  irlscape:
+    "Old School RuneScape streaming overlay. Game UI on a live camera feed with Twitch chat integration and Joycon controls.",
+  osrsProgress:
+    "API for generating progress report images for Old School RuneScape players. Collection log items, OSRS Wiki integration.",
+};
