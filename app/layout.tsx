@@ -10,6 +10,9 @@ const inter = Inter({
   display: "swap",
 });
 
+/* The card already shows the site name on its own line; the title says who and what. */
+const SHARE_TITLE = `${AUTHOR.name}: games, light shows and tools built for fun`;
+
 export const metadata: Metadata = {
   /* Canonicals and card images are written as paths; this is what makes them
      absolute, on a preview deployment as much as on the real host. */
@@ -27,7 +30,7 @@ export const metadata: Metadata = {
     googleBot: { "max-snippet": -1, "max-image-preview": "large", "max-video-preview": -1 },
   },
   openGraph: {
-    title: SITE_NAME,
+    title: SHARE_TITLE,
     description: SITE_DESCRIPTION,
     type: "website",
     locale: "en_US",
@@ -36,7 +39,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: SITE_NAME,
+    title: SHARE_TITLE,
     description: SITE_DESCRIPTION,
     images: [DEFAULT_OG_IMAGE.url],
   },

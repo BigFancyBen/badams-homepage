@@ -21,10 +21,10 @@ interface OgImage {
 }
 
 export const DEFAULT_OG_IMAGE: OgImage = {
-  url: "/og-homepage.png",
+  url: "/og-homepage.jpg",
   width: 1200,
   height: 630,
-  alt: "benadams.dev project showcase",
+  alt: "Otters in silly hats paddling a raft in Middle Fork Rafting Simulator, beside a wall of blue lasers from the Prognosticator visualizer and Mario under stage lights in its Super Mario 64 scene",
 };
 
 /**
