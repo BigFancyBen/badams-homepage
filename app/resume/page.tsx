@@ -1,16 +1,8 @@
 import type { Metadata } from "next";
 import { ResumeView } from "../components/homepage/ResumeView";
+import { pageMetadata } from "../site";
 
-export const metadata: Metadata = {
-  title: "Technologies | benadams.dev",
-  description: "Tools and frameworks I work with",
-  openGraph: {
-    title: "Technologies | benadams.dev",
-    description: "Tools and frameworks I work with",
-    type: "website",
-    siteName: "benadams.dev",
-  },
-};
+export const metadata: Metadata = pageMetadata("/resume");
 
 export default function ResumePage() {
   return <ResumeView />;

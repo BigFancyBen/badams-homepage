@@ -1,37 +1,32 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
+import { JsonLd } from "../components/JsonLd";
+import { pageMetadata, webAppJsonLd } from "../site";
 
-export const metadata: Metadata = {
-  title: "FloatWise | NOAA Weather Tracker | badams-homepage",
-  description:
-    "Track weather conditions from NOAA data across multiple locations. View temperature and wind forecasts from 10am-7pm for planning your day on the water.",
-  keywords:
-    "NOAA, weather, marine forecast, wind, temperature, float trip, river conditions, weather tracker",
-  openGraph: {
-    title: "FloatWise - NOAA Weather Tracker",
-    description:
-      "Track weather conditions from NOAA data for multiple locations with detailed hourly forecasts",
-    type: "website",
-    siteName: "badams-homepage",
-  },
-  twitter: {
-    card: "summary",
-    title: "FloatWise - NOAA Weather Tracker",
-    description:
-      "NOAA weather tracking for multiple locations with hourly forecasts",
-  },
-
-  robots: "index, follow",
-};
-
-export const viewport = {
+export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
 };
+
+export const metadata: Metadata = pageMetadata("/floatwise", {
+  image: {
+    url: "/floatwise/forecast.webp",
+    width: 1280,
+    height: 720,
+    alt: "FloatWise forecast table with hourly temperature, wind, and precipitation for eight Yellowstone River towns, plus the live river flow",
+  },
+  keywords:
+    "weather, hourly forecast, wind, temperature, float trip, river flow, Yellowstone River, Open-Meteo, USGS",
+});
 
 export default function FloatWiseLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return children;
+  return (
+    <>
+      <JsonLd data={webAppJsonLd("/floatwise", "WeatherApplication", "/floatwise/forecast.webp")} />
+      {children}
+    </>
+  );
 }

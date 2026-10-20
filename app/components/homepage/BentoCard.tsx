@@ -18,6 +18,8 @@ interface BentoCardProps {
   dimmed?: boolean;
   onHover?: () => void;
   tags?: string[];
+  /** 2 for a card that stands alone in the grid, 3 for one nested under a group heading. */
+  headingLevel?: 2 | 3;
 }
 
 export function BentoCard({
@@ -34,7 +36,9 @@ export function BentoCard({
   dimmed,
   onHover,
   tags,
+  headingLevel = 2,
 }: BentoCardProps) {
+  const Heading = headingLevel === 2 ? "h2" : "h3";
   const cardRef = useRef<HTMLDivElement>(null);
   const [isHovered, setIsHovered] = useState(false);
   const reducedMotion = useReducedMotion();
@@ -167,7 +171,7 @@ export function BentoCard({
         <div className="relative z-10 p-5 h-full flex flex-col">
           {/* Header */}
           <div className="mb-2">
-            <h3 className={`${titleClass} font-bold text-white`}>{title}</h3>
+            <Heading className={`${titleClass} font-bold text-white`}>{title}</Heading>
             {subtitle && (
               <AnimatePresence mode="wait">
                 <motion.p

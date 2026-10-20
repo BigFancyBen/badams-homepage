@@ -19,7 +19,7 @@ import {
   upsertEntry,
   upsertPlayer,
 } from "./db";
-import { editInteractionReply } from "./discord";
+import { editInteractionReply, messageUrl } from "./discord";
 import {
   MAX_CAPTION_LENGTH,
   MAX_HUMAN_ENTRIES,
@@ -329,13 +329,23 @@ async function withBoard(
   if (voted.length === 0) return reply(lead);
 
   const picks = voted.map((row) => `#${row.id} → ${row.pick}`).join(" · ");
-  const left = board.length - voted.length;
+
+  // The ones still waiting are links to their cards, because "one still open"
+  // on its own sends people scrolling a thread of five to find which. A card
+  // with no message on record has nothing to link to and is just its number.
+  const open = board
+    .filter((row) => row.pick === null)
+    .map((row) =>
+      row.message_id
+        ? `[#${row.id}](${messageUrl(env, row.message_id, row.thread_id ?? undefined)})`
+        : `#${row.id}`
+    );
 
   return reply(
     `${lead} Your board: ${picks}. ` +
-      (left === 0
+      (open.length === 0
         ? "That is all of them."
-        : `${left === 1 ? "One" : left} still open.`)
+        : `Still open: ${open.join(" · ")}.`)
   );
 }
 

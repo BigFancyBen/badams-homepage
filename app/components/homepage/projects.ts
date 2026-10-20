@@ -158,6 +158,27 @@ export const SM64_SCENE = {
   ] satisfies Shot[],
 };
 
+export const TESTQ = {
+  title: "testq",
+  tagline: "One queue for every Godot run on the machine.",
+  description:
+    "The warehouse, the SM64 scene and the rafting game all test and capture on one PC, from a couple of dozen worktrees that each think they have it to themselves. Two suites starting in the same minute slowed each other enough to fail anything timed against the wall clock, and those failures read exactly like real ones. testq is a small daemon that holds the machine's slots, and every run script asks it before launching an engine.",
+  features: [
+    { label: "Outside every project", text: "A capture in the DJ app and a physics suite in the game are two engines on one box, and neither repo can see the other's. The queue belongs to neither." },
+    { label: "Shortest first", text: "Estimates come from each job's own history, so a twenty-second test does not sit behind two eleven-minute suites. A job that has waited long enough ages to the front." },
+    { label: "Hung runs get killed", text: "An engine that stalls or overruns its limit is stopped and its slot handed back. A client that dies has its slots reclaimed in about five seconds." },
+    { label: "A page and a tray dot", text: "What is running, what is queued and roughly when it starts, with every finished run kept in SQLite to pick out the jobs that only sometimes pass." },
+  ],
+  tags: ["Python", "SQLite", "Node", "Bash", "PowerShell", "Godot"],
+  repoUrl: "https://github.com/BigFancyBen/testq",
+  image: {
+    src: "/testq/page.webp",
+    alt: "The testq status page: eight CPU slots and two GPU slots all in use, five running jobs across mfrs and prognosticator worktrees with progress bars, five queued jobs with estimated start times and what each is waiting for, and recent results including one marked killed: stalled",
+    width: 1600,
+    height: 1166,
+  },
+};
+
 export const RADIANCE_SCREENSHOTS = [
   { src: "/radiance/lights.webp", label: "Smart light controls", bg: "#161616" },
   { src: "/radiance/games-idle.webp", label: "TV launcher", bg: "#161616" },
@@ -393,4 +414,35 @@ export const MFRS = {
     { src: "/mfrs/06-hats.webp", label: "The crew", caption: "Merit badges unlock hats. Every one is on a head here.", alt: "Otters in life jackets paddling a raft wearing a wizard hat, top hat, traffic cone, viking helm and sombrero" },
     { src: "/mfrs/07-ledge-drop.webp", label: "Ledge drop", caption: "A flipped raft in the pour, one otter on the rock with a rope.", alt: "A flipped raft in the pour below a ledge, its crew in the water around it and one otter on a rock holding a rope out to the boat" },
   ] satisfies Shot[],
+};
+
+/**
+ * One paragraph per project. The homepage cards render these and /llms.txt
+ * lists them, so a crawler that never runs the carousels reads the same copy.
+ */
+export const SUMMARIES = {
+  prognosticator:
+    "A DJ companion app that runs alongside VirtualDJ. It imports Spotify playlists, tags every track with key, BPM, energy and vibe, filters the library to what mixes harmonically with the playing deck, and drives DMX lighting and a Godot visualizer in time with the music.",
+  hobbitHouse:
+    "Phone control app for a living room mini PC. Launch games and streaming apps, run a music visualizer on the TV, and control lights, Kodi and cameras. A QR code turns a guest's phone into a game controller.",
+  scrandle:
+    "A weekly game built from my friends' dinner photos. Ten pairs of plates: pick the one the channel rated higher, then see the ratings and who cooked each.",
+  scranbot:
+    "The Discord bot behind Scrandle. It posts a daily food photo matchup in a friends' channel, keeps votes private until the round closes, reveals the result, and posts weekly standings with rank changes.",
+  yutHut:
+    "A Discord bot that turns workout check-ins into Old School RuneScape progress for a friend group. Each check-in is a Slayer session run on the game's real XP table and drop tables, and the results come back as OSRS-style cards.",
+  commander:
+    "Touch-friendly scorekeeper for Commander. Four-player quadrant layout with life, poison, and commander damage tracking.",
+  tutorHelper:
+    "Import a decklist from Archidekt and filter it by mana cost and card type, with Scryfall card images.",
+  tokenHelper:
+    "Import a deck and it finds every token the deck can make. Track them on the battlefield with tap/untap, counters, and buffs.",
+  floatwise:
+    "Float trip planner. Hourly forecast tables for multiple locations with the live Yellowstone River flow, and a map for pinning put-ins, take-outs, and swim spots.",
+  dotaRandomizer:
+    "Spin two wheels to get a random hero and a random item to build. Canvas-animated wheels fed by live OpenDota data, with sound and confetti.",
+  irlscape:
+    "Old School RuneScape streaming overlay. Game UI on a live camera feed with Twitch chat integration and Joycon controls.",
+  osrsProgress:
+    "API for generating progress report images for Old School RuneScape players. Collection log items, OSRS Wiki integration.",
 };

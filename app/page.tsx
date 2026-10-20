@@ -1,21 +1,31 @@
 import { ParticleField } from "./components/homepage/ParticleField";
 import { BentoGrid } from "./components/homepage/BentoGrid";
 import { AnimatedResumeLink } from "./components/homepage/AnimatedResumeLink";
+import type { Metadata } from "next";
 import { HeroSection } from "./components/homepage/HeroSection";
+import { JsonLd } from "./components/JsonLd";
+import { homeJsonLd } from "./site";
+
+/* Set here and not in the root layout, where every page without a canonical
+   of its own would inherit a claim to be the homepage. */
+export const metadata: Metadata = { alternates: { canonical: "/" } };
 
 export default function Home() {
   return (
     <div className="min-h-screen relative overflow-hidden">
+      <JsonLd data={homeJsonLd()} />
       <ParticleField />
       <AnimatedResumeLink />
 
-      {/* Hero section */}
-      <HeroSection />
+      <main>
+        {/* Hero section */}
+        <HeroSection />
 
-      {/* Bento grid */}
-      <div className="relative z-10 max-w-7xl mx-auto px-4 pb-24">
-        <BentoGrid />
-      </div>
+        {/* Bento grid */}
+        <div className="relative z-10 max-w-7xl mx-auto px-4 pb-24">
+          <BentoGrid />
+        </div>
+      </main>
 
       {/* Footer */}
       <footer className="relative z-10 border-t border-white/5 py-6 px-4">
