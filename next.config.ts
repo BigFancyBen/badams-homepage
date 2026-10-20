@@ -63,6 +63,13 @@ const nextConfig: NextConfig = {
     return [
       { source: "/:path*", headers: SECURITY_HEADERS },
       {
+        /* The render endpoints are cards for Discord, not pages. Said as a
+           header rather than a robots.txt Disallow, which a crawler would have
+           to obey before it could read this. */
+        source: "/api/:path*",
+        headers: [{ key: "X-Robots-Tag", value: "noindex" }],
+      },
+      {
         /* The homepage loops. Not fingerprinted, so a day and no longer. */
         source: "/:path*/loop.mp4",
         headers: [{ key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" }],

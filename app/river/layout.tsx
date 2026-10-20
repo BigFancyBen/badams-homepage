@@ -23,7 +23,9 @@ export const metadata: Metadata = {
   /* Discord unfurls these links in chat, so the card art has to resolve to an
      absolute URL rather than to whatever host rendered the page. */
   metadataBase: new URL("https://benadams.dev"),
-  title,
+  /* The game goes by its own name: `absolute` keeps the site's "| benadams.dev"
+     suffix off this page, and the template keeps it off the pages below. */
+  title: { absolute: title, template: "%s" },
   description,
   openGraph: {
     title,
