@@ -287,15 +287,16 @@ export async function voteBreakdown(
  * halves are only ever read together. Filtered on `closes_at` as well as
  * `status`, so the line agrees with what handleVote will actually accept: a
  * matchup whose window ran out before the tick that closes it is not on the
- * board, whatever the row still says.
+ * board, whatever the row still says. The card's message and thread come
+ * along so the matchups still waiting on a vote can be linked to.
  */
 export async function boardFor(
   env: Env,
   voterId: string,
   now: number
-): Promise<{ id: number; pick: number | null }[]> {
+): Promise<BoardRow[]> {
   const result = await env.DB.prepare(
-    "SELECT m.id AS id, CASE " +
+    "SELECT m.id AS id, m.message_id AS message_id, m.thread_id AS thread_id, CASE " +
       "WHEN v.picked_dish_id IS NULL THEN NULL " +
       "WHEN v.picked_dish_id = m.dish_a_id THEN 1 ELSE 2 END AS pick " +
       "FROM matchups m LEFT JOIN votes v " +
@@ -304,8 +305,15 @@ export async function boardFor(
       "ORDER BY m.created_at ASC, m.id ASC"
   )
     .bind(voterId, now)
-    .all<{ id: number; pick: number | null }>();
+    .all<BoardRow>();
   return result.results ?? [];
+}
+
+export interface BoardRow {
+  id: number;
+  pick: number | null;
+  message_id: string | null;
+  thread_id: string | null;
 }
 
 // ── Ranking rounds ─────────────────────────────────────────────────

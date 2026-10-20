@@ -840,7 +840,7 @@ running it twice is a no-op.
   can only say things that stay true of the lines it replaces, so "Voted 2."
   had to go: it is true of the click and wrong about the four votes before it.
   The reply is now every open matchup this person has voted on and what they
-  picked — `Voted: #341 → 2 · #342 → 1. Three still open.` — in the numbers
+  picked — `Voted: #341 → 2 · #342 → 1. Still open: #343 · #344.` — in the numbers
   printed on the cards and the buttons, which is all a voter has to go on. Only
   their own picks, mind; the channel still sees nothing until the round closes.
 - **The result goes out as a new message, not as an edit.** A vote window is a
