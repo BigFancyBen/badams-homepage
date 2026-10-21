@@ -6,6 +6,10 @@ const BASE_URL = "http://localhost:3000";
 const VIEWPORT = { width: 1280, height: 800 };
 const OUTPUT_DIR = join(__dirname, "..", "public", "readme");
 
+// The README leads with one picture of the homepage. Every other image in it
+// is a project screenshot that already lives under /public for the site.
+const HOMEPAGE_HEIGHT = 1500;
+
 async function waitForPage(page: Page, timeout = 3000) {
   await page.waitForLoadState("networkidle").catch(() => {});
   await page.waitForTimeout(timeout);
@@ -16,54 +20,28 @@ async function captureHomepage(page: Page) {
   await page.goto(BASE_URL);
   await waitForPage(page, 4000);
 
-  // Scroll past hero to the bento grid
-  await page.evaluate(() => window.scrollTo(0, window.innerHeight));
-  await page.waitForTimeout(2000);
+  // The dev server's indicator would otherwise sit in the corner of the shot.
+  await page.addStyleTag({ content: "nextjs-portal { display: none !important; }" });
+
+  // Scroll through the page so every whileInView section has animated in.
+  const total = await page.evaluate(() => document.documentElement.scrollHeight);
+  for (let y = 0; y < total; y += 600) {
+    await page.evaluate((top) => window.scrollTo(0, top), y);
+    await page.waitForTimeout(250);
+  }
+
+  // Start the shot at the grid, below the full-screen hero.
+  const top = await page.evaluate(() => window.innerHeight);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.waitForTimeout(1000);
 
   await page.screenshot({
     path: join(OUTPUT_DIR, "homepage.png"),
     type: "png",
     fullPage: true,
+    clip: { x: 0, y: top - 24, width: VIEWPORT.width, height: HOMEPAGE_HEIGHT },
   });
   console.log("  ✅ homepage.png");
-}
-
-async function captureResume(page: Page) {
-  console.log("📸 Capturing resume...");
-  await page.goto(`${BASE_URL}/resume`);
-  await waitForPage(page, 3000);
-
-  await page.screenshot({
-    path: join(OUTPUT_DIR, "resume.png"),
-    type: "png",
-  });
-  console.log("  ✅ resume.png");
-}
-
-async function captureFloatWise(page: Page) {
-  console.log("📸 Capturing FloatWise...");
-  await page.goto(`${BASE_URL}/floatwise`);
-  await page.evaluate(() => localStorage.clear());
-  await page.reload();
-  await waitForPage(page);
-
-  await page.screenshot({
-    path: join(OUTPUT_DIR, "floatwise.png"),
-    type: "png",
-  });
-  console.log("  ✅ floatwise.png");
-}
-
-async function captureDotaRandomizer(page: Page) {
-  console.log("📸 Capturing Dota Randomizer...");
-  await page.goto(`${BASE_URL}/dota-randomizer`);
-  await waitForPage(page, 5000);
-
-  await page.screenshot({
-    path: join(OUTPUT_DIR, "dota-randomizer.png"),
-    type: "png",
-  });
-  console.log("  ✅ dota-randomizer.png");
 }
 
 async function main() {
@@ -91,9 +69,6 @@ async function main() {
     }
 
     await captureHomepage(page);
-    await captureResume(page);
-    await captureFloatWise(page);
-    await captureDotaRandomizer(page);
 
     console.log("\n✅ All screenshots captured!");
   } catch (error) {
