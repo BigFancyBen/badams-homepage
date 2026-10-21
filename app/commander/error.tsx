@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { clearSavedGame } from "./storage";
 
 export default function CommanderError({
   error,
@@ -15,7 +16,7 @@ export default function CommanderError({
   }, [error]);
 
   return (
-    <div className="w-screen h-screen bg-[#2d1e2f] flex items-center justify-center">
+    <div className="w-screen h-dvh bg-[#2d1e2f] flex items-center justify-center">
       <div className="bg-[#473455] p-8 rounded-lg max-w-md mx-4 text-center">
         <h2 className="text-[#fcf6b1] text-2xl font-bold mb-4">
           Commander Error
@@ -29,6 +30,16 @@ export default function CommanderError({
             className="w-full bg-[#a9e5bb] hover:bg-[#89d4a0] text-black font-bold py-3 px-6 rounded-sm transition-all duration-200"
           >
             Try Again
+          </button>
+          {/* A broken save would crash again on retry, so offer to drop it */}
+          <button
+            onClick={() => {
+              clearSavedGame();
+              reset();
+            }}
+            className="w-full bg-[#9a0f08] hover:bg-[#c0140b] text-white font-bold py-3 px-6 rounded-sm transition-all duration-200"
+          >
+            Start a New Game
           </button>
           <button
             onClick={() => window.location.href = "/"}

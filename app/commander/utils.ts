@@ -1,86 +1,132 @@
-import { ParsedAction, ParsedLifeActionFromPlayer, ParsedCommanderDamageAction, ParsedPoisonAction, PlayerState } from './types';
+import { HistoryEntry, HistoryKind, Layout, PlayerState, Rotation } from './types';
 
-// Helper function to parse life actions
-export const parseLifeAction = (actionStr: string): ParsedAction | null => {
-  const match = actionStr.match(/^([+-])(\d+)\s+life\|(.+)$/);
+export const STARTING_LIFE = 40;
+export const COMMANDER_DAMAGE_MAX = 21;
+// Taps on the same counter within this window merge into one history entry
+export const COLLAPSE_WINDOW_MS = 2000;
+
+export const defaultPlayerName = (index: number) => `Player ${index + 1}`;
+
+export const createPlayer = (index: number, overrides: Partial<PlayerState> = {}): PlayerState => ({
+  life: STARTING_LIFE,
+  commanderDamage: [0, 0, 0],
+  rotation: 0,
+  name: defaultPlayerName(index),
+  history: [],
+  poison: 0,
+  isDead: false,
+  ...overrides,
+});
+
+// Indices of the three opponents, in the order commanderDamage stores them
+export const commanderSources = (playerIndex: number) =>
+  [0, 1, 2, 3].filter((i) => i !== playerIndex);
+
+// Add an entry to the front of a history, merging it with the newest entry when
+// that one is the same counter from the same source and still recent. A merge
+// that sums to zero removes the entry, so +1 then -1 leaves no trace.
+export const addHistoryEntry = (
+  history: HistoryEntry[],
+  entry: Omit<HistoryEntry, 'timestamp'>,
+  now = Date.now()
+): HistoryEntry[] => {
+  const [latest, ...rest] = history;
+  if (
+    latest &&
+    latest.kind === entry.kind &&
+    latest.from === entry.from &&
+    now - latest.timestamp <= COLLAPSE_WINDOW_MS
+  ) {
+    const value = latest.value + entry.value;
+    return value === 0 ? rest : [{ ...entry, value, timestamp: now }, ...rest];
+  }
+  return [{ ...entry, timestamp: now }, ...history];
+};
+
+const isFiniteNumber = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value);
+
+const LEGACY_KINDS: Record<string, HistoryKind> = {
+  life: 'life',
+  'commander damage': 'commander',
+  poison: 'poison',
+};
+
+// Earlier versions stored history as strings like "-1 life from Bob|negative"
+const parseLegacyEntry = (action: string, timestamp: number): HistoryEntry | null => {
+  const match = action.match(/^([+-])(\d+)\s+(life|commander damage|poison)(?: from (.+))?\|\w+$/);
   if (!match) return null;
   return {
+    kind: LEGACY_KINDS[match[3]],
     value: parseInt(match[2]) * (match[1] === '+' ? 1 : -1),
-    type: match[3]
+    ...(match[4] ? { from: match[4] } : {}),
+    timestamp,
   };
 };
 
-// Helper function to parse life actions from a specific player
-export const parseLifeActionFromPlayer = (actionStr: string): ParsedLifeActionFromPlayer | null => {
-  const match = actionStr.match(/^([+-])(\d+)\s+life from (.+)\|(.+)$/);
-  if (!match) return null;
-  return {
-    value: parseInt(match[2]) * (match[1] === '+' ? 1 : -1),
-    type: match[4],
-    fromPlayer: match[3]
-  };
+const normalizeHistory = (raw: unknown): HistoryEntry[] => {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((item): HistoryEntry[] => {
+    if (!item || typeof item !== 'object') return [];
+    const { kind, value, from, timestamp, action } = item as Record<string, unknown>;
+    if (!isFiniteNumber(timestamp)) return [];
+    if (typeof action === 'string') {
+      const legacy = parseLegacyEntry(action, timestamp);
+      return legacy ? [legacy] : [];
+    }
+    if ((kind === 'life' || kind === 'commander' || kind === 'poison') && isFiniteNumber(value)) {
+      return [{ kind, value, ...(typeof from === 'string' ? { from } : {}), timestamp }];
+    }
+    return [];
+  });
 };
 
-// Helper function to parse commander damage actions
-export const parseCommanderDamageAction = (actionStr: string): ParsedCommanderDamageAction | null => {
-  const match = actionStr.match(/^([+-])(\d+)\s+commander damage from (.+)\|commander$/);
-  if (!match) return null;
-  return {
-    value: parseInt(match[2]) * (match[1] === '+' ? 1 : -1),
-    fromPlayer: match[3]
-  };
-};
-
-// Helper function to parse poison actions
-export const parsePoisonAction = (actionStr: string): ParsedPoisonAction | null => {
-  const match = actionStr.match(/^([+-])(\d+)\s+poison\|poison$/);
-  if (!match) return null;
-  return {
-    value: parseInt(match[2]) * (match[1] === '+' ? 1 : -1)
-  };
+// Rebuild a saved game field by field, falling back to defaults for anything
+// missing or malformed, so a save from an older version can't crash the page.
+export const normalizePlayers = (raw: unknown): PlayerState[] | null => {
+  if (!Array.isArray(raw) || raw.length !== 4) return null;
+  return raw.map((item, index) => {
+    const p = (item && typeof item === 'object' ? item : {}) as Record<string, unknown>;
+    const damage = Array.isArray(p.commanderDamage) ? p.commanderDamage : [];
+    return createPlayer(index, {
+      life: isFiniteNumber(p.life) ? p.life : STARTING_LIFE,
+      commanderDamage: [0, 1, 2].map((i) =>
+        isFiniteNumber(damage[i]) ? Math.max(0, Math.min(COMMANDER_DAMAGE_MAX, damage[i])) : 0
+      ) as [number, number, number],
+      rotation: p.rotation === 90 || p.rotation === 180 || p.rotation === 270 ? p.rotation : 0,
+      name: typeof p.name === 'string' && p.name.trim() ? p.name : defaultPlayerName(index),
+      history: normalizeHistory(p.history),
+      poison: isFiniteNumber(p.poison) ? Math.max(0, p.poison) : 0,
+      isDead: p.isDead === true,
+    });
+  });
 };
 
 // Generate unique abbreviations for player names
 export const generateAbbreviations = (players: PlayerState[]): string[] => {
   const abbreviations: string[] = [];
-  const usedAbbrevs = new Set<string>();
-
-  // First pass: find common prefixes and group similar names
   const nameGroups: { [key: string]: number[] } = {};
 
   players.forEach((player, index) => {
-    // If using default name, keep P1, P2, etc.
-    if (player.name === `Player ${index + 1}`) {
+    // Default names keep P1, P2, etc.
+    if (player.name === defaultPlayerName(index)) {
       abbreviations[index] = `P${index + 1}`;
       return;
     }
 
-    const name = player.name.trim().toLowerCase();
-    // Try to find a meaningful 3-character prefix
-    const prefix = name.substring(0, 3);
-
-    if (!nameGroups[prefix]) {
-      nameGroups[prefix] = [];
+    const prefix = player.name.trim().toLowerCase().substring(0, 3);
+    if (!prefix) {
+      abbreviations[index] = `P${index + 1}`;
+      return;
     }
-    nameGroups[prefix].push(index);
+    (nameGroups[prefix] ??= []).push(index);
   });
 
-  // Second pass: assign abbreviations
   Object.entries(nameGroups).forEach(([prefix, indices]) => {
-    if (indices.length === 1) {
-      // Only one name with this prefix, use 3 characters
-      const index = indices[0];
-      const abbrev = prefix.toUpperCase();
-      usedAbbrevs.add(abbrev);
-      abbreviations[index] = abbrev;
-    } else {
-      // Multiple names with same prefix, use prefix + numbers
-      indices.forEach((index, i) => {
-        const abbrev = prefix.toUpperCase() + (i + 1);
-        usedAbbrevs.add(abbrev);
-        abbreviations[index] = abbrev;
-      });
-    }
+    indices.forEach((index, i) => {
+      // Names sharing a prefix get numbered: BOB1, BOB2
+      abbreviations[index] = prefix.toUpperCase() + (indices.length > 1 ? i + 1 : '');
+    });
   });
 
   return abbreviations;
@@ -97,30 +143,39 @@ export const formatTime = (timestamp: number): string => {
   });
 };
 
-// Parse action text to extract components for display
-export const parseActionForDisplay = (actionText: string) => {
-  // Match patterns like "+5", "-1", "+2 commander damage", etc.
-  const match = actionText.match(/^([+-])(\d+)\s*(.*)$/);
-  if (match) {
-    return {
-      sign: match[1],
-      number: match[2],
-      label: match[3] || "",
-    };
-  }
-  // Fallback for non-standard formats
+export const describeEntry = (entry: HistoryEntry) => {
+  const base =
+    entry.kind === 'life' ? 'life' : entry.kind === 'commander' ? 'commander damage' : 'poison';
   return {
-    sign: "",
-    number: "",
-    label: actionText,
+    sign: entry.value > 0 ? '+' : '-',
+    number: String(Math.abs(entry.value)),
+    label: entry.from ? `${base} from ${entry.from}` : base,
   };
 };
 
+// Phones only flip a player between the two angles that fit the screen, so a
+// rotation saved in another layout is mapped onto the matching one here.
+// Desktop allows all four.
+export const fitRotation = (rotation: Rotation, layout: Layout): Rotation => {
+  if (layout === 'portrait') {
+    return rotation === 90 ? 0 : rotation === 270 ? 180 : rotation;
+  }
+  if (layout === 'landscape') {
+    return rotation === 0 ? 90 : rotation === 180 ? 270 : rotation;
+  }
+  return rotation;
+};
+
+export const nextRotation = (rotation: Rotation, layout: Layout): Rotation => {
+  const current = fitRotation(rotation, layout);
+  if (layout === 'desktop') return ((current + 90) % 360) as Rotation;
+  // A half turn keeps the player on the same axis
+  return ((current + 180) % 360) as Rotation;
+};
+
 // Get rotation CSS class based on rotation value
-export const getRotationClass = (rotation: number): string => {
+export const getRotationClass = (rotation: Rotation): string => {
   switch (rotation) {
-    case 0:
-      return "rotate-0 origin-center";
     case 90:
       return "rotate-90 origin-center";
     case 180:
@@ -131,4 +186,3 @@ export const getRotationClass = (rotation: number): string => {
       return "rotate-0 origin-center";
   }
 };
-
