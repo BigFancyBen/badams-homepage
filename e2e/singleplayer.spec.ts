@@ -78,16 +78,16 @@ test.describe('Single Player Commander', () => {
     await expect(page.getByTestId('life-total-0')).toHaveText('45');
   });
 
-  test('life cannot go below 0', async ({ page }) => {
+  test('life can go below 0', async ({ page }) => {
     await page.waitForSelector('[data-testid="life-total-0"]');
 
-    // Click -5 button 9 times (would be -45, but should stop at 0)
+    // Click -5 button 9 times: 40 - 45
     for (let i = 0; i < 9; i++) {
       await page.getByTestId('life-minus-5-0').click();
     }
 
-    // Verify life is 0, not negative
-    await expect(page.getByTestId('life-total-0')).toHaveText('0');
+    // Negative life is real in Magic, so it is shown, not clamped
+    await expect(page.getByTestId('life-total-0')).toHaveText('-5');
   });
 
   test('multiple players can have different life totals', async ({ page }) => {

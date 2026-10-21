@@ -1,25 +1,27 @@
-import { PlayerState } from "../types";
-import { formatTime, parseActionForDisplay } from "../utils";
+import { HistoryEntry, PlayerState } from "../types";
+import { describeEntry, formatTime } from "../utils";
+import { CloseIcon } from "./icons";
 
 interface HistoryModalProps {
   isOpen: boolean;
   player: PlayerState;
-  playerIndex: number;
-  isMobileLandscape: boolean;
-  isMobilePortrait: boolean;
+  isMobile: boolean;
   onClose: () => void;
 }
 
-export function HistoryModal({
-  isOpen,
-  player,
-  isMobileLandscape,
-  isMobilePortrait,
-  onClose,
-}: HistoryModalProps) {
-  if (!isOpen) return null;
+const entryColor = (entry: HistoryEntry) => {
+  switch (entry.kind) {
+    case "poison":
+      return "text-[#c490e0]";
+    case "commander":
+      return "text-[#f7b32b]";
+    default:
+      return entry.value > 0 ? "text-[#a9e5bb]" : "text-[#e3170a]";
+  }
+};
 
-  const isMobile = isMobileLandscape || isMobilePortrait;
+export function HistoryModal({ isOpen, player, isMobile, onClose }: HistoryModalProps) {
+  if (!isOpen) return null;
 
   return (
     <div
@@ -39,10 +41,7 @@ export function HistoryModal({
             onClick={onClose}
             className="text-[#fcf6b1]/70 hover:text-[#fcf6b1]/90 transition-colors p-1 ml-2 shrink-0"
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M18 6L6 18" />
-              <path d="M6 6l12 12" />
-            </svg>
+            <CloseIcon size={18} />
           </button>
         </div>
 
@@ -53,29 +52,11 @@ export function HistoryModal({
               No actions yet
             </div>
           ) : (
-            <div>
+            <div data-testid="history-list">
               {player.history.map((entry, index) => {
-                const [text, type] = entry.action.split("|");
-                let textColor = "text-[#9d88aa]";
-
-                if (type === "positive") {
-                  textColor = "text-[#a9e5bb]";
-                } else if (type === "negative") {
-                  textColor = "text-[#e3170a]";
-                } else if (type === "poison") {
-                  textColor = "text-[#c490e0]";
-                } else if (type === "commander") {
-                  textColor = "text-[#f7b32b]";
-                }
-
-                const { sign, number, label } = parseActionForDisplay(text);
-
-                const signColor =
-                  sign === "+"
-                    ? "text-[#a9e5bb]"
-                    : sign === "-"
-                    ? "text-[#e3170a]"
-                    : "";
+                const textColor = entryColor(entry);
+                const { sign, number, label } = describeEntry(entry);
+                const signColor = sign === "+" ? "text-[#a9e5bb]" : "text-[#e3170a]";
 
                 return (
                   <div
