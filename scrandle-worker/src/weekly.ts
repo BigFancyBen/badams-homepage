@@ -1,4 +1,8 @@
-import { allowedMentions, postMessage } from "./discord";
+import {
+  allowedMentions,
+  ARCHIVE_AFTER_THREE_DAYS,
+  openThread,
+} from "./discord";
 import { getState, setState } from "./db";
 import { dishFocus, dishUrl } from "./images";
 import { parseWeekdays } from "./schedule";
@@ -173,12 +177,19 @@ export async function postWeeklyIfDue(
 
   await putJson(env, WEEKLY_CURRENT_KEY, body);
 
-  await postMessage(env, {
-    content:
-      `**Scrandle #${number} is up.** ${puzzle.rounds.length} pairs off the board — ` +
-      `pick the plate the channel rated higher.\n${env.WEEKLY_URL}`,
-    allowed_mentions: allowedMentions(env),
-  });
+  // The thread is where scores go, so they sit in one place instead of
+  // scattering down the channel.
+  await openThread(
+    env,
+    {
+      content:
+        `**Scrandle #${number} is up.** ${puzzle.rounds.length} pairs off the board — ` +
+        `pick the plate the channel rated higher. Post your score in the thread.\n${env.WEEKLY_URL}`,
+      allowed_mentions: allowedMentions(env),
+    },
+    `Scrandle #${number}`,
+    ARCHIVE_AFTER_THREE_DAYS
+  );
 
   const recentRaw = await getState(env, "weekly_recent");
   const recent: number[][] = recentRaw ? JSON.parse(recentRaw) : [];
