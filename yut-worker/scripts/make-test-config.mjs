@@ -23,6 +23,8 @@ const PLACEHOLDERS = [
   [/database_id = "[^"]*"/, 'database_id = "00000000-0000-0000-0000-000000000000"'],
   [/R2_PUBLIC_BASE = ""/, 'R2_PUBLIC_BASE = "https://images.test.local"'],
   // Hold /help and the Boss button back past the ack budget so the harness can watch the late path.
+  // The harness plays the game, so it runs unpaused whatever production says.
+  [/GAME_PAUSED = "1"/, 'GAME_PAUSED = "0"'],
   [/TOWN_TICK_ENABLED = "0"/, 'TOWN_TICK_ENABLED = "0"\nSLOW_COMMAND = "help,boss"'],
   // TEST_IMAGE_BASE points the cards at a local `next dev`, so the harness can watch one get drawn.
   ...(process.env.TEST_IMAGE_BASE ? [[/IMAGE_BASE_URL = "[^"]*"/, `IMAGE_BASE_URL = "${process.env.TEST_IMAGE_BASE}"`]] : []),

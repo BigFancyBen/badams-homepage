@@ -99,6 +99,7 @@ import { bossView } from "./bosses.ts";
 import { personalTodo, todoBlock } from "./todo.ts";
 import { hubRows, MENU_BUTTON, nextLines, playerStatus, STALE_LINE, submenu } from "./menu.ts";
 import { toastRareDrops } from "./toast.ts";
+import { gamePaused } from "./feedback.ts";
 import { kingdomAssign, kingdomCollect, kingdomFund, kingdomMove, kingdomSplit, kingdomView } from "./kingdom.ts";
 import { armourFor, weaponFor } from "./combat.ts";
 import { EXPEDITION_MAX_WEEKS, EXPEDITION_MIN_WEEKS, KINGDOM_JOBS, KINGDOM_SUBJECTS, MAX_NOTE_LENGTH } from "./config.ts";
@@ -394,6 +395,15 @@ export async function handleInTime(
   interaction: Interaction
 ): Promise<Response> {
   if (interaction.type === InteractionType.PING) return handleInteraction(env, ctx, interaction);
+  if (gamePaused(env)) {
+    return Response.json({
+      type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+      data: {
+        content: "Yut Hut is paused while we playtest Oathkeep. Your progress is saved. Tell us how Oathkeep is going in the latest feedback thread!",
+        flags: 64,
+      },
+    });
+  }
 
   // Test seam: wrangler.test.toml names commands and buttons to hold back, so
   // the harness can watch the late path work.

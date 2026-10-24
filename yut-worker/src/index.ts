@@ -83,6 +83,7 @@ async function admin(env: Env, ctx: ExecutionContext, url: URL): Promise<unknown
           post: url.searchParams.get("post") === "1",
           lastCall: url.searchParams.get("lastcall") === "1",
           reminders: url.searchParams.get("reminders") === "1",
+          feedback: url.searchParams.get("feedback") === "1",
         }),
       };
 

@@ -22,6 +22,11 @@ export interface Env {
   /** The Monday the campaign starts, YYYY-MM-DD. */
   CAMPAIGN_START: string;
   TOWN_TICK_ENABLED: string;
+  /** "1" freezes the game: no ticks, every command answers "paused". */
+  GAME_PAUSED?: string;
+  /** While paused: weekdays (0 = Sunday, comma list) and hour of the Oathkeep feedback post. */
+  FEEDBACK_WEEKDAYS?: string;
+  FEEDBACK_HOUR_UTC?: string;
   /** Test only: command names and button prefixes, comma-separated, that the Worker holds back past the ack budget. */
   SLOW_COMMAND?: string;
 
