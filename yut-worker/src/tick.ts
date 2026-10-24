@@ -10,6 +10,7 @@ import {
 } from "./db.ts";
 import { composeDigest, composeLastCall, composeRollCall, dailyCardUrl, digestPayload, threadName, trimmedDigestPayload } from "./digest.ts";
 import { allowedMentions, deleteMessage, editMessage, logToDiscord, postMessage, startThread } from "./discord.ts";
+import { gamePaused, postFeedbackAsk } from "./feedback.ts";
 import { composeReminders, reminderMessage } from "./reminders.ts";
 import { playersRoleId } from "./roles.ts";
 import {
@@ -41,12 +42,27 @@ import { actForWeek, campaignWeek } from "./schedule.ts";
 export async function runTick(
   env: Env,
   now: number,
-  force: { daily?: boolean; post?: boolean; lastCall?: boolean; reminders?: boolean } = {}
+  force: { daily?: boolean; post?: boolean; lastCall?: boolean; reminders?: boolean; feedback?: boolean } = {}
 ): Promise<Record<string, unknown>> {
   const report: Record<string, unknown> = {};
   const rollover = parseHour(env.ROLLOVER_HOUR_UTC) ?? 9;
   const today = gameDay(now, rollover);
   const yesterday = addDays(today, -1);
+
+  // ── Paused: the game stands still and the channel asks about Oathkeep ──
+  // Nothing resolves, decays, posts or reminds; picking back up resumes from
+  // the day it is unpaused (a missed Monday's week is not resolved).
+  if (gamePaused(env)) {
+    try {
+      const posted = await postFeedbackAsk(env, now, force.feedback);
+      if (posted) report.feedback = posted;
+    } catch (error) {
+      await logToDiscord(env, `Feedback post failed: ${String(error)}`);
+      report.feedbackError = String(error);
+    }
+    report.paused = true;
+    return report;
+  }
 
   // ── The daily resolution ───────────────────────────────────────
   // gameDay() only changes at the rollover hour, so "last_daily_day is not

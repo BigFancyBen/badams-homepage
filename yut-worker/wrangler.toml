@@ -41,6 +41,15 @@ REMINDER_HOUR_UTC = "1"
 CAMPAIGN_START = "2026-09-14"
 # The town's hourly tick. Off until the town ships.
 TOWN_TICK_ENABLED = "0"
+# "1" pauses Yut Hut: the tick resolves, posts and reminds nothing, and every
+# command or button answers that the game is paused. Progress is untouched;
+# set it back to "0" to resume from that day.
+GAME_PAUSED = "1"
+# While paused, the channel asks for Oathkeep playtest feedback and opens a
+# thread of questions: Mon, Wed, Fri at 17:00 UTC = 11am MDT, 10am MST after
+# the November shift unless this hour moves with the others.
+FEEDBACK_WEEKDAYS = "1,3,5"
+FEEDBACK_HOUR_UTC = "17"
 
 # Keep invocation logs (duration, outcome, console output) in the dashboard,
 # so a "didn't respond in time" can be read back rather than guessed at.
