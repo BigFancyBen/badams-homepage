@@ -5,7 +5,7 @@ import type { Metadata } from "next";
 export const SITE_URL = "https://benadams.dev";
 export const SITE_NAME = "benadams.dev";
 export const SITE_DESCRIPTION =
-  "Side projects by Ben Adams: a multiplayer rafting game built in Godot, a DJ lighting and visualizer rig, Discord bots, and tools for Magic: The Gathering and Dota 2.";
+  "Side projects by Ben Adams: a multiplayer rafting game and a co-op idle ARPG built in Godot, a DJ lighting and visualizer rig, Discord bots, and tools for Magic: The Gathering and Dota 2.";
 
 export const AUTHOR = {
   name: "Ben Adams",
@@ -24,7 +24,7 @@ export const DEFAULT_OG_IMAGE: OgImage = {
   url: "/og-homepage.jpg",
   width: 1200,
   height: 630,
-  alt: "Otters in silly hats paddling a raft in Middle Fork Rafting Simulator, beside a wall of blue lasers from the Prognosticator visualizer and Mario under stage lights in its Super Mario 64 scene",
+  alt: "Otters in silly hats paddling a raft in Middle Fork Rafting Simulator, a skeleton army and huge damage numbers in an Oathkeep boss fight, and a red laser across a giant wheel in the Prognosticator visualizer's outdoor venue",
 };
 
 /**

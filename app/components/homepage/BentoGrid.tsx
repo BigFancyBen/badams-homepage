@@ -14,6 +14,8 @@ import {
   PROGNOSTICATOR_SCREENSHOTS,
   WAREHOUSE_SCENE,
   SM64_SCENE,
+  MK64_SCENE,
+  OATHKEEP,
   TESTQ,
   RADIANCE_SCREENSHOTS,
   MTG_SCREENSHOTS,
@@ -153,6 +155,34 @@ export function BentoGrid() {
         </div>
       </BentoSection>
 
+      {/* Oathkeep — full-width feature, portrait phone captures */}
+      <BentoSection dimmed={isDimmed("oathkeep")} onHover={() => setHoveredIndex("oathkeep")}>
+        <div className="flex flex-col lg:flex-row gap-5 lg:gap-8">
+          <div className="w-full lg:w-[42%] flex flex-col">
+            <p className="text-[10px] font-mono uppercase tracking-widest mb-2" style={{ color: ACCENT }}>
+              {OATHKEEP.kicker}
+            </p>
+            <h2 className="text-2xl md:text-3xl font-bold text-white leading-tight">{OATHKEEP.title}</h2>
+            <p className="text-gray-300 text-sm mt-2">{OATHKEEP.tagline}</p>
+            <p className="text-gray-400 text-sm leading-relaxed mt-3">{OATHKEEP.description}</p>
+            <ul className="mt-4 flex flex-col gap-2">
+              {OATHKEEP.features.map((f) => (
+                <li key={f.label} className="text-xs leading-relaxed text-gray-400">
+                  <span className="text-white font-medium">{f.label}.</span> {f.text}
+                </li>
+              ))}
+            </ul>
+            <div className="mt-4">
+              <Tags tags={OATHKEEP.tags} />
+            </div>
+          </div>
+          <div className="w-full lg:w-[58%] grid grid-cols-2 gap-4 md:gap-6 max-w-2xl lg:max-w-none mx-auto">
+            <ShotGallery shots={OATHKEEP.fights} accentColor={ACCENT} aspect="9 / 16" />
+            <ShotGallery shots={OATHKEEP.screens} accentColor={ACCENT} aspect="9 / 16" autoPlayInterval={4500} autoPlayDelay={2000} />
+          </div>
+        </div>
+      </BentoSection>
+
       {/* Prognosticator — 3 col, 2 row */}
       <BentoCard
         title="Prognosticator"
@@ -226,10 +256,10 @@ export function BentoGrid() {
           The lighting rig has a second home. Prognosticator sends its beat grid and DMX output to a Godot
           visualizer, so every light cue also plays in a venue that does not exist.
         </p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {[WAREHOUSE_SCENE, SM64_SCENE].map((scene, i) => (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[WAREHOUSE_SCENE, SM64_SCENE, MK64_SCENE].map((scene, i) => (
             <div key={scene.title} className="flex flex-col gap-3">
-              <ShotGallery shots={scene.shots} accentColor={ACCENT} autoPlayInterval={5000} autoPlayDelay={i * 2500} />
+              <ShotGallery shots={scene.shots} accentColor={ACCENT} autoPlayInterval={5000} autoPlayDelay={i * 1700} />
               <div>
                 <h3 className="text-base font-bold text-white">{scene.title}</h3>
                 <p className="text-gray-400 text-sm leading-relaxed mt-1 mb-3">{scene.description}</p>

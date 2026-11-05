@@ -69,45 +69,46 @@ export const PROGNOSTICATOR_SCREENSHOTS = [
 export const WAREHOUSE_SCENE = {
   title: "Warehouse",
   description:
-    "An endless, procedurally generated club that the Godot visualizer builds out of code and lights only with DMX values. The same rig, action or Effect Picks card that drives the real fixtures drives its 104 virtual ones, as volumetric beams and shadow-casting spotlights in haze, while a camera rides through rooms and tunnels and cuts on the beat.",
+    "An endless venue that the Godot visualizer builds out of code and lights only with DMX values. The same rig, action or Effect Picks card that drives the real fixtures drives its 104 virtual ones. Every load is a new world: packed concrete rooms, blacklight corridors and graffiti, and outdoor plazas up to 200 metres across, where a ring of kilometre-scale wheels, towers and arches stands on the night horizon. A production camera cuts between wide, drone, jib and crowd shots on the beat.",
   tags: ["Godot 4", "GDScript", "DMX", "Beat sync", "Procedural generation", "Spout"],
   shots: [
     {
-      src: "/prognosticator/warehouse/01-laser-sheets-mirror.webp",
+      src: "/prognosticator/warehouse/01-red-beams-wheel-megastructure.webp",
       video: "/prognosticator/warehouse/loop.mp4",
-      label: "Laser sheets",
-      caption: "The booth-mirror lens looks out over the crowd through haze, with laser sheets and pars in pink, blue and yellow.",
-      alt: "A hazy room with thin pink laser lines crossing it, blue, yellow and pink par cones, and crowd silhouettes in the foreground.",
+      hold: 24000,
+      label: "Red plaza",
+      caption: "The biggest outdoor room with the whole rig in red, and the far set's megastructures on the horizon.",
+      alt: "Red lasers and moving-head beams sweeping across a night plaza, with giant wheel and tower megastructures against a blue dusk.",
     },
     {
-      src: "/prognosticator/warehouse/02-white-beam-booth.webp",
-      label: "Beam from the booth",
-      caption: "A white moving-head beam with real volume sweeps toward the camera past the DJ booth, with a blue laser fan behind it.",
-      alt: "A wide white light beam cutting across a dark room toward the lower left, a second white beam over a DJ booth, and blue laser lines.",
+      src: "/prognosticator/warehouse/02-red-laser-sweep-gear-wall.webp",
+      label: "Gear wall",
+      caption: "A red laser fan off a truss tower, across a wheel the size of a hill.",
+      alt: "A red laser fan from a truss tower sweeping across a colossal gear-covered wheel structure at dusk.",
     },
     {
-      src: "/prognosticator/warehouse/03-magenta-beam-shaft.webp",
-      label: "Magenta shaft",
-      caption: "A magenta moving-head beam as a banded volumetric shaft over the crowd, crossed by a yellow beam and blue laser lines.",
-      alt: "A large banded magenta light shaft over a crowd, a yellow beam, a fan of blue-white laser lines, and glowing orange wall lights.",
+      src: "/prognosticator/warehouse/03-colonnade-gear-dusk.webp",
+      label: "Colonnade",
+      caption: "The plaza's colonnade in front of the wheel and a stepped tower.",
+      alt: "A stone colonnade railing in front of a huge wheel and stepped tower, red lasers rising from a mast.",
     },
     {
-      src: "/prognosticator/warehouse/04-orange-heads-crowd.webp",
-      label: "Orange heads",
-      caption: "Two orange moving-head beams and a gold laser fan above the crowd.",
-      alt: "Orange light beams angling down into haze over a crowd, with a gold laser fan and a lit DJ booth in the background.",
+      src: "/prognosticator/warehouse/04-red-beam-foreground.webp",
+      label: "Beam",
+      caption: "A mover's beam right across the lens, the wheel behind it.",
+      alt: "A thick red beam sweeping through haze across the frame, a giant wheel structure behind it.",
     },
     {
-      src: "/prognosticator/warehouse/05-blue-laser-wall.webp",
-      label: "Laser wall",
-      caption: "A wall of blue laser lines across the room, with a strobe blasting through the fog.",
-      alt: "Dozens of thin blue laser lines crossing a hazy hall, a bright white strobe flare at right and a pink par cone at left.",
+      src: "/prognosticator/warehouse/05-red-laser-burst-portal-tower.webp",
+      label: "Portal tower",
+      caption: "A laser hit in front of a tower with an oval portal.",
+      alt: "A red laser bursting from a pylon in front of a dark tower with a glowing oval portal.",
     },
     {
-      src: "/prognosticator/warehouse/06-teal-lens-flare.webp",
-      label: "Lens flare",
-      caption: "A teal moving head blooms into a lens flare, with a laser fan, a prism fixture and the crowd below.",
-      alt: "A bright teal flare at top right in thick haze, a pink laser fan, a multicolour prism fixture at top left and crowd heads at the bottom.",
+      src: "/prognosticator/warehouse/06-red-pars-crowd-wheels.webp",
+      label: "Pars and crowd",
+      caption: "Three red pars over the crowd, a laser slashing past the portal tower.",
+      alt: "Three red par cans lighting the crowd at left, a diagonal red laser and a portal tower behind.",
     },
   ] satisfies Shot[],
 };
@@ -158,11 +159,58 @@ export const SM64_SCENE = {
   ] satisfies Shot[],
 };
 
+export const MK64_SCENE = {
+  title: "Mario Kart 64",
+  description:
+    "Mario Kart 64 under the warehouse's 104-slot rig, so every light, rig and Effect Picks card that runs the club runs the racetrack too. The decomp's PC port is built as a library that steps the game one frame at a time, and Godot draws every triangle it hands over. All 20 courses, the 16 races and the 4 battle arenas, have their own lighting plot. With nobody on a pad the game's CPU drivers race while a director cuts between 12 lenses on the downbeat, and up to four people can pick up a pad and play split screen. Bring your own ROM.",
+  tags: ["Godot 4", "GDScript", "GDExtension", "C", "DMX", "Beat sync"],
+  shots: [
+    {
+      src: "/prognosticator/mk64/01-luigi-spotlight-sweep.webp",
+      video: "/prognosticator/mk64/loop.mp4",
+      hold: 28000,
+      label: "Luigi Raceway",
+      caption: "A CPU-driven race through Luigi Raceway, Toad's Turnpike and Bowser's Castle at night, lit live by the Director.",
+      alt: "Luigi Raceway at night, white spotlights sweeping down from a truss onto the track, a kart ahead.",
+    },
+    {
+      src: "/prognosticator/mk64/04-red-beams-turn.webp",
+      label: "Red beams",
+      caption: "Red beams from a pylon over a bend, past the Koopa Air hoardings.",
+      alt: "Red light beams from a lighting pylon over a bend of Luigi Raceway, a kart on the track and a Koopa Air wall behind.",
+    },
+    {
+      src: "/prognosticator/mk64/02-magenta-lamp-straight.webp",
+      label: "Night straight",
+      caption: "A magenta lamp glows on the verge of the back straight.",
+      alt: "A kart on a dark straight with a magenta lamp glow on the verge.",
+    },
+    {
+      src: "/prognosticator/mk64/03-brick-tunnel-kart.webp",
+      label: "The tunnel",
+      caption: "Into the brick tunnel under warm work lights.",
+      alt: "A kart entering a warm-lit brick tunnel.",
+    },
+    {
+      src: "/prognosticator/mk64/05-turnpike-pink-flare.webp",
+      label: "Toad's Turnpike",
+      caption: "Traffic under a lit gantry on Toad's Turnpike.",
+      alt: "Toad's Turnpike at night, a bus and a truck ahead under an overhead gantry with pink light.",
+    },
+    {
+      src: "/prognosticator/mk64/06-thwomps-castle.webp",
+      label: "Bowser's Castle",
+      caption: "Two Thwomps hang over the checkered floor in amber light.",
+      alt: "Two Thwomps hovering over a red and checkered floor in Bowser's Castle, lit amber, with a small kart below.",
+    },
+  ] satisfies Shot[],
+};
+
 export const TESTQ = {
   title: "testq",
   tagline: "One queue for every Godot run on the machine.",
   description:
-    "The warehouse, the SM64 scene and the rafting game all test and capture on one PC, from a couple of dozen worktrees that each think they have it to themselves. Two suites starting in the same minute slowed each other enough to fail anything timed against the wall clock, and those failures read exactly like real ones. testq is a small daemon that holds the machine's slots, and every run script asks it before launching an engine.",
+    "The warehouse, the two Nintendo scenes, the rafting game and Oathkeep all test and capture on one PC, from a couple of dozen worktrees that each think they have it to themselves. Two suites starting in the same minute slowed each other enough to fail anything timed against the wall clock, and those failures read exactly like real ones. testq is a small daemon that holds the machine's slots, and every run script asks it before launching an engine.",
   features: [
     { label: "Outside every project", text: "A capture in the DJ app and a physics suite in the game are two engines on one box, and neither repo can see the other's. The queue belongs to neither." },
     { label: "Shortest first", text: "Estimates come from each job's own history, so a twenty-second test does not sit behind two eleven-minute suites. A job that has waited long enough ages to the front." },
@@ -416,6 +464,77 @@ export const MFRS = {
   ] satisfies Shot[],
 };
 
+export const OATHKEEP = {
+  kicker: "Testing on Android",
+  title: "Oathkeep",
+  tagline: "A guild chat that is also a co-op idle ARPG, run on a daily check-in.",
+  description:
+    "Once a day a bell asks the guild one question: did you keep your oath? The oath is whatever you decided it is, a run, a lift, twenty minutes of anything, and nobody checks. Keeping it feeds your hero, the guild's hearth and the week's raid. The fighting happens while you are away, and you come back to the replay.",
+  features: [
+    { label: "Broken builds are a feature", text: "Any skill gem with any support that fits, a constellation of over a hundred stars with rule-breaking keystones, and free respecs. The Court of Bones build never swings; its minions hit five times harder than a plain build in the same gear." },
+    { label: "Every fight read back", text: "The result card gives time, DPS and damage taken, then reads the build: how much came from triggers or minions, the biggest hit, the peak second. Fights are seeded, so a guildmate can watch yours exactly." },
+    { label: "The end of the road", text: "The Unlit Hall is the twelfth and last zone. Past it the Unlit Depths go down a rung at a time with a boss every tenth. Gear tops out, so only the challenge keeps climbing." },
+    { label: "Missing a day costs nothing", text: "Power comes from the last fortnight, not from how long you have played. A rest day takes nothing from you or the guild." },
+  ],
+  tags: ["Godot 4.7", "GDScript", "Android", "Cloudflare Workers", "Async co-op"],
+  fights: [
+    {
+      src: "/oathkeep/01-unlit-hall.webp",
+      video: "/oathkeep/unlit-hall.mp4",
+      hold: 13700,
+      label: "The Unlit Hall",
+      caption: "End game: a Court of Bones army against the last zone's boss.",
+      alt: "A swarm of skeleton minions surrounds the Unlit Hall's boss on a purple stone arena, huge damage numbers bursting over them, until the Victory card appears.",
+    },
+    {
+      src: "/oathkeep/02-court-of-bones.webp",
+      video: "/oathkeep/court-of-bones.mp4",
+      label: "Court of Bones",
+      caption: "The minions do all the damage. The Oathbreaker falls in under six seconds.",
+      alt: "A crowd of skeleton minions overwhelms a caped, crowned boss in a torchlit arena, ending on a Victory card with no damage taken.",
+    },
+    {
+      src: "/oathkeep/03-thunderclap-loop.webp",
+      video: "/oathkeep/thunderclap-loop.mp4",
+      label: "Thunderclap Loop",
+      caption: "A trigger build where the slowest spell fires at the fastest rate.",
+      alt: "A lone hero chains spell blasts through three waves and a crowned boss in a torchlit arena, then a Victory card shows.",
+    },
+  ] satisfies Shot[],
+  screens: [
+    {
+      src: "/oathkeep/town.webp",
+      label: "Town",
+      caption: "Every station is a building you walk to. The seal at the bottom keeps today's oath.",
+      alt: "A pixel-art town square with an observatory, bell tower, war room, dormitory and road gate around a campfire, and an I kept my oath seal at the bottom.",
+    },
+    {
+      src: "/oathkeep/oath-kept.webp",
+      label: "Oath kept",
+      caption: "What keeping it paid: your Mettle, your hero's patrol, the guild's hearth.",
+      alt: "The Oath kept sheet listing Mettle, this week's oaths, Vigil, patrol yield, caskets waiting and the guild hearth bonus.",
+    },
+    {
+      src: "/oathkeep/skills.webp",
+      label: "Skills",
+      caption: "Four skill gems, each with a row of supports and its DPS.",
+      alt: "The Skills screen: Cinderbolt, Cleave, Raise Oathbones and Rimeburst, each with support gem sockets and a DPS figure.",
+    },
+    {
+      src: "/oathkeep/constellation.webp",
+      label: "Constellation",
+      caption: "Six branches of stars, with keystones that break the rules.",
+      alt: "A radial star map with six branches named Iron, Blood, Shadow, Storm, Arcane and Command, and a glowing allocated path.",
+    },
+    {
+      src: "/oathkeep/guild-chat.webp",
+      label: "Guild chat",
+      caption: "A photo check-in in #oaths. Guildmates pay its author in boons.",
+      alt: "The #oaths channel: a guildmate's check-in reading bike commute counts, with a sunset photo and five boon buttons.",
+    },
+  ] satisfies Shot[],
+};
+
 /**
  * One paragraph per project. The homepage cards render these and /llms.txt
  * lists them, so a crawler that never runs the carousels reads the same copy.
@@ -423,6 +542,8 @@ export const MFRS = {
 export const SUMMARIES = {
   prognosticator:
     "A DJ companion app that runs alongside VirtualDJ. It imports Spotify playlists, tags every track with key, BPM, energy and vibe, filters the library to what mixes harmonically with the playing deck, and drives DMX lighting and a Godot visualizer in time with the music.",
+  oathkeep:
+    "A guild chat that is also an async co-op idle ARPG. Once a day a bell asks whether you kept your oath, and keeping it powers your hero, the guild's hearth and the weekly raid. Underneath is a build game where broken builds are a feature, and the fights happen while you are away.",
   hobbitHouse:
     "Phone control app for a living room mini PC. Launch games and streaming apps, run a music visualizer on the TV, and control lights, Kodi and cameras. A QR code turns a guest's phone into a game controller.",
   scrandle:

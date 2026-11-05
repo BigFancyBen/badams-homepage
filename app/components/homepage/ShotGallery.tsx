@@ -12,6 +12,8 @@ export interface Shot {
   alt: string;
   /** A muted loop to play in place of the still, which becomes its poster. */
   video?: string;
+  /** How long the loop holds the frame before the gallery moves on, in ms. */
+  hold?: number;
 }
 
 interface ShotGalleryProps {
@@ -23,7 +25,7 @@ interface ShotGalleryProps {
   aspect?: string;
 }
 
-/** How long a loop holds the frame before the gallery moves on. */
+/** How long a loop holds the frame before the gallery moves on, unless the shot says otherwise. */
 const VIDEO_HOLD_MS = 10000;
 
 /**
@@ -65,7 +67,7 @@ export function ShotGallery({
 
   useEffect(() => {
     if (!started || !inView || userClicked || preview !== null || reducedMotion || shots.length < 2) return;
-    const hold = shots[current].video ? VIDEO_HOLD_MS : autoPlayInterval;
+    const hold = shots[current].hold ?? (shots[current].video ? VIDEO_HOLD_MS : autoPlayInterval);
     const timeoutId = setTimeout(next, hold);
     return () => clearTimeout(timeoutId);
   }, [started, inView, userClicked, preview, reducedMotion, shots, current, next, autoPlayInterval]);
