@@ -28,7 +28,7 @@ const TECHNOLOGIES: Technology[] = [
   { name: "Redux", logo: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/redux/redux-original.svg", accentColor: "#764abc", colSpan: 1, rowSpan: 1 },
   // Row 5+: Smaller techs in varied sizes
   { name: "Vercel", logo: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/vercel/vercel-original.svg", accentColor: "#ffffff", colSpan: 2, rowSpan: 1 },
-  { name: "Zustand", logo: "https://raw.githubusercontent.com/pmndrs/zustand/main/bear.jpg", accentColor: "#443e38", colSpan: 1, rowSpan: 1 },
+  { name: "Zustand", logo: "https://raw.githubusercontent.com/pmndrs/zustand/main/docs/bear.jpg", accentColor: "#443e38", colSpan: 1, rowSpan: 1 },
   { name: "Supabase", logo: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/supabase/supabase-original.svg", accentColor: "#3ecf8e", colSpan: 2, rowSpan: 2 },
   { name: "TanStack", logo: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/reactrouter/reactrouter-original.svg", accentColor: "#ef4444", colSpan: 1, rowSpan: 1 },
   { name: "Apollo", logo: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/graphql/graphql-plain.svg", accentColor: "#311c87", colSpan: 1, rowSpan: 1 },
