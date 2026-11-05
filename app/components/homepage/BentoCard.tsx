@@ -1,7 +1,6 @@
 "use client";
 
-import { useRef, MouseEvent, useState } from "react";
-import { motion, useMotionValue, useSpring, useTransform, AnimatePresence } from "motion/react";
+import { motion, AnimatePresence } from "motion/react";
 import { useReducedMotion } from "../../hooks/useReducedMotion";
 
 interface BentoCardProps {
@@ -15,7 +14,6 @@ interface BentoCardProps {
   children?: React.ReactNode;
   index?: number;
   fixedDescriptionHeight?: string;
-  dimmed?: boolean;
   onHover?: () => void;
   tags?: string[];
   /** 2 for a card that stands alone in the grid, 3 for one nested under a group heading. */
@@ -33,73 +31,18 @@ export function BentoCard({
   children,
   index = 0,
   fixedDescriptionHeight,
-  dimmed,
   onHover,
   tags,
   headingLevel = 2,
 }: BentoCardProps) {
   const Heading = headingLevel === 2 ? "h2" : "h3";
-  const cardRef = useRef<HTMLDivElement>(null);
-  const [isHovered, setIsHovered] = useState(false);
   const reducedMotion = useReducedMotion();
-
-  const mouseX = useMotionValue(0.5);
-  const mouseY = useMotionValue(0.5);
-  const hoverValue = useMotionValue(0);
-
-  const springConfig = { stiffness: 150, damping: 20 };
-  const smoothX = useSpring(mouseX, springConfig);
-  const smoothY = useSpring(mouseY, springConfig);
-
-  // 3D tilt — disabled when card has embedded children (carousels) or reduced motion
-  const enableTilt = !children && !reducedMotion;
-  const rotateX = useTransform(smoothY, [0, 1], enableTilt ? [6, -6] : [0, 0]);
-  const rotateY = useTransform(smoothX, [0, 1], enableTilt ? [-6, 6] : [0, 0]);
-
-  const glowX = useTransform(smoothX, [0, 1], [0, 100]);
-  const glowY = useTransform(smoothY, [0, 1], [0, 100]);
-
-  const borderGlow = useSpring(useTransform(hoverValue, [0, 1], [0, 1]), {
-    stiffness: 200,
-    damping: 20,
-  });
-
-  const glowBackground = useTransform(
-    [glowX, glowY],
-    ([x, y]) =>
-      `radial-gradient(circle at ${x}% ${y}%, ${accentColor}25, transparent 60%)`
-  );
-
-  const glowBoxShadow = useTransform(
-    borderGlow,
-    (v) => `0 0 ${v * 12}px ${accentColor}${Math.round(v * 0.25 * 255).toString(16).padStart(2, "0")}`
-  );
 
   // Typography sizing based on card dimensions
   const isLarge = colSpan >= 3 && rowSpan >= 2;
   const isMedium = colSpan >= 2 || rowSpan >= 2;
   const titleClass = isLarge ? "text-lg" : isMedium ? "text-base" : "text-sm";
   const descClass = isLarge ? "text-sm" : isMedium ? "text-sm" : "text-xs";
-
-  const handleMouseMove = (e: MouseEvent<HTMLDivElement>) => {
-    if (!cardRef.current) return;
-    const rect = cardRef.current.getBoundingClientRect();
-    mouseX.set((e.clientX - rect.left) / rect.width);
-    mouseY.set((e.clientY - rect.top) / rect.height);
-  };
-
-  const handleMouseEnter = () => {
-    setIsHovered(true);
-    hoverValue.set(1);
-    onHover?.();
-  };
-
-  const handleMouseLeave = () => {
-    setIsHovered(false);
-    hoverValue.set(0);
-    mouseX.set(0.5);
-    mouseY.set(0.5);
-  };
 
   const spanClasses = [
     colSpan === 2 ? "md:col-span-2" : "",
@@ -111,12 +54,8 @@ export function BentoCard({
 
   const card = (
     <motion.div
-      ref={cardRef}
       className={`relative h-full ${spanClasses}`}
-      style={{ perspective: "800px" }}
-      onMouseMove={handleMouseMove}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
+      onMouseEnter={onHover}
       initial={reducedMotion ? false : { opacity: 0, y: 30 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, amount: 0.1 }}
@@ -129,46 +68,18 @@ export function BentoCard({
               ease: [0.25, 0.1, 0.25, 1],
             }
       }
-      animate={{ opacity: dimmed ? 0.55 : 1 }}
     >
-      <motion.div
-        className="relative h-full will-change-transform"
+      <div
+        className="relative h-full"
         style={{
-          rotateX,
-          rotateY,
-          transformStyle: "preserve-3d",
           background: "rgba(255,255,255,0.03)",
-          border: `1px solid ${isHovered ? accentColor : "rgba(255,255,255,0.06)"}`,
+          border: "1px solid rgba(255,255,255,0.06)",
           backdropFilter: "blur(12px)",
           WebkitBackdropFilter: "blur(12px)",
-          transition: "border-color 0.3s ease, transform 0.3s ease",
-          transform: reducedMotion
-            ? "none"
-            : isHovered
-              ? "translateY(-2px) scale(1.012)"
-              : "translateY(0) scale(1)",
         }}
       >
-        {/* Accent top line */}
-        <div
-          className="h-[2px] w-full transition-opacity duration-300"
-          style={{
-            background: `linear-gradient(90deg, transparent, ${accentColor}, transparent)`,
-            opacity: isHovered ? 0.9 : 0.3,
-          }}
-        />
-
-        {/* Mouse-tracking glow */}
-        <motion.div
-          className="absolute inset-0 pointer-events-none will-change-opacity"
-          style={{
-            background: glowBackground,
-            opacity: borderGlow,
-          }}
-        />
-
         {/* Content */}
-        <div className="relative z-10 p-5 h-full flex flex-col">
+        <div className="p-5 h-full flex flex-col">
           {/* Header */}
           <div className="mb-2">
             <Heading className={`${titleClass} font-bold text-white`}>{title}</Heading>
@@ -262,13 +173,7 @@ export function BentoCard({
             </div>
           )}
         </div>
-
-        {/* Outer glow */}
-        <motion.div
-          className="absolute inset-0 pointer-events-none"
-          style={{ boxShadow: glowBoxShadow }}
-        />
-      </motion.div>
+      </div>
     </motion.div>
   );
 

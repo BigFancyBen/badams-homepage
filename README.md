@@ -2,7 +2,7 @@
 
 <p align="center">
   <b>The things I've built that weren't my job.</b><br>
-  A multiplayer rafting game, a DJ and lighting rig, two Discord games my friends play every day, and a handful of tools I use every week.
+  A multiplayer rafting game, a co-op idle ARPG, a DJ and lighting rig, two Discord games my friends play every day, and a handful of tools I use every week.
 </p>
 
 <p align="center">
@@ -13,16 +13,17 @@
 </p>
 
 <p align="center">
-  <a href="https://benadams.dev"><img src="public/readme/homepage.png" alt="The benadams.dev homepage: the Middle Fork Rafting Simulator feature above the Prognosticator and hobbit.house cards" width="100%"></a>
+  <a href="https://benadams.dev"><img src="public/readme/homepage.png" alt="The benadams.dev homepage: the Middle Fork Rafting Simulator feature, then Oathkeep with its end-game boss fight, above the Prognosticator and hobbit.house cards" width="100%"></a>
 </p>
 
-I'm Ben Adams. This repository is my portfolio site, and it is also where several of the projects on it live: the web apps are routes in this Next.js app, and the two Discord bots are Cloudflare Workers in this repo that use the site to draw their images. The larger projects (the game, the DJ software, the home hub) have their own repositories and are shown here with screenshots.
+I'm Ben Adams. This repository is my portfolio site, and it is also where several of the projects on it live: the web apps are routes in this Next.js app, and the two Discord bots are Cloudflare Workers in this repo that use the site to draw their images. The larger projects (the two games, the DJ software, the home hub) have their own repositories and are shown here with screenshots.
 
 ## Projects
 
 | Project | What it is | Built with |
 | --- | --- | --- |
 | [Middle Fork Rafting Simulator](#middle-fork-rafting-simulator) | Multiplayer whitewater rafting game, in development | Godot 4, GDScript, host-authoritative netcode |
+| [Oathkeep](#oathkeep) | A guild chat that is also an async co-op idle ARPG, run on a daily check-in; testing on Android | Godot 4.7, GDScript, Cloudflare Workers |
 | [Prognosticator](#prognosticator) | DJ library, beat-synced DMX lighting and OBS scenes, with a 3D visualizer | Electron, React, TypeScript, Godot 4, C |
 | [hobbit.house](#hobbithouse) | Phone remote for a living room PC, lights and media | React, Docker, Linux, MQTT |
 | [Scrandle and Scranbot](#scrandle-and-scranbot) | A daily food photo game for a Discord channel, and its weekly web puzzle | Cloudflare Workers, D1, R2, Next.js |
@@ -66,6 +67,33 @@ Multiplayer whitewater: one raft, and everyone paddles. You and a boat of friend
 
 ---
 
+## Oathkeep
+
+**Testing on Android**
+
+A guild chat that is also an async co-op idle ARPG. Once a day a bell asks the guild one question: did you keep your oath? The oath is whatever you decided it is, a run, a lift, twenty minutes of anything, and nobody checks. Keeping it feeds your hero, the guild's hearth and the week's raid. The fighting happens while you are away, and you come back to the replay.
+
+<table>
+  <tr>
+    <td width="33%"><img src="public/oathkeep/01-unlit-hall.webp" alt="End game: a swarm of skeleton minions surrounds the Unlit Hall's boss on a purple stone arena, huge damage numbers bursting over them"></td>
+    <td width="33%"><img src="public/oathkeep/02-court-of-bones.webp" alt="A skeleton army facing a crowned boss with a red slam telegraph in a torchlit arena"></td>
+    <td width="33%"><img src="public/oathkeep/town.webp" alt="A pixel-art town square with an observatory, bell tower, war room, dormitory and road gate around a campfire"></td>
+  </tr>
+  <tr>
+    <td valign="top"><b>The end of the road.</b> The Unlit Hall is the last of twelve zones. Past it the Unlit Depths go down a rung at a time, with a boss every tenth.</td>
+    <td valign="top"><b>Broken builds are a feature.</b> The Court of Bones never swings; its minions hit five times harder than a plain build in the same gear.</td>
+    <td valign="top"><b>The town.</b> Every station is a building you walk to, and the seal at the bottom keeps today's oath.</td>
+  </tr>
+</table>
+
+- Any skill gem with any support that fits, a constellation of over a hundred stars with rule-breaking keystones, and free respecs.
+- Fights are seeded, so the result card can read a build back (what share came from triggers or minions, the biggest hit) and a guildmate can watch yours exactly.
+- Power comes from the last fortnight, not from how long you have played, and a rest day takes nothing from you or the guild.
+
+**Stack:** Godot 4.7, GDScript, Android, Cloudflare Workers
+
+---
+
 ## Prognosticator
 
 A desktop app that runs a DJ set end to end. It imports Spotify playlists, reads BPM and key from VirtualDJ, suggests tracks that mix harmonically, and drives DMX lights and OBS scenes on the beat.
@@ -97,20 +125,23 @@ A desktop app that runs a DJ set end to end. It imports Spotify playlists, reads
 
 ### The visualizer
 
-Prognosticator sends its beat grid and DMX output to a Godot visualizer, so every light cue also plays in a venue that does not exist.
+Prognosticator sends its beat grid and DMX output to a Godot visualizer, so every light cue also plays in a venue that does not exist, or on a Nintendo 64 game.
 
 <table>
   <tr>
-    <td width="50%"><img src="public/prognosticator/warehouse/03-magenta-beam-shaft.webp" alt="A large banded magenta light shaft over a crowd, a yellow beam, a fan of blue-white laser lines, and glowing orange wall lights"></td>
-    <td width="50%"><img src="public/prognosticator/sm64/01-jolly-roger-bay.webp" alt="Mario seen from behind running across Jolly Roger Bay's sandy ground, with a coin bank glowing at left, a pink star light and a vertical laser"></td>
+    <td width="33%"><img src="public/prognosticator/warehouse/01-red-beams-wheel-megastructure.webp" alt="Red lasers and moving-head beams across a night plaza, with giant wheel and tower megastructures against a blue dusk"></td>
+    <td width="33%"><img src="public/prognosticator/sm64/01-jolly-roger-bay.webp" alt="Mario seen from behind running across Jolly Roger Bay's sandy ground, with a coin bank glowing at left, a pink star light and a vertical laser"></td>
+    <td width="33%"><img src="public/prognosticator/mk64/01-luigi-spotlight-sweep.webp" alt="Luigi Raceway at night, white spotlights sweeping down from a truss onto the track, a kart ahead"></td>
   </tr>
   <tr>
-    <td valign="top"><b>Warehouse.</b> An endless, procedurally generated club built out of code and lit only with DMX values. The rig that drives the real fixtures drives its 104 virtual ones as volumetric beams in haze, while a camera rides through rooms and cuts on the beat.</td>
+    <td valign="top"><b>Warehouse.</b> An endless venue built out of code and lit only with DMX values. The rig that drives the real fixtures drives its 104 virtual ones, from concrete rooms and blacklight corridors to outdoor plazas ringed by kilometre-scale wheels and towers.</td>
     <td valign="top"><b>Super Mario 64.</b> The same DMX kit re-skinned onto the game: pars are Power Stars, movers are cannon heads, and the lava is eight pars. The open-source decomp port runs as a library inside Godot. All 45 areas have a lighting plot, and an autopilot plays Mario on the beat.</td>
+    <td valign="top"><b>Mario Kart 64.</b> The PC port runs as a library that steps the game a frame at a time, and Godot draws it under the same rig. All 20 courses have a lighting plot. CPU drivers race while a director cuts on the downbeat, or up to four people play split screen.</td>
   </tr>
   <tr>
-    <td><img src="public/prognosticator/warehouse/05-blue-laser-wall.webp" alt="Dozens of thin blue laser lines crossing a hazy hall, a bright white strobe flare at right and a pink par cone at left"></td>
+    <td><img src="public/prognosticator/warehouse/06-red-pars-crowd-wheels.webp" alt="Three red par cans lighting the crowd at left, a diagonal red laser and a portal tower behind"></td>
     <td><img src="public/prognosticator/sm64/05-bay-laser-vista.webp" alt="A wide high view of the bay with blue laser lines fanning out, pink stars, coin banks, green pipes and a small Mario in the middle"></td>
+    <td><img src="public/prognosticator/mk64/05-turnpike-pink-flare.webp" alt="Toad's Turnpike at night, a bus and a truck ahead under an overhead gantry with pink light"></td>
   </tr>
 </table>
 

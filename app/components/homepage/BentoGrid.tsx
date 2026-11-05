@@ -14,6 +14,8 @@ import {
   PROGNOSTICATOR_SCREENSHOTS,
   WAREHOUSE_SCENE,
   SM64_SCENE,
+  MK64_SCENE,
+  OATHKEEP,
   TESTQ,
   RADIANCE_SCREENSHOTS,
   MTG_SCREENSHOTS,
@@ -48,15 +50,13 @@ function Tags({ tags }: { tags: string[] }) {
 }
 
 interface BentoSectionProps {
-  dimmed: boolean;
-  onHover: () => void;
   onMouseLeave?: () => void;
   delay?: number;
   children: React.ReactNode;
 }
 
 /** A full-width frosted group, for projects that need more room than a card. */
-function BentoSection({ dimmed, onHover, onMouseLeave, delay = 0.15, children }: BentoSectionProps) {
+function BentoSection({ onMouseLeave, delay = 0.15, children }: BentoSectionProps) {
   const reducedMotion = useReducedMotion();
 
   return (
@@ -76,8 +76,6 @@ function BentoSection({ dimmed, onHover, onMouseLeave, delay = 0.15, children }:
           ? { duration: 0 }
           : { delay, duration: 0.5, ease: [0.25, 0.1, 0.25, 1] }
       }
-      animate={{ opacity: dimmed ? 0.55 : 1 }}
-      onMouseEnter={onHover}
       onMouseLeave={onMouseLeave}
     >
       {children}
@@ -103,23 +101,18 @@ export function BentoGrid() {
   const [progSlide, setProgSlide] = useState(0);
   const [progControlledIndex, setProgControlledIndex] = useState<number | null>(null);
   const [mtgControlledIndex, setMtgControlledIndex] = useState<number | null>(null);
-  const [hoveredIndex, setHoveredIndex] = useState<number | string | null>(null);
 
   const handleProgSlideChange = useCallback((index: number) => {
     setProgSlide(index);
   }, []);
 
-  const handleGridMouseLeave = () => setHoveredIndex(null);
-  const isDimmed = (key: number | string) => hoveredIndex !== null && hoveredIndex !== key;
-
   return (
     <div
       className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"
       style={{ gridAutoRows: "minmax(180px, auto)" }}
-      onMouseLeave={handleGridMouseLeave}
     >
       {/* MFRS — full-width feature */}
-      <BentoSection dimmed={isDimmed("mfrs")} onHover={() => setHoveredIndex("mfrs")} delay={0}>
+      <BentoSection delay={0}>
         <div className="flex flex-col lg:flex-row gap-5 lg:gap-8">
           <div className="w-full lg:w-[62%]">
             <ShotGallery
@@ -153,6 +146,34 @@ export function BentoGrid() {
         </div>
       </BentoSection>
 
+      {/* Oathkeep — full-width feature, portrait phone captures */}
+      <BentoSection>
+        <div className="flex flex-col lg:flex-row gap-5 lg:gap-8">
+          <div className="w-full lg:w-[42%] flex flex-col">
+            <p className="text-[10px] font-mono uppercase tracking-widest mb-2" style={{ color: ACCENT }}>
+              {OATHKEEP.kicker}
+            </p>
+            <h2 className="text-2xl md:text-3xl font-bold text-white leading-tight">{OATHKEEP.title}</h2>
+            <p className="text-gray-300 text-sm mt-2">{OATHKEEP.tagline}</p>
+            <p className="text-gray-400 text-sm leading-relaxed mt-3">{OATHKEEP.description}</p>
+            <ul className="mt-4 flex flex-col gap-2">
+              {OATHKEEP.features.map((f) => (
+                <li key={f.label} className="text-xs leading-relaxed text-gray-400">
+                  <span className="text-white font-medium">{f.label}.</span> {f.text}
+                </li>
+              ))}
+            </ul>
+            <div className="mt-4">
+              <Tags tags={OATHKEEP.tags} />
+            </div>
+          </div>
+          <div className="w-full lg:w-[58%] grid grid-cols-2 gap-4 md:gap-6 max-w-2xl lg:max-w-none mx-auto">
+            <ShotGallery shots={OATHKEEP.fights} accentColor={ACCENT} aspect="9 / 16" />
+            <ShotGallery shots={OATHKEEP.screens} accentColor={ACCENT} aspect="9 / 16" autoPlayInterval={4500} autoPlayDelay={2000} />
+          </div>
+        </div>
+      </BentoSection>
+
       {/* Prognosticator — 3 col, 2 row */}
       <BentoCard
         title="Prognosticator"
@@ -163,8 +184,8 @@ export function BentoGrid() {
         rowSpan={2}
         index={0}
         fixedDescriptionHeight="7.5rem"
-        dimmed={isDimmed(0)}
-        onHover={() => setHoveredIndex(0)}
+       
+       
         tags={["Electron", "React", "TypeScript", "Node", "Godot", "DMX", "OBS", "Tailwind", "VirtualDJ"]}
       >
         <div className="flex flex-col gap-3 flex-1">
@@ -212,24 +233,24 @@ export function BentoGrid() {
         accentColor={ACCENT}
         rowSpan={2}
         index={1}
-        dimmed={isDimmed(1)}
-        onHover={() => setHoveredIndex(1)}
+       
+       
         tags={["React", "Docker", "Linux", "MQTT"]}
       >
         <PhoneCarousel screenshots={RADIANCE_SCREENSHOTS} autoPlayInterval={4500} autoPlayDelay={1500} />
       </BentoCard>
 
       {/* Prognosticator's visualizer scenes */}
-      <BentoSection dimmed={isDimmed("scenes")} onHover={() => setHoveredIndex("scenes")}>
+      <BentoSection>
         <h2 className="text-sm font-bold text-white">Prognosticator: visualizer scenes</h2>
         <p className="text-gray-400 text-xs mb-4 mt-1">
           The lighting rig has a second home. Prognosticator sends its beat grid and DMX output to a Godot
           visualizer, so every light cue also plays in a venue that does not exist.
         </p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {[WAREHOUSE_SCENE, SM64_SCENE].map((scene, i) => (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[WAREHOUSE_SCENE, SM64_SCENE, MK64_SCENE].map((scene, i) => (
             <div key={scene.title} className="flex flex-col gap-3">
-              <ShotGallery shots={scene.shots} accentColor={ACCENT} autoPlayInterval={5000} autoPlayDelay={i * 2500} />
+              <ShotGallery shots={scene.shots} accentColor={ACCENT} autoPlayInterval={5000} autoPlayDelay={i * 1700} />
               <div>
                 <h3 className="text-base font-bold text-white">{scene.title}</h3>
                 <p className="text-gray-400 text-sm leading-relaxed mt-1 mb-3">{scene.description}</p>
@@ -241,7 +262,7 @@ export function BentoGrid() {
       </BentoSection>
 
       {/* testq — the queue the scenes above are tested and captured through */}
-      <BentoSection dimmed={isDimmed("testq")} onHover={() => setHoveredIndex("testq")}>
+      <BentoSection>
         <div className="flex flex-col lg:flex-row gap-5 lg:gap-8">
           <div className="w-full lg:w-[62%]">
             <Image
@@ -283,8 +304,8 @@ export function BentoGrid() {
         accentColor={ACCENT}
         colSpan={2}
         index={2}
-        dimmed={isDimmed(2)}
-        onHover={() => setHoveredIndex(2)}
+       
+       
         tags={["Next.js", "TypeScript", "Tailwind", "Cloudflare R2"]}
       >
         <ShotGallery shots={SCRANDLE_SHOTS} accentColor={ACCENT} aspect="16 / 10" autoPlayInterval={4500} />
@@ -296,15 +317,15 @@ export function BentoGrid() {
         accentColor={ACCENT}
         colSpan={2}
         index={3}
-        dimmed={isDimmed(3)}
-        onHover={() => setHoveredIndex(3)}
+       
+       
         tags={["Cloudflare Workers", "D1", "R2", "Discord", "TypeScript"]}
       >
         <DiscordFeed botName="Scranbot" messages={SCRANBOT_MESSAGES} maxHeight="26rem" />
       </BentoCard>
 
       {/* Yut Hut */}
-      <BentoSection dimmed={isDimmed("yut")} onHover={() => setHoveredIndex("yut")}>
+      <BentoSection>
         <div className="flex flex-col md:flex-row gap-5 md:gap-8">
           <div className="w-full md:w-[38%] flex flex-col">
             <h2 className="text-lg font-bold text-white">Yut Hut</h2>
@@ -344,8 +365,8 @@ export function BentoGrid() {
 
       {/* MTG section — frosted glass group */}
       <BentoSection
-        dimmed={isDimmed("mtg")}
-        onHover={() => setHoveredIndex("mtg")}
+       
+       
         onMouseLeave={() => setMtgControlledIndex(null)}
       >
         <div className="flex items-center gap-3 mb-1">
@@ -406,8 +427,8 @@ export function BentoGrid() {
         accentColor={ACCENT}
         colSpan={2}
         index={7}
-        dimmed={isDimmed(7)}
-        onHover={() => setHoveredIndex(7)}
+       
+       
         tags={["Next.js", "Leaflet", "Open-Meteo", "USGS"]}
       >
         <div className="relative aspect-video w-full overflow-hidden">
@@ -428,8 +449,8 @@ export function BentoGrid() {
         accentColor={ACCENT}
         colSpan={2}
         index={8}
-        dimmed={isDimmed(8)}
-        onHover={() => setHoveredIndex(8)}
+       
+       
         tags={["Next.js", "Canvas", "OpenDota"]}
       >
         <div className="relative aspect-video w-full overflow-hidden">
@@ -452,8 +473,8 @@ export function BentoGrid() {
           accentColor={ACCENT}
           colSpan={2}
           index={9}
-          dimmed={isDimmed(9)}
-          onHover={() => setHoveredIndex(9)}
+         
+         
         >
           <div className="relative aspect-video w-full overflow-hidden">
             <Image
@@ -474,8 +495,8 @@ export function BentoGrid() {
         accentColor={ACCENT}
         colSpan={2}
         index={10}
-        dimmed={isDimmed(10)}
-        onHover={() => setHoveredIndex(10)}
+       
+       
       >
         <DiscordFeed botName="OSRS Progress" messages={OSRS_MESSAGES} />
       </BentoCard>

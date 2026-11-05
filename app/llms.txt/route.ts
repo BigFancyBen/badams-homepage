@@ -1,6 +1,8 @@
 import { AUTHOR, INDEXED_PAGES, SITE_DESCRIPTION, SITE_NAME, absoluteUrl } from "../site";
 import {
   MFRS,
+  MK64_SCENE,
+  OATHKEEP,
   PROGNOSTICATOR_SCREENSHOTS,
   SM64_SCENE,
   SUMMARIES,
@@ -45,6 +47,14 @@ function build(): string {
       ],
     ),
     project(
+      OATHKEEP.title,
+      `${OATHKEEP.tagline} ${OATHKEEP.description}
+
+${features(OATHKEEP.features)}
+
+Built with: ${OATHKEEP.tags.join(", ")}.`,
+    ),
+    project(
       "Prognosticator",
       `${SUMMARIES.prognosticator}\n\n${features(
         PROGNOSTICATOR_SCREENSHOTS.map((s) => ({ label: s.label, text: s.description })),
@@ -57,6 +67,12 @@ function build(): string {
     project(
       `Prognosticator visualizer: ${SM64_SCENE.title}`,
       `${SM64_SCENE.description}\n\nBuilt with: ${SM64_SCENE.tags.join(", ")}.`,
+    ),
+    project(
+      `Prognosticator visualizer: ${MK64_SCENE.title}`,
+      `${MK64_SCENE.description}
+
+Built with: ${MK64_SCENE.tags.join(", ")}.`,
     ),
     project(
       TESTQ.title,
