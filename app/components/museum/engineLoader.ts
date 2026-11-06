@@ -18,8 +18,10 @@ import { ENGINE_BASE, ENGINE_VERSION } from "./constants";
  *
  * They are also kept in Cache Storage ("museum-engine-<version>"), which unlike the HTTP cache is
  * not evicted for being large and is not subject to its write failures. A return visit reads them
- * from there with no request at all; other versions' caches are deleted, and the browser is asked
- * to make storage persistent. Without the Cache API (insecure context) or on any error, it is the
+ * from there with no request at all, and other versions' caches are deleted. No
+ * navigator.storage.persist(): Firefox turns that into a permission prompt, and an evicted cache
+ * only means downloading again.
+ * Without the Cache API (insecure context) or on any error, it is the
  * network as before.
  */
 
@@ -37,7 +39,6 @@ function openCache(): Promise<Cache | null> {
         .keys()
         .then((keys) => Promise.all(keys.filter((k) => k.startsWith(CACHE_PREFIX) && k !== CACHE_NAME).map((k) => caches.delete(k))))
         .catch(() => {});
-      void navigator.storage?.persist?.().catch(() => {});
       return cache;
     } catch {
       return null;

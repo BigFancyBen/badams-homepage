@@ -53,7 +53,7 @@ const bytes = {};
 for (const f of readdirSync(OUT)) {
   const data = readFileSync(join(OUT, f));
   const raw = data.length;
-  const br = brotliCompressSync(data, { params: { [constants.BROTLI_PARAM_QUALITY]: 9 } }).length;
+  const br = brotliCompressSync(data, { params: { [constants.BROTLI_PARAM_QUALITY]: 11 } }).length;
   if (!f.includes("worklet")) total += br;
   if (/\.(js|wasm|pck)$/.test(f) && !f.includes("worklet")) hash.update(f).update(data);
   if (/\.(wasm|pck)$/.test(f)) bytes[f] = raw;
