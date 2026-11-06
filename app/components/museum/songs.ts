@@ -44,6 +44,17 @@ export const getSong = (): Song => current;
 
 /** Picks one song uniformly at random, never the one the previous visit played (remembered in
     localStorage under one small key). Idempotent: later calls return the same pick. */
+/** The visitor picked a song from the menu: it is this visit's song now, and the one to skip next visit. */
+export function pickSong(song: Song): void {
+  chosen = true;
+  current = song;
+  try {
+    localStorage.setItem(LAST_KEY, song.id);
+  } catch {
+    /* ignore */
+  }
+}
+
 export function chooseSong(): Song {
   if (chosen) return current;
   chosen = true;

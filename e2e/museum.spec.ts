@@ -433,7 +433,8 @@ test.describe('museum overlay (stub engine)', () => {
     const menuBtn = page.getByRole('button', { name: 'Project menu' });
     await menuBtn.click();
     const menu = page.getByRole('dialog', { name: 'Projects' });
-    const items = menu.getByRole('button');
+    /* The first list is the views; the music list follows it. */
+    const items = menu.getByRole('list').first().getByRole('button');
     await expect(items).toHaveCount(15);
     await expect(items.first()).toHaveText('Stage');
     await expect(items.last()).toHaveText('Entrance');
@@ -466,6 +467,39 @@ test.describe('museum overlay (stub engine)', () => {
     await tour(page, 'paused');
     await menuBtn.click();
     await expect(menu.getByRole('button', { name: 'Stage' })).toHaveAttribute('aria-current', 'true');
+  });
+
+  test('the menu switches the song: Godot is told, the lights get its cue sheet, the menu stays open', async ({ page }) => {
+    await enterStub(page);
+    await tour(page, 'touring');
+    await page.getByRole('button', { name: 'Project menu' }).click();
+    const menu = page.getByRole('dialog', { name: 'Projects' });
+    const tracks = menu.getByRole('list').nth(1).getByRole('button');
+    await expect(tracks).toHaveCount(5);
+    const before = await page.evaluate(() => JSON.parse(window.museumBridge!.songCues()).id as string);
+    await expect(menu.locator('button[aria-pressed="true"]')).toHaveCount(1);
+    await drain(page);
+    /* pick one that is not playing */
+    const title = (await menu.locator('button[aria-pressed="false"]').first().textContent())!;
+    const other = tracks.filter({ hasText: title });
+    await other.click();
+    await expect(other).toHaveAttribute('aria-pressed', 'true');
+    expect(await drain(page)).toEqual(['song']);
+    const after = await page.evaluate(() => JSON.parse(window.museumBridge!.songCues()) as { id: string; title: string });
+    expect(after.id).not.toBe(before);
+    expect(title).toContain(after.title);
+    await expect(menu).toBeVisible();
+    /* It comes in on its build, like the first visit. */
+    const until = await page.evaluate(() => {
+      const b = window.museumBridge!;
+      const c = JSON.parse(b.songCues()) as { bpm: number; loopSeconds: number; sections: { name: string; from: number }[] };
+      const i = c.sections.findIndex((x, k) => x.name === 'drop' && c.sections[k - 1]?.name === 'break');
+      const drop = (c.sections[i].from * 240) / c.bpm;
+      return (((drop - b.time()) % c.loopSeconds) + c.loopSeconds) % c.loopSeconds;
+    });
+    expect(until).toBeGreaterThan(5);
+    expect(until).toBeLessThanOrEqual(8.6);
+    await page.screenshot({ path: join(FRAMES, `${test.info().project.name}-menu.png`) });
   });
 
   test('menu traps Tab focus', async ({ page }) => {
@@ -544,14 +578,18 @@ test.describe('museum overlay (stub engine)', () => {
     await expect(text).toHaveCount(0);
   });
 
-  test('unmute callout dismisses after 6 s and the pulse goes on until the first unmute', async ({ page }) => {
+  test('unmute callout has no timeout: it and the beating red button stay until the music is on', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'no-preference' });
     await enterStub(page);
     const text = page.getByText('Turn on the music');
     await expect(text).toBeVisible();
-    await expect(text).toBeHidden({ timeout: 9000 });
+    await page.waitForTimeout(9000);
+    await expect(text).toBeVisible();
     const mute = page.getByRole('button', { name: 'Play music' });
+    await expect(mute).toHaveCSS('background-color', 'rgb(255, 42, 42)');
     await expect.poll(() => mute.evaluate((el) => (el as HTMLElement).style.boxShadow)).toMatch(/255, ?42, ?42/);
+    /* The button swells on the beat. */
+    await expect.poll(() => mute.evaluate((el) => (el as HTMLElement).style.transform)).toMatch(/scale\(1\.\d*[1-9]/);
   });
 
   test('reduced motion: the callout shows but the button does not pulse', async ({ page }) => {
@@ -559,7 +597,11 @@ test.describe('museum overlay (stub engine)', () => {
     await enterStub(page);
     await expect(page.getByText('Turn on the music')).toBeVisible();
     await page.waitForTimeout(500);
-    expect(await page.getByRole('button', { name: 'Play music' }).evaluate((el) => (el as HTMLElement).style.boxShadow)).toBe('');
+    const mute = page.getByRole('button', { name: 'Play music' });
+    expect(await mute.evaluate((el) => (el as HTMLElement).style.boxShadow)).toBe('');
+    expect(await mute.evaluate((el) => (el as HTMLElement).style.transform)).toBe('');
+    /* Still hard to miss: the red fill stays. */
+    await expect(mute).toHaveCSS('background-color', 'rgb(255, 42, 42)');
   });
 
   test('the callout does not show before the game is ready', async ({ page }) => {
@@ -572,7 +614,7 @@ test.describe('museum overlay (stub engine)', () => {
     await expect(page.getByText('Turn on the music')).toHaveCount(0);
   });
 
-  test('overlay states screenshot, and the bottom inset covers the open menu', async ({ page }, info) => {
+  test('overlay states screenshot; on phones the menu is a modal over the dimmed scene', async ({ page }, info) => {
     mkdirSync(FRAMES, { recursive: true });
     await enterStub(page);
     await tour(page, 'stage');
@@ -584,11 +626,36 @@ test.describe('museum overlay (stub engine)', () => {
     const barInset = await page.evaluate(() => window.museumBridge!.bottomInset());
     await page.screenshot({ path: join(FRAMES, `${info.project.name}-overlay-touring.png`) });
     await page.getByRole('button', { name: 'Project menu' }).click();
-    await expect(page.getByRole('dialog', { name: 'Projects' })).toBeVisible();
+    const menu = page.getByRole('dialog', { name: 'Projects' });
+    await expect(menu).toBeVisible();
+    await page.waitForTimeout(600);
     await page.screenshot({ path: join(FRAMES, `${info.project.name}-overlay-menu.png`) });
-    const menuInset = await page.evaluate(() => window.museumBridge!.bottomInset());
     expect(barInset).toBeGreaterThanOrEqual(44);
-    if (info.project.name !== 'chromium') expect(menuInset).toBeGreaterThan(barInset + 200);
+    if (info.project.name === 'chromium') {
+      /* Desktop: a panel rising out of the icon bar, no backdrop. */
+      await expect(menu).not.toHaveAttribute('aria-modal', 'true');
+      const nav = (await page.getByRole('navigation', { name: NAV }).boundingBox())!;
+      const box = (await menu.boundingBox())!;
+      expect(box.y + box.height).toBeLessThanOrEqual(nav.y + 1);
+      expect(Math.abs(box.x + box.width / 2 - (nav.x + nav.width / 2))).toBeLessThan(4);
+      return;
+    }
+    /* Phones: a modal in the middle of the screen, below the music button; it closes from its x and from the dimmed scene. */
+    await expect(menu).toHaveAttribute('aria-modal', 'true');
+    const vp = page.viewportSize()!;
+    const box = (await menu.boundingBox())!;
+    const mute = (await page.getByRole('button', { name: 'Play music' }).boundingBox())!;
+    expect(box.y).toBeGreaterThanOrEqual(mute.y + mute.height);
+    expect(box.x).toBeGreaterThanOrEqual(8);
+    expect(box.x + box.width).toBeLessThanOrEqual(vp.width - 8);
+    await menu.getByRole('button', { name: 'Close menu' }).click();
+    await expect(menu).toHaveCount(0);
+    await page.getByRole('button', { name: 'Project menu' }).click();
+    await expect(menu).toBeVisible();
+    /* once it has risen into place */
+    await page.waitForTimeout(600);
+    await page.mouse.click(vp.width / 2, vp.height - 4);
+    await expect(menu).toHaveCount(0);
   });
 });
 

@@ -58,7 +58,7 @@ extends Node3D
 ## pitches the exhibit poses up instead.
 ##
 ## Bridge (window.museumBridge, see museumBridge.ts): time(), visible(), pollCommand() (next / prev
-## / home / browse / tour:pause / tour:play / goto:<id> / mode:scroll / mode:free), scrollDelta(), reducedMotion(), pointerLocked() (is the canvas
+## / home / browse / tour:pause / tour:play / goto:<id> / mode:scroll / mode:free / song: re-read songCues()), scrollDelta(), reducedMotion(), pointerLocked() (is the canvas
 ## pointer-locked), bottomInset() and rightInset() (CSS px) in; onReady(), onFocus(id) ("" none, "stage"), onTour(state: stage, touring, paused, end),
 ## onIntroDone() (sent with onReady, kept for the page), onWalk(bool), onBuildProgress(f), and the
 ## debugPos string property out.
@@ -703,6 +703,10 @@ func _command(c: String) -> void:
 			if str(exhibits[i]["id"]) == id:
 				_go(i + 1, false)
 				return
+	elif c == "song":
+		# the page switched songs: take its new cue sheet (the clock follows the page's time already)
+		_cues_from_page = false
+		_try_page_cues()
 	elif c == "mode:free":
 		_set_free(true)
 	elif c == "mode:scroll":

@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent, type MutableRefObject } from "react";
-import Link from "next/link";
-import { ArrowUpRight, ChevronDown, ChevronLeft, ChevronRight, Menu, Pause, Play } from "lucide-react";
+import { AnimatePresence } from "motion/react";
+import { ArrowUpRight, ChevronDown, ChevronLeft, ChevronRight, Menu, Pause, Play, X } from "lucide-react";
 import { EXHIBITS } from "./exhibits";
 import { FreeRoamButton } from "./FreeRoamButton";
 import { LeaveModal } from "./LeaveModal";
 import { MuseumDetails } from "./MuseumDetails";
+import { MuseumMenu } from "./MuseumMenu";
 import type { MuseumCommand, TourState } from "./museumBridge";
 
 interface Props {
@@ -156,46 +157,23 @@ export function MuseumOverlay({ focusId, tour, free, onToggleFree, touch, send, 
 
         {!wide && <MuseumDetails exhibitId={detailId} mode="sheet" onOpenLink={askToLeave} suspended={menuOpen} />}
 
-        {browsing && menuOpen && (
-          <div
-            ref={menuRef}
-            role="dialog"
-            aria-label="Projects"
-            onKeyDown={onMenuKey}
-            className="pointer-events-auto max-h-[60svh] overflow-y-auto overscroll-contain border-t border-white/15 bg-black/85 backdrop-blur-md sm:absolute sm:bottom-full sm:right-6 sm:mb-2 sm:w-80 sm:border sm:max-h-[70svh] [@media(max-height:500px)]:absolute [@media(max-height:500px)]:bottom-full [@media(max-height:500px)]:right-3 [@media(max-height:500px)]:mb-1 [@media(max-height:500px)]:max-h-[70svh] [@media(max-height:500px)]:w-72 [@media(max-height:500px)]:border"
-          >
-            <ul>
-              {entries.map((e) => {
-                const active = e.active;
-                return (
-                  <li key={e.id}>
-                    <button
-                      type="button"
-                      aria-current={active ? "true" : undefined}
-                      onClick={() => {
-                        send(`goto:${e.id}`);
-                        setMenuOpen(false);
-                      }}
-                      className={`flex min-h-11 w-full items-center border-l-2 px-4 text-left text-sm hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-white ${active ? "border-[#ff2a2a] text-white" : "border-transparent text-gray-300"}`}
-                    >
-                      {e.title}
-                    </button>
-                  </li>
-                );
-              })}
-              <li className="border-t border-white/15">
-                {/* Same site, so no leave modal; let go of the pointer first so the next page is not stuck locked. */}
-                <Link
-                  href="/"
-                  onClick={() => document.exitPointerLock?.()}
-                  className="flex min-h-11 w-full items-center border-l-2 border-transparent px-4 text-left text-sm text-gray-300 hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-white"
-                >
-                  Back to the homepage
-                </Link>
-              </li>
-            </ul>
-          </div>
-        )}
+        <AnimatePresence>
+          {browsing && menuOpen && (
+            <MuseumMenu
+              key="menu"
+              menuRef={menuRef}
+              entries={entries}
+              onKeyDown={onMenuKey}
+              onGo={(id) => {
+                send(`goto:${id}`);
+                setMenuOpen(false);
+              }}
+              onSong={() => send("song")}
+              onClose={() => setMenuOpen(false)}
+              modal={!wide}
+            />
+          )}
+        </AnimatePresence>
 
         {browsing && (
           <nav aria-label="Museum navigation" className="pointer-events-auto flex items-center justify-center gap-1 px-3 pt-2" style={pad}>
@@ -222,7 +200,7 @@ export function MuseumOverlay({ focusId, tour, free, onToggleFree, touch, send, 
               aria-expanded={menuOpen}
               onClick={() => setMenuOpen((o) => !o)}
             >
-              <Menu className="h-5 w-5" aria-hidden="true" />
+              {menuOpen ? <X className="h-5 w-5" aria-hidden="true" /> : <Menu className="h-5 w-5" aria-hidden="true" />}
             </button>
             <button
               ref={openBtnRef}

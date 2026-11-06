@@ -12,6 +12,7 @@ export type MuseumCommand =
   | "tour:play"
   | "mode:scroll"
   | "mode:free"
+  | "song"
   | "goto:stage"
   | "goto:entrance"
   | `goto:${string}`;
