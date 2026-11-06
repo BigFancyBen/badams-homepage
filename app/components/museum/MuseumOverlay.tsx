@@ -6,7 +6,7 @@ import { ArrowUpRight, ChevronDown, ChevronLeft, ChevronRight, Menu, Pause, Play
 import { EXHIBITS } from "./exhibits";
 import { FreeRoamButton } from "./FreeRoamButton";
 import { LeaveModal } from "./LeaveModal";
-import { MuseumDetails } from "./MuseumDetails";
+import { MuseumDetails, PANEL_MARGIN, PANEL_WIDTH } from "./MuseumDetails";
 import { MuseumMenu } from "./MuseumMenu";
 import type { MuseumCommand, TourState } from "./museumBridge";
 
@@ -23,12 +23,21 @@ interface Props {
   insetRef: MutableRefObject<() => number>;
   /** Filled with a function returning the CSS px the details panel covers at the right edge (0 on phones). */
   rightInsetRef: MutableRefObject<() => number>;
+  /** Filled with a function returning how the art should be framed at an exhibit, as "side,bottom,width,height" in
+      CSS px: what the details panel (side) or the folded sheet and icon bar (bottom) will cover once there, whether
+      or not they are open yet, and the view's size. Godot builds it into the exhibit poses, so the camera lands
+      framed and does not move again when the panel opens. */
+  framingRef: MutableRefObject<() => string>;
 }
 
 const BTN =
   "flex h-11 w-11 items-center justify-center border border-white/15 bg-black/60 text-gray-200 backdrop-blur hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-white disabled:pointer-events-none disabled:opacity-40";
 
 const FOCUSABLE = "button:not([disabled]), a[href]";
+
+/* Phones: the folded details sheet's height, and the icon bar's before it has mounted (CSS px). */
+const SHEET_PEEK_PX = 66;
+const NAV_PX = 64;
 
 /* Room for a side panel: not a phone, and not a phone on its side. Narrower or shorter gets the bottom sheet. */
 const WIDE_QUERY = "(min-width: 640px) and (min-height: 501px)";
@@ -49,11 +58,12 @@ function useWide(): boolean {
  * canvas still gets swipes and taps; only the controls catch them. No text
  * except the one Browse button and the menu's list of titles.
  */
-export function MuseumOverlay({ focusId, tour, free, onToggleFree, touch, send, insetRef, rightInsetRef }: Props) {
+export function MuseumOverlay({ focusId, tour, free, onToggleFree, touch, send, insetRef, rightInsetRef, framingRef }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
+  const navRef = useRef<HTMLElement>(null);
   const openBtnRef = useRef<HTMLButtonElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const wide = useWide();
@@ -71,6 +81,19 @@ export function MuseumOverlay({ focusId, tour, free, onToggleFree, touch, send, 
       insetRef.current = () => 0;
     };
   }, [insetRef]);
+
+  useEffect(() => {
+    framingRef.current = () => {
+      const r = rootRef.current?.getBoundingClientRect();
+      if (!r) return "";
+      if (wide) return `${PANEL_WIDTH + PANEL_MARGIN},0,${Math.round(r.width)},${Math.round(r.height)}`;
+      const nav = navRef.current?.getBoundingClientRect().height ?? NAV_PX;
+      return `0,${Math.round(nav + SHEET_PEEK_PX)},${Math.round(r.width)},${Math.round(r.height)}`;
+    };
+    return () => {
+      framingRef.current = () => "";
+    };
+  }, [framingRef, wide]);
 
   /* Move focus into the menu on open; hand it back to the menu button on close. */
   useEffect(() => {
@@ -176,7 +199,7 @@ export function MuseumOverlay({ focusId, tour, free, onToggleFree, touch, send, 
         </AnimatePresence>
 
         {browsing && (
-          <nav aria-label="Museum navigation" className="pointer-events-auto flex items-center justify-center gap-1 px-3 pt-2" style={pad}>
+          <nav ref={navRef} aria-label="Museum navigation" className="pointer-events-auto flex items-center justify-center gap-1 px-3 pt-2" style={pad}>
             <button type="button" className={BTN} aria-label="Previous exhibit" onClick={() => send("prev")}>
               <ChevronLeft className="h-5 w-5" aria-hidden="true" />
             </button>

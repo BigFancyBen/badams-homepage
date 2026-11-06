@@ -502,6 +502,31 @@ test.describe('museum overlay (stub engine)', () => {
     await page.screenshot({ path: join(FRAMES, `${test.info().project.name}-menu.png`) });
   });
 
+  test('four exhibits have a video for Godot to play in their frame; the rest have none', async ({ page }) => {
+    await enterStub(page);
+    const urls = await page.evaluate(() =>
+      ['mfrs', 'oathkeep', 'prognosticator', 'warehouse', 'testq', 'resume'].map((id) => window.museumBridge!.videoUrl(id)),
+    );
+    for (const u of urls.slice(0, 4)) expect(u).toMatch(/\/museum\/[0-9a-f]+\/videos\/[a-z-]+\.ogv$/);
+    expect(urls.slice(4)).toEqual(['', '']);
+  });
+
+  test('the menu has a close button in its top-right corner', async ({ page }) => {
+    await enterStub(page);
+    await tour(page, 'touring');
+    await page.getByRole('button', { name: 'Project menu' }).click();
+    const menu = page.getByRole('dialog', { name: 'Projects' });
+    await page.waitForTimeout(500);
+    const close = menu.getByRole('button', { name: 'Close menu' });
+    const mb = (await menu.boundingBox())!;
+    const cb = (await close.boundingBox())!;
+    expect(cb.x + cb.width).toBeGreaterThan(mb.x + mb.width - 8);
+    expect(cb.y).toBeLessThan(mb.y + 8);
+    await close.click();
+    await expect(menu).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Project menu' })).toBeFocused();
+  });
+
   test('menu traps Tab focus', async ({ page }) => {
     await enterStub(page);
     await tour(page, 'touring');

@@ -20,11 +20,26 @@ const BEAMS = [
  * Fills its positioned parent. Used by the homepage's game section and as the museum page's
  * loading backdrop, so the one reads as the next step of the other.
  */
-export function GamePoster({ children, className = "", style }: { children?: ReactNode; className?: string; style?: CSSProperties }) {
+export function GamePoster({
+  children,
+  className = "",
+  style,
+  lift = false,
+}: {
+  children?: ReactNode;
+  className?: string;
+  style?: CSSProperties;
+  /** Raise the picture (more in landscape, where the neon sits lower) so the neon clears a tall block of
+      controls below it; its bottom edge then fades out instead of ending in a line. */
+  lift?: boolean;
+}) {
   return (
     <div className={`absolute inset-0 overflow-hidden ${className}`} style={{ background: BEAMS, ...style }}>
       <div className="absolute inset-0 opacity-[0.12] mix-blend-overlay" style={{ backgroundImage: GRAIN }} aria-hidden="true" />
-      <picture>
+      <picture
+        className={`absolute inset-0 ${lift ? "-translate-y-[14%] landscape:-translate-y-[22%]" : ""}`}
+        style={lift ? { maskImage: "linear-gradient(to bottom, #000 78%, transparent 100%)", WebkitMaskImage: "linear-gradient(to bottom, #000 78%, transparent 100%)" } : undefined}
+      >
         <source media="(orientation: portrait)" srcSet="/museum/poster-portrait.webp" />
         <img
           src="/museum/poster-landscape.webp"

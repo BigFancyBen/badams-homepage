@@ -20,16 +20,20 @@ test.describe('homepage', () => {
     await expect(page.getByRole('link', { name: 'Resume' })).toHaveCount(0);
   });
 
-  test('the game section is full bleed, with a Game version link to /museum and no engine', async ({ page }) => {
+  test('the game section is full bleed, with an Experience my portfolio link to /museum and no engine', async ({ page }) => {
     const requested: string[] = [];
     page.on('request', (r) => {
       if (/\/museum\/[0-9a-f]+\/museum\.|\/songs\/[\w-]+\.mp3/.test(r.url())) requested.push(r.url());
     });
     await page.goto('/');
     const section = page.locator('section#game');
-    const link = section.getByRole('link', { name: 'Game version' });
+    const link = section.getByRole('link', { name: 'Experience my portfolio' });
     await expect(link).toHaveAttribute('href', '/museum');
     await expect(section).toContainText(/About \d+ MB download/);
+    /* A subline says what the click gets you. */
+    await expect(section).toContainText('Walk through every project in a 3D museum after dark');
+    /* ...and the plain version is just below. */
+    await expect(section.getByRole('link', { name: /Prefer the boring version\? Keep scrolling/ })).toHaveAttribute('href', '#catalogue');
     await expect(section.locator('p', { hasText: 'Ben Adams' })).toHaveCount(0);
     await expect(page.locator('canvas')).toHaveCount(0);
     await expect(page.getByRole('button', { name: /music/i })).toHaveCount(0);
@@ -58,10 +62,10 @@ test.describe('homepage', () => {
     await expect.poll(() => page.evaluate(() => document.getElementById('game')!.getBoundingClientRect().top), { timeout: 5000 }).toBeLessThan(5);
   });
 
-  test('the Game version link opens /museum', async ({ page }) => {
+  test('the Experience my portfolio link opens /museum', async ({ page }) => {
     await page.route('**/museum/*/museum.*', (route) => route.fulfill({ status: 404, body: 'nope' }));
     await page.goto('/');
-    await page.locator('section#game').getByRole('link', { name: 'Game version' }).click();
+    await page.locator('section#game').getByRole('link', { name: 'Experience my portfolio' }).click();
     await expect(page).toHaveURL(/\/museum$/);
     await expect(page.locator('section#museum')).toBeVisible();
   });

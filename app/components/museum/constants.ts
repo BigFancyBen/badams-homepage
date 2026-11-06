@@ -15,6 +15,12 @@ const CDN_DIR = `${MUSEUM_CDN}/museum/${ENGINE_VERSION}`;
 /** The mp3 of one of the house songs (see songs.ts), under songs/ on the CDN. */
 export const songUrl = (id: string): string => `${CDN_DIR}/songs/${id}.mp3`;
 
+/** Exhibits that play a short loop of the project in their main frame (scripts/museum-videos.mjs
+    makes them; keep the two lists in step). Godot fetches them after the hall is up. */
+export const MUSEUM_VIDEOS: readonly string[] = ["mfrs", "oathkeep", "prognosticator", "warehouse"];
+/** The exhibit's video on the CDN (videos/<id>.ogv), or "" for none. */
+export const videoUrl = (id: string): string => (MUSEUM_VIDEOS.includes(id) ? `${CDN_DIR}/videos/${id}.ogv` : "");
+
 export const ENGINE_BASE = `${CDN_DIR}/museum`;
 export const ENGINE_SCRIPT = `${ENGINE_BASE}.js?v=${ENGINE_VERSION}`;
 /** Decoded sizes of the two large files (what the loader receives), for the loading bar. */

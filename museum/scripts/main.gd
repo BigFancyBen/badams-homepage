@@ -52,10 +52,12 @@ extends Node3D
 ## Only WASD/arrows (and touch looks) pause the tour. Phones: touch_controls.gd turns the same way
 ## (drag right turns right, drag up looks up); none of the lock applies there.
 ##
-## Panel framing: the page's details panel covers the right of the screen on desktop (bridge
-## rightInset(), CSS px, 0 when closed or absent); while an exhibit is held the view turns slightly
-## right, eased, so the art sits in the uncovered part. On phones the bottom sheet (bottomInset())
-## pitches the exhibit poses up instead.
+## Panel framing: the page's details panel covers the right of the screen on desktop, the folded
+## bottom sheet and icon bar the bottom on phones. The page says how much they will cover at an
+## exhibit, open yet or not (bridge framing(): "side,bottom,width,height" CSS px), and the exhibit poses
+## (_tour_pose) are built with that turn to the right / pitch up, so every move lands already framed and
+## nothing moves when the panel opens a moment later. Only unfolding the phone sheet further (the visitor's
+## own doing) pitches up more, eased (_tick_sheet, from bottomInset()).
 ##
 ## Bridge (window.museumBridge, see museumBridge.ts): time(), visible(), pollCommand() (next / prev
 ## / home / browse / tour:pause / tour:play / goto:<id> / mode:scroll / mode:free / song: re-read songCues()), scrollDelta(), reducedMotion(), pointerLocked() (is the canvas
@@ -70,6 +72,7 @@ const Player := preload("res://scripts/player.gd")
 const TouchControls := preload("res://scripts/touch_controls.gd")
 const Perf := preload("res://scripts/perf.gd")
 const Warm := preload("res://scripts/warm.gd")
+const ExhibitVideo := preload("res://scripts/exhibit_video.gd")
 const FPS_CAP := 60
 
 ## debugPos reports the mode as 1 (TRANS, an auto-walk), 2 (PLAY, holds and free walk) or 3 (SCROLL).
@@ -113,6 +116,7 @@ var bridge = null
 var clock := Clock.new()
 var player := Player.new()
 var controls: CanvasLayer
+var video: Node                     # exhibit_video.gd: the focused exhibit's video, if it has one
 
 var mode: int = Mode.PLAY
 var _bridge_try: float = 0.0
@@ -129,7 +133,11 @@ var _fov_goal: float = 60.0
 var _inset_css: float = 0.0
 var _right_inset_css: float = 0.0  # CSS px the page's desktop details panel covers on the right (0 when closed, on phones, or absent)
 var _sheet_pitch: float = 0.0      # eased pitch offset (degrees, negative looks up) that keeps the art above the phone bottom sheet
-var _panel_yaw: float = 0.0        # eased yaw offset (degrees, negative turns right) that centres the art in the uncovered part
+var _panel_yaw: float = 0.0        # unused: the framing is built into the exhibit poses (_frame_side / _frame_bottom)
+var _frame_side: float = 0.0       # share of the view's width the desktop details panel covers at an exhibit
+var _frame_bottom: float = 0.0     # share of the view's height the folded phone sheet and icon bar cover
+var _seg_i: int = -1               # the scroll leg the camera is on, and whether it entered it going back
+var _seg_back: bool = false
 
 var _stage_aspect: float = -1.0   # aspect the stage hold was last fitted for
 
@@ -384,6 +392,8 @@ func _process(delta: float) -> void:
 			_bridge_try = 0.5
 			_try_bridge()
 	clock.poll_visible(delta)
+	if video != null:
+		video.set_active(clock.visible)
 	_tick_lock()
 	if bridge != null:
 		for _i in 8:
@@ -423,6 +433,11 @@ func _process(delta: float) -> void:
 				_emit_focus(Player.FOCUS_STAGE, true)
 				bridge.onTour(_tour)
 				bridge.onIntroDone()
+		if not _shot:
+			video = ExhibitVideo.new()
+			add_child(video)
+			video.setup(bridge, exhibits, _reduced or (bridge != null and bool(bridge.reducedMotion())))
+			video.focus(_focus_bay)
 
 
 func _poll_page(delta: float) -> void:
@@ -441,6 +456,12 @@ func _poll_page(delta: float) -> void:
 			_right_inset_css = maxf(0.0, float(rv)) if (typeof(rv) == TYPE_FLOAT or typeof(rv) == TYPE_INT) else 0.0
 		else:
 			_right_inset_css = 0.0
+		var fr = bridge.framing
+		if fr != null:
+			var parts := str(bridge.framing()).split(",")
+			if parts.size() == 4 and float(parts[2]) > 1.0 and float(parts[3]) > 1.0:
+				_frame_side = clampf(float(parts[0]) / float(parts[2]), 0.0, 0.6) if not _mobile else 0.0
+				_frame_bottom = clampf(float(parts[1]) / float(parts[3]), 0.0, 0.5)
 	_dbg_poll -= delta
 	if _dbg_poll <= 0.0:
 		_dbg_poll = 0.2
@@ -606,7 +627,18 @@ func _tour_pose(t: int) -> Dictionary:
 	if t > n:
 		return Layout.end_pose(a)
 	var to := Layout.walk_pose(t, a, n)
-	return to
+	return _framed(to)
+
+
+## An exhibit pose turned right (desktop panel) or pitched up (phone sheet) so the art sits in the middle
+## of the part of the view the page leaves clear.
+func _framed(pose: Dictionary) -> Dictionary:
+	var fov := float(pose.get("fov", _fov))
+	var tan_v := tan(deg_to_rad(fov) * 0.5)
+	pose["yaw"] = float(pose["yaw"]) - rad_to_deg(atan(_frame_side * tan_v * _aspect()))
+	if _aspect() < 0.9:
+		pose["pitch"] = float(pose["pitch"]) - rad_to_deg(atan(_frame_bottom * tan_v))
+	return pose
 
 
 ## Fly to tour position t (0 stage, 1..n exhibits, n+1 the end at the marquee). play: keep the tour
@@ -789,6 +821,8 @@ func _scroll_origin() -> bool:
 		if absi(_t - _tr_from_t) != 1:
 			return false
 		_s = lerpf(float(_tr_from_t), float(_t), _ease(_tr_t / _tr_dur))
+		_seg_i = mini(_tr_from_t, _t)
+		_seg_back = _t < _tr_from_t
 	else:
 		_s = float(_t)
 	_s_goal = _s
@@ -828,9 +862,19 @@ func _scroll_pose(s: float) -> Dictionary:
 	var i := clampi(int(floorf(s)), 0, n)
 	var f := s - float(i)
 	if f <= 0.0005:
+		_seg_i = -1
 		return _tour_pose(i).duplicate()
 	if f >= 0.9995:
+		_seg_i = -1
 		return _tour_pose(i + 1).duplicate()
+	# A leg is flown the way it was entered: going on, the swing between walls looks on toward the
+	# entrance; going back, it looks back toward the stage. Reversing part way retraces the same curve.
+	if i != _seg_i:
+		_seg_i = i
+		_seg_back = _s_dir < 0.0
+	if _seg_back:
+		_setup_move(_tour_pose(i + 1), _tour_pose(i), i == 0)
+		return _mix_move(1.0 - f)
 	_setup_move(_tour_pose(i), _tour_pose(i + 1), i == 0)
 	return _mix_move(f)
 
@@ -999,6 +1043,8 @@ func _emit_focus(code: int, force: bool) -> void:
 	_focus_code = code
 	_focus_cand = code
 	_focus_bay = code if code >= 0 else -1
+	if video != null:
+		video.focus(_focus_bay)
 	if code >= 0:
 		_t = code + 1
 	elif code == Player.FOCUS_STAGE:
@@ -1129,15 +1175,8 @@ func _release_lock() -> void:
 ## paused at it) and the panel covers `_right_inset_css`, turn the view a little to the right so the
 ## art sits in the middle of the uncovered part. Eased, so the panel opening or closing does not jump.
 func _tick_panel(delta: float) -> void:
-	var goal := 0.0
-	var holding := _t >= 1 and _t <= exhibits.size() and (_tour == "touring" or _tour == "paused")
-	if holding and _right_inset_css > 0.0 and not _mobile:
-		var vs := get_viewport().get_visible_rect().size
-		var css_w := maxf(vs.x * _css_per_unit(), 1.0)
-		var frac := clampf(_right_inset_css / css_w, 0.0, 0.6)    # the covered share of the width: the centre moves by half of it
-		var tan_h := tan(deg_to_rad(_fov) * 0.5) * (vs.x / maxf(vs.y, 1.0))   # fov is vertical
-		goal = -rad_to_deg(atan(frac * tan_h))
-	_panel_yaw = lerpf(_panel_yaw, goal, 1.0 - exp(-delta * PANEL_EASE))
+	# the desktop panel's framing is in the exhibit poses; nothing turns when it opens or closes
+	_panel_yaw = lerpf(_panel_yaw, 0.0, 1.0 - exp(-delta * PANEL_EASE))
 
 
 ## Phones: the bottom sheet covers part of the screen, so while an exhibit is held pitch up (eased)
@@ -1147,9 +1186,12 @@ func _tick_sheet(delta: float) -> void:
 	var goal := 0.0
 	var holding := _t >= 1 and _t <= exhibits.size() and (_tour == "touring" or _tour == "paused")
 	if holding and _aspect() < 0.9 and _inset_css > 0.0:
+		# the folded sheet is already in the pose (_framed); pitch up only for what is unfolded beyond it
 		var vs := get_viewport().get_visible_rect().size
 		var cover := clampf(_inset_css / maxf(vs.y * _css_per_unit(), 1.0), 0.0, 0.5)
-		goal = -rad_to_deg(atan(cover * tan(deg_to_rad(_fov) * 0.5)))
+		if cover > _frame_bottom:
+			var tv := tan(deg_to_rad(_fov) * 0.5)
+			goal = -rad_to_deg(atan(cover * tv) - atan(_frame_bottom * tv))
 	_sheet_pitch = lerpf(_sheet_pitch, goal, 1.0 - exp(-delta * SHEET_EASE))
 
 

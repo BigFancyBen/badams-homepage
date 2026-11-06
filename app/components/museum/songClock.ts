@@ -283,7 +283,7 @@ export class SongClock {
   }
 
   /**
-   * Fetch and decode the chosen song ahead of the first unmute. Call from the "Game version"
+   * Fetch and decode the chosen song ahead of the first unmute. Call from the "Experience my portfolio"
    * click (a gesture, so the AudioContext may be made). Starts no playback and leaves mute alone.
    */
   preload(): void {

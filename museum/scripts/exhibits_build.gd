@@ -65,6 +65,15 @@ static func set_art_level(b: int, g: float) -> void:
 		(m as ShaderMaterial).set_shader_parameter("level", g)
 
 
+## Show a video in bay b's main picture (exhibit_video.gd): its frames, and how far it has faded in (0 the still).
+static func set_video(b: int, tex: Texture2D, mix: float) -> void:
+	if b < 0 or b >= _pics.size() or (_pics[b] as Array).is_empty():
+		return
+	var m := _pics[b][0] as ShaderMaterial
+	m.set_shader_parameter("video_tex", tex)
+	m.set_shader_parameter("video_mix", mix if tex != null else 0.0)
+
+
 ## Bay b's frames: Array of [Vector3 centre on the wall, Vector2 picture size].
 static func frames(b: int) -> Array:
 	return _frames[b]

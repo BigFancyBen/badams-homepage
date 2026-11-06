@@ -69,6 +69,7 @@ export function Museum() {
   const insetRef = useRef<() => number>(() => 0);
   /* Likewise for the width the details panel covers at the right edge. */
   const rightInsetRef = useRef<() => number>(() => 0);
+  const framingRef = useRef<() => string>(() => "");
   /* When the load last moved (a download chunk, or a step of the hall's build). A
      failure that nothing reports would otherwise leave the bar sitting there forever. */
   const progressAtRef = useRef(0);
@@ -115,6 +116,7 @@ export function Museum() {
         scrollHeld: () => scrollRef.current?.held() ?? false,
         bottomInset: () => insetRef.current(),
         rightInset: () => rightInsetRef.current(),
+        framing: () => framingRef.current(),
       });
       if (!globalThis.Engine) await loadScript(ENGINE_SCRIPT);
       const Ctor = globalThis.Engine;
@@ -344,7 +346,7 @@ export function Museum() {
 
       <MuteButton ready={ready} aim={aim} />
 
-      {ready && <MuseumOverlay focusId={focusId} tour={tour} free={free} onToggleFree={toggleFree} touch={!desktop} send={send} insetRef={insetRef} rightInsetRef={rightInsetRef} />}
+      {ready && <MuseumOverlay focusId={focusId} tour={tour} free={free} onToggleFree={toggleFree} touch={!desktop} send={send} insetRef={insetRef} rightInsetRef={rightInsetRef} framingRef={framingRef} />}
       <Poster
         status={status}
         detail={failDetail}

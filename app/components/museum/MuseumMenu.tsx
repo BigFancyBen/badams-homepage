@@ -27,7 +27,8 @@ const EASE = [0.2, 0.8, 0.2, 1] as const;
  *
  * On phones (`modal`) there is no room for it beside the view, so it is a modal instead: the scene
  * dims behind it, the panel rises into the middle of the screen below the music button, and a
- * close button, a tap on the dimmed scene or Esc puts it away.
+ * tap on the dimmed scene also puts it away. Everywhere, the × in its top-right corner, the menu button
+ * (an × while open) and Esc close it.
  */
 export function MuseumMenu({
   entries,
@@ -93,20 +94,18 @@ export function MuseumMenu({
         className="pointer-events-none absolute bottom-1.5 right-1.5 h-2.5 w-2.5 border-b border-r border-white/30"
       />
 
-      {modal && (
-        <div className="flex shrink-0 justify-end">
-          <button
-            type="button"
-            aria-label="Close menu"
-            onClick={onClose}
-            className="flex h-11 w-11 items-center justify-center text-gray-400 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-white"
-          >
-            <X className="h-5 w-5" aria-hidden="true" />
-          </button>
-        </div>
-      )}
+      <div className="flex shrink-0 justify-end">
+        <button
+          type="button"
+          aria-label="Close menu"
+          onClick={onClose}
+          className="flex h-11 w-11 items-center justify-center text-gray-400 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-white"
+        >
+          <X className="h-5 w-5" aria-hidden="true" />
+        </button>
+      </div>
 
-      <div className={`overflow-y-auto overscroll-contain ${modal ? "pb-2" : "py-2"}`}>
+      <div className="overflow-y-auto overscroll-contain pb-2">
         <ul>
           {entries.map((e, i) => (
             <motion.li key={e.id} {...row(i)}>
