@@ -1,8 +1,22 @@
 import { getSongClock } from "./songClock";
 import { getSong } from "./songs";
+import { videoUrl } from "./constants";
 
-/** goto:stage flies to the stage hold, goto:entrance to the end-of-tour view of the marquee, goto:<id> to an exhibit. */
-export type MuseumCommand = "next" | "prev" | "home" | "browse" | "tour:pause" | "tour:play" | "goto:stage" | "goto:entrance" | `goto:${string}`;
+/** goto:stage flies to the stage hold, goto:entrance to the end-of-tour view of the marquee, goto:<id> to an exhibit.
+    mode:scroll (the default) moves between the views by scrolling; mode:free walks freely (WASD, the stick, pointer lock). */
+export type MuseumCommand =
+  | "next"
+  | "prev"
+  | "home"
+  | "browse"
+  | "tour:pause"
+  | "tour:play"
+  | "mode:scroll"
+  | "mode:free"
+  | "song"
+  | "goto:stage"
+  | "goto:entrance"
+  | `goto:${string}`;
 
 /** What the tour is doing: stage (holding from the first frame, show Browse projects), touring, paused, end (at the marquee). */
 export type TourState = "stage" | "touring" | "paused" | "end";
@@ -13,6 +27,10 @@ export interface MuseumBridge {
   /** This visit's song as its cue sheet JSON (museum/songs/<id>.json): tempo, loop and sections. */
   songCues(): string;
   pollCommand(): string;
+  /** CSS px scrolled (wheel, trackpad, swipes) since Godot last asked; positive moves on toward the entrance. */
+  scrollDelta(): number;
+  /** True while a finger is down on the canvas or the wheel turned in the last moment: a gesture still going, so Godot does not snap yet. */
+  scrollHeld(): boolean;
   /** False while the hero is scrolled away or the tab is hidden; Godot throttles. */
   visible(): boolean;
   onFocus(id: string): void;
@@ -33,6 +51,12 @@ export interface MuseumBridge {
   bottomInset(): number;
   /** CSS px from the right of the hero that the project details panel covers while open (0 on phones and while closed); Godot frames the art in the rest. */
   rightInset(): number;
+  /** How to frame the art at an exhibit: "side,bottom,width,height" CSS px (see MuseumOverlay's framingRef). "" until known. */
+  framing(): string;
+  /** The exhibit's video (an .ogv URL), or "" when it has none. */
+  videoUrl(id: string): string;
+  /** Set by Godot: "<bay>:<mix>" of the exhibit video playing (bay -1 none). */
+  debugVideo?: string;
   /** Set by Godot ~5 times a second: "x,y,z,yawDegrees,mode" (mode 1 auto-walk, 2 holds and free walk). */
   debugPos?: string;
 }
@@ -63,7 +87,10 @@ export function installMuseumBridge(handlers: {
   onWalk(walking: boolean): void;
   bottomInset(): number;
   rightInset(): number;
+  framing(): string;
   pointerLocked(): boolean;
+  scrollDelta(): number;
+  scrollHeld(): boolean;
 }): BridgeHandle {
   const clock = getSongClock();
   const queue: string[] = [];
@@ -73,6 +100,11 @@ export function installMuseumBridge(handlers: {
     audible: () => clock.getState().audible,
     songCues: () => JSON.stringify(getSong()),
     pollCommand: () => queue.shift() ?? "",
+    scrollDelta: () => {
+      const v = handlers.scrollDelta();
+      return Number.isFinite(v) ? v : 0;
+    },
+    scrollHeld: () => Boolean(handlers.scrollHeld()),
     visible: () => onScreen && document.visibilityState === "visible",
     onFocus: (id) => handlers.onFocus(String(id ?? "")),
     onReady: () => handlers.onReady(),
@@ -86,6 +118,8 @@ export function installMuseumBridge(handlers: {
       const v = handlers.bottomInset();
       return Number.isFinite(v) ? v : 0;
     },
+    framing: () => String(handlers.framing() ?? ""),
+    videoUrl: (id) => videoUrl(String(id ?? "")),
     rightInset: () => {
       const v = handlers.rightInset();
       return Number.isFinite(v) ? v : 0;

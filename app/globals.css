@@ -308,3 +308,25 @@ body {
   from { transform: scale(1.02) translate3d(0, 0, 0); }
   to { transform: scale(1.1) translate3d(-1.5%, -1%, 0); }
 }
+
+/* The museum's scroll hint bobs gently downward. */
+@media (prefers-reduced-motion: no-preference) {
+  .museum-scroll-hint {
+    animation: museum-scroll-hint 1.8s ease-in-out infinite;
+  }
+}
+@keyframes museum-scroll-hint {
+  0%, 100% { transform: translateY(0); opacity: 0.7; }
+  50% { transform: translateY(5px); opacity: 1; }
+}
+
+/* The playing track's equalizer in the museum menu. */
+@media (prefers-reduced-motion: no-preference) {
+  .museum-eq {
+    animation: museum-eq 0.7s ease-in-out infinite alternate;
+  }
+}
+@keyframes museum-eq {
+  from { transform: scaleY(0.25); }
+  to { transform: scaleY(1); }
+}

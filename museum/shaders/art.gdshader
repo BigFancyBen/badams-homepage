@@ -10,10 +10,16 @@ render_mode unshaded, fog_disabled;
 uniform sampler2D albedo_tex : filter_linear_mipmap_anisotropic, repeat_disable;
 uniform sampler3D lut : filter_linear, repeat_disable;
 uniform float level = 0.97;
+// A playing video of the project (exhibit_video.gd), crossfaded over the still; no mipmaps on video frames.
+uniform sampler2D video_tex : filter_linear, repeat_disable;
+uniform float video_mix = 0.0;
 const float LUT_N = 40.0;
 
 void fragment() {
 	vec3 enc = texture(albedo_tex, UV).rgb;
+	if (video_mix > 0.0) {
+		enc = mix(enc, texture(video_tex, UV).rgb, video_mix);
+	}
 	vec3 t = clamp(enc * level, 0.0, 1.0);
 	ALBEDO = texture(lut, t * ((LUT_N - 1.0) / LUT_N) + 0.5 / LUT_N).rgb;
 }

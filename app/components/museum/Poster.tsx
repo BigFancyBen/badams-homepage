@@ -58,12 +58,6 @@ export function Poster({
           <p className="mt-2 font-mono text-[11px] text-gray-300" aria-live="polite">
             {phase === "download" ? `Downloading, about ${DOWNLOAD_MB} MB` : "Setting up the hall"} · {Math.round(progress * 100)}%
           </p>
-          <Link
-            href="/"
-            className="mt-3 inline-flex min-h-11 items-center px-4 text-sm text-gray-300 underline underline-offset-4 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
-          >
-            Cancel
-          </Link>
         </>
       )}
 

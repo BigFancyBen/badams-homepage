@@ -120,16 +120,14 @@ test.describe('museum on phones', () => {
     await expect(page.getByText(CLOSED)).toBeVisible();
   });
 
-  test('loading shows progress, and Cancel goes back to the homepage', async ({ page }) => {
+  test('loading shows progress, with no Cancel link', async ({ page }) => {
     await page.route('**/museum/*/museum.js*', async (route) => {
       await new Promise((r) => setTimeout(r, 4000));
       await route.continue();
     });
     await page.goto('/museum');
     await expect(page.getByText(/Downloading, about \d+ MB/)).toBeVisible();
-    await page.getByRole('link', { name: 'Cancel' }).click();
-    await expect(page).toHaveURL(/\/$/);
-    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Cancel' })).toHaveCount(0);
   });
 
   test('boots the engine, caps the render size, and recovers from a lost GL context', async ({ page }, info) => {
@@ -181,7 +179,7 @@ async function readGlance(page: Page) {
 }
 
 test.describe('museum walk', () => {
-  test('opens on the stage hold, W walks, the stick walks on phones', async ({ page }, info) => {
+  test('opens on the stage hold, scrolls to exhibit 1 and back; in free roam W walks, the stick walks on phones', async ({ page }, info) => {
     test.setTimeout(540_000);
     await page.route('**/museum/*/museum.*', async (route) => {
       const name = new URL(route.request().url()).pathname.split('/').pop()!;
@@ -201,6 +199,39 @@ test.describe('museum walk', () => {
     await expect.poll(async () => (await readPos(page))?.mode, { timeout: 30_000 }).toBe(2);
     const start = (await readPos(page))!;
     expect(start.y).toBeCloseTo(1.65, 1);
+
+    /* Scrolling is the default: one wheel notch (a swipe up on phones) carries on to exhibit 1, the
+       other way comes back. Exhibit 1 is nearer the entrance (larger z) than the stage hold. */
+    const cdp = phone ? await page.context().newCDPSession(page) : null;
+    const scroll = async (dir: 1 | -1) => {
+      if (!cdp) {
+        const b = (await page.locator('canvas').boundingBox())!;
+        await page.mouse.move(b.x + b.width / 2, b.y + b.height * 0.4);
+        await page.mouse.wheel(0, 120 * dir);
+        return;
+      }
+      const vp = page.viewportSize()!;
+      const x = Math.round(vp.width / 2);
+      const y0 = Math.round(vp.height * 0.5);
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y: y0, id: 5 }] });
+      for (let i = 1; i <= 8; i++) {
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y0 - dir * i * 20, id: 5 }] });
+        await page.waitForTimeout(16);
+      }
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    };
+    await scroll(1);
+    await expect.poll(async () => (await readPos(page))!.z - start.z, { timeout: 60_000 }).toBeGreaterThan(0.5);
+    await expect.poll(async () => (await readPos(page))!.mode, { timeout: 60_000 }).toBe(2);
+    await expect(page.getByRole('button', { name: 'Browse projects' })).toHaveCount(0);
+    await scroll(-1);
+    await expect.poll(async () => Math.abs((await readPos(page))!.z - start.z), { timeout: 60_000 }).toBeLessThan(0.05);
+    await expect.poll(async () => (await readPos(page))!.mode, { timeout: 60_000 }).toBe(2);
+    await expect(page.getByRole('button', { name: 'Browse projects' })).toBeVisible();
+
+    /* Walking is free roam's. */
+    await page.getByRole('button', { name: 'Free roam' }).click();
+    await expect(page.getByRole('button', { name: 'Free roam' })).toHaveAttribute('aria-pressed', 'true');
 
     if (!phone) {
       const box = (await page.locator('canvas').boundingBox())!;
@@ -264,7 +295,7 @@ test.describe('museum walk', () => {
     }
 
     /* Phone: drag the stick with a real touch (CDP), keep the finger down for a screenshot. */
-    const cdp = await page.context().newCDPSession(page);
+    if (!cdp) return;
     const vp = page.viewportSize()!;
     const x0 = Math.round(vp.width * 0.2);
     const y0 = Math.round(vp.height * 0.55);
@@ -402,7 +433,8 @@ test.describe('museum overlay (stub engine)', () => {
     const menuBtn = page.getByRole('button', { name: 'Project menu' });
     await menuBtn.click();
     const menu = page.getByRole('dialog', { name: 'Projects' });
-    const items = menu.getByRole('button');
+    /* The first list is the views; the music list follows it. */
+    const items = menu.getByRole('list').first().getByRole('button');
     await expect(items).toHaveCount(15);
     await expect(items.first()).toHaveText('Stage');
     await expect(items.last()).toHaveText('Entrance');
@@ -435,6 +467,64 @@ test.describe('museum overlay (stub engine)', () => {
     await tour(page, 'paused');
     await menuBtn.click();
     await expect(menu.getByRole('button', { name: 'Stage' })).toHaveAttribute('aria-current', 'true');
+  });
+
+  test('the menu switches the song: Godot is told, the lights get its cue sheet, the menu stays open', async ({ page }) => {
+    await enterStub(page);
+    await tour(page, 'touring');
+    await page.getByRole('button', { name: 'Project menu' }).click();
+    const menu = page.getByRole('dialog', { name: 'Projects' });
+    const tracks = menu.getByRole('list').nth(1).getByRole('button');
+    await expect(tracks).toHaveCount(5);
+    const before = await page.evaluate(() => JSON.parse(window.museumBridge!.songCues()).id as string);
+    await expect(menu.locator('button[aria-pressed="true"]')).toHaveCount(1);
+    await drain(page);
+    /* pick one that is not playing */
+    const title = (await menu.locator('button[aria-pressed="false"]').first().textContent())!;
+    const other = tracks.filter({ hasText: title });
+    await other.click();
+    await expect(other).toHaveAttribute('aria-pressed', 'true');
+    expect(await drain(page)).toEqual(['song']);
+    const after = await page.evaluate(() => JSON.parse(window.museumBridge!.songCues()) as { id: string; title: string });
+    expect(after.id).not.toBe(before);
+    expect(title).toContain(after.title);
+    await expect(menu).toBeVisible();
+    /* It comes in on its build, like the first visit. */
+    const until = await page.evaluate(() => {
+      const b = window.museumBridge!;
+      const c = JSON.parse(b.songCues()) as { bpm: number; loopSeconds: number; sections: { name: string; from: number }[] };
+      const i = c.sections.findIndex((x, k) => x.name === 'drop' && c.sections[k - 1]?.name === 'break');
+      const drop = (c.sections[i].from * 240) / c.bpm;
+      return (((drop - b.time()) % c.loopSeconds) + c.loopSeconds) % c.loopSeconds;
+    });
+    expect(until).toBeGreaterThan(5);
+    expect(until).toBeLessThanOrEqual(8.6);
+    await page.screenshot({ path: join(FRAMES, `${test.info().project.name}-menu.png`) });
+  });
+
+  test('four exhibits have a video for Godot to play in their frame; the rest have none', async ({ page }) => {
+    await enterStub(page);
+    const urls = await page.evaluate(() =>
+      ['mfrs', 'oathkeep', 'prognosticator', 'warehouse', 'testq', 'resume'].map((id) => window.museumBridge!.videoUrl(id)),
+    );
+    for (const u of urls.slice(0, 4)) expect(u).toMatch(/\/museum\/[0-9a-f]+\/videos\/[a-z-]+\.ogv$/);
+    expect(urls.slice(4)).toEqual(['', '']);
+  });
+
+  test('the menu has a close button in its top-right corner', async ({ page }) => {
+    await enterStub(page);
+    await tour(page, 'touring');
+    await page.getByRole('button', { name: 'Project menu' }).click();
+    const menu = page.getByRole('dialog', { name: 'Projects' });
+    await page.waitForTimeout(500);
+    const close = menu.getByRole('button', { name: 'Close menu' });
+    const mb = (await menu.boundingBox())!;
+    const cb = (await close.boundingBox())!;
+    expect(cb.x + cb.width).toBeGreaterThan(mb.x + mb.width - 8);
+    expect(cb.y).toBeLessThan(mb.y + 8);
+    await close.click();
+    await expect(menu).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Project menu' })).toBeFocused();
   });
 
   test('menu traps Tab focus', async ({ page }) => {
@@ -513,14 +603,18 @@ test.describe('museum overlay (stub engine)', () => {
     await expect(text).toHaveCount(0);
   });
 
-  test('unmute callout dismisses after 6 s and the pulse goes on until the first unmute', async ({ page }) => {
+  test('unmute callout has no timeout: it and the beating red button stay until the music is on', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'no-preference' });
     await enterStub(page);
     const text = page.getByText('Turn on the music');
     await expect(text).toBeVisible();
-    await expect(text).toBeHidden({ timeout: 9000 });
+    await page.waitForTimeout(9000);
+    await expect(text).toBeVisible();
     const mute = page.getByRole('button', { name: 'Play music' });
+    await expect(mute).toHaveCSS('background-color', 'rgb(255, 42, 42)');
     await expect.poll(() => mute.evaluate((el) => (el as HTMLElement).style.boxShadow)).toMatch(/255, ?42, ?42/);
+    /* The button swells on the beat. */
+    await expect.poll(() => mute.evaluate((el) => (el as HTMLElement).style.transform)).toMatch(/scale\(1\.\d*[1-9]/);
   });
 
   test('reduced motion: the callout shows but the button does not pulse', async ({ page }) => {
@@ -528,7 +622,11 @@ test.describe('museum overlay (stub engine)', () => {
     await enterStub(page);
     await expect(page.getByText('Turn on the music')).toBeVisible();
     await page.waitForTimeout(500);
-    expect(await page.getByRole('button', { name: 'Play music' }).evaluate((el) => (el as HTMLElement).style.boxShadow)).toBe('');
+    const mute = page.getByRole('button', { name: 'Play music' });
+    expect(await mute.evaluate((el) => (el as HTMLElement).style.boxShadow)).toBe('');
+    expect(await mute.evaluate((el) => (el as HTMLElement).style.transform)).toBe('');
+    /* Still hard to miss: the red fill stays. */
+    await expect(mute).toHaveCSS('background-color', 'rgb(255, 42, 42)');
   });
 
   test('the callout does not show before the game is ready', async ({ page }) => {
@@ -541,7 +639,7 @@ test.describe('museum overlay (stub engine)', () => {
     await expect(page.getByText('Turn on the music')).toHaveCount(0);
   });
 
-  test('overlay states screenshot, and the bottom inset covers the open menu', async ({ page }, info) => {
+  test('overlay states screenshot; on phones the menu is a modal over the dimmed scene', async ({ page }, info) => {
     mkdirSync(FRAMES, { recursive: true });
     await enterStub(page);
     await tour(page, 'stage');
@@ -553,11 +651,36 @@ test.describe('museum overlay (stub engine)', () => {
     const barInset = await page.evaluate(() => window.museumBridge!.bottomInset());
     await page.screenshot({ path: join(FRAMES, `${info.project.name}-overlay-touring.png`) });
     await page.getByRole('button', { name: 'Project menu' }).click();
-    await expect(page.getByRole('dialog', { name: 'Projects' })).toBeVisible();
+    const menu = page.getByRole('dialog', { name: 'Projects' });
+    await expect(menu).toBeVisible();
+    await page.waitForTimeout(600);
     await page.screenshot({ path: join(FRAMES, `${info.project.name}-overlay-menu.png`) });
-    const menuInset = await page.evaluate(() => window.museumBridge!.bottomInset());
     expect(barInset).toBeGreaterThanOrEqual(44);
-    if (info.project.name !== 'chromium') expect(menuInset).toBeGreaterThan(barInset + 200);
+    if (info.project.name === 'chromium') {
+      /* Desktop: a panel rising out of the icon bar, no backdrop. */
+      await expect(menu).not.toHaveAttribute('aria-modal', 'true');
+      const nav = (await page.getByRole('navigation', { name: NAV }).boundingBox())!;
+      const box = (await menu.boundingBox())!;
+      expect(box.y + box.height).toBeLessThanOrEqual(nav.y + 1);
+      expect(Math.abs(box.x + box.width / 2 - (nav.x + nav.width / 2))).toBeLessThan(4);
+      return;
+    }
+    /* Phones: a modal in the middle of the screen, below the music button; it closes from its x and from the dimmed scene. */
+    await expect(menu).toHaveAttribute('aria-modal', 'true');
+    const vp = page.viewportSize()!;
+    const box = (await menu.boundingBox())!;
+    const mute = (await page.getByRole('button', { name: 'Play music' }).boundingBox())!;
+    expect(box.y).toBeGreaterThanOrEqual(mute.y + mute.height);
+    expect(box.x).toBeGreaterThanOrEqual(8);
+    expect(box.x + box.width).toBeLessThanOrEqual(vp.width - 8);
+    await menu.getByRole('button', { name: 'Close menu' }).click();
+    await expect(menu).toHaveCount(0);
+    await page.getByRole('button', { name: 'Project menu' }).click();
+    await expect(menu).toBeVisible();
+    /* once it has risen into place */
+    await page.waitForTimeout(600);
+    await page.mouse.click(vp.width / 2, vp.height - 4);
+    await expect(menu).toHaveCount(0);
   });
 });
 
@@ -576,8 +699,13 @@ test.describe('pointer-lock prompts (stub engine)', () => {
     mkdirSync(FRAMES, { recursive: true });
     await page.emulateMedia({ reducedMotion: 'no-preference' });
     await enterStub(page);
+    await tour(page, 'stage');
     const hint = page.getByText('Click to aim');
     const esc = page.getByText('Press Esc to show cursor');
+    /* Scrolling (the default) has no pointer lock, so no prompt until free roam is on. */
+    await page.waitForTimeout(600);
+    await expect(hint).toHaveCount(0);
+    await page.getByRole('button', { name: 'Free roam' }).click();
     await expect(hint).toBeVisible();
     await expect(esc).toHaveCount(0);
     /* It sits right of the mute button and, while the music callout is up, under it rather than on it. */
@@ -617,6 +745,71 @@ test.describe('pointer-lock prompts (stub engine)', () => {
     await setLock(page, true);
     await page.waitForTimeout(300);
     await expect(page.getByText('Press Esc to show cursor')).toHaveCount(0);
+  });
+
+  test('the wheel and swipes on the canvas add up for Godot; free roam swallows them and toggles the mode', async ({ page }, info) => {
+    await enterStub(page);
+    await tour(page, 'stage');
+    await drain(page);
+    const take = () => page.evaluate(() => window.museumBridge!.scrollDelta());
+    await take();
+    const free = page.getByRole('button', { name: 'Free roam' });
+    await expect(free).toHaveAttribute('aria-pressed', 'false');
+    const box = (await page.locator('canvas').boundingBox())!;
+    if (info.project.name === 'chromium') {
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height * 0.3);
+      await page.mouse.wheel(0, 120);
+      await expect.poll(take).toBeGreaterThanOrEqual(120);
+      await page.mouse.wheel(0, -50);
+      await expect.poll(take).toBeLessThan(0);
+    } else {
+      const cdp = await page.context().newCDPSession(page);
+      const x = Math.round(box.x + box.width / 2);
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y: 500, id: 1 }] });
+      for (let i = 1; i <= 6; i++) {
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: 500 - i * 30, id: 1 }] });
+      }
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      /* A finger moving up scrolls on, like a page: at least the 180 px it travelled less the axis slop. */
+      expect(await take()).toBeGreaterThan(150);
+    }
+    await free.click();
+    await expect(free).toHaveAttribute('aria-pressed', 'true');
+    expect(await drain(page)).toEqual(['mode:free']);
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height * 0.3);
+    await page.mouse.wheel(0, 300);
+    await page.waitForTimeout(300);
+    expect(await take()).toBe(0);
+    await free.click();
+    expect(await drain(page)).toEqual(['mode:scroll']);
+  });
+
+  test('the stage hold shows a scroll hint and the Free roam toggle beside Browse projects', async ({ page }, info) => {
+    await enterStub(page);
+    await tour(page, 'stage');
+    await expect(page.getByText(info.project.name === 'chromium' ? 'Scroll' : 'Swipe up', { exact: true })).toBeVisible();
+    const browse = (await page.getByRole('button', { name: 'Browse projects' }).boundingBox())!;
+    const free = (await page.getByRole('button', { name: 'Free roam' }).boundingBox())!;
+    expect(Math.abs(free.y - browse.y)).toBeLessThan(2);
+    expect(free.x).toBeGreaterThan(browse.x + browse.width);
+    await page.screenshot({ path: join(FRAMES, `${info.project.name}-stage-controls.png`) });
+    /* Browsing, the toggle joins the icon bar. */
+    await tour(page, 'paused');
+    await expect(page.getByRole('navigation', { name: NAV }).getByRole('button', { name: 'Free roam' })).toBeVisible();
+  });
+
+  test('the scene opens on the build: the first drop lands about 8.5 s after the reveal', async ({ page }) => {
+    await enterStub(page);
+    const { now, drop, loop } = await page.evaluate(() => {
+      const b = window.museumBridge!;
+      const cues = JSON.parse(b.songCues()) as { bpm: number; loopSeconds: number; sections: { name: string; from: number }[] };
+      const i = cues.sections.findIndex((x, k) => x.name === 'drop' && cues.sections[k - 1]?.name === 'break');
+      return { now: b.time(), drop: (cues.sections[i].from * 240) / cues.bpm, loop: cues.loopSeconds };
+    });
+    /* Time to the drop, from the moment the canvas finished fading in (it may have taken a second or two). */
+    const until = (((drop - now) % loop) + loop) % loop;
+    expect(until).toBeGreaterThan(4);
+    expect(until).toBeLessThanOrEqual(8.6);
   });
 
   test('the menu ends with a link back to the homepage, which lets go of the pointer', async ({ page }) => {

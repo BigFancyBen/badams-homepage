@@ -4,7 +4,7 @@
  *
  *   node scripts/museum-upload.mjs [--force]
  *
- * Reads public/museum/engine/*, public/museum/songs/*.mp3 (to museum/<v>/songs/), the two posters and the export hash
+ * Reads public/museum/engine/*, public/museum/songs/*.mp3 (to museum/<v>/songs/), public/museum/videos/*.ogv (to museum/<v>/videos/), the two posters and the export hash
  * `v` from app/components/museum/engineManifest.json, and puts them at museum/<v>/<file>.
  * museum.wasm goes up twice: brotli (quality 11) as museum.wasm.br with
  * Content-Encoding: br, and plain as museum.wasm. Uses `wrangler r2 object put --remote`
@@ -28,7 +28,7 @@ const WORKER = process.env.MUSEUM_CDN_URL ?? "https://benadams-museum-cdn.scrand
 const WRANGLER = join(ROOT, "museum-cdn", "node_modules", "wrangler", "bin", "wrangler.js");
 const force = process.argv.includes("--force");
 const CACHE = "public, max-age=31536000, immutable";
-const TYPES = { wasm: "application/wasm", pck: "application/octet-stream", js: "text/javascript", mp3: "audio/mpeg", webp: "image/webp" };
+const TYPES = { wasm: "application/wasm", pck: "application/octet-stream", js: "text/javascript", mp3: "audio/mpeg", webp: "image/webp", ogv: "video/ogg" };
 
 const { v } = JSON.parse(readFileSync(join(ROOT, "app", "components", "museum", "engineManifest.json"), "utf8"));
 const engineDir = join(ROOT, "public", "museum", "engine");
@@ -40,6 +40,11 @@ const songsDir = join(ROOT, "public", "museum", "songs");
 if (existsSync(songsDir)) {
   for (const f of readdirSync(songsDir).filter((n) => n.endsWith(".mp3"))) jobs.push({ name: `songs/${f}`, store: `songs/${f}`, path: join(songsDir, f) });
 } else console.warn(`missing ${songsDir}, no songs uploaded`);
+/* The exhibit videos (scripts/museum-videos.mjs), to museum/<v>/videos/. */
+const videosDir = join(ROOT, "public", "museum", "videos");
+if (existsSync(videosDir)) {
+  for (const f of readdirSync(videosDir).filter((n) => n.endsWith(".ogv"))) jobs.push({ name: `videos/${f}`, store: `videos/${f}`, path: join(videosDir, f) });
+} else console.warn(`missing ${videosDir}, no videos uploaded (run scripts/museum-videos.mjs)`);
 for (const f of ["poster-landscape.webp", "poster-portrait.webp"]) {
   const p = join(ROOT, "public", "museum", f);
   if (existsSync(p)) jobs.push({ name: f, store: f, path: p });

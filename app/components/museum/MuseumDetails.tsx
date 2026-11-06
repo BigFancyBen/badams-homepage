@@ -10,8 +10,8 @@ import { PROJECT_DETAILS, type DetailLink, type ProjectDetail } from "./projectD
 /* A beat before the panel opens, so it doesn't flash while the camera flies past an exhibit. */
 const OPEN_DELAY_MS = 400;
 /* The desktop panel's width and its gap to the viewport's right edge, in CSS px. */
-const PANEL_WIDTH = 380;
-const PANEL_MARGIN = 16;
+export const PANEL_WIDTH = 380;
+export const PANEL_MARGIN = 16;
 /* The phone sheet's slim bar, in CSS px (h-16). */
 const BAR_HEIGHT = 64;
 /* How far a drag on the bar has to travel to count as a swipe. */

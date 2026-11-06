@@ -1,7 +1,9 @@
 import { songUrl } from "./constants";
-import { getSong, type Song } from "./songs";
+import { getSong, pickSong, type Song } from "./songs";
 
 export interface ClockState {
+  /** The song playing (or that would play), by id. */
+  songId: string;
   audible: boolean;
   /** True while the mp3 is being fetched and decoded on the first unmute. */
   loading: boolean;
@@ -44,7 +46,7 @@ function silentWavUrl(): string {
  * elapsed since", with `ref` in the units of whichever clock is current.
  */
 export class SongClock {
-  private state: ClockState = { audible: false, loading: false, failed: false };
+  private state: ClockState = { songId: getSong().id, audible: false, loading: false, failed: false };
   private listeners = new Set<() => void>();
   private base = 0;
   private ref = typeof performance !== "undefined" ? performance.now() / 1000 : 0;
@@ -83,7 +85,24 @@ export class SongClock {
     this.bufferReady = false;
     this.base = 0;
     this.ref = performance.now() / 1000;
+    this.set({ songId: song.id });
   }
+
+  /**
+   * Switch to another song from the menu, starting `at` seconds into its loop. Playing, it carries
+   * on playing (call from the click: starting audio needs the gesture); muted, only the lights change.
+   */
+  switchTo(song: Song, at: number): void {
+    if (song.id === this.song.id) return;
+    const on = this.state.audible || this.state.loading;
+    if (on) void this.setAudible(false);
+    pickSong(song);
+    this.setSong(song);
+    this.seek(at);
+    this.set({ failed: false });
+    if (on) void this.setAudible(true);
+  }
+
   get bpm(): number {
     return this.song.bpm;
   }
@@ -109,6 +128,34 @@ export class SongClock {
     }
     return this.wrap(this.base + (performance.now() / 1000 - this.ref));
   };
+
+  /**
+   * Jump to `seconds` into the loop. Muted (or still loading) only the clock moves; audible, the
+   * source restarts there, with the same short fade the mute uses so it does not click.
+   */
+  seek(seconds: number): void {
+    const pos = this.wrap(seconds);
+    const { ctx, source, gain } = this;
+    if (this.state.audible && ctx && source && gain && source.buffer) {
+      const buffer = source.buffer;
+      this.stopSource();
+      const startAt = ctx.currentTime + 0.05;
+      const next = ctx.createBufferSource();
+      next.buffer = buffer;
+      next.loop = true;
+      next.loopStart = this.song.loopStartSeconds;
+      next.loopEnd = this.song.loopStartSeconds + this.song.loopSeconds;
+      next.connect(gain);
+      gain.gain.setValueAtTime(1, startAt);
+      next.start(startAt, this.song.loopStartSeconds + pos);
+      this.source = next;
+      this.base = pos;
+      this.ref = startAt;
+      return;
+    }
+    this.base = pos;
+    this.ref = performance.now() / 1000;
+  }
 
   /** Call from a user gesture when turning sound on. */
   async setAudible(on: boolean): Promise<void> {
@@ -236,7 +283,7 @@ export class SongClock {
   }
 
   /**
-   * Fetch and decode the chosen song ahead of the first unmute. Call from the "Game version"
+   * Fetch and decode the chosen song ahead of the first unmute. Call from the "Experience my portfolio"
    * click (a gesture, so the AudioContext may be made). Starts no playback and leaves mute alone.
    */
   preload(): void {
