@@ -629,13 +629,20 @@ test.describe('museum overlay (stub engine)', () => {
     await expect(mute).toHaveCSS('background-color', 'rgb(255, 42, 42)');
   });
 
-  test('the callout does not show before the game is ready', async ({ page }) => {
+  test('the unmute prompt starts with the page, during the download, and goes on the closed sign', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
     await page.route('**/museum/*/museum.js*', async (route) => {
-      await new Promise((r) => setTimeout(r, 3000));
+      await new Promise((r) => setTimeout(r, 6000));
       await route.fulfill({ status: 404, body: 'nope' });
     });
     await page.goto('/museum');
     await expect(page.getByRole('progressbar')).toBeVisible();
+    await expect(page.getByText('Turn on the music')).toBeVisible();
+    const mute = page.getByRole('button', { name: 'Play music' });
+    await expect(mute).toHaveCSS('background-color', 'rgb(255, 42, 42)');
+    await expect.poll(() => mute.evaluate((el) => (el as HTMLElement).style.boxShadow)).toMatch(/255, ?42, ?42/);
+    /* No game, no prompt. */
+    await expect(page.getByText(CLOSED)).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText('Turn on the music')).toHaveCount(0);
   });
 
