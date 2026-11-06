@@ -21,13 +21,14 @@ function sectionBoost(time: number): number {
 
 /**
  * Fixed top-left, inset for notches, 44 px touch target. Muted on every visit; sound only starts
- * from a click here. Once the game is ready and until the music is first turned on, the button is
+ * from a click here. From the moment the museum page opens (during the download too, so the music
+ * can already be playing when the hall appears) until the music is first turned on, the button is
  * filled red and, on every beat of the song, swells, glows and sends a ring out, harder in the drop.
  * Beside it the "Turn on the music" callout (red outline, glowing on the beat, equalizer bars
  * bouncing in time) stays up until the music is on; a tap on it turns the music on. Under reduced
  * motion both are shown still: the red fill and the callout, no movement.
  */
-export function MuteButton({ ready = false, aim = null }: { ready?: boolean; aim?: AimPrompt }) {
+export function MuteButton({ prompt = false, aim = null }: { prompt?: boolean; aim?: AimPrompt }) {
   const clock = getSongClock();
   const { audible, loading } = useSyncExternalStore(
     clock.subscribe,
@@ -45,7 +46,7 @@ export function MuteButton({ ready = false, aim = null }: { ready?: boolean; aim
   if (audible && !unmutedOnce) setUnmutedOnce(true);
 
   /* The hint: until the music has been on once. No timeout: it stays until the visitor answers it. */
-  const hinting = ready && !audible && !unmutedOnce;
+  const hinting = prompt && !audible && !unmutedOnce;
   const callout = hinting && !tapped;
 
   /* On the beat: the button swells and glows, a ring goes out from it, the callout glows and its bars bounce. */

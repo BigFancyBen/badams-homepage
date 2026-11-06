@@ -344,7 +344,8 @@ export function Museum() {
         style={{ touchAction: ready ? "none" : "pan-y", WebkitTouchCallout: "none", WebkitTapHighlightColor: "transparent", userSelect: "none" }}
       />
 
-      <MuteButton ready={ready} aim={aim} />
+      {/* The unmute prompt starts with the page, not when the game is ready; not on the closed sign. */}
+      <MuteButton prompt={status !== "failed" && status !== "lost"} aim={aim} />
 
       {ready && <MuseumOverlay focusId={focusId} tour={tour} free={free} onToggleFree={toggleFree} touch={!desktop} send={send} insetRef={insetRef} rightInsetRef={rightInsetRef} framingRef={framingRef} />}
       <Poster
