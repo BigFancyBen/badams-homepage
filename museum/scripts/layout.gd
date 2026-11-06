@@ -39,6 +39,13 @@ const START_PITCH := 3.0
 const SIGN_Y := 6.7
 const SIGN_Z := -0.76
 const SIGN_HALF_W := 5.9
+## Camera3D keeps a fixed vertical FOV, so a tall phone screen collapses the horizontal view to a
+## sliver. Every pose's "fov" is therefore the vertical FOV for the screen's aspect: landscape poses use
+## their authored value, portrait ones are derived from a horizontal FOV (see portrait_fov) or a width to
+## fit, and never above MAX_V_FOV (past it the picture fisheyes, so the camera pulls back instead).
+const MAX_V_FOV := 112.0
+## horizontal FOV a 60 degree landscape lens becomes in portrait (zoomed shots scale with it)
+const PORTRAIT_H_FOV := 76.0
 
 
 static func bay_z(b: int) -> float:
@@ -84,6 +91,18 @@ static func plaque_normal(b: int) -> Vector3:
 	return plaque_rot(b) * Vector3(0, 0, 1)
 
 
+## The vertical FOV to use at this aspect for a lens authored as v_land degrees vertical in landscape.
+## Landscape (aspect >= 1) is returned unchanged. Narrower screens widen the lens so the horizontal view
+## stays near PORTRAIT_H_FOV (scaled by the lens: a 40 degree close-up stays a close-up), eased out
+## between aspect 0.6 and 1.0 so there is no jump, and capped at MAX_V_FOV.
+static func portrait_fov(v_land: float, aspect: float) -> float:
+	if aspect >= 1.0:
+		return v_land
+	var k := tan(deg_to_rad(PORTRAIT_H_FOV * 0.5)) / tan(deg_to_rad(30.0))
+	k = lerpf(k, 1.0, clampf((aspect - 0.6) / 0.4, 0.0, 1.0))
+	return minf(2.0 * rad_to_deg(atan(tan(deg_to_rad(v_land) * 0.5) * k / aspect)), MAX_V_FOV)
+
+
 ## Camera pose for stop i (0 entrance, 1..n exhibits, n+1 stage): {pos, yaw, pitch, fov} in degrees.
 static func pose(i: int, aspect: float, n: int) -> Dictionary:
 	if i > n:
@@ -91,7 +110,7 @@ static func pose(i: int, aspect: float, n: int) -> Dictionary:
 	if i <= 0:
 		var fov := 60.0
 		if aspect < 1.4:
-			fov = clampf(2.0 * rad_to_deg(atan(tan(deg_to_rad(36.0)) / aspect)), 60.0, 100.0)
+			fov = clampf(2.0 * rad_to_deg(atan(tan(deg_to_rad(36.0)) / aspect)), 60.0, MAX_V_FOV)
 		# portrait: pitch down so the marquee rides in the upper third and the hall fills below
 		return {"pos": Vector3(0, 1.8, 9.0), "yaw": 0.0, "pitch": 9.0 if aspect >= 1.4 else 0.0, "fov": fov}
 	var b := i - 1
@@ -101,7 +120,7 @@ static func pose(i: int, aspect: float, n: int) -> Dictionary:
 	var d := clampf(need_w / (2.0 * tan_h * aspect), 8.8, 12.5)
 	var fov2 := 52.0
 	if 2.0 * d * tan_h * aspect < need_w:
-		fov2 = clampf(2.0 * rad_to_deg(atan(need_w / (2.0 * d * aspect))), 52.0, 100.0)
+		fov2 = clampf(2.0 * rad_to_deg(atan(need_w / (2.0 * d * aspect))), 52.0, MAX_V_FOV)
 	return {
 		"pos": Vector3(side * WALL_X - side * d, 1.8, bay_z(b)),
 		"yaw": -side * 90.0,
@@ -126,17 +145,17 @@ static func look_pose(pos: Vector3, target: Vector3, fov: float) -> Dictionary:
 ## neon (a little above the floor, centred), from well back in the hall.
 static func stage_pose(aspect: float) -> Dictionary:
 	if aspect < 1.4:
-		return {"pos": Vector3(0.0, 2.3, -96.0), "yaw": 0.0, "pitch": 10.0, "fov": 80.0}
+		return {"pos": Vector3(0.0, 2.3, -99.0), "yaw": 0.0, "pitch": 9.0, "fov": portrait_fov(52.0, aspect)}
 	return {"pos": Vector3(0.0, 2.0, -95.0), "yaw": 0.0, "pitch": 9.0, "fov": 60.0}
 
 
 ## Tour end: at the entrance, looking up at the original marquee (its ink fills the frame width; a
-## wider lens in portrait, up to 100 degrees).
+## wider lens in portrait, up to MAX_V_FOV).
 static func end_pose(aspect: float) -> Dictionary:
 	var pos := Vector3(0.0, 1.8, 11.0)
 	var target := Vector3(0.0, SIGN_Y - 0.5, SIGN_Z)
 	var dist := pos.z - SIGN_Z
-	var fov := clampf(rad_to_deg(2.0 * atan(SIGN_HALF_W * 1.12 / (dist * aspect))), 42.0, 100.0)
+	var fov := clampf(rad_to_deg(2.0 * atan(SIGN_HALF_W * 1.12 / (dist * aspect))), 42.0, MAX_V_FOV)
 	return look_pose(pos, target, fov)
 
 

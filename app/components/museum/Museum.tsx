@@ -79,6 +79,8 @@ export function Museum() {
     startedRef.current = true;
     progressAtRef.current = performance.now();
     setStatus("loading");
+    /* A ~2.5 MB side load, not counted in the bar: the song is ready when the visitor unmutes. */
+    getSongClock().preload();
     try {
       if (!hasWebGL2()) throw new Error("no WebGL2");
       bridgeRef.current ??= installMuseumBridge({

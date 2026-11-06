@@ -53,6 +53,7 @@ export class SongClock {
   private gain: GainNode | null = null;
   private source: AudioBufferSourceNode | null = null;
   private buffer: Promise<AudioBuffer> | null = null;
+  private bufferReady = false;
   private keepAlive: HTMLAudioElement | null = null;
   /** Bumped by every toggle so a stale async unmute can tell it was overtaken. */
   private token = 0;
@@ -76,6 +77,7 @@ export class SongClock {
     if (song.id === this.song.id) return;
     this.song = song;
     this.buffer = null;
+    this.bufferReady = false;
     this.base = 0;
     this.ref = performance.now() / 1000;
   }
@@ -124,42 +126,29 @@ export class SongClock {
     try {
       /* All of this runs synchronously inside the tap, before the first await. */
       this.unlockIosAudio();
-      if (!this.ctx) {
-        const Ctor =
-          window.AudioContext ??
-          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-        this.ctx = new Ctor();
-        this.gain = this.ctx.createGain();
-        this.gain.connect(this.ctx.destination);
-        /* iOS interrupts (calls, Siri, another app) without a pause event: the
-           context goes "interrupted"/"suspended". Reflect that, so the button is honest. */
-        const ctx = this.ctx;
-        ctx.addEventListener("statechange", () => {
-          if (this.ctx === ctx && ctx.state !== "running" && this.state.audible && !document.hidden) {
-            void this.setAudible(false);
-          }
-        });
-      }
-      const ctx = this.ctx;
+      const ctx = this.ensureCtx();
       /* resume() starts inside the gesture, before any await that could cost
          the browser's user activation. */
       const resumed = ctx.state === "running" ? Promise.resolve() : ctx.resume();
       if (!this.buffer) {
         this.set({ loading: true, failed: false });
-        const buffer = fetch(songUrl(this.song.id))
-          .then((r) => {
-            if (!r.ok) throw new Error(`song ${r.status}`);
-            return r.arrayBuffer();
-          })
-          .then((data) => ctx.decodeAudioData(data));
-        buffer.catch(() => {
-          this.buffer = null;
-        });
-        this.buffer = buffer;
+        this.buffer = this.fetchBuffer(ctx);
+      } else if (!this.bufferReady) {
+        /* The preload is still in flight: wait for it. */
+        this.set({ loading: true, failed: false });
       } else if (!this.state.loading) {
         this.set({ loading: false });
       }
-      const [buffer] = await Promise.all([this.buffer, resumed]);
+      let buffer: AudioBuffer;
+      try {
+        [buffer] = await Promise.all([this.buffer, resumed]);
+      } catch {
+        /* A failed preload: fetch once more, as an unmuted visit would. */
+        if (token !== this.token) return;
+        this.set({ loading: true, failed: false });
+        this.buffer = this.fetchBuffer(ctx);
+        [buffer] = await Promise.all([this.buffer, resumed]);
+      }
       if (token !== this.token) return; // muted again while loading
 
       const lead = 0.05;
@@ -185,6 +174,56 @@ export class SongClock {
       this.keepAlive?.pause();
       this.stopSource();
       this.set({ audible: false, loading: false, failed: true });
+    }
+  }
+
+  private ensureCtx(): AudioContext {
+    if (this.ctx) return this.ctx;
+    const Ctor =
+      window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const ctx = new Ctor();
+    this.ctx = ctx;
+    this.gain = ctx.createGain();
+    this.gain.connect(ctx.destination);
+    /* iOS interrupts (calls, Siri, another app) without a pause event: the
+       context goes "interrupted"/"suspended". Reflect that, so the button is honest. */
+    ctx.addEventListener("statechange", () => {
+      if (this.ctx === ctx && ctx.state !== "running" && this.state.audible && !document.hidden) {
+        void this.setAudible(false);
+      }
+    });
+    return ctx;
+  }
+
+  private fetchBuffer(ctx: AudioContext): Promise<AudioBuffer> {
+    this.bufferReady = false;
+    const buffer = fetch(songUrl(this.song.id))
+      .then((r) => {
+        if (!r.ok) throw new Error(`song ${r.status}`);
+        return r.arrayBuffer();
+      })
+      .then((data) => ctx.decodeAudioData(data));
+    buffer.then(
+      () => {
+        if (this.buffer === buffer) this.bufferReady = true;
+      },
+      () => {
+        if (this.buffer === buffer) this.buffer = null;
+      },
+    );
+    return buffer;
+  }
+
+  /**
+   * Fetch and decode the chosen song ahead of the first unmute. Call from the "Game version"
+   * click (a gesture, so the AudioContext may be made). Starts no playback and leaves mute alone.
+   */
+  preload(): void {
+    if (this.buffer || typeof window === "undefined") return;
+    try {
+      this.buffer = this.fetchBuffer(this.ensureCtx());
+    } catch {
+      /* The first unmute fetches it. */
     }
   }
 

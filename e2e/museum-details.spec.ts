@@ -27,7 +27,29 @@ const tour = (page: Page, state: string) => page.evaluate((s) => window.museumBr
 const focus = (page: Page, id: string) => page.evaluate((i) => window.museumBridge!.onFocus(i), id);
 const rightInset = (page: Page) => page.evaluate(() => window.museumBridge!.rightInset());
 const bottomInset = (page: Page) => page.evaluate(() => window.museumBridge!.bottomInset());
+/* Real touch gestures over CDP, so the page sees pointer and touch events like a phone does. */
+async function swipe(page: Page, x: number, y0: number, y1: number) {
+  const cdp = await page.context().newCDPSession(page);
+  const send = (type: 'touchStart' | 'touchMove' | 'touchEnd', y?: number) =>
+    cdp.send('Input.dispatchTouchEvent', { type, touchPoints: y === undefined ? [] : [{ x, y }] });
+  await send('touchStart', y0);
+  for (let i = 1; i <= 6; i++) await send('touchMove', y0 + ((y1 - y0) * i) / 6);
+  await send('touchEnd');
+  await cdp.detach();
+}
+const swipeDown = (page: Page, x: number, y: number) => swipe(page, x, y, y + 80);
+const swipeUp = (page: Page, x: number, y: number) => swipe(page, x, y, y - 80);
 const panel = (page: Page) => page.getByRole('complementary');
+/* On phones the sheet opens as a slim bar; unfold it to read or click the body (desktop: no-op). */
+const unfold = async (page: Page) => {
+  if (page.viewportSize()!.width < 640) {
+    const b = page.getByRole('button', { name: 'Expand project details' });
+    await expect(b).toBeVisible();
+    await b.click();
+    await page.waitForTimeout(450);
+  }
+  await expect(page.getByRole('button', { name: 'Close project details' })).toBeVisible();
+};
 
 test.describe('museum project details (stub engine)', () => {
   test('arriving at an exhibit opens the panel with its homepage copy, after a short delay', async ({ page }) => {
@@ -40,6 +62,7 @@ test.describe('museum project details (stub engine)', () => {
     await expect(p).toBeVisible();
     await expect(p).toHaveAccessibleName(/Middle Fork Rafting Simulator/);
     await expect(p.getByRole('heading', { name: 'Middle Fork Rafting Simulator', level: 2 })).toBeVisible();
+    await unfold(page);
     await expect(p).toContainText('Multiplayer whitewater. One raft, everyone paddles.');
     await expect(p).toContainText('A multiplayer rafting game built in Godot.');
     await expect(p).toContainText('Join by code.');
@@ -75,10 +98,16 @@ test.describe('museum project details (stub engine)', () => {
     }
     /* A group shows what the grid shows for it. */
     await focus(page, 'magic');
+    await expect(panel(page)).toBeVisible();
+    await unfold(page);
     await expect(panel(page).getByRole('heading', { name: 'MTG Token Helper' })).toBeVisible();
     await focus(page, 'scrandle');
+    await expect(panel(page).getByRole('heading', { level: 2 })).toBeVisible();
+    await unfold(page);
     await expect(panel(page).getByRole('heading', { name: 'Scranbot' })).toBeVisible();
     await focus(page, 'resume');
+    await expect(panel(page).getByRole('heading', { level: 2 })).toBeVisible();
+    await unfold(page);
     await expect(panel(page).getByRole('link', { name: 'Resume', exact: true })).toHaveAttribute('href', '/resume');
     await expect(panel(page).getByRole('link')).toHaveCount(1);
   });
@@ -146,6 +175,7 @@ test.describe('museum project details (stub engine)', () => {
     await tour(page, 'touring');
     await focus(page, 'testq');
     await expect(panel(page)).toBeVisible();
+    await unfold(page);
     await expect(panel(page)).not.toHaveAttribute('aria-modal', 'true');
     /* Tab moves on past the panel to the controls underneath. */
     await panel(page).getByRole('button', { name: 'Close project details' }).focus();
@@ -162,6 +192,7 @@ test.describe('museum project details (stub engine)', () => {
     await tour(page, 'touring');
     await focus(page, 'mfrs');
     await expect(panel(page)).toBeVisible();
+    await unfold(page);
     await drain(page);
     await panel(page).getByRole('link', { name: 'itch.io page' }).click();
     expect(await drain(page)).toEqual(['tour:pause']);
@@ -178,7 +209,15 @@ test.describe('museum project details (stub engine)', () => {
     await expect(panel(page)).toBeVisible();
     /* A group's own links go through it too, titled with the app. */
     await focus(page, 'magic');
-    await panel(page).getByRole('link', { name: 'View project →' }).first().click();
+    await expect(panel(page).getByRole('heading', { level: 2 })).toBeVisible();
+    await unfold(page);
+    const viewLink = panel(page).getByRole('link', { name: 'View project →' }).first();
+    /* Scroll the sheet's own scroller to the link (Playwright's default would scroll the page too). */
+    await viewLink.evaluate((el) => {
+      const sc = el.closest('div.overflow-y-auto') as HTMLElement;
+      sc.scrollTop += el.getBoundingClientRect().top - sc.getBoundingClientRect().top - 20;
+    });
+    await viewLink.click();
     await expect(modal).toContainText('Opens MTG Commander Scorekeeper in a new tab.');
     await expect(modal.getByRole('link', { name: 'Open project' })).toHaveAttribute('href', '/commander');
   });
@@ -210,12 +249,13 @@ test.describe('museum project details (stub engine)', () => {
     expect(await rightInset(page)).toBe(0);
   });
 
-  test('phones: a bottom sheet up to 45% high, above the nav, and the bottom inset grows with it', async ({ page }, info) => {
+  test('phones: the sheet opens as a slim bar, unfolds to at most 40% high, scrolls inside, folds on a swipe down', async ({ page }, info) => {
     test.skip(info.project.name === 'chromium', 'phone projects only');
     await enterStub(page);
     await tour(page, 'touring');
     await focus(page, 'stage');
-    await expect(page.getByRole('navigation', { name: 'Museum navigation' })).toBeVisible();
+    const navEl = page.getByRole('navigation', { name: 'Museum navigation' });
+    await expect(navEl).toBeVisible();
     const bare = await bottomInset(page);
     expect(bare).toBeGreaterThanOrEqual(44);
     await focus(page, 'prognosticator');
@@ -223,23 +263,88 @@ test.describe('museum project details (stub engine)', () => {
     await expect(sheet).toBeVisible();
     await expect(sheet.getByRole('heading', { name: 'Prognosticator', level: 2 })).toBeInViewport();
     const vh = page.viewportSize()!.height;
-    await expect.poll(() => sheet.evaluate((el) => el.getBoundingClientRect().height)).toBeGreaterThan(vh * 0.3);
-    const box = (await sheet.boundingBox())!;
-    expect(box.height).toBeLessThanOrEqual(vh * 0.45 + 1);
-    const nav = (await page.getByRole('navigation', { name: 'Museum navigation' }).boundingBox())!;
-    expect(box.y + box.height).toBeLessThanOrEqual(nav.y + 1);
-    const grown = await bottomInset(page);
-    expect(grown).toBeGreaterThan(bare + 150);
+    const nav = (await navEl.boundingBox())!;
+    const height = () => sheet.evaluate((el) => el.getBoundingClientRect().height);
+    /* Folded: a slim bar with the title, sitting on the nav, opaque. */
+    await expect.poll(height).toBeGreaterThan(50);
+    expect(await height()).toBeLessThanOrEqual(90);
+    const peekBox = (await sheet.boundingBox())!;
+    expect(peekBox.y + peekBox.height).toBeLessThanOrEqual(nav.y + 1);
+    expect(await sheet.evaluate((el) => getComputedStyle(el).backgroundColor)).toMatch(/^rgb\(/);
+    await expect(sheet.getByRole('button', { name: 'Expand project details' })).toBeVisible();
+    await expect(sheet.getByRole('link').first()).toBeHidden();
+    const peekInset = await bottomInset(page);
+    expect(peekInset).toBeGreaterThan(bare + 40);
+    expect(peekInset).toBeLessThanOrEqual(bare + 100);
     expect(await rightInset(page)).toBe(0);
-    /* The body scrolls, the title stays. */
-    await sheet.locator('div.overflow-y-auto').evaluate((el) => {
-      el.scrollTop = el.scrollHeight;
-    });
+    /* A tap on the bar unfolds it, capped at 40svh, and the inset follows. */
+    await sheet.getByRole('heading', { name: 'Prognosticator', level: 2 }).click();
+    await expect.poll(height).toBeGreaterThan(vh * 0.25);
+    await page.waitForTimeout(400);
+    expect(await height()).toBeLessThanOrEqual(vh * 0.4 + 1);
+    expect(await bottomInset(page)).toBeGreaterThan(peekInset + 100);
+    const box = (await sheet.boundingBox())!;
+    expect(box.y + box.height).toBeLessThanOrEqual(nav.y + 1);
+    /* The body scrolls inside the sheet and never moves the page. */
+    const scroller = sheet.locator('div.overflow-y-auto');
+    expect(await scroller.evaluate((el) => getComputedStyle(el).overscrollBehaviorY)).toBe('contain');
+    expect(await scroller.evaluate((el) => getComputedStyle(el).touchAction)).toBe('pan-y');
+    const scrollY = await page.evaluate(() => window.scrollY);
+    await scroller.hover();
+    await page.mouse.wheel(0, 2000);
+    await page.mouse.wheel(0, 2000);
+    await page.waitForTimeout(200);
+    expect(await scroller.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+    expect(await page.evaluate(() => window.scrollY)).toBe(scrollY);
     await expect(sheet.getByRole('heading', { name: 'Prognosticator', level: 2 })).toBeInViewport();
+    /* A swipe down on the bar folds it. */
+    const bar = (await sheet.getByRole('heading', { level: 2 }).boundingBox())!;
+    await swipeDown(page, bar.x + bar.width / 2, bar.y + 4);
+    await expect.poll(height).toBeLessThanOrEqual(90);
+    await expect.poll(() => bottomInset(page)).toBe(peekInset);
+    /* A swipe up unfolds it again. */
+    const folded = (await sheet.getByRole('heading', { level: 2 }).boundingBox())!;
+    await swipeUp(page, folded.x + folded.width / 2, folded.y + 4);
+    await expect.poll(height).toBeGreaterThan(vh * 0.25);
+    /* A new exhibit starts folded. */
+    await focus(page, 'warehouse');
+    await expect(sheet.getByRole('heading', { name: 'Warehouse', level: 2 })).toBeVisible();
+    await expect.poll(height).toBeLessThanOrEqual(90);
     /* Closed, the inset falls back. */
     await sheet.getByRole('button', { name: 'Close project details' }).click();
     await expect(sheet).toHaveCount(0);
     await expect.poll(() => bottomInset(page)).toBe(bare);
+  });
+
+  test('the song is fetched once when the game starts, muted, and unmuting reuses it', async ({ page }, info) => {
+    let hits = 0;
+    await page.route('**/songs/*.mp3', async (route) => {
+      hits++;
+      /* A real (silent, 1 s) WAV body is enough: decodeAudioData reads the bytes, not the extension. */
+      const n = 8000;
+      const buf = Buffer.alloc(44 + n, 128);
+      buf.write('RIFF', 0);
+      buf.writeUInt32LE(36 + n, 4);
+      buf.write('WAVEfmt ', 8);
+      buf.writeUInt32LE(16, 16);
+      buf.writeUInt16LE(1, 20);
+      buf.writeUInt16LE(1, 22);
+      buf.writeUInt32LE(8000, 24);
+      buf.writeUInt32LE(8000, 28);
+      buf.writeUInt16LE(1, 32);
+      buf.writeUInt16LE(8, 34);
+      buf.write('data', 36);
+      buf.writeUInt32LE(n, 40);
+      await route.fulfill({ contentType: 'audio/wav', body: buf });
+    });
+    await enterStub(page);
+    await expect.poll(() => hits).toBe(1);
+    await page.waitForTimeout(500);
+    expect(hits).toBe(1);
+    await page.getByRole('button', { name: 'Play music' }).first().click();
+    await expect(page.getByRole('button', { name: 'Mute music' }).first()).toBeVisible({ timeout: 1500 });
+    expect(hits).toBe(1);
+    void info;
   });
 
   test('reduced motion: the panel appears without sliding', async ({ page }) => {
@@ -261,6 +366,9 @@ test.describe('museum project details (stub engine)', () => {
     for (const id of ['mfrs', 'warehouse', 'magic']) {
       await focus(page, id);
       await expect(panel(page)).toBeVisible();
+      await page.waitForTimeout(500);
+      await page.screenshot({ path: join(SHOTS!, `${info.project.name}-${id}-collapsed.png`) });
+      await unfold(page);
       await page.waitForTimeout(500);
       await page.screenshot({ path: join(SHOTS!, `${info.project.name}-${id}.png`) });
     }

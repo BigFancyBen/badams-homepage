@@ -454,7 +454,7 @@ func _update_camera() -> void:
 	cam.global_transform = Transform3D(Basis.from_euler(Vector3(deg_to_rad(pitch), deg_to_rad(yaw), 0.0)), pos)
 	if not _shot_cam.is_empty() and _dbg_cam.size() != 6:
 		cam.global_transform = _shot_cam["cam"]
-		cam.fov = _shot_cam["fov"]
+		cam.fov = Layout.portrait_fov(float(_shot_cam["fov"]), _aspect())
 
 
 static func _ease(u: float) -> float:
