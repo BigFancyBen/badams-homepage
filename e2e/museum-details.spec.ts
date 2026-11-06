@@ -62,11 +62,11 @@ test.describe('museum project details (stub engine)', () => {
     await expect(p).toHaveAccessibleName(/Middle Fork Rafting Simulator/);
     await expect(p.getByRole('heading', { name: 'Middle Fork Rafting Simulator', level: 2 })).toBeVisible();
     await unfold(page);
-    await expect(p).toContainText('Multiplayer whitewater. One raft, everyone paddles.');
-    await expect(p).toContainText('A multiplayer rafting game built in Godot.');
+    await expect(p).toContainText('A co-op rafting game where everyone paddles the same raft.');
+    await expect(p).toContainText("A multiplayer rafting game I'm making in Godot.");
     await expect(p).toContainText('Join by code.');
     await expect(p).toContainText('Host-authoritative netcode');
-    await expect(p.getByRole('link', { name: /Meet at the put-in/ })).toHaveAttribute('target', '_blank');
+    await expect(p.getByRole('link', { name: /Game page/ })).toHaveAttribute('target', '_blank');
     await expect(p.getByRole('link', { name: 'itch.io page' })).toHaveAttribute('href', /itch\.io/);
     /* Opening it does not touch the tour. */
     expect(await drain(page)).toEqual([]);
