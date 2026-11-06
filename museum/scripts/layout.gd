@@ -164,7 +164,7 @@ static func end_pose(aspect: float) -> Dictionary:
 static func glide_lift(from_stage: bool) -> Vector3:
 	if from_stage:
 		return Vector3(-3.0, 7.0, 32.0)
-	return Vector3(0.0, 0.7, 0.0)
+	return Vector3(0.0, 0.35, 0.0)   # a slight rise between exhibits, no more
 
 
 ## Viewing pose for stop i at eye height, kept off the stage blocker (auto-walk target).
