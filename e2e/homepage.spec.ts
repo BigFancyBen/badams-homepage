@@ -31,7 +31,7 @@ test.describe('homepage', () => {
     await expect(link).toHaveAttribute('href', '/museum');
     await expect(section).toContainText(/About \d+ MB download/);
     /* A subline says what the click gets you. */
-    await expect(section).toContainText('Walk through every project in a 3D museum after dark');
+    await expect(section).toContainText('Walk through every project in a 3D museum.');
     /* ...and the plain version is just below. */
     await expect(section.getByRole('link', { name: /Prefer the boring version\? Keep scrolling/ })).toHaveAttribute('href', '#catalogue');
     await expect(section.locator('p', { hasText: 'Ben Adams' })).toHaveCount(0);

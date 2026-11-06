@@ -16,7 +16,7 @@ export function GameSection() {
           Experience my portfolio
         </Link>
         <p className="mt-4 max-w-sm text-sm leading-snug text-gray-200 sm:max-w-md sm:text-base">
-          Walk through every project in a 3D museum after dark, its lights synced to an original house track.
+          Walk through every project in a 3D museum.
         </p>
         <p className="mt-1.5 font-mono text-[11px] text-gray-500">About {DOWNLOAD_MB} MB download</p>
         <a
