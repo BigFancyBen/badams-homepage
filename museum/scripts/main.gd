@@ -6,7 +6,7 @@ extends Node3D
 ## Flow: the game opens on the stage hold (Layout.stage_pose) and stays there, with only a faint idle
 ## drift, tour state "stage", until the page sends `browse` (the Browse projects button). There is no
 ## opening move. `browse` pulls back out from the stage on a crane arc and glides to exhibit 1; each
-## exhibit is held HOLD_BARS bars (moves start on bar lines, clock.gd), through the last, then the
+## exhibit is held HOLD_BARS (8) bars (moves start on bar lines, clock.gd), through the last, then the
 ## camera glides to the entrance and looks up at the marquee (Layout.end_pose), "end", and holds.
 ## Tour position _t: 0 the stage, 1..n the exhibits, n+1 the end.
 ## `next`/`prev` jump at once (the tour keeps running from there), `tour:pause` / `tour:play`,
@@ -17,12 +17,31 @@ extends Node3D
 ## held pose).
 ##
 ## Modes: TRANS (an eased timed move: a tour glide) and PLAY (holds and free walk).
-## Desktop: WASD strafe/walk, Up/Down walk, Left/Right turn, Shift fast, drag to look, click an
-## exhibit's wall to fly there. Phones: the touch stick and look finger (touch_controls.gd), tap an
-## exhibit to fly there.
+## Desktop: WASD strafe/walk, Up/Down walk, Left/Right turn, Shift fast, click an exhibit's wall to
+## fly there. Phones: the touch stick and look finger (touch_controls.gd), tap an exhibit to fly there.
+##
+## Look (the usual game convention: mouse right turns right, mouse up looks up; yaw grows to the LEFT,
+## so a right turn lowers it). On desktop the mouse looks with no button held, using relative motion
+## (MOUSE_DEG_PER_PX, lightly smoothed) and no pointer lock: the cursor stays visible and free to
+## reach the page's buttons. Holding a button and dragging turns the same way and speed. A press that
+## stays within MOUSE_SLOP is a click (it flies to the exhibit) and is not counted as a look.
+## Where the look goes depends on the camera: during the tour (glides, holds) and at the stage hold it
+## is a bounded *glance* (+-GLANCE_YAW/+-GLANCE_PITCH degrees) added on top of the aimed shot, and it
+## never pauses the tour; each new glide eases the glance back to zero over GLANCE_RETURN seconds. In
+## free walk, paused and at the end the mouse turns the player fully (unbounded yaw, +-60ish pitch).
+## Only WASD/arrows (and touch looks) pause the tour. Edge turning: while the cursor rests in the
+## outer EDGE_FRAC of the canvas it keeps yawing that way (eased in, EDGE_MAX_DEG_S at most), so a
+## visitor can turn all the way round without lifting the mouse; it stops when the cursor leaves the
+## canvas or the window loses focus, and is off for reduced motion. Phones: touch_controls.gd turns
+## the same way (drag right turns right, drag up looks up).
+##
+## Panel framing: the page's details panel covers the right of the screen on desktop (bridge
+## rightInset(), CSS px, 0 when closed or absent); while an exhibit is held the view turns slightly
+## right, eased, so the art sits in the uncovered part. On phones the bottom sheet (bottomInset())
+## pitches the exhibit poses up instead.
 ##
 ## Bridge (window.museumBridge, see museumBridge.ts): time(), visible(), pollCommand() (next / prev
-## / home / browse / tour:pause / tour:play / goto:<id>), reducedMotion(), bottomInset() (CSS px)
+## / home / browse / tour:pause / tour:play / goto:<id>), reducedMotion(), bottomInset() and rightInset() (CSS px)
 ## in; onReady(), onFocus(id) ("" none, "stage"), onTour(state: stage, touring, paused, end),
 ## onIntroDone() (sent with onReady, kept for the page), onWalk(bool), onBuildProgress(f), and the
 ## debugPos string property out.
@@ -45,15 +64,27 @@ const MAX_DPR := 2.0
 ## Of the page's build progress (0..1) the hall construction takes this share, shader warm-up the rest.
 const BUILD_SHARE := 0.35
 const PULL_SECONDS := 4.2        # the pull-out from the stage hold to exhibit 1
-const HOLD_BARS := 3.5           # an exhibit is held about this many bars, then the move starts on a bar line
-const MOUSE_DEG_PER_PX := 0.16
+const HOLD_BARS := 8.0           # an exhibit is held about this many bars (~15 s, time to read the details), then the move starts on a bar line
+const PANEL_EASE := 6.0          # rate (1/s) the framing shift for the page's right panel eases at (~0.5 s)
+const MOUSE_DEG_PER_PX := 0.15
 const MOUSE_SLOP := 5.0
+const MOUSE_SMOOTH := 30.0       # look smoothing rate (1/s); higher is snappier
+const GLANCE_YAW := 30.0         # bounded look while the camera is on a tour shot
+const GLANCE_PITCH := 20.0
+const GLANCE_RETURN := 0.8       # seconds for the glance to ease back to zero on each new glide
+const EDGE_FRAC := 0.06
+const EDGE_MAX_DEG_S := 45.0
+const EDGE_ACCEL := 150.0        # degrees per second squared (ease-in)
 const FOCUS_SETTLE := 0.25
+const DEFAULT_SONG := "after-hours"   # the bundled cue sheet (res://songs/) used without the page or --song
+const SHEET_EASE := 6.0               # rate (1/s) the pitch for the phone bottom sheet eases at
 
 var hall: Node3D
 var cam: Camera3D
 var exhibits: Array = []
 var cues: Dictionary = {}
+var _cues_from_page: bool = false   # the cue sheet came from the page (this visit's song), not the bundled default
+var _song_arg: String = ""          # --song=<id>: render a bundled song (desktop runs, --shot)
 var bridge = null
 var clock := Clock.new()
 var player := Player.new()
@@ -72,6 +103,9 @@ var _state: Dictionary = {}       # the camera right now: pos, yaw, pitch, fov
 var _fov: float = 60.0
 var _fov_goal: float = 60.0
 var _inset_css: float = 0.0
+var _right_inset_css: float = 0.0  # CSS px the page's desktop details panel covers on the right (0 when closed, on phones, or absent)
+var _sheet_pitch: float = 0.0      # eased pitch offset (degrees, negative looks up) that keeps the art above the phone bottom sheet
+var _panel_yaw: float = 0.0        # eased yaw offset (degrees, negative turns right) that centres the art in the uncovered part
 
 var _stage_aspect: float = -1.0   # aspect the stage hold was last fitted for
 
@@ -104,6 +138,12 @@ var _mouse_down: bool = false
 var _mouse_moved: bool = false
 var _mouse_press := Vector2.ZERO
 var _mouse_ms: int = 0
+var _look_pending := Vector2.ZERO  # mouse look not yet applied, degrees (x yaw, y pitch; yaw grows to the left)
+var _glance := Vector2.ZERO        # bounded look added on top of a tour shot, degrees (x yaw, y pitch)
+var _glance_return: float = 0.0    # seconds left of the ease back to zero after a new glide began
+var _cursor_in: bool = false       # the cursor is over the canvas (a motion event seen, no exit since)
+var _cursor_x: float = 0.0         # last cursor x in viewport units
+var _edge_vel: float = 0.0         # edge-turn yaw rate, degrees per second (positive turns left)
 var _inset_poll: float = 0.0
 var _dbg_poll: float = 0.0
 
@@ -119,10 +159,12 @@ func _ready() -> void:
 	Perf.setup()
 	Perf.mark("main._ready (engine ticks: %d ms)" % Time.get_ticks_msec())
 	exhibits = _load_json("res://exhibits.json", [])
-	cues = _load_json("res://cues.json", {})
 	for a in OS.get_cmdline_user_args():
 		if a == "--tier=mobile":
 			_force_mobile = true
+		elif a.begins_with("--song="):
+			_song_arg = a.substr(7)
+	_load_cues()
 	# iPadOS Safari reports as a Mac, so ask the page whether the primary pointer is coarse too.
 	_mobile = _force_mobile or OS.has_feature("web_android") or OS.has_feature("web_ios") or _web_coarse_pointer()
 	if _mobile:
@@ -131,7 +173,6 @@ func _ready() -> void:
 		get_window().size_changed.connect(_fit_render_scale)
 		_fit_render_scale()
 	Engine.max_fps = FPS_CAP
-	clock.setup(cues)
 	hall = Hall.new()
 	# hidden while it is built (the frames in between would draw, and so compile, half a hall)
 	hall.visible = false
@@ -252,6 +293,32 @@ func _try_bridge() -> void:
 	if bridge == null and OS.has_feature("web"):
 		bridge = JavaScriptBridge.get_interface("museumBridge")
 		clock.bridge = bridge
+	_try_page_cues()
+
+
+## The cue sheet: the bundled song named by --song=<id> (DEFAULT_SONG without it) now, then, in the
+## browser, this visit's song from the page once the bridge is there (_try_page_cues, retried with
+## the bridge). The page's wins unless --song was given.
+func _load_cues() -> void:
+	var id := _song_arg if _song_arg != "" else DEFAULT_SONG
+	cues = _load_json("res://songs/%s.json" % id, {})
+	if cues.is_empty() and id != DEFAULT_SONG:
+		cues = _load_json("res://songs/%s.json" % DEFAULT_SONG, {})
+	clock.setup(cues)
+	_try_page_cues()
+
+
+func _try_page_cues() -> void:
+	if _cues_from_page or _song_arg != "" or bridge == null:
+		return
+	var f = bridge.songCues      # missing on a page older than this build
+	if f == null:
+		return
+	var parsed = JSON.parse_string(str(bridge.songCues()))
+	if typeof(parsed) == TYPE_DICTIONARY and parsed.has("sections"):
+		cues = parsed
+		_cues_from_page = true
+		clock.setup(cues)
 
 
 ## Capture shot (--shot=<name>, see Layout.shot): pin song time, freeze, and show a stop's pose, the end
@@ -292,6 +359,9 @@ func _process(delta: float) -> void:
 	if not clock.visible:
 		return
 	if not _shot:
+		_tick_look(delta)
+		_tick_panel(delta)
+		_tick_sheet(delta)
 		match mode:
 			Mode.TRANS:
 				_tick_trans(delta)
@@ -326,6 +396,13 @@ func _poll_page(delta: float) -> void:
 		var v = bridge.bottomInset()
 		if typeof(v) == TYPE_FLOAT or typeof(v) == TYPE_INT:
 			_inset_css = maxf(0.0, float(v))
+		# rightInset() is newer than the page of an older bridge: treat a missing one as 0
+		var ri = bridge.rightInset
+		if ri != null:
+			var rv = bridge.rightInset()
+			_right_inset_css = maxf(0.0, float(rv)) if (typeof(rv) == TYPE_FLOAT or typeof(rv) == TYPE_INT) else 0.0
+		else:
+			_right_inset_css = 0.0
 	_dbg_poll -= delta
 	if _dbg_poll <= 0.0:
 		_dbg_poll = 0.2
@@ -333,6 +410,7 @@ func _poll_page(delta: float) -> void:
 		_reduced = typeof(rm) == TYPE_BOOL and rm
 		var p: Vector3 = _state["pos"]
 		bridge.debugPos = "%.2f,%.2f,%.2f,%.1f,%d" % [p.x, p.y, p.z, float(_state["yaw"]), mode]
+		bridge.debugGlance = "%.1f,%.1f" % [_glance.x, _glance.y]
 
 
 # ---------------------------------------------------------------- camera
@@ -369,6 +447,9 @@ func _update_camera() -> void:
 		pos += _drift["pos"] as Vector3
 		yaw += float(_drift["yaw"])
 		pitch += float(_drift["pitch"])
+	if not _shot:
+		yaw += _glance.x + _panel_yaw
+		pitch += _glance.y + _sheet_pitch
 	cam.fov = fov
 	cam.global_transform = Transform3D(Basis.from_euler(Vector3(deg_to_rad(pitch), deg_to_rad(yaw), 0.0)), pos)
 	if not _shot_cam.is_empty() and _dbg_cam.size() != 6:
@@ -419,6 +500,7 @@ func _begin_trans(from: Dictionary, to: Dictionary, dur: float, from_stage: bool
 	_tr_t = 0.0
 	_tr_dur = maxf(dur, 0.05)
 	mode = Mode.TRANS
+	_glance_return = GLANCE_RETURN
 
 
 ## The camera along the current move at eased progress e.
@@ -486,11 +568,6 @@ func _tour_pose(t: int) -> Dictionary:
 	if t > n:
 		return Layout.end_pose(a)
 	var to := Layout.walk_pose(t, a, n)
-	var vs := get_viewport().get_visible_rect().size
-	var cover := clampf(_inset_css / maxf(vs.y * _css_per_unit(), 1.0), 0.0, 0.5)
-	if a < 0.9 and cover > 0.0:
-		# a bottom sheet covers part of the screen: pitch up so the art sits in the clear part above
-		to["pitch"] = float(to["pitch"]) - rad_to_deg(atan(cover * tan(deg_to_rad(float(to["fov"])) * 0.5)))
 	return to
 
 
@@ -733,14 +810,95 @@ func _input(ev: InputEvent) -> void:
 			_mouse_down = false
 			if not _mouse_moved and Time.get_ticks_msec() - _mouse_ms < 500 and mode == Mode.PLAY:
 				_tap(m.position)
-	elif ev is InputEventMouseMotion and _mouse_down:
+	elif ev is InputEventMouseMotion:
 		var mm := ev as InputEventMouseMotion
-		if not _mouse_moved and mm.position.distance_to(_mouse_press) > MOUSE_SLOP:
+		var entered := not _cursor_in
+		_cursor_in = true
+		_cursor_x = mm.position.x
+		if entered:
+			return        # the first motion after entering (or loading) can carry a bogus jump
+		if _mouse_down and not _mouse_moved:
+			if mm.position.distance_to(_mouse_press) <= MOUSE_SLOP:
+				return        # still a click, not a look
 			_mouse_moved = true
-		if _mouse_moved and mode == Mode.PLAY:
-			if _tour == "touring":
-				_pause_tour()
-			player.look(mm.relative.x * MOUSE_DEG_PER_PX, mm.relative.y * MOUSE_DEG_PER_PX)
+		# the usual game direction: right turns right (yaw falls), up looks up
+		_look_pending += Vector2(-mm.relative.x, -mm.relative.y) * MOUSE_DEG_PER_PX
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_MOUSE_EXIT or what == NOTIFICATION_WM_WINDOW_FOCUS_OUT or what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		_cursor_in = false
+		_mouse_down = false
+		_look_pending = Vector2.ZERO
+
+
+## Frame the art around the page's right-hand details panel: while an exhibit is held (touring or
+## paused at it) and the panel covers `_right_inset_css`, turn the view a little to the right so the
+## art sits in the middle of the uncovered part. Eased, so the panel opening or closing does not jump.
+func _tick_panel(delta: float) -> void:
+	var goal := 0.0
+	var holding := _t >= 1 and _t <= exhibits.size() and (_tour == "touring" or _tour == "paused")
+	if holding and _right_inset_css > 0.0 and not _mobile:
+		var vs := get_viewport().get_visible_rect().size
+		var css_w := maxf(vs.x * _css_per_unit(), 1.0)
+		var frac := clampf(_right_inset_css / css_w, 0.0, 0.6)    # the covered share of the width: the centre moves by half of it
+		var tan_h := tan(deg_to_rad(_fov) * 0.5) * (vs.x / maxf(vs.y, 1.0))   # fov is vertical
+		goal = -rad_to_deg(atan(frac * tan_h))
+	_panel_yaw = lerpf(_panel_yaw, goal, 1.0 - exp(-delta * PANEL_EASE))
+
+
+## Phones: the bottom sheet covers part of the screen, so while an exhibit is held pitch up (eased)
+## so the art sits in the clear part above it. Follows the sheet as its height changes (it opens,
+## grows and shrinks), not just at the moment of arrival.
+func _tick_sheet(delta: float) -> void:
+	var goal := 0.0
+	var holding := _t >= 1 and _t <= exhibits.size() and (_tour == "touring" or _tour == "paused")
+	if holding and _aspect() < 0.9 and _inset_css > 0.0:
+		var vs := get_viewport().get_visible_rect().size
+		var cover := clampf(_inset_css / maxf(vs.y * _css_per_unit(), 1.0), 0.0, 0.5)
+		goal = -rad_to_deg(atan(cover * tan(deg_to_rad(_fov) * 0.5)))
+	_sheet_pitch = lerpf(_sheet_pitch, goal, 1.0 - exp(-delta * SHEET_EASE))
+
+
+## Is the mouse look a bounded glance (tour shots, glides, the stage hold) rather than a real turn?
+func _glancing() -> bool:
+	return mode == Mode.TRANS or _tour == "stage" or _tour == "touring"
+
+
+## Apply the mouse look and edge turning for this frame. Pending look is eased in (light smoothing).
+func _tick_look(delta: float) -> void:
+	if _mobile:
+		return
+	var edge_target := 0.0
+	if _cursor_in and not _reduced:
+		var w := maxf(get_viewport().get_visible_rect().size.x, 1.0)
+		var zone := w * EDGE_FRAC
+		var depth := 0.0
+		if _cursor_x < zone:
+			depth = 1.0 - _cursor_x / zone
+			edge_target = 1.0
+		elif _cursor_x > w - zone:
+			depth = 1.0 - (w - _cursor_x) / zone
+			edge_target = -1.0
+		edge_target *= EDGE_MAX_DEG_S * lerpf(0.4, 1.0, clampf(depth, 0.0, 1.0))
+	_edge_vel = move_toward(_edge_vel, edge_target, EDGE_ACCEL * delta)
+	var d := _look_pending * (1.0 - exp(-delta * MOUSE_SMOOTH))
+	_look_pending -= d
+	d.x += _edge_vel * delta
+	if _glancing():
+		if _glance_return > 0.0:
+			_glance *= maxf(_glance_return - delta, 0.0) / _glance_return
+			_glance_return = maxf(_glance_return - delta, 0.0)
+		_glance = Vector2(clampf(_glance.x + d.x, -GLANCE_YAW, GLANCE_YAW), clampf(_glance.y + d.y, -GLANCE_PITCH, GLANCE_PITCH))
+	else:
+		_glance_return = 0.0
+		if _glance != Vector2.ZERO:
+			# the tour was taken over: keep what is on screen as the player's own aim
+			player.look(_glance.x, _glance.y)
+			_glance = Vector2.ZERO
+		if mode == Mode.PLAY:
+			player.look(d.x, d.y)
+			_state = _player_state()
 
 
 ## A tap or click: if it lands on an exhibit's wall, auto-walk to that bay.

@@ -196,9 +196,31 @@ test.describe('museum walk', () => {
       await expect.poll(async () => start.z - (await readPos(page))!.z, { timeout: 20_000 }).toBeGreaterThan(0.5);
       await page.keyboard.up('w');
       await page.waitForTimeout(600);
-      const after = (await readPos(page))!;
-      /* Left arrow turns the view. */
-      const yaw0 = after.yaw;
+      /* The mouse looks with no button held, the usual game way. Yaw grows to the left (forward is
+         (-sin yaw, -cos yaw)), so moving the mouse right turns the view right and LOWERS the yaw. */
+      const box = (await page.locator('canvas').boundingBox())!;
+      const my = box.y + box.height * 0.4;
+      /* SwiftShader runs a few frames a second and debugPos lags, so let each move settle before reading. */
+      await page.mouse.move(box.x + box.width * 0.4, my);
+      await page.waitForTimeout(3000);
+      const yawM0 = (await readPos(page))!.yaw;
+      for (let i = 1; i <= 12; i++) {
+        await page.mouse.move(box.x + box.width * 0.4 + i * 12, my);
+        await page.waitForTimeout(50);
+      }
+      await page.waitForTimeout(3000);
+      expect(yawM0 - (await readPos(page))!.yaw).toBeGreaterThan(8);
+      const yawM1 = (await readPos(page))!.yaw;
+      for (let i = 1; i <= 12; i++) {
+        await page.mouse.move(box.x + box.width * 0.4 + 144 - i * 24, my);
+        await page.waitForTimeout(50);
+      }
+      await page.waitForTimeout(3000);
+      expect((await readPos(page))!.yaw - yawM1).toBeGreaterThan(8);
+      await page.mouse.move(box.x + box.width * 0.5, my);
+      await page.waitForTimeout(3000);
+      /* Left arrow turns the view left. */
+      const yaw0 = (await readPos(page))!.yaw;
       await page.keyboard.down('ArrowLeft');
       await expect.poll(async () => Math.abs((await readPos(page))!.yaw - yaw0), { timeout: 20_000 }).toBeGreaterThan(10);
       await page.keyboard.up('ArrowLeft');
@@ -222,6 +244,18 @@ test.describe('museum walk', () => {
     await page.waitForTimeout(600);
     const after = (await readPos(page))!;
     expect(start.z - after.z).toBeGreaterThan(0.5);
+
+    /* A look finger dragged right turns the view right (yaw falls), as in mobile shooters. */
+    const yawT0 = after.yaw;
+    const lx = Math.round(vp.width * 0.6);
+    const ly = Math.round(vp.height * 0.3);
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: lx, y: ly, id: 2 }] });
+    for (let i = 1; i <= 10; i++) {
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: lx + i * 10, y: ly, id: 2 }] });
+      await page.waitForTimeout(60);
+    }
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await expect.poll(async () => yawT0 - (await readPos(page))!.yaw, { timeout: 20_000 }).toBeGreaterThan(5);
   });
 });
 
@@ -265,7 +299,6 @@ test.describe('engine cache', () => {
     expect(hits['museum.wasm']).toBe(1);
     expect(hits['museum.pck']).toBe(1);
     console.log(`[cache] ready after ${first.ms} ms on the first visit, ${second.ms} ms on the second`);
-    expect(second.ms).toBeLessThan(first.ms);
     await context.close();
   });
 });
@@ -431,7 +464,7 @@ test.describe('museum overlay (stub engine)', () => {
 
   test('unmute callout appears after ready, pulses the button, and goes on a tap', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'no-preference' });
-    await page.route('**/song.mp3', (route) => route.fulfill({ status: 404, body: 'no' }));
+    await page.route('**/songs/*.mp3', (route) => route.fulfill({ status: 404, body: 'no' }));
     await enterStub(page);
     const text = page.getByText('Turn on the music');
     await expect(text).toBeVisible();

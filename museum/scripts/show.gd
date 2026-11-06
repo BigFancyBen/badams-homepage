@@ -49,7 +49,7 @@ static func update(clock: Clock, focus: Dictionary) -> void:
 
 static func _mover_target(clock: Clock, b: int, k: int, z: float, sx: float) -> Vector3:
 	var beat := clock.beat
-	var bar := clock.bar
+	var bar := clock.dbar
 	var dx: float
 	var dz: float
 	if clock.is_drop:
@@ -103,7 +103,7 @@ static func _par_level(clock: Clock, b: int, k: int) -> float:
 
 static func _bay(clock: Clock, b: int, focus_bay: int) -> void:
 	var beat := clock.beat
-	var bar := clock.bar
+	var bar := clock.dbar
 	var e := clock.e
 	var kp := clock.kp
 	var black := clock.black
@@ -200,7 +200,7 @@ static func _lasers(clock: Clock, focus_bay: int) -> void:
 	if not clock.is_drop:
 		return
 	var beat := clock.beat
-	var bar := clock.bar
+	var bar := clock.dbar
 	var n := 7
 	for bi in range(0, _pal.size(), 3):
 		if focus_bay >= 0 and absi(bi - focus_bay) <= 1:

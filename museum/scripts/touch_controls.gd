@@ -1,12 +1,12 @@
 extends CanvasLayer
 ## Touch controls for phones, drawn in Godot above the 3D view. A virtual thumbstick appears where
 ## a finger lands in the left part of the screen (above the page's bottom sheet), and a finger
-## anywhere else drags to look. Each finger is tracked by its index, so stick and look work at
+## anywhere else drags to look (drag right turns right, drag up looks up). Each finger is tracked by its index, so stick and look work at
 ## once. A short, still touch is reported as a tap. Styled like the site: thin white strokes, no
 ## fills, a red accent on the knob.
 ##
 ## Usage: main forwards screen touch/drag events to handle(), sets css / inset_css every frame,
-## reads move (x strafe, y forward, -1..1) and consume_look() (degrees), and listens to tapped.
+## reads move (x strafe, y forward, -1..1) and consume_look() (degrees: x yaw, positive turns left, y pitch, positive up; feed it to Player.look), and listens to tapped.
 
 signal tapped(pos: Vector2)
 
@@ -139,8 +139,8 @@ func _drag(idx: int, p: Vector2, rel: Vector2) -> void:
 			_used = true
 	elif bool(f["moved"]):
 		var k := css * LOOK_DEG_PER_CSS
-		# the world follows the finger: drag right turns the view left, drag down looks up
-		_look += Vector2(rel.x * k, rel.y * k)
+		# as in mobile shooters: drag right turns right (yaw falls), drag up looks up
+		_look += Vector2(-rel.x * k, -rel.y * k)
 
 
 func _apply_stick(p: Vector2) -> void:

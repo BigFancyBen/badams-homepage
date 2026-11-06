@@ -1,35 +1,37 @@
 {
-  "bpm": 128,
+  "id": "velvet-rope",
+  "title": "Velvet Rope",
+  "bpm": 122,
   "bars": 64,
-  "loopSeconds": 120,
-  "loopStartSeconds": 1.875,
+  "loopSeconds": 125.90163934426229,
+  "loopStartSeconds": 1.9672131147540983,
   "sections": [
     {
       "name": "intro",
       "from": 0,
       "to": 8,
-      "energy": 0.35,
+      "energy": 0.3,
       "kick": true
     },
     {
       "name": "groove",
       "from": 8,
       "to": 16,
-      "energy": 0.6,
+      "energy": 0.55,
       "kick": true
     },
     {
       "name": "groove",
       "from": 16,
       "to": 24,
-      "energy": 0.72,
+      "energy": 0.7,
       "kick": true
     },
     {
       "name": "break",
       "from": 24,
       "to": 32,
-      "energy": 0.25,
+      "energy": 0.22,
       "kick": false
     },
     {
@@ -50,7 +52,7 @@
       "name": "outro",
       "from": 56,
       "to": 64,
-      "energy": 0.45,
+      "energy": 0.4,
       "kick": true
     }
   ]

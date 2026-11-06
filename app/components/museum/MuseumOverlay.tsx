@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState, type KeyboardEvent, type MutableRefObject } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent, type MutableRefObject } from "react";
 import { ArrowUpRight, ChevronLeft, ChevronRight, Menu, Pause, Play } from "lucide-react";
 import { EXHIBITS } from "./exhibits";
 import { LeaveModal } from "./LeaveModal";
+import { MuseumDetails } from "./MuseumDetails";
 import type { MuseumCommand, TourState } from "./museumBridge";
 
 interface Props {
@@ -12,6 +13,8 @@ interface Props {
   send: (cmd: MuseumCommand) => void;
   /** Filled with a function returning the CSS px the controls and menu cover at the bottom. */
   insetRef: MutableRefObject<() => number>;
+  /** Filled with a function returning the CSS px the details panel covers at the right edge (0 on phones). */
+  rightInsetRef: MutableRefObject<() => number>;
 }
 
 const BTN =
@@ -19,18 +22,33 @@ const BTN =
 
 const FOCUSABLE = "button:not([disabled]), a[href]";
 
+/* Room for a side panel: not a phone, and not a phone on its side. Narrower or shorter gets the bottom sheet. */
+const WIDE_QUERY = "(min-width: 640px) and (min-height: 501px)";
+function useWide(): boolean {
+  return useSyncExternalStore(
+    (cb) => {
+      const mq = window.matchMedia(WIDE_QUERY);
+      mq.addEventListener("change", cb);
+      return () => mq.removeEventListener("change", cb);
+    },
+    () => window.matchMedia(WIDE_QUERY).matches,
+    () => false,
+  );
+}
+
 /**
  * The HTML on top of the canvas. The wrapper ignores pointer events so the
  * canvas still gets swipes and taps; only the controls catch them. No text
  * except the one Browse button and the menu's list of titles.
  */
-export function MuseumOverlay({ focusId, tour, send, insetRef }: Props) {
+export function MuseumOverlay({ focusId, tour, send, insetRef, rightInsetRef }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
   const openBtnRef = useRef<HTMLButtonElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const wide = useWide();
   /* The exhibit whose link the visitor asked for; the modal asks before leaving the game. */
   const [leaving, setLeaving] = useState<{ title: string; href: string; resume: boolean } | null>(null);
 
@@ -91,6 +109,8 @@ export function MuseumOverlay({ focusId, tour, send, insetRef }: Props) {
   const exhibit = EXHIBITS.find((e) => e.id === focusId);
   const browsing = tour === "touring" || tour === "paused" || tour === "end";
   const playing = tour === "touring";
+  /* The details panel follows the camera: only at an exhibit, and only on a tour (not the stage hold). */
+  const detailId = browsing && exhibit ? exhibit.id : null;
   /* The two framed shots bracket the exhibits: the stage hold first, the marquee view last. */
   const entries = [
     { id: "stage", title: "Stage", active: focusId === "stage" },
@@ -102,6 +122,8 @@ export function MuseumOverlay({ focusId, tour, send, insetRef }: Props) {
   return (
     <div ref={rootRef} className="pointer-events-none absolute inset-0 z-10 flex flex-col justify-end">
       <h1 className="sr-only">Ben Adams</h1>
+
+      {wide && <MuseumDetails exhibitId={detailId} mode="side" onOpenLink={askToLeave} rightInsetRef={rightInsetRef} />}
 
       <div ref={bottomRef} className="relative flex flex-col">
         {tour === "stage" && (
@@ -115,6 +137,8 @@ export function MuseumOverlay({ focusId, tour, send, insetRef }: Props) {
             </button>
           </div>
         )}
+
+        {!wide && <MuseumDetails exhibitId={detailId} mode="sheet" onOpenLink={askToLeave} suspended={menuOpen} />}
 
         {browsing && menuOpen && (
           <div

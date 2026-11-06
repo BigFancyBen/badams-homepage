@@ -18,7 +18,8 @@ const TYPES: Record<string, string> = {
   webp: "image/webp",
 };
 
-const PATH = /^\/museum\/([A-Za-z0-9]{6,32})\/([A-Za-z0-9._-]+)$/;
+// A file at the top of the export, or one of the songs (songs/<id>.mp3).
+const PATH = /^\/museum\/([A-Za-z0-9]{6,32})\/(songs\/[a-z0-9-]+\.mp3|[A-Za-z0-9._-]+)$/;
 
 const ALLOWED_ORIGIN =
   /^(https:\/\/(www\.)?benadams\.dev|https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)*\.vercel\.app|http:\/\/localhost(:\d+)?|http:\/\/192\.168\.\d{1,3}\.\d{1,3}(:\d+)?)$/;

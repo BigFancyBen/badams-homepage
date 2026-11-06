@@ -567,3 +567,82 @@ export const SUMMARIES = {
   osrsProgress:
     "API for generating progress report images for Old School RuneScape players. Collection log items, OSRS Wiki integration.",
 };
+
+/**
+ * The titles, tags, links and group copy that BentoGrid used to carry inline. The grid renders
+ * these and the museum's details panel (museum/projectDetails.ts) reads the same objects.
+ */
+export const PROGNOSTICATOR_CARD = {
+  title: "Prognosticator",
+  tags: ["Electron", "React", "TypeScript", "Node", "Godot", "DMX", "OBS", "Tailwind", "VirtualDJ"],
+};
+
+export const HOBBIT_HOUSE = {
+  title: "hobbit.house",
+  href: "https://github.com/BigFancyBen/hobbit-ccp",
+  tags: ["React", "Docker", "Linux", "MQTT"],
+};
+
+export const VISUALIZER_SCENES = {
+  title: "Prognosticator: visualizer scenes",
+  description:
+    "The lighting rig has a second home. Prognosticator sends its beat grid and DMX output to a Godot visualizer, so every light cue also plays in a venue that does not exist.",
+};
+
+export const MFRS_LINKS = {
+  river: { label: "Meet at the put-in", href: "/river" },
+  itch: { label: "itch.io page", href: MFRS.itchUrl },
+};
+
+export const TESTQ_LINK = { label: "Source on GitHub", href: TESTQ.repoUrl };
+
+export const SCRANDLE = {
+  title: "Scrandle",
+  href: "/scrandle/play",
+  tags: ["Next.js", "TypeScript", "Tailwind", "Cloudflare R2"],
+};
+
+export const SCRANBOT = {
+  title: "Scranbot",
+  tags: ["Cloudflare Workers", "D1", "R2", "Discord", "TypeScript"],
+};
+
+export const YUT_HUT = {
+  title: "Yut Hut",
+  features: [
+    { label: "Two a week", text: "The first two check-ins count in full, then half, then a fifth. A rest day is written down and never punished." },
+    { label: "The bot asks", text: "Every morning it posts one question with a Yes and a No, and edits the roll call into the post as people answer." },
+    { label: "Numbers from the wiki", text: "Monsters, Slayer masters, drop rates and gear come from the OSRS Wiki. Only the session length is tuned." },
+    { label: "Something to chase", text: "Clue caskets, a pick of three spoils, gear drops, an Achievement Diary, a quest and a group boss each week." },
+  ],
+  tags: ["Cloudflare Workers", "D1", "R2", "Discord", "Next.js", "TypeScript"],
+  rulesLink: { label: "Read the rules", href: "/yut-hut" },
+};
+
+export const MTG_GROUP = {
+  title: "Magic: The Gathering",
+  tagline: "Tools for Commander players and deck builders",
+  tags: ["Next.js", "React", "Vercel"],
+  apps: [
+    { title: "MTG Commander Scorekeeper", description: SUMMARIES.commander, href: "/commander" },
+    { title: "Magic Tutor Helper", description: SUMMARIES.tutorHelper, href: "/tutor-helper" },
+    { title: "MTG Token Helper", description: SUMMARIES.tokenHelper, href: "/token-helper" },
+  ],
+};
+
+export const FLOATWISE = {
+  title: "FloatWise",
+  href: "/floatwise",
+  tags: ["Next.js", "Leaflet", "Open-Meteo", "USGS"],
+};
+
+export const DOTA_RANDOMIZER = {
+  title: "Dota 2 Randomizer",
+  href: "/dota-randomizer",
+  tags: ["Next.js", "Canvas", "OpenDota"],
+};
+
+export const IRLSCAPE = {
+  title: "IRLScape",
+  href: "https://www.youtube.com/watch?v=gCofVhR5HUQ",
+};

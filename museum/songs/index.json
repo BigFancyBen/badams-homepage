@@ -1,0 +1,37 @@
+[
+  {
+    "id": "after-hours",
+    "title": "Museum After Hours",
+    "bpm": 128,
+    "bars": 64,
+    "file": "after-hours.mp3"
+  },
+  {
+    "id": "velvet-rope",
+    "title": "Velvet Rope",
+    "bpm": 122,
+    "bars": 64,
+    "file": "velvet-rope.mp3"
+  },
+  {
+    "id": "gallery-lights",
+    "title": "Gallery Lights",
+    "bpm": 124,
+    "bars": 64,
+    "file": "gallery-lights.mp3"
+  },
+  {
+    "id": "strobe-hall",
+    "title": "Strobe Hall",
+    "bpm": 126,
+    "bars": 72,
+    "file": "strobe-hall.mp3"
+  },
+  {
+    "id": "mirror-ball",
+    "title": "Mirror Ball",
+    "bpm": 120,
+    "bars": 72,
+    "file": "mirror-ball.mp3"
+  }
+]

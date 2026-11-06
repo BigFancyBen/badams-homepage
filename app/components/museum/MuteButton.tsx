@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Volume2, VolumeX, Loader2 } from "lucide-react";
-import { BPM } from "./constants";
 import { getSongClock } from "./songClock";
 
 /** How long the "Turn on the music" callout stays up if nobody taps. */
@@ -47,7 +46,7 @@ export function MuteButton({ ready = false }: { ready?: boolean }) {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     let raf = 0;
     const tick = () => {
-      const phase = ((((clock.time() * BPM) / 60) % 1) + 1) % 1;
+      const phase = ((((clock.time() * clock.bpm) / 60) % 1) + 1) % 1;
       const k = Math.exp(-phase * 5) * (strong.current ? 1 : 0.55);
       el.style.boxShadow = `0 0 ${Math.round(4 + 12 * k)}px ${Math.round(k * 4)}px rgba(255,42,42,${(0.15 + 0.6 * k).toFixed(3)})`;
       el.style.borderColor = `rgba(255,${Math.round(255 * (1 - k))},${Math.round(255 * (1 - k))},${0.2 + 0.6 * k})`;
@@ -69,7 +68,7 @@ export function MuteButton({ ready = false }: { ready?: boolean }) {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     let raf = 0;
     const tick = () => {
-      const phase = ((clock.time() * BPM) / 60) % 1;
+      const phase = ((clock.time() * clock.bpm) / 60) % 1;
       const k = Math.exp(-phase * 6);
       el.style.transform = `scale(${1 + 0.1 * k})`;
       el.style.borderColor = `rgba(255,${Math.round(255 * (1 - k))},${Math.round(255 * (1 - k))},${0.15 + 0.5 * k})`;

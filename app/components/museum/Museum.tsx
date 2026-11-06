@@ -6,6 +6,8 @@ import { installEngineFetch } from "./engineLoader";
 import { installMuseumBridge, type BridgeHandle, type MuseumCommand, type TourState } from "./museumBridge";
 import { MuseumOverlay } from "./MuseumOverlay";
 import { MuteButton } from "./MuteButton";
+import { getSongClock } from "./songClock";
+import { chooseSong } from "./songs";
 import { Poster, type LoadPhase, type PosterStatus } from "./Poster";
 
 /* The Engine class comes from the exported museum.js, which is a plain script. */
@@ -63,6 +65,8 @@ export function Museum() {
   const [tour, setTour] = useState<TourState | "">("");
   /* The overlay registers how to measure its bottom edge; Godot asks through the bridge. */
   const insetRef = useRef<() => number>(() => 0);
+  /* Likewise for the width the details panel covers at the right edge. */
+  const rightInsetRef = useRef<() => number>(() => 0);
   /* When the load last moved (a download chunk, or a step of the hall's build). A
      failure that nothing reports would otherwise leave the bar sitting there forever. */
   const progressAtRef = useRef(0);
@@ -95,6 +99,7 @@ export function Museum() {
         onTour: (state) => setTour(state as TourState),
         onWalk: () => {},
         bottomInset: () => insetRef.current(),
+        rightInset: () => rightInsetRef.current(),
       });
       if (!globalThis.Engine) await loadScript(ENGINE_SCRIPT);
       const Ctor = globalThis.Engine;
@@ -148,6 +153,12 @@ export function Museum() {
     }, 2000);
     return () => window.clearInterval(id);
   }, [status]);
+
+  /* One of the house songs per visit, picked here (the mp3 itself loads on the first unmute); the
+     lights get the same cue sheet through the bridge. */
+  useEffect(() => {
+    getSongClock().setSong(chooseSong());
+  }, []);
 
   /* Never auto-starts: the visitor opts in to the download. */
   useEffect(() => {
@@ -256,7 +267,7 @@ export function Museum() {
 
       <MuteButton ready={ready} />
 
-      {ready && <MuseumOverlay focusId={focusId} tour={tour} send={send} insetRef={insetRef} />}
+      {ready && <MuseumOverlay focusId={focusId} tour={tour} send={send} insetRef={insetRef} rightInsetRef={rightInsetRef} />}
       <Poster
         status={status}
         detail={failDetail}

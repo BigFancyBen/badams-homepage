@@ -1,7 +1,7 @@
 # museum-cdn
 
 A small Cloudflare Worker (`benadams-museum-cdn`) that serves the homepage museum's Godot web build
-(wasm ~39.5 MB, pck ~11.9 MB, js, worklets, song, posters) out of the R2 bucket `benadams-museum`.
+(wasm ~39.5 MB, pck ~11.9 MB, js, worklets, one song, posters) out of the R2 bucket `benadams-museum`.
 The binaries stay out of git and off Vercel.
 
 Live at `https://benadams-museum-cdn.scrandle-worker.workers.dev` (the account's workers.dev subdomain).
@@ -22,7 +22,7 @@ where `<v>` is the export hash in `app/components/museum/engineManifest.json`.
 
 ## Free-tier math
 
-Worker: 100k requests/day free. Each visit costs about 8 requests (js, wasm, pck, worklets, song, posters), so
+Worker: 100k requests/day free. Each visit costs about 8 requests (js, wasm, pck, worklets, one song, posters), so
 roughly 12k visits/day. R2: 10 GB storage free; one version is about 62 MB raw (plus 8 MB br), so ~100 versions fit.
 Reads: 10M Class B/month free (1-2 R2 reads per request: a `head` and a `get`). Egress from R2 is free.
 Delete old versions occasionally: `npx wrangler r2 object delete benadams-museum/museum/<v>/<file> --remote`.

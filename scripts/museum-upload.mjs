@@ -4,7 +4,7 @@
  *
  *   node scripts/museum-upload.mjs [--force]
  *
- * Reads public/museum/engine/*, public/museum/song.mp3, the two posters and the export hash
+ * Reads public/museum/engine/*, public/museum/songs/*.mp3 (to museum/<v>/songs/), the two posters and the export hash
  * `v` from app/components/museum/engineManifest.json, and puts them at museum/<v>/<file>.
  * museum.wasm goes up twice: brotli (quality 11) as museum.wasm.br with
  * Content-Encoding: br, and plain as museum.wasm. Uses `wrangler r2 object put --remote`
@@ -36,7 +36,11 @@ const engineDir = join(ROOT, "public", "museum", "engine");
 /** { name: public name, key suffix, path of bytes, encoding, accept: Accept-Encoding to probe with } */
 const jobs = [];
 for (const f of readdirSync(engineDir)) jobs.push({ name: f, store: f, path: join(engineDir, f) });
-for (const f of ["song.mp3", "poster-landscape.webp", "poster-portrait.webp"]) {
+const songsDir = join(ROOT, "public", "museum", "songs");
+if (existsSync(songsDir)) {
+  for (const f of readdirSync(songsDir).filter((n) => n.endsWith(".mp3"))) jobs.push({ name: `songs/${f}`, store: `songs/${f}`, path: join(songsDir, f) });
+} else console.warn(`missing ${songsDir}, no songs uploaded`);
+for (const f of ["poster-landscape.webp", "poster-portrait.webp"]) {
   const p = join(ROOT, "public", "museum", f);
   if (existsSync(p)) jobs.push({ name: f, store: f, path: p });
   else console.warn(`missing ${p}, skipped`);

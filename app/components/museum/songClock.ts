@@ -1,4 +1,5 @@
-import { LOOP_END, LOOP_SECONDS, LOOP_START, SONG_URL } from "./constants";
+import { songUrl } from "./constants";
+import { getSong, type Song } from "./songs";
 
 export interface ClockState {
   audible: boolean;
@@ -32,7 +33,6 @@ function silentWavUrl(): string {
   return URL.createObjectURL(new Blob([buf], { type: "audio/wav" }));
 }
 
-const wrap = (t: number) => ((t % LOOP_SECONDS) + LOOP_SECONDS) % LOOP_SECONDS;
 
 /**
  * One clock, always running. Muted, it follows performance.now(). Audible, it
@@ -70,6 +70,20 @@ export class SongClock {
 
   getState = (): ClockState => this.state;
 
+  /** The song whose tempo, loop and mp3 this clock follows. Set once per visit, before the engine starts. */
+  private song: Song = getSong();
+  setSong(song: Song) {
+    if (song.id === this.song.id) return;
+    this.song = song;
+    this.buffer = null;
+    this.base = 0;
+    this.ref = performance.now() / 1000;
+  }
+  get bpm(): number {
+    return this.song.bpm;
+  }
+  private wrap = (t: number) => ((t % this.song.loopSeconds) + this.song.loopSeconds) % this.song.loopSeconds;
+
   subscribe = (fn: () => void) => {
     this.listeners.add(fn);
     return () => {
@@ -82,13 +96,13 @@ export class SongClock {
     this.listeners.forEach((fn) => fn());
   }
 
-  /** Seconds into the loop, [0, LOOP_SECONDS). Always advancing. */
+  /** Seconds into the loop, [0, loopSeconds). Always advancing. */
   time = (): number => {
     if (this.state.audible && this.ctx) {
       const latency = this.ctx.outputLatency ?? this.ctx.baseLatency ?? 0;
-      return wrap(this.base + (this.ctx.currentTime - latency - this.ref));
+      return this.wrap(this.base + (this.ctx.currentTime - latency - this.ref));
     }
-    return wrap(this.base + (performance.now() / 1000 - this.ref));
+    return this.wrap(this.base + (performance.now() / 1000 - this.ref));
   };
 
   /** Call from a user gesture when turning sound on. */
@@ -132,7 +146,7 @@ export class SongClock {
       const resumed = ctx.state === "running" ? Promise.resolve() : ctx.resume();
       if (!this.buffer) {
         this.set({ loading: true, failed: false });
-        const buffer = fetch(SONG_URL)
+        const buffer = fetch(songUrl(this.song.id))
           .then((r) => {
             if (!r.ok) throw new Error(`song ${r.status}`);
             return r.arrayBuffer();
@@ -151,16 +165,17 @@ export class SongClock {
       const lead = 0.05;
       const startAt = ctx.currentTime + lead;
       /* The loop position the listener should hear when the source starts. */
-      const pos = wrap(this.time() + lead);
+      const pos = this.wrap(this.time() + lead);
       const source = ctx.createBufferSource();
       source.buffer = buffer;
       source.loop = true;
-      source.loopStart = LOOP_START;
-      source.loopEnd = LOOP_END;
+      const { loopStartSeconds: loopStart, loopSeconds } = this.song;
+      source.loopStart = loopStart;
+      source.loopEnd = loopStart + loopSeconds;
       source.connect(this.gain!);
       this.gain!.gain.cancelScheduledValues(ctx.currentTime);
       this.gain!.gain.setValueAtTime(1, ctx.currentTime);
-      source.start(startAt, LOOP_START + pos);
+      source.start(startAt, loopStart + pos);
       this.source = source;
       this.base = pos;
       this.ref = startAt;

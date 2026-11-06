@@ -1,12 +1,5 @@
-import cues from "../../../museum/cues.json";
 import manifest from "./engineManifest.json";
 
-/** The one place the song's numbers enter the site; they come from museum/cues.json. */
-export const BPM: number = cues.bpm;
-export const LOOP_SECONDS: number = cues.loopSeconds;
-/** One bar of pre-roll in the mp3 before the loop proper begins. */
-export const LOOP_START: number = cues.loopStartSeconds;
-export const LOOP_END: number = LOOP_START + LOOP_SECONDS;
 /** Changes with every export (scripts/museum-export.mjs writes engineManifest.json). The engine
     files live under `museum/<this>/` on the CDN and are cached as immutable, so a new export is
     picked up and an old one is never revalidated. */
@@ -19,7 +12,8 @@ export const ENGINE_VERSION: string = manifest.v;
 export const MUSEUM_CDN: string =
   process.env.NEXT_PUBLIC_MUSEUM_CDN ?? "https://benadams-museum-cdn.scrandle-worker.workers.dev";
 const CDN_DIR = `${MUSEUM_CDN}/museum/${ENGINE_VERSION}`;
-export const SONG_URL = `${CDN_DIR}/song.mp3`;
+/** The mp3 of one of the house songs (see songs.ts), under songs/ on the CDN. */
+export const songUrl = (id: string): string => `${CDN_DIR}/songs/${id}.mp3`;
 
 export const ENGINE_BASE = `${CDN_DIR}/museum`;
 export const ENGINE_SCRIPT = `${ENGINE_BASE}.js?v=${ENGINE_VERSION}`;

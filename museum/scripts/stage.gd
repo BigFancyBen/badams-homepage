@@ -319,7 +319,7 @@ static func build(root: Node3D) -> void:
 ## Stage show for this frame.
 static func update(clock: Clock, focus: Dictionary) -> void:
 	var beat := clock.beat
-	var bar := clock.bar
+	var bar := clock.dbar   # counted from the drop start inside a drop, so the phrases follow each drop
 	var e := clock.e
 	var kp := clock.kp
 	var black := clock.black

@@ -4,7 +4,7 @@ extends RefCounted
 ## sphere head, in the stage's rubber material (dark clothes, red rim from the screen behind).
 ## A "move" is a function of the beat that fills a parameter vector (hips, spine, head, hand and
 ## foot targets); arms and legs are solved with two-bone IK. The move is picked per 2-bar unit from
-## a list per song section (cues.json), held 2 or 4 bars, and eased in over 1.5 beats from the move
+## a list per song section (the song's cue sheet), held 2 or 4 bars, and eased in over 1.5 beats from the move
 ## before it, so there are no pops. Section overrides: both hands up on the last bar of the break
 ## and on drop phrase starts, a jump on the drop.
 ## Everything is a pure function of song time (clock.beat/bar), like the rest of the show.
@@ -110,11 +110,21 @@ static func build(root: Node3D, top: float, rz: float) -> void:
 
 # ------------------------------------------------------------------ move selection
 
-static func _sec_at(bw: float) -> Dictionary:
-	for s in _secs:
+static func _sec_idx(bw: float) -> int:
+	for i in _secs.size():
+		var s: Dictionary = _secs[i]
 		if bw >= float(s["from"]) and bw < float(s["to"]):
-			return s
-	return {"name": "intro", "from": 0, "to": 8}
+			return i
+	return -1
+
+
+static func _sec_at(bw: float) -> Dictionary:
+	var i := _sec_idx(bw)
+	return _secs[i] if i >= 0 else {"name": "intro", "from": 0, "to": _nbars}
+
+
+static func _name_at(i: int) -> String:
+	return str(_secs[posmod(i, _secs.size())]["name"]) if not _secs.is_empty() else ""
 
 
 static func _raw(u: int) -> int:
@@ -381,19 +391,22 @@ static func pose(clock: Clock) -> PackedFloat32Array:
 		p = _blend(_move(_id(u0 - 1), beat, clock.build), p, w)
 	# overrides
 	var bw := fposmod(clock.bar, float(_nbars))
+	var si := _sec_idx(bw)
 	var s := _sec_at(bw)
 	var up := 0.0
 	var jump := 0.0
 	if str(s["name"]) == "break":
-		up = smoothstep(float(s["to"]) - 1.35, float(s["to"]) - 1.0, bw)
+		# both hands up for the last bar, only into a drop
+		if _name_at(si + 1) == "drop":
+			up = smoothstep(float(s["to"]) - 1.35, float(s["to"]) - 1.0, bw)
 	elif str(s["name"]) == "drop":
-		var k := bw - float(s["from"])
+		var k := clock.dbar   # bars since this drop began
 		var q := fposmod(k * 4.0, 16.0)
 		up = maxf(1.0 - smoothstep(1.2, 3.0, q), smoothstep(15.4, 16.0, q))
 		var j := clampf(q, 0.0, 1.0)
 		jump = (0.3 if k < 4.0 else 0.12) * sin(PI * j)
-	elif str(s["name"]) == "outro":
-		# the drop's last phrase ends with both hands up: let them come down over the first beats
+	elif _name_at(si - 1) == "drop":
+		# the drop's last phrase ends with both hands up: let them come down over the first beats of what follows
 		up = 1.0 - smoothstep(0.0, 3.0, (bw - float(s["from"])) * 4.0)
 	if up > 0.0:
 		p = _blend(p, _move(M_UP, beat, clock.build), up)

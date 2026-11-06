@@ -7,10 +7,10 @@
  *   node scripts/museum-song/render.mjs
  *
  * Writes:
- *   public/museum/song.mp3      — [last bar] + 64-bar loop + [first bar], so a
+ *   public/museum/songs/after-hours.mp3— [last bar] + 64-bar loop + [first bar], so a
  *                                 player can loop the middle without seams
  *                                 even if the decoder pads the start
- *   museum/cues.json            — the arrangement, read by the Godot scene so
+ *   museum/songs/after-hours.json— the arrangement, read by the Godot scene so
  *                                 the lights know a breakdown from a drop
  *
  * Needs ffmpeg on PATH for the MP3 encode. Deterministic: same script, same
@@ -454,13 +454,17 @@ const tmp = join(tmpdir(), "museum-song.wav");
 writeFileSync(tmp, wav);
 
 mkdirSync(join(ROOT, "public", "museum"), { recursive: true });
-const mp3 = join(ROOT, "public", "museum", "song.mp3");
+mkdirSync(join(ROOT, "public", "museum", "songs"), { recursive: true });
+const mp3 = join(ROOT, "public", "museum", "songs", "after-hours.mp3");
 execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", tmp, "-codec:a", "libmp3lame", "-b:a", "160k",
   "-metadata", "title=Museum After Hours", "-metadata", "artist=Ben Adams", "-metadata", "comment=Rendered by scripts/museum-song/render.mjs",
   mp3]);
 
 mkdirSync(join(ROOT, "museum"), { recursive: true });
-writeFileSync(join(ROOT, "museum", "cues.json"), JSON.stringify({
+mkdirSync(join(ROOT, "museum", "songs"), { recursive: true });
+writeFileSync(join(ROOT, "museum", "songs", "after-hours.json"), JSON.stringify({
+  id: "after-hours",
+  title: "Museum After Hours",
   bpm: BPM,
   bars: BARS,
   loopSeconds: LOOP,
