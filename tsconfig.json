@@ -37,6 +37,8 @@
   ],
   "exclude": [
     "node_modules",
+    "museum",
+    "museum-cdn",
     "scrandle-worker",
     "yut-worker"
   ]

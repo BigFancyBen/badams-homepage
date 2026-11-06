@@ -50,18 +50,21 @@ function Tags({ tags }: { tags: string[] }) {
 }
 
 interface BentoSectionProps {
+  /** Anchor for /#id links. */
+  id?: string;
   onMouseLeave?: () => void;
   delay?: number;
   children: React.ReactNode;
 }
 
 /** A full-width frosted group, for projects that need more room than a card. */
-function BentoSection({ onMouseLeave, delay = 0.15, children }: BentoSectionProps) {
+function BentoSection({ id, onMouseLeave, delay = 0.15, children }: BentoSectionProps) {
   const reducedMotion = useReducedMotion();
 
   return (
     <motion.div
-      className="col-span-1 md:col-span-2 lg:col-span-4 p-4 md:p-6"
+      id={id}
+      className="col-span-1 md:col-span-2 lg:col-span-4 p-4 md:p-6 scroll-mt-4"
       style={{
         background: "rgba(255,255,255,0.03)",
         border: "1px solid rgba(255,255,255,0.06)",
@@ -147,7 +150,7 @@ export function BentoGrid() {
       </BentoSection>
 
       {/* Oathkeep — full-width feature, portrait phone captures */}
-      <BentoSection>
+      <BentoSection id="oathkeep">
         <div className="flex flex-col lg:flex-row gap-5 lg:gap-8">
           <div className="w-full lg:w-[42%] flex flex-col">
             <p className="text-[10px] font-mono uppercase tracking-widest mb-2" style={{ color: ACCENT }}>
@@ -176,6 +179,7 @@ export function BentoGrid() {
 
       {/* Prognosticator — 3 col, 2 row */}
       <BentoCard
+        id="prognosticator"
         title="Prognosticator"
         subtitle={PROGNOSTICATOR_SCREENSHOTS[progSlide].label}
         description={PROGNOSTICATOR_SCREENSHOTS[progSlide].description}
@@ -241,7 +245,7 @@ export function BentoGrid() {
       </BentoCard>
 
       {/* Prognosticator's visualizer scenes */}
-      <BentoSection>
+      <BentoSection id="warehouse">
         <h2 className="text-sm font-bold text-white">Prognosticator: visualizer scenes</h2>
         <p className="text-gray-400 text-xs mb-4 mt-1">
           The lighting rig has a second home. Prognosticator sends its beat grid and DMX output to a Godot

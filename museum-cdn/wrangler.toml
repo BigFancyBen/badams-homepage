@@ -1,0 +1,13 @@
+name = "benadams-museum-cdn"
+main = "src/index.ts"
+compatibility_date = "2026-11-01"
+
+# Serves the homepage museum's Godot web build (wasm, pck, js, song, posters) out of R2
+# on the account's workers.dev subdomain. See README.md.
+
+[observability]
+enabled = true
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "benadams-museum"

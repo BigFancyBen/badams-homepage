@@ -298,3 +298,13 @@ body {
   animation: shimmer 1.5s ease-in-out infinite;
 }
 
+/* Slow drift on the museum poster. */
+@media (prefers-reduced-motion: no-preference) {
+  .museum-drift {
+    animation: museum-drift 30s ease-in-out infinite alternate;
+  }
+}
+@keyframes museum-drift {
+  from { transform: scale(1.02) translate3d(0, 0, 0); }
+  to { transform: scale(1.1) translate3d(-1.5%, -1%, 0); }
+}

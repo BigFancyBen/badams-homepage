@@ -1,0 +1,57 @@
+{
+  "bpm": 128,
+  "bars": 64,
+  "loopSeconds": 120,
+  "loopStartSeconds": 1.875,
+  "sections": [
+    {
+      "name": "intro",
+      "from": 0,
+      "to": 8,
+      "energy": 0.35,
+      "kick": true
+    },
+    {
+      "name": "groove",
+      "from": 8,
+      "to": 16,
+      "energy": 0.6,
+      "kick": true
+    },
+    {
+      "name": "groove",
+      "from": 16,
+      "to": 24,
+      "energy": 0.72,
+      "kick": true
+    },
+    {
+      "name": "break",
+      "from": 24,
+      "to": 32,
+      "energy": 0.25,
+      "kick": false
+    },
+    {
+      "name": "drop",
+      "from": 32,
+      "to": 48,
+      "energy": 1,
+      "kick": true
+    },
+    {
+      "name": "drop",
+      "from": 48,
+      "to": 56,
+      "energy": 0.9,
+      "kick": true
+    },
+    {
+      "name": "outro",
+      "from": 56,
+      "to": 64,
+      "energy": 0.45,
+      "kick": true
+    }
+  ]
+}
