@@ -8,7 +8,7 @@ export const PROGNOSTICATOR_SCREENSHOTS = [
     src: "/prognosticator/01-dashboard.webp",
     label: "Command Center",
     bg: "#1a1a2e",
-    description: "One home screen links every tool: Now Playing, Effect Picks, the Disperser, Lights, Gear Setup, Scene Controls and your playlists and tags. Import a Spotify playlist and Prognosticator downloads each track from YouTube, then pulls BPM and key from VirtualDJ.",
+    description: "The home screen links to all the tools: Now Playing, Effect Picks, the Disperser, Lights, Gear Setup, Scene Controls, and your playlists and tags. When you import a Spotify playlist, it downloads each track from YouTube and gets the BPM and key from VirtualDJ.",
   },
   {
     src: "/prognosticator/02-playlist-browser.webp",
@@ -20,56 +20,56 @@ export const PROGNOSTICATOR_SCREENSHOTS = [
     src: "/prognosticator/03-song-detail.webp",
     label: "Vibes and Energy",
     bg: "#1a1a2e",
-    description: "Each song has a preview player, an energy rating from 1 to 5 and vibe labels like Groovy, Hypnotic or Peak-time. The labels become filterable tags, and the Deck buttons load the track into VirtualDJ.",
+    description: "Each song gets a preview player, an energy rating from 1 to 5, and vibe tags like Groovy, Hypnotic or Peak-time that you can filter by. The Deck buttons load the track into VirtualDJ.",
   },
   {
     src: "/prognosticator/04-now-playing.webp",
     label: "Live Deck View",
     bg: "#1a1a2e",
-    description: "Both VirtualDJ decks show here with art, live BPM and key. Click a deck and the library filters to tracks that are harmonically compatible and within BPM range. Auto mix can run beat-synced crossfades of 16 to 128 beats and swap the bass between decks.",
+    description: "Shows both VirtualDJ decks with album art, live BPM and key. Click a deck to filter the library down to tracks that mix well with it by key and BPM. Auto mix does beat-synced crossfades from 16 to 128 beats long and can swap the bass between decks.",
   },
   {
     src: "/prognosticator/05-song-requests.webp",
     label: "Song Requests",
     bg: "#1a1a2e",
-    description: "Paste a YouTube or Spotify link, or search either service from the request box. A Spotify request streams straight through VirtualDJ without waiting for a download. Requests land in their own playlist, and downloads show live progress.",
+    description: "Paste a YouTube or Spotify link, or search either one from the request box. Spotify requests stream through VirtualDJ right away, so you don't have to wait for a download. Requests go into their own playlist, and you can watch downloads progress.",
   },
   {
     src: "/prognosticator/06-effect-picks.webp",
     label: "Effect Picks",
     bg: "#1a1a2e",
-    description: "Instead of a wall of pads, the board deals three cards, each pairing a light effect with a video look. Tap one and it fires on the next downbeat, runs for its set number of beats, then hands the room back. A palette picker tints every light effect to the colors you choose.",
+    description: "The board shows three cards at a time, each one a light effect paired with a video look. Tap a card and it starts on the next downbeat, runs for a set number of beats, then goes back to the normal show. A palette picker sets the colors for all the light effects.",
   },
   {
     src: "/prognosticator/07-disperser-runtime.webp",
     label: "Disperser Director",
     bg: "#1a1a2e",
-    description: "Pick a venue and the Disperser shuffles idle lights and OBS scenes on the beat. Active effect pads fire strobes, fog and laser sweeps on demand, with a beats-left countdown. Everything is quantized to the bar or phrase, so changes read as decisions instead of glitches.",
+    description: "Pick a venue and the Disperser cycles through idle light looks and OBS scenes in time with the music. Effect pads trigger strobes, fog and laser sweeps on demand, with a countdown of beats left. Changes snap to the next bar or phrase so they stay on time.",
   },
   {
     src: "/prognosticator/08-lights.webp",
     label: "Lights and Rigs",
     bg: "#1a1a2e",
-    description: "Build rigs from a catalog of 87 actions and 122 group animations, each aimed at named lights instead of raw DMX channels. A rig's action pool rotates on bar boundaries. The same rigs also drive the fixtures inside the Godot warehouse scene.",
+    description: "Build rigs out of 87 actions and 122 group animations that target lights by name, so you don't have to work with raw DMX channels. A rig switches between its actions on bar lines. The same rigs also run the lights in the Godot warehouse scene.",
   },
   {
     src: "/prognosticator/09-scene-controls.webp",
     label: "Scene Controls",
     bg: "#1a1a2e",
-    description: "Switch the warehouse camera between nine lenses, including CCTV, fixture POV and a phone cam, with changes landing on the next downbeat. Below that, set strobe trigger intervals and flash length for the DMX rig. The beat timing comes from VirtualDJ.",
+    description: "Switch the warehouse camera between nine views, including CCTV, fixture POV and a phone cam. Camera changes wait for the next downbeat. Below that are strobe timing and flash length settings for the DMX rig, all synced to VirtualDJ's beat.",
   },
   {
     src: "/prognosticator/10-gear-setup.webp",
     label: "Gear Setup",
     bg: "#1a1a2e",
-    description: "A canvas of every DMX device with its named channels, drag-to-arrange positions, and a panel of master-dimmer channels. Fixtures come from a library of 2000+ OpenFixtureLibrary definitions. With no interface plugged in, the app runs a virtual universe so lighting still works on screen.",
+    description: "Drag your DMX devices around a canvas, with each one's channels labeled and a panel for the master dimmers. Fixture definitions come from Open Fixture Library, which has over 2,000 of them. If no DMX interface is plugged in, the app runs a virtual one so you can still see the lighting on screen.",
   },
 ];
 
 export const WAREHOUSE_SCENE = {
   title: "Warehouse",
   description:
-    "An endless venue that the Godot visualizer builds out of code and lights only with DMX values. The same rig, action or Effect Picks card that drives the real fixtures drives its 104 virtual ones. Every load is a new world: packed concrete rooms, blacklight corridors and graffiti, and outdoor plazas up to 200 metres across, where a ring of kilometre-scale wheels, towers and arches stands on the night horizon. A production camera cuts between wide, drone, jib and crowd shots on the beat.",
+    "A procedurally generated club, lit only by DMX values. The same rigs, actions and Effect Picks cards that run the real lights also run its 104 virtual fixtures. Each load builds a new layout: concrete rooms, blacklight hallways with graffiti, and outdoor plazas up to 200 meters across with huge wheels, towers and arches on the horizon. A virtual camera cuts between wide, drone, jib and crowd shots on the beat.",
   tags: ["Godot 4", "GDScript", "DMX", "Beat sync", "Procedural generation", "Spout"],
   shots: [
     {
@@ -77,7 +77,7 @@ export const WAREHOUSE_SCENE = {
       video: "/prognosticator/warehouse/loop.mp4",
       hold: 24000,
       label: "Red plaza",
-      caption: "The biggest outdoor room with the whole rig in red, and the far set's megastructures on the horizon.",
+      caption: "The biggest outdoor area with the whole rig in red, and the giant structures on the horizon.",
       alt: "Red lasers and moving-head beams sweeping across a night plaza, with giant wheel and tower megastructures against a blue dusk.",
     },
     {
@@ -95,7 +95,7 @@ export const WAREHOUSE_SCENE = {
     {
       src: "/prognosticator/warehouse/04-red-beam-foreground.webp",
       label: "Beam",
-      caption: "A mover's beam right across the lens, the wheel behind it.",
+      caption: "A moving head's beam right across the lens, with the wheel behind it.",
       alt: "A thick red beam sweeping through haze across the frame, a giant wheel structure behind it.",
     },
     {
@@ -107,7 +107,7 @@ export const WAREHOUSE_SCENE = {
     {
       src: "/prognosticator/warehouse/06-red-pars-crowd-wheels.webp",
       label: "Pars and crowd",
-      caption: "Three red pars over the crowd, a laser slashing past the portal tower.",
+      caption: "Three red pars over the crowd, and a laser cutting past the portal tower.",
       alt: "Three red par cans lighting the crowd at left, a diagonal red laser and a portal tower behind.",
     },
   ] satisfies Shot[],
@@ -116,14 +116,14 @@ export const WAREHOUSE_SCENE = {
 export const SM64_SCENE = {
   title: "Super Mario 64",
   description:
-    "The warehouse's DMX kit re-skinned onto Super Mario 64: pars are Power Stars, movers are cannon heads, lasers are Amps, and the lava is eight pars. The open-source decomp port runs as a library inside Godot, which draws every frame the game produces. All 45 areas have a lighting plot and a DJ Peach at the decks, and an autopilot plays Mario on the beat while a director cuts between nine lenses. Bring your own ROM.",
+    "The warehouse's DMX lights reskinned for Super Mario 64: the pars are Power Stars, the moving heads are cannons, the lasers are Amps, and the lava is eight pars. The open-source decomp port runs as a library inside Godot, and Godot renders each frame. All 45 areas have their own lighting setup and DJ Peach on the decks. An autopilot plays Mario in time with the music while the camera cuts between nine angles. Bring your own ROM.",
   tags: ["Godot 4", "GDScript", "GDExtension", "C", "DMX", "Beat sync"],
   shots: [
     {
       src: "/prognosticator/sm64/01-jolly-roger-bay.webp",
       video: "/prognosticator/sm64/loop.mp4",
       label: "Jolly Roger Bay",
-      caption: "Mario runs toward a bank of coins working as blinders, under star pars and a laser, in the level's own blue haze.",
+      caption: "Mario running toward a bank of coins used as blinders, under star-shaped pars and a laser.",
       alt: "Mario seen from behind running across Jolly Roger Bay's sandy ground, with a coin bank glowing at left, a pink star light and a vertical laser.",
     },
     {
@@ -141,19 +141,19 @@ export const SM64_SCENE = {
     {
       src: "/prognosticator/sm64/04-castle-grounds-stars.webp",
       label: "Castle grounds",
-      caption: "Power Stars as pars throw pink beams and a red pool onto the lawn.",
+      caption: "Power Stars working as pars, throwing pink beams and a red spot onto the lawn.",
       alt: "Mario jumping on the castle lawn at night under floating pale stars, with a pink beam fan and a red floor spot.",
     },
     {
       src: "/prognosticator/sm64/05-bay-laser-vista.webp",
       label: "Laser vista",
-      caption: "A high director camera over the bay, with laser fans and star pars cutting through the haze.",
+      caption: "A high camera angle over the bay, with laser fans and star pars in the haze.",
       alt: "A wide high view of the bay with blue laser lines fanning out, pink stars, coin banks, green pipes and a small Mario in the middle.",
     },
     {
       src: "/prognosticator/sm64/06-night-hillside-beam.webp",
       label: "Hillside beam",
-      caption: "A cannon-head mover throws a hard white beam across a night hillside, past a neon DJ stage at upper right.",
+      caption: "A cannon moving head throwing a white beam across a hillside at night, with a neon DJ stage at the top right.",
       alt: "A dark hillside seen from above with a wide white volumetric beam crossing the frame and a small neon-trimmed platform at top right.",
     },
   ] satisfies Shot[],
@@ -162,7 +162,7 @@ export const SM64_SCENE = {
 export const MK64_SCENE = {
   title: "Mario Kart 64",
   description:
-    "Mario Kart 64 under the warehouse's 104-slot rig, so every light, rig and Effect Picks card that runs the club runs the racetrack too. The decomp's PC port is built as a library that steps the game one frame at a time, and Godot draws every triangle it hands over. All 20 courses, the 16 races and the 4 battle arenas, have their own lighting plot. With nobody on a pad the game's CPU drivers race while a director cuts between 12 lenses on the downbeat, and up to four people can pick up a pad and play split screen. Bring your own ROM.",
+    "Mario Kart 64 running under the same 104-light rig as the warehouse, so the lights, rigs and Effect Picks cards that run the club also run the racetrack. The decomp's PC port is built as a library that Godot steps one frame at a time and renders. All 20 courses (16 race tracks and 4 battle arenas) have their own lighting setup. When nobody's playing, CPU drivers race while the camera cuts between 12 angles on the downbeat, and up to four people can grab a controller and play split screen. Bring your own ROM.",
   tags: ["Godot 4", "GDScript", "GDExtension", "C", "DMX", "Beat sync"],
   shots: [
     {
@@ -170,7 +170,7 @@ export const MK64_SCENE = {
       video: "/prognosticator/mk64/loop.mp4",
       hold: 28000,
       label: "Luigi Raceway",
-      caption: "A CPU-driven race through Luigi Raceway, Toad's Turnpike and Bowser's Castle at night, lit live by the Director.",
+      caption: "CPU drivers racing through Luigi Raceway, Toad's Turnpike and Bowser's Castle at night, with the lights running live.",
       alt: "Luigi Raceway at night, white spotlights sweeping down from a truss onto the track, a kart ahead.",
     },
     {
@@ -208,14 +208,14 @@ export const MK64_SCENE = {
 
 export const TESTQ = {
   title: "testq",
-  tagline: "One queue for every Godot run on the machine.",
+  tagline: "A job queue for all the Godot runs on my PC.",
   description:
-    "The warehouse, the two Nintendo scenes, the rafting game and Oathkeep all test and capture on one PC, from a couple of dozen worktrees that each think they have it to themselves. Two suites starting in the same minute slowed each other enough to fail anything timed against the wall clock, and those failures read exactly like real ones. testq is a small daemon that holds the machine's slots, and every run script asks it before launching an engine.",
+    "The warehouse, the two Nintendo scenes, the rafting game and Oathkeep all run their tests and captures on one PC, from a couple dozen worktrees at once. When two test suites started at the same time, they slowed each other down enough to fail timing-sensitive tests, and those failures looked just like real bugs. testq is a small daemon that hands out the machine's CPU and GPU slots, and each run script checks with it before launching Godot.",
   features: [
-    { label: "Outside every project", text: "A capture in the DJ app and a physics suite in the game are two engines on one box, and neither repo can see the other's. The queue belongs to neither." },
-    { label: "Shortest first", text: "Estimates come from each job's own history, so a twenty-second test does not sit behind two eleven-minute suites. A job that has waited long enough ages to the front." },
-    { label: "Hung runs get killed", text: "An engine that stalls or overruns its limit is stopped and its slot handed back. A client that dies has its slots reclaimed in about five seconds." },
-    { label: "A page and a tray dot", text: "What is running, what is queued and roughly when it starts, with every finished run kept in SQLite to pick out the jobs that only sometimes pass." },
+    { label: "Separate from the projects", text: "A capture in the DJ app and a physics test in the rafting game don't know about each other, so the queue lives in its own repo outside both." },
+    { label: "Shortest first", text: "It estimates each job's length from its past runs, so a 20-second test doesn't get stuck behind two 11-minute suites. Jobs that have been waiting a long time move to the front." },
+    { label: "Hung runs get killed", text: "If Godot stalls or runs past its time limit, testq kills it and frees the slot. If a client crashes, testq takes its slots back in about five seconds." },
+    { label: "Status page", text: "A web page and a tray icon show what's running, what's queued and roughly when it'll start. Finished runs are saved in SQLite, which makes flaky tests easy to find." },
   ],
   tags: ["Python", "SQLite", "Node", "Bash", "PowerShell", "Godot"],
   repoUrl: "https://github.com/BigFancyBen/testq",
@@ -249,25 +249,25 @@ export const SCRANDLE_SHOTS: Shot[] = [
   {
     src: "/scrandle/site-01-pick.webp",
     label: "Pick a plate",
-    caption: "Two plates from the channel. Pick the one it rated higher.",
+    caption: "Two plates from the Discord. Pick the one people rated higher.",
     alt: "Scrandle round 1 of 10: two plates side by side, a breaded cutlet with sweet potato and a seared steak, with the question of which the channel rated higher",
   },
   {
     src: "/scrandle/site-02-reveal.webp",
     label: "The reveal",
-    caption: "Both ratings, who cooked each plate, and how many points were in it.",
+    caption: "After you pick, you see both ratings, who cooked each plate, and the point gap.",
     alt: "After the pick, both plates show their channel ratings, 1429 and 1571, and the cook's name. The higher plate is outlined green and the page says Right, 142 points in it",
   },
   {
     src: "/scrandle/site-03-midgame.webp",
     label: "Midway through",
-    caption: "Ten rounds a week, with a strip of rights and wrongs along the top.",
+    caption: "Ten rounds a week, with your rights and wrongs tracked along the top.",
     alt: "Round 6 of 10 revealed, with a progress strip of green and red squares along the top and a running score of 5 of 10",
   },
   {
     src: "/scrandle/site-04-score.webp",
     label: "Your score",
-    caption: "A score to copy into the channel and a list of how all ten pairs went.",
+    caption: "Your score to paste into the chat, plus how each of the ten pairs went.",
     alt: "End screen showing a 7 of 10 score, a Copy score button, and a list of all ten pairs with ratings and thumbnails",
   },
 ];
@@ -441,40 +441,40 @@ export const OSRS_MESSAGES: DiscordMessage[] = [
 export const MFRS = {
   kicker: "In development",
   title: "Middle Fork Rafting Simulator",
-  tagline: "Multiplayer whitewater. One raft, everyone paddles.",
+  tagline: "A co-op rafting game where everyone paddles the same raft.",
   description:
-    "A multiplayer rafting game built in Godot. You and a boat of friends, all river otters in oversized helmets, paddle a procedurally generated Idaho canyon and carry a job's cargo to its take-out. The water is modelled to real ranges, and the otters are cartoons.",
+    "A multiplayer rafting game I'm making in Godot. You and your friends play river otters in oversized helmets, paddling one raft down a procedurally generated Idaho canyon to deliver cargo to the take-out. The water physics are based on real rivers.",
   features: [
-    { label: "Jobs", text: "Pick a cargo (wedding cake, beehive, watermelon, piano) and run it to the take-out flag. A hard hit costs you a tier of cake." },
-    { label: "Join by code", text: "A three-word trip code or a link puts a friend in your boat, even on a trip already on the water. If the host leaves, the trip carries on." },
-    { label: "Real rapids", text: "A canyon generated from a seed. Rocks wrap boats, holes keep them, waves launch them." },
-    { label: "Nobody stays stuck", text: "Throw bags and rope hauls for rescues, and a bird that carries a stranded swimmer back to the raft." },
+    { label: "Jobs", text: "Pick a cargo like a wedding cake, a beehive or a piano and get it to the take-out flag. Hit something too hard and you lose a tier of the cake." },
+    { label: "Join by code", text: "Friends can join with a three-word code or a link, even after the trip has started. If the host leaves, the trip keeps going." },
+    { label: "Real rapids", text: "Each canyon is generated from a seed. Rocks can pin the raft, holes can trap it, and waves can launch it." },
+    { label: "Rescues", text: "Use throw bags and ropes to pull swimmers back in or haul the raft off a rock. If someone gets stranded, a bird carries them back to the raft." },
   ],
   tags: ["Godot 4", "GDScript", "Multiplayer", "Host-authoritative netcode", "Procedural generation"],
   itchUrl: "https://bigfancyben.itch.io/middle-fork-rafting-simulator",
   shots: [
-    { src: "/mfrs/loop-poster.webp", video: "/mfrs/loop.mp4", label: "On the water", caption: "A full boat through a sunny rapid, close enough to a rock to earn a near-miss.", alt: "Six otters paddling a raft through white water between two boulders, with a merit badge and a near-miss card on screen" },
+    { src: "/mfrs/loop-poster.webp", video: "/mfrs/loop.mp4", label: "On the water", caption: "A full raft squeezing past a rock in a sunny rapid, close enough to count as a near-miss.", alt: "Six otters paddling a raft through white water between two boulders, with a merit badge and a near-miss card on screen" },
     { src: "/mfrs/01-wave.webp", label: "Big water", caption: "Launching off a standing wave, two of the crew going over the stern.", alt: "A raft launching off a standing wave with two otters thrown over the stern, an inner tube floating in the foreground" },
-    { src: "/mfrs/02-cargo.webp", label: "Jobs", caption: "A wedding cake to deliver downriver. The tag tracks the take-out and what is left of the cake.", alt: "Six otters paddling a raft with a wedding cake aboard, a tag above reading take-out 450 m, wedding cake 69%" },
-    { src: "/mfrs/03-takeout.webp", label: "The take-out", caption: "Every job ends at a flag on a gravel beach.", alt: "A raft with its cargo aboard coming in toward the take-out sign on a gravel beach, rubber ducks floating by" },
-    { src: "/mfrs/04-trip-board.webp", label: "Trip board", caption: "Pick a job, see the crew, and hand a friend the trip code.", alt: "The trip board listing the day's jobs, the party of four, and a three-word trip code" },
-    { src: "/mfrs/05-rope-rescue.webp", label: "Rope rescue", caption: "A wrapped raft, two otters hauling it off a rock, a swimmer waiting.", alt: "Two otters on a rock holding a rope out to a raft pinned in the current, a golden rubber duck floating past" },
-    { src: "/mfrs/06-hats.webp", label: "The crew", caption: "Merit badges unlock hats. Every one is on a head here.", alt: "Otters in life jackets paddling a raft wearing a wizard hat, top hat, traffic cone, viking helm and sombrero" },
-    { src: "/mfrs/07-ledge-drop.webp", label: "Ledge drop", caption: "A flipped raft in the pour, one otter on the rock with a rope.", alt: "A flipped raft in the pour below a ledge, its crew in the water around it and one otter on a rock holding a rope out to the boat" },
+    { src: "/mfrs/02-cargo.webp", label: "Jobs", caption: "Delivering a wedding cake downriver. The tag shows the distance to the take-out and how much cake is left.", alt: "Six otters paddling a raft with a wedding cake aboard, a tag above reading take-out 450 m, wedding cake 69%" },
+    { src: "/mfrs/03-takeout.webp", label: "The take-out", caption: "Jobs end at a flag on a gravel beach.", alt: "A raft with its cargo aboard coming in toward the take-out sign on a gravel beach, rubber ducks floating by" },
+    { src: "/mfrs/04-trip-board.webp", label: "Trip board", caption: "Pick a job, see who's in the crew, and send the trip code to a friend.", alt: "The trip board listing the day's jobs, the party of four, and a three-word trip code" },
+    { src: "/mfrs/05-rope-rescue.webp", label: "Rope rescue", caption: "Two otters hauling a pinned raft off a rock while a swimmer waits.", alt: "Two otters on a rock holding a rope out to a raft pinned in the current, a golden rubber duck floating past" },
+    { src: "/mfrs/06-hats.webp", label: "The crew", caption: "Merit badges unlock hats, like the wizard hat and traffic cone here.", alt: "Otters in life jackets paddling a raft wearing a wizard hat, top hat, traffic cone, viking helm and sombrero" },
+    { src: "/mfrs/07-ledge-drop.webp", label: "Ledge drop", caption: "A raft flipped below a ledge, with one otter on a rock holding out a rope.", alt: "A flipped raft in the pour below a ledge, its crew in the water around it and one otter on a rock holding a rope out to the boat" },
   ] satisfies Shot[],
 };
 
 export const OATHKEEP = {
   kicker: "Testing on Android",
   title: "Oathkeep",
-  tagline: "A guild chat that is also a co-op idle ARPG, run on a daily check-in.",
+  tagline: "A guild chat app with a co-op idle ARPG built around a daily check-in.",
   description:
-    "Once a day a bell asks the guild one question: did you keep your oath? The oath is whatever you decided it is, a run, a lift, twenty minutes of anything, and nobody checks. Keeping it feeds your hero, the guild's hearth and the week's raid. The fighting happens while you are away, and you come back to the replay.",
+    "Once a day the app asks everyone in the guild whether they kept their oath. You decide what your oath is, like a run, a lift or twenty minutes of practice, and it's on the honor system. Checking in powers up your hero, the guild's hearth and that week's raid. Fights play out while you're away, and you can watch the replay when you come back.",
   features: [
-    { label: "Broken builds are a feature", text: "Any skill gem with any support that fits, a constellation of over a hundred stars with rule-breaking keystones, and free respecs. The Court of Bones build never swings; its minions hit five times harder than a plain build in the same gear." },
-    { label: "Every fight read back", text: "The result card gives time, DPS and damage taken, then reads the build: how much came from triggers or minions, the biggest hit, the peak second. Fights are seeded, so a guildmate can watch yours exactly." },
-    { label: "The end of the road", text: "The Unlit Hall is the twelfth and last zone. Past it the Unlit Depths go down a rung at a time with a boss every tenth. Gear tops out, so only the challenge keeps climbing." },
-    { label: "Missing a day costs nothing", text: "Power comes from the last fortnight, not from how long you have played. A rest day takes nothing from you or the guild." },
+    { label: "Builds", text: "Put any support gem on any skill it fits, pick from a constellation of over a hundred stars with keystones that change the rules, and respec for free. Builds can get pretty broken. Court of Bones never attacks, and its minions do five times the damage of a basic build in the same gear." },
+    { label: "Fight breakdowns", text: "After each fight you get the time, DPS and damage taken, plus a breakdown of where the damage came from, your biggest hit and your best second. Fights are seeded, so a guildmate can replay yours exactly." },
+    { label: "Endgame", text: "The Unlit Hall is the twelfth and final zone. After that, the Unlit Depths keep going one level at a time, with a boss every ten levels. Gear stops improving, but the difficulty keeps going up." },
+    { label: "Rest days are fine", text: "Your power is based on the last two weeks, not your total playtime. Taking a day off doesn't cost you or the guild anything." },
   ],
   tags: ["Godot 4.7", "GDScript", "Android", "Cloudflare Workers", "Async co-op"],
   fights: [
@@ -483,14 +483,14 @@ export const OATHKEEP = {
       video: "/oathkeep/unlit-hall.mp4",
       hold: 13700,
       label: "The Unlit Hall",
-      caption: "End game: a Court of Bones army against the last zone's boss.",
+      caption: "A Court of Bones skeleton army fighting the final zone's boss.",
       alt: "A swarm of skeleton minions surrounds the Unlit Hall's boss on a purple stone arena, huge damage numbers bursting over them, until the Victory card appears.",
     },
     {
       src: "/oathkeep/02-court-of-bones.webp",
       video: "/oathkeep/court-of-bones.mp4",
       label: "Court of Bones",
-      caption: "The minions do all the damage. The Oathbreaker falls in under six seconds.",
+      caption: "The minions do all the damage and kill the Oathbreaker in under six seconds.",
       alt: "A crowd of skeleton minions overwhelms a caped, crowned boss in a torchlit arena, ending on a Victory card with no damage taken.",
     },
     {
@@ -505,13 +505,13 @@ export const OATHKEEP = {
     {
       src: "/oathkeep/town.webp",
       label: "Town",
-      caption: "Every station is a building you walk to. The seal at the bottom keeps today's oath.",
+      caption: "Each feature is a building you walk to. Tap the seal at the bottom to check in for the day.",
       alt: "A pixel-art town square with an observatory, bell tower, war room, dormitory and road gate around a campfire, and an I kept my oath seal at the bottom.",
     },
     {
       src: "/oathkeep/oath-kept.webp",
       label: "Oath kept",
-      caption: "What keeping it paid: your Mettle, your hero's patrol, the guild's hearth.",
+      caption: "What checking in earned you: Mettle, your hero's patrol haul and the guild's hearth bonus.",
       alt: "The Oath kept sheet listing Mettle, this week's oaths, Vigil, patrol yield, caskets waiting and the guild hearth bonus.",
     },
     {
@@ -529,7 +529,7 @@ export const OATHKEEP = {
     {
       src: "/oathkeep/guild-chat.webp",
       label: "Guild chat",
-      caption: "A photo check-in in #oaths. Guildmates pay its author in boons.",
+      caption: "A photo check-in in #oaths. Guildmates can send boons to whoever posted it.",
       alt: "The #oaths channel: a guildmate's check-in reading bike commute counts, with a sunset photo and five boon buttons.",
     },
   ] satisfies Shot[],
@@ -543,15 +543,15 @@ export const SUMMARIES = {
   prognosticator:
     "A DJ companion app that runs alongside VirtualDJ. It imports Spotify playlists, tags every track with key, BPM, energy and vibe, filters the library to what mixes harmonically with the playing deck, and drives DMX lighting and a Godot visualizer in time with the music.",
   oathkeep:
-    "A guild chat that is also an async co-op idle ARPG. Once a day a bell asks whether you kept your oath, and keeping it powers your hero, the guild's hearth and the weekly raid. Underneath is a build game where broken builds are a feature, and the fights happen while you are away.",
+    "A guild chat app with an async co-op idle ARPG built in. Once a day it asks whether you kept your oath, and checking in powers up your hero, the guild's hearth and the weekly raid. There's a deep build system, and the fights play out while you're away.",
   hobbitHouse:
     "Phone control app for a living room mini PC. Launch games and streaming apps, run a music visualizer on the TV, and control lights, Kodi and cameras. A QR code turns a guest's phone into a game controller.",
   scrandle:
-    "A weekly game built from my friends' dinner photos. Ten pairs of plates: pick the one the channel rated higher, then see the ratings and who cooked each.",
+    "A weekly game made from my friends' dinner photos. You get ten pairs of plates and pick the one the group rated higher, then see the ratings and who cooked each one.",
   scranbot:
-    "The Discord bot behind Scrandle. It posts a daily food photo matchup in a friends' channel, keeps votes private until the round closes, reveals the result, and posts weekly standings with rank changes.",
+    "The Discord bot behind Scrandle. Every day it posts a food photo matchup in our group's channel, keeps the votes hidden until voting closes, and then posts the result. Once a week it posts standings with rank changes.",
   yutHut:
-    "A Discord bot that turns workout check-ins into Old School RuneScape progress for a friend group. Each check-in is a Slayer session run on the game's real XP table and drop tables, and the results come back as OSRS-style cards.",
+    "A Discord bot for my friends that turns workout check-ins into Old School RuneScape progress. Each check-in counts as a Slayer session using the game's real XP and drop tables, and the bot posts the results as OSRS-style cards.",
   commander:
     "Touch-friendly scorekeeper for Commander. Four-player quadrant layout with life, poison, and commander damage tracking.",
   tutorHelper:
@@ -586,11 +586,11 @@ export const HOBBIT_HOUSE = {
 export const VISUALIZER_SCENES = {
   title: "Prognosticator: visualizer scenes",
   description:
-    "The lighting rig has a second home. Prognosticator sends its beat grid and DMX output to a Godot visualizer, so every light cue also plays in a venue that does not exist.",
+    "Prognosticator also sends its beat grid and DMX output to a visualizer I built in Godot, so the same light cues play in a virtual venue.",
 };
 
 export const MFRS_LINKS = {
-  river: { label: "Meet at the put-in", href: "/river" },
+  river: { label: "Game page", href: "/river" },
   itch: { label: "itch.io page", href: MFRS.itchUrl },
 };
 
@@ -610,10 +610,10 @@ export const SCRANBOT = {
 export const YUT_HUT = {
   title: "Yut Hut",
   features: [
-    { label: "Two a week", text: "The first two check-ins count in full, then half, then a fifth. A rest day is written down and never punished." },
-    { label: "The bot asks", text: "Every morning it posts one question with a Yes and a No, and edits the roll call into the post as people answer." },
-    { label: "Numbers from the wiki", text: "Monsters, Slayer masters, drop rates and gear come from the OSRS Wiki. Only the session length is tuned." },
-    { label: "Something to chase", text: "Clue caskets, a pick of three spoils, gear drops, an Achievement Diary, a quest and a group boss each week." },
+    { label: "Two a week", text: "Your first two check-ins each week count in full. After that they count for half, then a fifth. Rest days get logged and don't cost you anything." },
+    { label: "Morning check-in", text: "Each morning the bot posts a yes-or-no question and updates the post as people answer." },
+    { label: "Real game data", text: "Monsters, Slayer masters, drop rates and gear all come from the OSRS Wiki. The only number I tuned is how long a session lasts." },
+    { label: "Goals", text: "Clue caskets, a choice of three rewards, gear drops, an Achievement Diary, a quest, and a group boss each week." },
   ],
   tags: ["Cloudflare Workers", "D1", "R2", "Discord", "Next.js", "TypeScript"],
   rulesLink: { label: "Read the rules", href: "/yut-hut" },
