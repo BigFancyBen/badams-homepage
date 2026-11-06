@@ -706,6 +706,20 @@ test.describe('pointer-lock prompts (stub engine)', () => {
     await expect(page.getByRole('navigation', { name: NAV }).getByRole('button', { name: 'Free roam' })).toBeVisible();
   });
 
+  test('the scene opens on the build: the first drop lands about 8.5 s after the reveal', async ({ page }) => {
+    await enterStub(page);
+    const { now, drop, loop } = await page.evaluate(() => {
+      const b = window.museumBridge!;
+      const cues = JSON.parse(b.songCues()) as { bpm: number; loopSeconds: number; sections: { name: string; from: number }[] };
+      const i = cues.sections.findIndex((x, k) => x.name === 'drop' && cues.sections[k - 1]?.name === 'break');
+      return { now: b.time(), drop: (cues.sections[i].from * 240) / cues.bpm, loop: cues.loopSeconds };
+    });
+    /* Time to the drop, from the moment the canvas finished fading in (it may have taken a second or two). */
+    const until = (((drop - now) % loop) + loop) % loop;
+    expect(until).toBeGreaterThan(4);
+    expect(until).toBeLessThanOrEqual(8.6);
+  });
+
   test('the menu ends with a link back to the homepage, which lets go of the pointer', async ({ page }) => {
     await enterStub(page);
     await tour(page, 'touring');

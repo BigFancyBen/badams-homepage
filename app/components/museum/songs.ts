@@ -20,6 +20,20 @@ export interface Song {
 
 export const SONGS: readonly Song[] = [afterHours, velvetRope, galleryLights, strobeHall, mirrorBall];
 
+/**
+ * Seconds into the loop to start from so the first drop lands `lead` seconds later. Every song's
+ * first drop follows a break whose last four bars are the riser, snare roll and the stage screen's
+ * countdown, so a lead of a little over four bars opens on the build. Falls back to 0 for a cue
+ * sheet without a break into a drop.
+ */
+export function dropLeadIn(song: Song, lead: number): number {
+  const i = song.sections.findIndex((s, k) => s.name === "drop" && song.sections[k - 1]?.name === "break");
+  if (i < 0) return 0;
+  const bar = 240 / song.bpm;
+  const t = song.sections[i].from * bar - lead;
+  return ((t % song.loopSeconds) + song.loopSeconds) % song.loopSeconds;
+}
+
 const LAST_KEY = "museum-last-song";
 let current: Song = SONGS[0];
 let chosen = false;

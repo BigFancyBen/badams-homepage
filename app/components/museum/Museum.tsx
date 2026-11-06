@@ -7,7 +7,7 @@ import { installMuseumBridge, type BridgeHandle, type MuseumCommand, type TourSt
 import { MuseumOverlay } from "./MuseumOverlay";
 import { MuteButton, type AimPrompt } from "./MuteButton";
 import { getSongClock } from "./songClock";
-import { chooseSong } from "./songs";
+import { chooseSong, dropLeadIn, getSong } from "./songs";
 import { Poster, type LoadPhase, type PosterStatus } from "./Poster";
 import { attachScrollInput, type ScrollInput } from "./scrollInput";
 
@@ -28,6 +28,9 @@ type Status = PosterStatus;
 /* The loading bar: the download is the first part, the hall building itself and compiling its
    shaders behind the poster (reported by Godot through the bridge) is the rest. */
 const DOWNLOAD_SHARE = 0.5;
+/* The scene opens on the build: the first drop lands this many seconds after it appears, so a visit
+   of under half a minute still sees the countdown and the drop. A little over four bars at 120-128 BPM. */
+const DROP_LEAD_SECONDS = 8.5;
 
 function hasWebGL2(): boolean {
   try {
@@ -96,6 +99,8 @@ export function Museum() {
           setProgress((p) => Math.max(p, DOWNLOAD_SHARE + (1 - DOWNLOAD_SHARE) * Math.min(1, Math.max(0, f))));
         },
         onReady: () => {
+          /* Only on the first reveal of the visit; a lost-context reload or remount keeps the song where it is. */
+          if (!readyRef.current) getSongClock().seek(dropLeadIn(getSong(), DROP_LEAD_SECONDS));
           readyRef.current = true;
           setProgress(1);
           setStatus((s) => (s === "loading" ? "ready" : s));

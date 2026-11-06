@@ -110,6 +110,34 @@ export class SongClock {
     return this.wrap(this.base + (performance.now() / 1000 - this.ref));
   };
 
+  /**
+   * Jump to `seconds` into the loop. Muted (or still loading) only the clock moves; audible, the
+   * source restarts there, with the same short fade the mute uses so it does not click.
+   */
+  seek(seconds: number): void {
+    const pos = this.wrap(seconds);
+    const { ctx, source, gain } = this;
+    if (this.state.audible && ctx && source && gain && source.buffer) {
+      const buffer = source.buffer;
+      this.stopSource();
+      const startAt = ctx.currentTime + 0.05;
+      const next = ctx.createBufferSource();
+      next.buffer = buffer;
+      next.loop = true;
+      next.loopStart = this.song.loopStartSeconds;
+      next.loopEnd = this.song.loopStartSeconds + this.song.loopSeconds;
+      next.connect(gain);
+      gain.gain.setValueAtTime(1, startAt);
+      next.start(startAt, this.song.loopStartSeconds + pos);
+      this.source = next;
+      this.base = pos;
+      this.ref = startAt;
+      return;
+    }
+    this.base = pos;
+    this.ref = performance.now() / 1000;
+  }
+
   /** Call from a user gesture when turning sound on. */
   async setAudible(on: boolean): Promise<void> {
     const token = ++this.token;
