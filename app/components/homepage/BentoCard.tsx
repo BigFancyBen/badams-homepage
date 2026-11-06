@@ -4,6 +4,8 @@ import { motion, AnimatePresence } from "motion/react";
 import { useReducedMotion } from "../../hooks/useReducedMotion";
 
 interface BentoCardProps {
+  /** Anchor for /#id links. */
+  id?: string;
   title: string;
   subtitle?: string;
   description: string;
@@ -21,6 +23,7 @@ interface BentoCardProps {
 }
 
 export function BentoCard({
+  id,
   title,
   subtitle,
   description,
@@ -54,7 +57,8 @@ export function BentoCard({
 
   const card = (
     <motion.div
-      className={`relative h-full ${spanClasses}`}
+      id={id}
+      className={`relative h-full scroll-mt-4 ${spanClasses}`}
       onMouseEnter={onHover}
       initial={reducedMotion ? false : { opacity: 0, y: 30 }}
       whileInView={{ opacity: 1, y: 0 }}

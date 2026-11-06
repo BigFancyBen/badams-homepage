@@ -10,7 +10,7 @@ export function HeroSection() {
   const handleHeroComplete = useCallback(() => setHeroComplete(true), []);
 
   return (
-    <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-4 py-8">
+    <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-4 pt-[max(2rem,env(safe-area-inset-top))] pb-8">
       <AnimatedHeroTitle text="benadams.dev" onComplete={handleHeroComplete} />
       <AnimatedSubtitle
         startDelay={400}

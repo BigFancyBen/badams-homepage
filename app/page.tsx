@@ -1,8 +1,8 @@
 import { ParticleField } from "./components/homepage/ParticleField";
 import { BentoGrid } from "./components/homepage/BentoGrid";
-import { AnimatedResumeLink } from "./components/homepage/AnimatedResumeLink";
-import type { Metadata } from "next";
 import { HeroSection } from "./components/homepage/HeroSection";
+import type { Metadata, Viewport } from "next";
+import { GameSection } from "./components/museum/GameSection";
 import { JsonLd } from "./components/JsonLd";
 import { homeJsonLd } from "./site";
 
@@ -10,25 +10,31 @@ import { homeJsonLd } from "./site";
    of its own would inherit a claim to be the homepage. */
 export const metadata: Metadata = { alternates: { canonical: "/" } };
 
+/* The game section's poster pads itself with env(safe-area-inset-bottom), which only applies under
+   viewport-fit=cover; the hero pads its top the same way. */
+export const viewport: Viewport = { viewportFit: "cover", themeColor: "#06070a" };
+
 export default function Home() {
   return (
     <div className="min-h-screen relative overflow-hidden">
       <JsonLd data={homeJsonLd()} />
       <ParticleField />
-      <AnimatedResumeLink />
 
       <main>
         {/* Hero section */}
         <HeroSection />
 
-        {/* Bento grid */}
-        <div className="relative z-10 max-w-7xl mx-auto px-4 pb-24">
+        {/* The game version: a full-screen poster that links to /museum (nothing loads here) */}
+        <GameSection />
+
+        {/* Same work as plain HTML, for crawlers and no-WebGL visitors */}
+        <div id="catalogue" className="relative z-10 max-w-7xl mx-auto px-[max(1rem,env(safe-area-inset-left))] pt-12 pb-24">
           <BentoGrid />
         </div>
       </main>
 
       {/* Footer */}
-      <footer className="relative z-10 border-t border-white/5 py-6 px-4">
+      <footer className="relative z-10 border-t border-white/5 py-6 px-[max(1rem,env(safe-area-inset-left))] pb-[max(1.5rem,env(safe-area-inset-bottom))]">
         <div className="max-w-7xl mx-auto flex items-center justify-between text-gray-600 text-xs">
           <span>Ben Adams</span>
           <a

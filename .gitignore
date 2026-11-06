@@ -50,3 +50,8 @@ next-env.d.ts
 # directory, so `.github/` followed by a negation cannot re-include anything.
 .github/*
 !.github/workflows/
+# The Godot export is served from Cloudflare R2 (museum-cdn/); scripts/museum-export.mjs
+# writes it here only as the staging copy that scripts/museum-upload.mjs uploads.
+/public/museum/engine/
+/public/museum/song.mp3
+/public/museum/songs/

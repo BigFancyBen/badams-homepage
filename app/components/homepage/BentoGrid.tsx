@@ -8,6 +8,7 @@ import { TabletCarousel } from "./TabletCarousel";
 import { PhoneCarousel } from "./PhoneCarousel";
 import { ShotGallery } from "./ShotGallery";
 import { DiscordFeed } from "./DiscordFeed";
+import { ACCENT, Tags } from "./Tags";
 import { useReducedMotion } from "../../hooks/useReducedMotion";
 import {
   MFRS,
@@ -24,44 +25,36 @@ import {
   YUT_MESSAGES,
   OSRS_MESSAGES,
   SUMMARIES,
+  PROGNOSTICATOR_CARD,
+  HOBBIT_HOUSE,
+  VISUALIZER_SCENES,
+  MFRS_LINKS,
+  TESTQ_LINK,
+  SCRANDLE,
+  SCRANBOT,
+  YUT_HUT,
+  MTG_GROUP,
+  FLOATWISE,
+  DOTA_RANDOMIZER,
+  IRLSCAPE,
 } from "./projects";
 
-const ACCENT = "#81a1c1";
-
-function Tags({ tags }: { tags: string[] }) {
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {tags.map((tag) => (
-        <span
-          key={tag}
-          className="px-1.5 py-0.5 text-[10px]"
-          style={{
-            color: ACCENT,
-            borderWidth: 1,
-            borderColor: `${ACCENT}30`,
-            backgroundColor: `${ACCENT}12`,
-          }}
-        >
-          {tag}
-        </span>
-      ))}
-    </div>
-  );
-}
-
 interface BentoSectionProps {
+  /** Anchor for /#id links. */
+  id?: string;
   onMouseLeave?: () => void;
   delay?: number;
   children: React.ReactNode;
 }
 
 /** A full-width frosted group, for projects that need more room than a card. */
-function BentoSection({ onMouseLeave, delay = 0.15, children }: BentoSectionProps) {
+function BentoSection({ id, onMouseLeave, delay = 0.15, children }: BentoSectionProps) {
   const reducedMotion = useReducedMotion();
 
   return (
     <motion.div
-      className="col-span-1 md:col-span-2 lg:col-span-4 p-4 md:p-6"
+      id={id}
+      className="col-span-1 md:col-span-2 lg:col-span-4 p-4 md:p-6 scroll-mt-4"
       style={{
         background: "rgba(255,255,255,0.03)",
         border: "1px solid rgba(255,255,255,0.06)",
@@ -139,15 +132,15 @@ export function BentoGrid() {
               <Tags tags={MFRS.tags} />
             </div>
             <div className="mt-auto pt-5 flex flex-wrap gap-x-6 gap-y-2">
-              <SectionLink href="/river">Meet at the put-in &rarr;</SectionLink>
-              <SectionLink href={MFRS.itchUrl}>itch.io page</SectionLink>
+              <SectionLink href={MFRS_LINKS.river.href}>{`${MFRS_LINKS.river.label} →`}</SectionLink>
+              <SectionLink href={MFRS_LINKS.itch.href}>{MFRS_LINKS.itch.label}</SectionLink>
             </div>
           </div>
         </div>
       </BentoSection>
 
       {/* Oathkeep — full-width feature, portrait phone captures */}
-      <BentoSection>
+      <BentoSection id="oathkeep">
         <div className="flex flex-col lg:flex-row gap-5 lg:gap-8">
           <div className="w-full lg:w-[42%] flex flex-col">
             <p className="text-[10px] font-mono uppercase tracking-widest mb-2" style={{ color: ACCENT }}>
@@ -176,7 +169,8 @@ export function BentoGrid() {
 
       {/* Prognosticator — 3 col, 2 row */}
       <BentoCard
-        title="Prognosticator"
+        id="prognosticator"
+        title={PROGNOSTICATOR_CARD.title}
         subtitle={PROGNOSTICATOR_SCREENSHOTS[progSlide].label}
         description={PROGNOSTICATOR_SCREENSHOTS[progSlide].description}
         accentColor={ACCENT}
@@ -186,7 +180,7 @@ export function BentoGrid() {
         fixedDescriptionHeight="7.5rem"
        
        
-        tags={["Electron", "React", "TypeScript", "Node", "Godot", "DMX", "OBS", "Tailwind", "VirtualDJ"]}
+        tags={PROGNOSTICATOR_CARD.tags}
       >
         <div className="flex flex-col gap-3 flex-1">
           <TabletCarousel
@@ -227,25 +221,24 @@ export function BentoGrid() {
 
       {/* hobbit.house — 1 col, 2 row */}
       <BentoCard
-        title="hobbit.house"
+        title={HOBBIT_HOUSE.title}
         description={SUMMARIES.hobbitHouse}
-        href="https://github.com/BigFancyBen/hobbit-ccp"
+        href={HOBBIT_HOUSE.href}
         accentColor={ACCENT}
         rowSpan={2}
         index={1}
        
        
-        tags={["React", "Docker", "Linux", "MQTT"]}
+        tags={HOBBIT_HOUSE.tags}
       >
         <PhoneCarousel screenshots={RADIANCE_SCREENSHOTS} autoPlayInterval={4500} autoPlayDelay={1500} />
       </BentoCard>
 
       {/* Prognosticator's visualizer scenes */}
-      <BentoSection>
-        <h2 className="text-sm font-bold text-white">Prognosticator: visualizer scenes</h2>
+      <BentoSection id="warehouse">
+        <h2 className="text-sm font-bold text-white">{VISUALIZER_SCENES.title}</h2>
         <p className="text-gray-400 text-xs mb-4 mt-1">
-          The lighting rig has a second home. Prognosticator sends its beat grid and DMX output to a Godot
-          visualizer, so every light cue also plays in a venue that does not exist.
+          {VISUALIZER_SCENES.description}
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {[WAREHOUSE_SCENE, SM64_SCENE, MK64_SCENE].map((scene, i) => (
@@ -290,7 +283,7 @@ export function BentoGrid() {
               <Tags tags={TESTQ.tags} />
             </div>
             <div className="mt-auto pt-5">
-              <SectionLink href={TESTQ.repoUrl}>Source on GitHub &rarr;</SectionLink>
+              <SectionLink href={TESTQ_LINK.href}>{`${TESTQ_LINK.label} →`}</SectionLink>
             </div>
           </div>
         </div>
@@ -298,28 +291,28 @@ export function BentoGrid() {
 
       {/* Scrandle + Scranbot row */}
       <BentoCard
-        title="Scrandle"
+        title={SCRANDLE.title}
         description={SUMMARIES.scrandle}
-        href="/scrandle/play"
+        href={SCRANDLE.href}
         accentColor={ACCENT}
         colSpan={2}
         index={2}
        
        
-        tags={["Next.js", "TypeScript", "Tailwind", "Cloudflare R2"]}
+        tags={SCRANDLE.tags}
       >
         <ShotGallery shots={SCRANDLE_SHOTS} accentColor={ACCENT} aspect="16 / 10" autoPlayInterval={4500} />
       </BentoCard>
 
       <BentoCard
-        title="Scranbot"
+        title={SCRANBOT.title}
         description={SUMMARIES.scranbot}
         accentColor={ACCENT}
         colSpan={2}
         index={3}
        
        
-        tags={["Cloudflare Workers", "D1", "R2", "Discord", "TypeScript"]}
+        tags={SCRANBOT.tags}
       >
         <DiscordFeed botName="Scranbot" messages={SCRANBOT_MESSAGES} maxHeight="26rem" />
       </BentoCard>
@@ -328,33 +321,22 @@ export function BentoGrid() {
       <BentoSection>
         <div className="flex flex-col md:flex-row gap-5 md:gap-8">
           <div className="w-full md:w-[38%] flex flex-col">
-            <h2 className="text-lg font-bold text-white">Yut Hut</h2>
+            <h2 className="text-lg font-bold text-white">{YUT_HUT.title}</h2>
             <p className="text-gray-400 text-sm leading-relaxed mt-2">
               {SUMMARIES.yutHut}
             </p>
             <ul className="mt-4 flex flex-col gap-2 text-xs leading-relaxed text-gray-400">
-              <li>
-                <span className="text-white font-medium">Two a week.</span> The first two check-ins count in
-                full, then half, then a fifth. A rest day is written down and never punished.
-              </li>
-              <li>
-                <span className="text-white font-medium">The bot asks.</span> Every morning it posts one
-                question with a Yes and a No, and edits the roll call into the post as people answer.
-              </li>
-              <li>
-                <span className="text-white font-medium">Numbers from the wiki.</span> Monsters, Slayer
-                masters, drop rates and gear come from the OSRS Wiki. Only the session length is tuned.
-              </li>
-              <li>
-                <span className="text-white font-medium">Something to chase.</span> Clue caskets, a pick of
-                three spoils, gear drops, an Achievement Diary, a quest and a group boss each week.
-              </li>
+              {YUT_HUT.features.map((f) => (
+                <li key={f.label}>
+                  <span className="text-white font-medium">{f.label}.</span> {f.text}
+                </li>
+              ))}
             </ul>
             <div className="mt-4">
-              <Tags tags={["Cloudflare Workers", "D1", "R2", "Discord", "Next.js", "TypeScript"]} />
+              <Tags tags={YUT_HUT.tags} />
             </div>
             <div className="mt-auto pt-5">
-              <SectionLink href="/yut-hut">Read the rules &rarr;</SectionLink>
+              <SectionLink href={YUT_HUT.rulesLink.href}>{`${YUT_HUT.rulesLink.label} →`}</SectionLink>
             </div>
           </div>
           <div className="w-full md:w-[62%] flex">
@@ -370,37 +352,37 @@ export function BentoGrid() {
         onMouseLeave={() => setMtgControlledIndex(null)}
       >
         <div className="flex items-center gap-3 mb-1">
-          <h2 className="text-sm font-bold text-white">Magic: The Gathering</h2>
-          <Tags tags={["Next.js", "React", "Vercel"]} />
+          <h2 className="text-sm font-bold text-white">{MTG_GROUP.title}</h2>
+          <Tags tags={MTG_GROUP.tags} />
         </div>
-        <p className="text-gray-400 text-xs mb-4">Tools for Commander players and deck builders</p>
+        <p className="text-gray-400 text-xs mb-4">{MTG_GROUP.tagline}</p>
 
         <div className="flex flex-col md:flex-row gap-4">
           {/* Left — 3 individual MTG cards */}
           <div className="w-full md:w-[30%] flex flex-col gap-4">
             <BentoCard
-              title="MTG Commander Scorekeeper"
+              title={MTG_GROUP.apps[0].title}
               headingLevel={3}
-              description={SUMMARIES.commander}
-              href="/commander"
+              description={MTG_GROUP.apps[0].description}
+              href={MTG_GROUP.apps[0].href}
               accentColor={ACCENT}
               index={4}
               onHover={() => setMtgControlledIndex(1)}
             />
             <BentoCard
-              title="Magic Tutor Helper"
+              title={MTG_GROUP.apps[1].title}
               headingLevel={3}
-              description={SUMMARIES.tutorHelper}
-              href="/tutor-helper"
+              description={MTG_GROUP.apps[1].description}
+              href={MTG_GROUP.apps[1].href}
               accentColor={ACCENT}
               index={5}
               onHover={() => setMtgControlledIndex(0)}
             />
             <BentoCard
-              title="MTG Token Helper"
+              title={MTG_GROUP.apps[2].title}
               headingLevel={3}
-              description={SUMMARIES.tokenHelper}
-              href="/token-helper"
+              description={MTG_GROUP.apps[2].description}
+              href={MTG_GROUP.apps[2].href}
               accentColor={ACCENT}
               index={6}
               onHover={() => setMtgControlledIndex(2)}
@@ -421,15 +403,15 @@ export function BentoGrid() {
 
       {/* FloatWise + Dota row */}
       <BentoCard
-        title="FloatWise"
+        title={FLOATWISE.title}
         description={SUMMARIES.floatwise}
-        href="/floatwise"
+        href={FLOATWISE.href}
         accentColor={ACCENT}
         colSpan={2}
         index={7}
        
        
-        tags={["Next.js", "Leaflet", "Open-Meteo", "USGS"]}
+        tags={FLOATWISE.tags}
       >
         <div className="relative aspect-video w-full overflow-hidden">
           <Image
@@ -443,15 +425,15 @@ export function BentoGrid() {
       </BentoCard>
 
       <BentoCard
-        title="Dota 2 Randomizer"
+        title={DOTA_RANDOMIZER.title}
         description={SUMMARIES.dotaRandomizer}
-        href="/dota-randomizer"
+        href={DOTA_RANDOMIZER.href}
         accentColor={ACCENT}
         colSpan={2}
         index={8}
        
        
-        tags={["Next.js", "Canvas", "OpenDota"]}
+        tags={DOTA_RANDOMIZER.tags}
       >
         <div className="relative aspect-video w-full overflow-hidden">
           <Image
@@ -467,9 +449,9 @@ export function BentoGrid() {
       {/* IRLScape */}
       <div className="md:col-span-2 self-start">
         <BentoCard
-          title="IRLScape"
+          title={IRLSCAPE.title}
           description={SUMMARIES.irlscape}
-          href="https://www.youtube.com/watch?v=gCofVhR5HUQ"
+          href={IRLSCAPE.href}
           accentColor={ACCENT}
           colSpan={2}
           index={9}
