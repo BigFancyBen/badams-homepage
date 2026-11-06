@@ -1,6 +1,8 @@
+import { ParticleField } from "./components/homepage/ParticleField";
 import { BentoGrid } from "./components/homepage/BentoGrid";
+import { HeroSection } from "./components/homepage/HeroSection";
 import type { Metadata, Viewport } from "next";
-import { Museum } from "./components/museum/Museum";
+import { GameSection } from "./components/museum/GameSection";
 import { JsonLd } from "./components/JsonLd";
 import { homeJsonLd } from "./site";
 
@@ -8,21 +10,25 @@ import { homeJsonLd } from "./site";
    of its own would inherit a claim to be the homepage. */
 export const metadata: Metadata = { alternates: { canonical: "/" } };
 
-/* The museum fills the screen edge to edge; its controls pad themselves with
-   env(safe-area-inset-*), which only applies under viewport-fit=cover. */
+/* The game section's poster pads itself with env(safe-area-inset-bottom), which only applies under
+   viewport-fit=cover; the hero pads its top the same way. */
 export const viewport: Viewport = { viewportFit: "cover", themeColor: "#06070a" };
 
 export default function Home() {
   return (
     <div className="min-h-screen relative overflow-hidden">
       <JsonLd data={homeJsonLd()} />
+      <ParticleField />
 
       <main>
-        {/* The 3D museum; the grid below is the same work as plain HTML. */}
-        <Museum />
+        {/* Hero section */}
+        <HeroSection />
+
+        {/* The game version: a full-screen poster that links to /museum (nothing loads here) */}
+        <GameSection />
 
         {/* Same work as plain HTML, for crawlers and no-WebGL visitors */}
-        <div id="catalogue" className="relative z-10 max-w-7xl mx-auto px-[max(1rem,env(safe-area-inset-left))] pt-12 pb-24 scroll-mt-0">
+        <div id="catalogue" className="relative z-10 max-w-7xl mx-auto px-[max(1rem,env(safe-area-inset-left))] pt-12 pb-24">
           <BentoGrid />
         </div>
       </main>

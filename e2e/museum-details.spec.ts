@@ -12,8 +12,7 @@ async function enterStub(page: Page) {
       body: 'window.Engine = class { startGame() { window.museumBridge.onReady(); return Promise.resolve(); } requestQuit() {} };',
     }),
   );
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Game version' }).click();
+  await page.goto('/museum');
   await expect(page.locator('canvas')).toHaveCSS('opacity', '1');
 }
 

@@ -17,23 +17,26 @@ extends Node3D
 ## held pose).
 ##
 ## Modes: TRANS (an eased timed move: a tour glide) and PLAY (holds and free walk).
-## Desktop: WASD strafe/walk, Up/Down walk, Left/Right turn, Shift fast, click an exhibit's wall to
-## fly there. Phones: the touch stick and look finger (touch_controls.gd), tap an exhibit to fly there.
+## Desktop: WASD strafe/walk, Up/Down walk, Left/Right turn, Shift fast, click (locked) on an exhibit's
+## wall at the centre of the view to fly there. Phones: the touch stick and look finger (touch_controls.gd), tap an exhibit to fly there.
 ##
 ## Look (the usual game convention: mouse right turns right, mouse up looks up; yaw grows to the LEFT,
-## so a right turn lowers it). On desktop the mouse looks with no button held, using relative motion
-## (MOUSE_DEG_PER_PX, lightly smoothed) and no pointer lock: the cursor stays visible and free to
-## reach the page's buttons. Holding a button and dragging turns the same way and speed. A press that
-## stays within MOUSE_SLOP is a click (it flies to the exhibit) and is not counted as a look.
-## Where the look goes depends on the camera: during the tour (glides, holds) and at the stage hold it
+## so a right turn lowers it). On desktop the mouse aims only while the pointer is locked: a click on the
+## canvas sets Input.mouse_mode to CAPTURED (on web that asks the browser for pointer lock, inside the
+## click), and the relative motion then aims (MOUSE_DEG_PER_PX, lightly smoothed; yaw unlimited, pitch
+## clamped by the player). Unlocked, the mouse does nothing to the camera: no hover-look, no edge
+## turning. The capturing click never flies anywhere. Esc is taken by the browser, which releases the
+## lock itself; _tick_lock notices (the page's bridge.pointerLocked(), or a lock that never took within
+## LOCK_WAIT_MS), puts the mouse mode back to VISIBLE and stops aiming. Clicking the canvas again
+## re-locks. While locked a click flies to the exhibit under the screen centre (the same wall test as a
+## tap on phones, from the centre of the view). The page also listens for pointerlockchange to show its
+## "Press Esc to show cursor" / "Click to aim" prompts, and exits the lock when the museum scrolls away.
+## Where the aim goes depends on the camera: during the tour (glides, holds) and at the stage hold it
 ## is a bounded *glance* (+-GLANCE_YAW/+-GLANCE_PITCH degrees) added on top of the aimed shot, and it
 ## never pauses the tour; each new glide eases the glance back to zero over GLANCE_RETURN seconds. In
 ## free walk, paused and at the end the mouse turns the player fully (unbounded yaw, +-60ish pitch).
-## Only WASD/arrows (and touch looks) pause the tour. Edge turning: while the cursor rests in the
-## outer EDGE_FRAC of the canvas it keeps yawing that way (eased in, EDGE_MAX_DEG_S at most), so a
-## visitor can turn all the way round without lifting the mouse; it stops when the cursor leaves the
-## canvas or the window loses focus, and is off for reduced motion. Phones: touch_controls.gd turns
-## the same way (drag right turns right, drag up looks up).
+## Only WASD/arrows (and touch looks) pause the tour. Phones: touch_controls.gd turns the same way
+## (drag right turns right, drag up looks up); none of the lock applies there.
 ##
 ## Panel framing: the page's details panel covers the right of the screen on desktop (bridge
 ## rightInset(), CSS px, 0 when closed or absent); while an exhibit is held the view turns slightly
@@ -41,8 +44,8 @@ extends Node3D
 ## pitches the exhibit poses up instead.
 ##
 ## Bridge (window.museumBridge, see museumBridge.ts): time(), visible(), pollCommand() (next / prev
-## / home / browse / tour:pause / tour:play / goto:<id>), reducedMotion(), bottomInset() and rightInset() (CSS px)
-## in; onReady(), onFocus(id) ("" none, "stage"), onTour(state: stage, touring, paused, end),
+## / home / browse / tour:pause / tour:play / goto:<id>), reducedMotion(), pointerLocked() (is the canvas
+## pointer-locked), bottomInset() and rightInset() (CSS px) in; onReady(), onFocus(id) ("" none, "stage"), onTour(state: stage, touring, paused, end),
 ## onIntroDone() (sent with onReady, kept for the page), onWalk(bool), onBuildProgress(f), and the
 ## debugPos string property out.
 
@@ -67,14 +70,12 @@ const PULL_SECONDS := 4.2        # the pull-out from the stage hold to exhibit 1
 const HOLD_BARS := 8.0           # an exhibit is held about this many bars (~15 s, time to read the details), then the move starts on a bar line
 const PANEL_EASE := 6.0          # rate (1/s) the framing shift for the page's right panel eases at (~0.5 s)
 const MOUSE_DEG_PER_PX := 0.15
-const MOUSE_SLOP := 5.0
+const MOUSE_SPIKE := 400.0       # a single motion event this large (px) is a browser glitch on locking, not a look
+const LOCK_WAIT_MS := 1200       # how long a requested pointer lock may take before it is taken as refused
 const MOUSE_SMOOTH := 30.0       # look smoothing rate (1/s); higher is snappier
 const GLANCE_YAW := 30.0         # bounded look while the camera is on a tour shot
 const GLANCE_PITCH := 20.0
 const GLANCE_RETURN := 0.8       # seconds for the glance to ease back to zero on each new glide
-const EDGE_FRAC := 0.06
-const EDGE_MAX_DEG_S := 45.0
-const EDGE_ACCEL := 150.0        # degrees per second squared (ease-in)
 const FOCUS_SETTLE := 0.25
 const DEFAULT_SONG := "after-hours"   # the bundled cue sheet (res://songs/) used without the page or --song
 const SHEET_EASE := 6.0               # rate (1/s) the pitch for the phone bottom sheet eases at
@@ -134,16 +135,14 @@ var _focus_cand_t: float = 0.0
 var _focus_bay: int = -1
 var _walk_idle: float = 1.0
 
-var _mouse_down: bool = false
-var _mouse_moved: bool = false
-var _mouse_press := Vector2.ZERO
+var _mouse_down: bool = false      # a click began while locked (it flies to the exhibit under the centre on release)
 var _mouse_ms: int = 0
+var _capture_click: bool = false   # the press that asked for the lock: its release is not a click on an exhibit
+var _lock_req_ms: int = -1         # when the lock was asked for (ticks), -1 when it was not
+var _locked: bool = false          # the pointer is locked and the mouse aims
 var _look_pending := Vector2.ZERO  # mouse look not yet applied, degrees (x yaw, y pitch; yaw grows to the left)
 var _glance := Vector2.ZERO        # bounded look added on top of a tour shot, degrees (x yaw, y pitch)
 var _glance_return: float = 0.0    # seconds left of the ease back to zero after a new glide began
-var _cursor_in: bool = false       # the cursor is over the canvas (a motion event seen, no exit since)
-var _cursor_x: float = 0.0         # last cursor x in viewport units
-var _edge_vel: float = 0.0         # edge-turn yaw rate, degrees per second (positive turns left)
 var _inset_poll: float = 0.0
 var _dbg_poll: float = 0.0
 
@@ -350,6 +349,7 @@ func _process(delta: float) -> void:
 			_bridge_try = 0.5
 			_try_bridge()
 	clock.poll_visible(delta)
+	_tick_lock()
 	if bridge != null:
 		for _i in 8:
 			var c := str(bridge.pollCommand())
@@ -789,6 +789,8 @@ func _input(ev: InputEvent) -> void:
 		if k.pressed and not k.echo:
 			if k.keycode == KEY_HOME:
 				_go(exhibits.size() + 1, false)
+			elif k.keycode == KEY_ESCAPE and not _mobile and _locked:
+				_release_lock()       # a native run; in the browser Esc never reaches here while locked
 		return
 	if _mobile:
 		if ev is InputEventScreenTouch:
@@ -802,34 +804,66 @@ func _input(ev: InputEvent) -> void:
 		if m.button_index != MOUSE_BUTTON_LEFT:
 			return
 		if m.pressed:
+			if not _locked:
+				# this click asks for the lock (on web the request rides on the click's user gesture) and is
+				# not also a click on an exhibit
+				if _ready_sent:
+					Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+					_lock_req_ms = Time.get_ticks_msec()
+					_capture_click = true
+				return
 			_mouse_down = true
-			_mouse_moved = false
-			_mouse_press = m.position
 			_mouse_ms = Time.get_ticks_msec()
-		elif _mouse_down:
-			_mouse_down = false
-			if not _mouse_moved and Time.get_ticks_msec() - _mouse_ms < 500 and mode == Mode.PLAY:
-				_tap(m.position)
+		else:
+			if _capture_click:
+				_capture_click = false
+				return
+			if _mouse_down:
+				_mouse_down = false
+				if Time.get_ticks_msec() - _mouse_ms < 500 and mode == Mode.PLAY:
+					_tap(get_viewport().get_visible_rect().size * 0.5)
 	elif ev is InputEventMouseMotion:
+		if not _locked:
+			return
 		var mm := ev as InputEventMouseMotion
-		var entered := not _cursor_in
-		_cursor_in = true
-		_cursor_x = mm.position.x
-		if entered:
-			return        # the first motion after entering (or loading) can carry a bogus jump
-		if _mouse_down and not _mouse_moved:
-			if mm.position.distance_to(_mouse_press) <= MOUSE_SLOP:
-				return        # still a click, not a look
-			_mouse_moved = true
+		if absf(mm.relative.x) > MOUSE_SPIKE or absf(mm.relative.y) > MOUSE_SPIKE:
+			return
 		# the usual game direction: right turns right (yaw falls), up looks up
 		_look_pending += Vector2(-mm.relative.x, -mm.relative.y) * MOUSE_DEG_PER_PX
 
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_MOUSE_EXIT or what == NOTIFICATION_WM_WINDOW_FOCUS_OUT or what == NOTIFICATION_APPLICATION_FOCUS_OUT:
-		_cursor_in = false
 		_mouse_down = false
+		_capture_click = false
 		_look_pending = Vector2.ZERO
+
+
+## Keep the lock honest. The browser drops it on its own (Esc, or the page exiting it when the museum
+## scrolls away), and a request can be refused; either way put the mouse mode back so the next click asks
+## again, and stop aiming. Without a page bridge (a desktop run) the mouse mode is the truth.
+func _tick_lock() -> void:
+	if _mobile or _shot:
+		return
+	if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+		_locked = false
+		_lock_req_ms = -1
+		return
+	var held := true
+	if bridge != null and bridge.pointerLocked != null:
+		held = bool(bridge.pointerLocked())
+	if held:
+		_locked = true
+	elif _locked or Time.get_ticks_msec() - _lock_req_ms > LOCK_WAIT_MS:
+		_release_lock()
+
+
+func _release_lock() -> void:
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	_locked = false
+	_lock_req_ms = -1
+	_mouse_down = false
+	_look_pending = Vector2.ZERO
 
 
 ## Frame the art around the page's right-hand details panel: while an exhibit is held (touring or
@@ -860,31 +894,20 @@ func _tick_sheet(delta: float) -> void:
 	_sheet_pitch = lerpf(_sheet_pitch, goal, 1.0 - exp(-delta * SHEET_EASE))
 
 
-## Is the mouse look a bounded glance (tour shots, glides, the stage hold) rather than a real turn?
+## Is the mouse aim a bounded glance (tour shots, glides, the stage hold) rather than a real turn?
 func _glancing() -> bool:
 	return mode == Mode.TRANS or _tour == "stage" or _tour == "touring"
 
 
-## Apply the mouse look and edge turning for this frame. Pending look is eased in (light smoothing).
+## Apply the mouse aim for this frame (only while the pointer is locked; _look_pending is empty
+## otherwise). Pending look is eased in (light smoothing).
 func _tick_look(delta: float) -> void:
 	if _mobile:
 		return
-	var edge_target := 0.0
-	if _cursor_in and not _reduced:
-		var w := maxf(get_viewport().get_visible_rect().size.x, 1.0)
-		var zone := w * EDGE_FRAC
-		var depth := 0.0
-		if _cursor_x < zone:
-			depth = 1.0 - _cursor_x / zone
-			edge_target = 1.0
-		elif _cursor_x > w - zone:
-			depth = 1.0 - (w - _cursor_x) / zone
-			edge_target = -1.0
-		edge_target *= EDGE_MAX_DEG_S * lerpf(0.4, 1.0, clampf(depth, 0.0, 1.0))
-	_edge_vel = move_toward(_edge_vel, edge_target, EDGE_ACCEL * delta)
+	if not _locked:
+		_look_pending = Vector2.ZERO
 	var d := _look_pending * (1.0 - exp(-delta * MOUSE_SMOOTH))
 	_look_pending -= d
-	d.x += _edge_vel * delta
 	if _glancing():
 		if _glance_return > 0.0:
 			_glance *= maxf(_glance_return - delta, 0.0) / _glance_return

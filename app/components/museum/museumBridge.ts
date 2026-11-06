@@ -27,6 +27,8 @@ export interface MuseumBridge {
   onWalk(walking: boolean): void;
   /** True under prefers-reduced-motion: shorter glides, no idle drift. */
   reducedMotion(): boolean;
+  /** True while the canvas holds the pointer lock (desktop mouse aim); Godot asks each frame to notice Esc. */
+  pointerLocked(): boolean;
   /** CSS px from the bottom of the hero that the card and controls cover; Godot keeps its stick above. */
   bottomInset(): number;
   /** CSS px from the right of the hero that the project details panel covers while open (0 on phones and while closed); Godot frames the art in the rest. */
@@ -61,6 +63,7 @@ export function installMuseumBridge(handlers: {
   onWalk(walking: boolean): void;
   bottomInset(): number;
   rightInset(): number;
+  pointerLocked(): boolean;
 }): BridgeHandle {
   const clock = getSongClock();
   const queue: string[] = [];
@@ -78,6 +81,7 @@ export function installMuseumBridge(handlers: {
     onTour: (state) => handlers.onTour(String(state ?? "")),
     onWalk: (walking) => handlers.onWalk(Boolean(walking)),
     reducedMotion: () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+    pointerLocked: () => Boolean(handlers.pointerLocked()),
     bottomInset: () => {
       const v = handlers.bottomInset();
       return Number.isFinite(v) ? v : 0;

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent, type MutableRefObject } from "react";
+import Link from "next/link";
 import { ArrowUpRight, ChevronLeft, ChevronRight, Menu, Pause, Play } from "lucide-react";
 import { EXHIBITS } from "./exhibits";
 import { LeaveModal } from "./LeaveModal";
@@ -121,8 +122,6 @@ export function MuseumOverlay({ focusId, tour, send, insetRef, rightInsetRef }: 
 
   return (
     <div ref={rootRef} className="pointer-events-none absolute inset-0 z-10 flex flex-col justify-end">
-      <h1 className="sr-only">Ben Adams</h1>
-
       {wide && <MuseumDetails exhibitId={detailId} mode="side" onOpenLink={askToLeave} rightInsetRef={rightInsetRef} />}
 
       <div ref={bottomRef} className="relative flex flex-col">
@@ -167,6 +166,16 @@ export function MuseumOverlay({ focusId, tour, send, insetRef, rightInsetRef }: 
                   </li>
                 );
               })}
+              <li className="border-t border-white/15">
+                {/* Same site, so no leave modal; let go of the pointer first so the next page is not stuck locked. */}
+                <Link
+                  href="/"
+                  onClick={() => document.exitPointerLock?.()}
+                  className="flex min-h-11 w-full items-center border-l-2 border-transparent px-4 text-left text-sm text-gray-300 hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-white"
+                >
+                  Back to the homepage
+                </Link>
+              </li>
             </ul>
           </div>
         )}

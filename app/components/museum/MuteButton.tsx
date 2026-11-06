@@ -4,6 +4,10 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Volume2, VolumeX, Loader2 } from "lucide-react";
 import { getSongClock } from "./songClock";
 
+/** The pointer-lock prompt beside the button: locked ("Press Esc to show cursor"), or the unlocked
+    hint ("Click to aim"), which is fading out. Null shows none. */
+export type AimPrompt = "locked" | "hint" | "hint-out" | null;
+
 /** How long the "Turn on the music" callout stays up if nobody taps. */
 const CALLOUT_MS = 6000;
 
@@ -13,7 +17,7 @@ const CALLOUT_MS = 6000;
  * song's beat (a red ring; none under reduced motion) and a callout points at it. The callout goes
  * on a tap on either, or after a few seconds; the pulse stays, fainter, until the first unmute.
  */
-export function MuteButton({ ready = false }: { ready?: boolean }) {
+export function MuteButton({ ready = false, aim = null }: { ready?: boolean; aim?: AimPrompt }) {
   const clock = getSongClock();
   const { audible, loading } = useSyncExternalStore(
     clock.subscribe,
@@ -111,10 +115,11 @@ export function MuteButton({ ready = false }: { ready?: boolean }) {
           <VolumeX className="h-4 w-4" aria-hidden="true" />
         )}
       </button>
-      {/* Always mounted so the live region exists before its text arrives. */}
+      {/* Always mounted so the live region exists before its text arrives. The music callout is the
+          first row, level with the button; the aim prompt takes that row alone, or sits under the callout. */}
       <div
         role="status"
-        className="pointer-events-none fixed z-50 flex h-11 items-center"
+        className="pointer-events-none fixed z-50 flex flex-col items-start"
         style={{
           top: inset.top,
           left: "calc(max(1rem, env(safe-area-inset-left)) + 2.75rem + 0.625rem)",
@@ -122,18 +127,32 @@ export function MuteButton({ ready = false }: { ready?: boolean }) {
         }}
       >
         {callout && (
-          <div
-            onClick={() => {
-              setDismissed(true);
-              void clock.toggle();
-            }}
-            className="pointer-events-auto relative cursor-pointer border border-white/25 bg-black/85 px-3 py-2 text-xs font-medium tracking-wide text-white backdrop-blur"
-          >
-            <span
-              aria-hidden="true"
-              className="absolute -left-[5px] top-1/2 h-2 w-2 -translate-y-1/2 rotate-45 border-b border-l border-white/25 bg-black"
-            />
-            Turn on the music
+          <div className="flex h-11 items-center">
+            <div
+              onClick={() => {
+                setDismissed(true);
+                void clock.toggle();
+              }}
+              className="pointer-events-auto relative cursor-pointer border border-white/25 bg-black/85 px-3 py-2 text-xs font-medium tracking-wide text-white backdrop-blur"
+            >
+              <span
+                aria-hidden="true"
+                className="absolute -left-[5px] top-1/2 h-2 w-2 -translate-y-1/2 rotate-45 border-b border-l border-white/25 bg-black"
+              />
+              Turn on the music
+            </div>
+          </div>
+        )}
+        {aim && (
+          <div className={`flex items-center ${callout ? "mt-1" : "h-11"}`}>
+            <div
+              data-aim={aim}
+              className={`border px-3 py-2 text-xs tracking-wide backdrop-blur transition-opacity duration-700 ${
+                aim === "locked" ? "border-white/25 bg-black/85 font-medium text-white" : "border-white/15 bg-black/60 text-gray-300"
+              } ${aim === "hint-out" ? "opacity-0" : "opacity-100"}`}
+            >
+              {aim === "locked" ? "Press Esc to show cursor" : "Click to aim"}
+            </div>
           </div>
         )}
       </div>

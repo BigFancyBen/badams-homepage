@@ -5,7 +5,7 @@ import { ENGINE_BASE, ENGINE_BYTES_TOTAL, ENGINE_SCRIPT } from "./constants";
 import { installEngineFetch } from "./engineLoader";
 import { installMuseumBridge, type BridgeHandle, type MuseumCommand, type TourState } from "./museumBridge";
 import { MuseumOverlay } from "./MuseumOverlay";
-import { MuteButton } from "./MuteButton";
+import { MuteButton, type AimPrompt } from "./MuteButton";
 import { getSongClock } from "./songClock";
 import { chooseSong } from "./songs";
 import { Poster, type LoadPhase, type PosterStatus } from "./Poster";
@@ -79,8 +79,9 @@ export function Museum() {
     startedRef.current = true;
     progressAtRef.current = performance.now();
     setStatus("loading");
-    /* A ~2.5 MB side load, not counted in the bar: the song is ready when the visitor unmutes. */
-    getSongClock().preload();
+    /* A ~2.5 MB side load, not counted in the bar. Only the bytes: decoding needs an AudioContext,
+       which needs a gesture, so that waits for the first unmute. */
+    getSongClock().prefetch();
     try {
       if (!hasWebGL2()) throw new Error("no WebGL2");
       bridgeRef.current ??= installMuseumBridge({
@@ -100,6 +101,7 @@ export function Museum() {
         onIntroDone: () => {},
         onTour: (state) => setTour(state as TourState),
         onWalk: () => {},
+        pointerLocked: () => document.pointerLockElement === canvasRef.current,
         bottomInset: () => insetRef.current(),
         rightInset: () => rightInsetRef.current(),
       });
@@ -162,13 +164,15 @@ export function Museum() {
     getSongClock().setSong(chooseSong());
   }, []);
 
-  /* Never auto-starts: the visitor opts in to the download. */
+  /* The visitor chose the game on the homepage, so the download starts as this page opens. */
   useEffect(() => {
     if (!hasWebGL2()) {
       setFailDetail("no WebGL2");
       setStatus("failed");
+      return;
     }
-  }, []);
+    void start();
+  }, [start]);
 
   /* Errors the engine throws outside the promises we hold (wasm OOM, audio
      setup) still say why a load died; keep the last one for ?museumdebug. */
@@ -184,15 +188,37 @@ export function Museum() {
     };
   }, [status]);
 
-  useEffect(
-    () => () => {
-      engineRef.current?.requestQuit();
-      bridgeRef.current?.dispose();
-    },
-    [],
-  );
+  /* Leaving the page quits the engine and lets go of the pointer. The teardown waits a tick so a
+     development double mount (mount, unmount, mount) does not kill the engine it just started. */
+  const mountedRef = useRef(false);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (document.pointerLockElement) document.exitPointerLock();
+      window.setTimeout(() => {
+        if (mountedRef.current) return;
+        engineRef.current?.requestQuit();
+        bridgeRef.current?.dispose();
+      }, 0);
+    };
+  }, []);
 
-  /* Tell Godot when the hero is off screen so it can drop to a trickle of frames. */
+  /* Pointer lock (desktop mouse aim, started by a click in Godot): the page shows a prompt for it. */
+  const [locked, setLocked] = useState(false);
+  useEffect(() => {
+    const onChange = () => setLocked(document.pointerLockElement === canvasRef.current);
+    document.addEventListener("pointerlockchange", onChange);
+    return () => document.removeEventListener("pointerlockchange", onChange);
+  }, []);
+  const [desktop, setDesktop] = useState(false);
+  useEffect(() => {
+    setDesktop(!window.matchMedia("(pointer: coarse)").matches);
+  }, []);
+  /* "Click to aim" shows for a few seconds each time the game is ready and the pointer is free. */
+  const [hint, setHint] = useState<"in" | "out" | null>(null);
+
+  /* Tell Godot when the page is off screen so it can drop to a trickle of frames. */
   const sectionRef = useRef<HTMLElement>(null);
   useEffect(() => {
     const el = sectionRef.current;
@@ -255,6 +281,20 @@ export function Museum() {
     if (cmd === "browse") setTour("touring");
   }, []);
   const ready = status === "ready";
+  useEffect(() => {
+    if (!ready || !desktop || locked) {
+      setHint(null);
+      return;
+    }
+    setHint("in");
+    const fade = window.setTimeout(() => setHint("out"), 4000);
+    const gone = window.setTimeout(() => setHint(null), 4800);
+    return () => {
+      window.clearTimeout(fade);
+      window.clearTimeout(gone);
+    };
+  }, [ready, desktop, locked]);
+  const aim: AimPrompt = !ready || !desktop ? null : locked ? "locked" : hint === "in" ? "hint" : hint === "out" ? "hint-out" : null;
 
   return (
     <section ref={sectionRef} id="museum" aria-label="Museum after hours" className="relative h-svh w-full overflow-hidden overscroll-x-none bg-[#06070a]">
@@ -267,7 +307,7 @@ export function Museum() {
         style={{ touchAction: ready ? "none" : "pan-y", WebkitTouchCallout: "none", WebkitTapHighlightColor: "transparent", userSelect: "none" }}
       />
 
-      <MuteButton ready={ready} />
+      <MuteButton ready={ready} aim={aim} />
 
       {ready && <MuseumOverlay focusId={focusId} tour={tour} send={send} insetRef={insetRef} rightInsetRef={rightInsetRef} />}
       <Poster
@@ -275,8 +315,6 @@ export function Museum() {
         detail={failDetail}
         progress={progress}
         phase={phase}
-        onEnter={() => void start()}
-        onCancel={() => setStatus("manual")}
         onReload={() => window.location.reload()}
       />
     </section>

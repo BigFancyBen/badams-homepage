@@ -54,6 +54,8 @@ export class SongClock {
   private source: AudioBufferSourceNode | null = null;
   private buffer: Promise<AudioBuffer> | null = null;
   private bufferReady = false;
+  /** The mp3 bytes fetched ahead of any gesture; decoded (which needs the AudioContext) at the first unmute. */
+  private bytes: Promise<ArrayBuffer> | null = null;
   private keepAlive: HTMLAudioElement | null = null;
   /** Bumped by every toggle so a stale async unmute can tell it was overtaken. */
   private token = 0;
@@ -77,6 +79,7 @@ export class SongClock {
     if (song.id === this.song.id) return;
     this.song = song;
     this.buffer = null;
+    this.bytes = null;
     this.bufferReady = false;
     this.base = 0;
     this.ref = performance.now() / 1000;
@@ -195,14 +198,18 @@ export class SongClock {
     return ctx;
   }
 
+  private fetchBytes(): Promise<ArrayBuffer> {
+    return fetch(songUrl(this.song.id)).then((r) => {
+      if (!r.ok) throw new Error(`song ${r.status}`);
+      return r.arrayBuffer();
+    });
+  }
+
   private fetchBuffer(ctx: AudioContext): Promise<AudioBuffer> {
     this.bufferReady = false;
-    const buffer = fetch(songUrl(this.song.id))
-      .then((r) => {
-        if (!r.ok) throw new Error(`song ${r.status}`);
-        return r.arrayBuffer();
-      })
-      .then((data) => ctx.decodeAudioData(data));
+    const raw = this.bytes ?? this.fetchBytes();
+    this.bytes = null;
+    const buffer = raw.then((data) => ctx.decodeAudioData(data));
     buffer.then(
       () => {
         if (this.buffer === buffer) this.bufferReady = true;
@@ -212,6 +219,20 @@ export class SongClock {
       },
     );
     return buffer;
+  }
+
+  /**
+   * Fetch the chosen song's bytes ahead of the first unmute, with no AudioContext (that needs a
+   * gesture, so decoding waits for the unmute). Starts no playback and leaves mute alone.
+   */
+  prefetch(): void {
+    if (this.buffer || this.bytes || typeof window === "undefined") return;
+    const bytes = this.fetchBytes();
+    this.bytes = bytes;
+    bytes.catch(() => {
+      /* The first unmute fetches it again. */
+      if (this.bytes === bytes) this.bytes = null;
+    });
   }
 
   /**

@@ -7,46 +7,59 @@ const FRAMES = process.env.MUSEUM_FRAMES_DIR ?? 'test-results/frames';
 const CLOSED = /couldn't start on this device/;
 
 /* None of these wait for the engine: it may be absent (404) or still booting. */
-test.describe('homepage museum', () => {
-  test('renders the museum section and the catalogue', async ({ page }) => {
-    await page.goto('/');
+test.describe('museum page', () => {
+  test('is the full-screen game, with one h1 and no catalogue', async ({ page }) => {
+    await page.goto('/museum');
     await expect(page.locator('section#museum')).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Ben Adams', level: 1 })).toBeVisible();
-    const catalogue = page.locator('#catalogue');
-    await expect(catalogue).toBeAttached();
-    await expect(catalogue.getByRole('heading', { name: 'Oathkeep' })).toBeAttached();
-    await expect(page.locator('#oathkeep')).toBeAttached();
-    await expect(page.locator('#prognosticator')).toBeAttached();
-    await expect(page.locator('#warehouse')).toBeAttached();
+    await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Ben Adams: game version');
+    await expect(page.locator('#catalogue')).toHaveCount(0);
+    await expect(page).toHaveTitle(/^Game version \|/);
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', /\/museum$/);
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', /noindex/);
+    const box = (await page.locator('section#museum').boundingBox())!;
+    const vp = page.viewportSize()!;
+    expect(box.width).toBeGreaterThanOrEqual(vp.width - 1);
+    expect(box.height).toBeGreaterThanOrEqual(vp.height - 120);
   });
 
   test('the page carries no overlay copy: no tagline, hints, counter, catalogue heading or resume link', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/museum');
     const body = page.locator('body');
     await expect(body).not.toContainText('Games, light shows and tools');
     await expect(body).not.toContainText(/Tap an exhibit|drag to look|WASD or arrow|Left thumb/);
     await expect(body).not.toContainText(/\d+ \/ 13/);
     await expect(page.getByRole('heading', { name: 'Catalogue' })).toHaveCount(0);
-    await expect(page.getByRole('link', { name: /^Catalogue/ })).toHaveCount(0);
     await expect(page.getByRole('link', { name: 'Resume' })).toHaveCount(0);
   });
 
   test('music starts muted and the button says so', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/museum');
     const mute = page.getByRole('button', { name: 'Play music' });
     await expect(mute).toBeVisible();
     await expect(mute).toHaveAttribute('aria-pressed', 'false');
   });
 
-  test('offers the call to action and does not fetch the engine until clicked', async ({ page }) => {
+  test('the engine download starts on arrival, with no click', async ({ page }) => {
     const requested: string[] = [];
     page.on('request', (r) => {
       if (/\/museum\/[0-9a-f]+\/museum\./.test(r.url())) requested.push(r.url());
     });
-    await page.goto('/');
-    await expect(page.getByRole('button', { name: 'Game version' })).toBeVisible();
-    await page.waitForTimeout(1000);
-    expect(requested).toEqual([]);
+    await page.route('**/museum/*/museum.*', (route) => route.fulfill({ status: 404, body: 'nope' }));
+    await page.goto('/museum');
+    await expect.poll(() => requested.length, { timeout: 10_000 }).toBeGreaterThan(0);
+    await expect(page.getByRole('button', { name: 'Game version' })).toHaveCount(0);
+  });
+
+  test('the song bytes are fetched on arrival, but nothing plays', async ({ page }) => {
+    const songs: string[] = [];
+    page.on('request', (r) => {
+      if (/\/songs\/[\w-]+\.mp3/.test(r.url())) songs.push(r.url());
+    });
+    await page.route('**/museum/*/museum.*', (route) => route.fulfill({ status: 404, body: 'nope' }));
+    await page.goto('/museum');
+    await expect.poll(() => songs.length, { timeout: 15_000 }).toBeGreaterThan(0);
+    await expect(page.getByRole('button', { name: 'Play music' })).toHaveAttribute('aria-pressed', 'false');
   });
 
   test('a failed engine download is tried again, not given up on', async ({ page }) => {
@@ -56,17 +69,16 @@ test.describe('homepage museum', () => {
       if (wasmRequests === 1) return route.abort('connectionreset');
       return route.fulfill({ path: join(process.cwd(), 'public', 'museum', 'engine', 'museum.wasm'), contentType: 'application/wasm' });
     });
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Game version' }).click();
+    await page.goto('/museum');
     await expect.poll(() => wasmRequests, { timeout: 15_000 }).toBeGreaterThanOrEqual(2);
     await expect(page.getByText(CLOSED)).toBeHidden();
   });
 
-  test('clicking with the engine missing shows the closed sign', async ({ page }) => {
+  test('with the engine missing the closed sign shows, with a way back', async ({ page }) => {
     await page.route('**/museum/*/museum.*', (route) => route.fulfill({ status: 404, body: 'nope' }));
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Game version' }).click();
+    await page.goto('/museum');
     await expect(page.getByText(CLOSED)).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Back to the homepage' })).toHaveAttribute('href', '/');
   });
 });
 
@@ -76,7 +88,7 @@ test.describe('museum on phones', () => {
   });
 
   test('has no horizontal overflow and blocks swipe-back', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/museum');
     await expect(page.locator('section#museum')).toBeVisible();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(overflow).toBeLessThanOrEqual(0);
@@ -84,10 +96,9 @@ test.describe('museum on phones', () => {
     await expect(page.locator('html')).toHaveCSS('overscroll-behavior-x', 'none');
   });
 
-  test('every control on the poster and the mute button is at least 44px', async ({ page }) => {
-    await page.goto('/');
+  test('the mute button is at least 44px', async ({ page }) => {
+    await page.goto('/museum');
     const targets = [
-      page.getByRole('button', { name: 'Game version' }),
       page.getByRole('button', { name: 'Play music' }),
     ];
     for (const t of targets) {
@@ -105,20 +116,20 @@ test.describe('museum on phones', () => {
         return (orig as any).call(this, type, ...rest);
       } as typeof orig;
     });
-    await page.goto('/');
+    await page.goto('/museum');
     await expect(page.getByText(CLOSED)).toBeVisible();
   });
 
-  test('loading shows progress and can be cancelled', async ({ page }) => {
+  test('loading shows progress, and Cancel goes back to the homepage', async ({ page }) => {
     await page.route('**/museum/*/museum.js*', async (route) => {
       await new Promise((r) => setTimeout(r, 4000));
       await route.continue();
     });
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Game version' }).click();
+    await page.goto('/museum');
     await expect(page.getByText(/Downloading, about \d+ MB/)).toBeVisible();
-    await page.getByRole('button', { name: 'Cancel' }).click();
-    await expect(page.getByRole('button', { name: 'Game version' })).toBeVisible();
+    await page.getByRole('link', { name: 'Cancel' }).click();
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   });
 
   test('boots the engine, caps the render size, and recovers from a lost GL context', async ({ page }, info) => {
@@ -131,8 +142,7 @@ test.describe('museum on phones', () => {
         contentType: name.endsWith('.wasm') ? 'application/wasm' : undefined,
       });
     });
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Game version' }).click();
+    await page.goto('/museum');
     const closed = page.getByText(CLOSED);
     await expect(page.locator('canvas').or(closed)).toHaveCSS('opacity', '1', { timeout: 480_000 });
     test.skip(await closed.isVisible(), 'engine did not boot headless here (no WebGL2 or no engine export)');
@@ -165,6 +175,11 @@ async function readPos(page: Page) {
   return { x, y, z, yaw, mode };
 }
 
+async function readGlance(page: Page) {
+  const raw = await page.evaluate(() => (window.museumBridge as unknown as { debugGlance?: string }).debugGlance ?? '');
+  return raw.split(',').map(Number);
+}
+
 test.describe('museum walk', () => {
   test('opens on the stage hold, W walks, the stick walks on phones', async ({ page }, info) => {
     test.setTimeout(540_000);
@@ -175,8 +190,7 @@ test.describe('museum walk', () => {
         contentType: name.endsWith('.wasm') ? 'application/wasm' : undefined,
       });
     });
-    await page.goto('/');
-    await page.getByRole('button', { name: 'Game version' }).click();
+    await page.goto('/museum');
     const closed = page.getByText(CLOSED);
     await expect(page.locator('canvas').or(closed)).toHaveCSS('opacity', '1', { timeout: 480_000 });
     test.skip(await closed.isVisible(), 'engine did not boot headless here (no WebGL2 or no engine export)');
@@ -189,36 +203,57 @@ test.describe('museum walk', () => {
     expect(start.y).toBeCloseTo(1.65, 1);
 
     if (!phone) {
-      /* Click the middle of the view (no exhibit there) so the canvas has keyboard focus. */
+      const box = (await page.locator('canvas').boundingBox())!;
+      const my = box.y + box.height * 0.4;
+      /* Unlocked, the mouse does nothing to the camera: no hover-look, no edge turning. */
+      const glance0 = await readGlance(page);
+      for (const fx of [0.01, 0.3, 0.7, 0.99, 0.5]) {
+        await page.mouse.move(box.x + box.width * fx, my);
+        await page.waitForTimeout(400);
+      }
+      await page.waitForTimeout(1500);
+      expect(await readGlance(page)).toEqual(glance0);
+      expect(glance0).toEqual([0, 0]);
+      /* Click the middle of the view: the click asks for the pointer lock (and the canvas gets keyboard
+         focus); it must not fly to an exhibit. */
       await page.locator('canvas').click();
       await page.keyboard.down('w');
       /* SwiftShader renders a few frames a second, so hold W until the camera has visibly moved. */
       await expect.poll(async () => start.z - (await readPos(page))!.z, { timeout: 20_000 }).toBeGreaterThan(0.5);
       await page.keyboard.up('w');
       await page.waitForTimeout(600);
-      /* The mouse looks with no button held, the usual game way. Yaw grows to the left (forward is
-         (-sin yaw, -cos yaw)), so moving the mouse right turns the view right and LOWERS the yaw. */
-      const box = (await page.locator('canvas').boundingBox())!;
-      const my = box.y + box.height * 0.4;
-      /* SwiftShader runs a few frames a second and debugPos lags, so let each move settle before reading. */
-      await page.mouse.move(box.x + box.width * 0.4, my);
-      await page.waitForTimeout(3000);
-      const yawM0 = (await readPos(page))!.yaw;
-      for (let i = 1; i <= 12; i++) {
-        await page.mouse.move(box.x + box.width * 0.4 + i * 12, my);
-        await page.waitForTimeout(50);
+      const locked = await page.evaluate(() => document.pointerLockElement === document.querySelector('canvas'));
+      info.annotations.push({ type: 'pointer-lock', description: locked ? 'real lock granted' : 'lock NOT granted by this browser' });
+      if (locked) {
+        /* Locked: relative motion aims. Yaw grows to the left (forward is (-sin yaw, -cos yaw)), so moving
+           the mouse right turns the view right and LOWERS the yaw. W pauses the tour, so this is a full turn. */
+        const yawM0 = (await readPos(page))!.yaw;
+        for (let i = 1; i <= 12; i++) {
+          await page.mouse.move(box.x + box.width * 0.5 + i * 12, my);
+          await page.waitForTimeout(50);
+        }
+        await page.waitForTimeout(3000);
+        expect(yawM0 - (await readPos(page))!.yaw).toBeGreaterThan(8);
+        const yawM1 = (await readPos(page))!.yaw;
+        for (let i = 1; i <= 12; i++) {
+          await page.mouse.move(box.x + box.width * 0.5 + 144 - i * 24, my);
+          await page.waitForTimeout(50);
+        }
+        await page.waitForTimeout(3000);
+        expect((await readPos(page))!.yaw - yawM1).toBeGreaterThan(8);
+        /* Releasing the lock (what Esc does) stops the aiming, and the prompt changes. */
+        await expect(page.getByText('Press Esc to show cursor')).toBeVisible();
+        await page.evaluate(() => document.exitPointerLock());
+        await expect(page.getByText('Press Esc to show cursor')).toHaveCount(0);
+        await page.waitForTimeout(1500);
+        const yawR = (await readPos(page))!.yaw;
+        for (let i = 1; i <= 12; i++) {
+          await page.mouse.move(box.x + box.width * 0.3 + i * 12, my);
+          await page.waitForTimeout(50);
+        }
+        await page.waitForTimeout(2000);
+        expect(Math.abs((await readPos(page))!.yaw - yawR)).toBeLessThan(1);
       }
-      await page.waitForTimeout(3000);
-      expect(yawM0 - (await readPos(page))!.yaw).toBeGreaterThan(8);
-      const yawM1 = (await readPos(page))!.yaw;
-      for (let i = 1; i <= 12; i++) {
-        await page.mouse.move(box.x + box.width * 0.4 + 144 - i * 24, my);
-        await page.waitForTimeout(50);
-      }
-      await page.waitForTimeout(3000);
-      expect((await readPos(page))!.yaw - yawM1).toBeGreaterThan(8);
-      await page.mouse.move(box.x + box.width * 0.5, my);
-      await page.waitForTimeout(3000);
       /* Left arrow turns the view left. */
       const yaw0 = (await readPos(page))!.yaw;
       await page.keyboard.down('ArrowLeft');
@@ -278,9 +313,8 @@ test.describe('engine cache', () => {
     });
     const visit = async () => {
       const page = await context.newPage();
-      await page.goto('/');
+      await page.goto('/museum');
       const t0 = Date.now();
-      await page.getByRole('button', { name: 'Game version' }).click();
       const closed = page.getByText(CLOSED);
       await expect(page.locator('canvas').or(closed)).toHaveCSS('opacity', '1', { timeout: 480_000 });
       const ms = Date.now() - t0;
@@ -312,8 +346,7 @@ async function enterStub(page: Page) {
       body: 'window.Engine = class { startGame() { window.museumBridge.onReady(); return Promise.resolve(); } requestQuit() {} };',
     }),
   );
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Game version' }).click();
+  await page.goto('/museum');
   await expect(page.locator('canvas')).toHaveCSS('opacity', '1');
 }
 
@@ -411,7 +444,7 @@ test.describe('museum overlay (stub engine)', () => {
     const menu = page.getByRole('dialog', { name: 'Projects' });
     await menu.getByRole('button').first().focus();
     await page.keyboard.press('Shift+Tab');
-    await expect(menu.getByRole('button').last()).toBeFocused();
+    await expect(menu.getByRole('link', { name: 'Back to the homepage' })).toBeFocused();
     await page.keyboard.press('Tab');
     await expect(menu.getByRole('button').first()).toBeFocused();
   });
@@ -499,8 +532,12 @@ test.describe('museum overlay (stub engine)', () => {
   });
 
   test('the callout does not show before the game is ready', async ({ page }) => {
-    await page.goto('/');
-    await expect(page.getByRole('button', { name: 'Game version' })).toBeVisible();
+    await page.route('**/museum/*/museum.js*', async (route) => {
+      await new Promise((r) => setTimeout(r, 3000));
+      await route.fulfill({ status: 404, body: 'nope' });
+    });
+    await page.goto('/museum');
+    await expect(page.getByRole('progressbar')).toBeVisible();
     await expect(page.getByText('Turn on the music')).toHaveCount(0);
   });
 
@@ -521,5 +558,76 @@ test.describe('museum overlay (stub engine)', () => {
     const menuInset = await page.evaluate(() => window.museumBridge!.bottomInset());
     expect(barInset).toBeGreaterThanOrEqual(44);
     if (info.project.name !== 'chromium') expect(menuInset).toBeGreaterThan(barInset + 200);
+  });
+});
+
+/* Pointer lock cannot always be granted to a test browser, so these fake document.pointerLockElement and
+   fire pointerlockchange, which is all the page listens to. The real lock path is checked in 'museum walk'. */
+const setLock = (page: Page, on: boolean) =>
+  page.evaluate((v) => {
+    const canvas = document.querySelector('canvas');
+    Object.defineProperty(document, 'pointerLockElement', { configurable: true, get: () => (v ? canvas : null) });
+    document.dispatchEvent(new Event('pointerlockchange'));
+  }, on);
+
+test.describe('pointer-lock prompts (stub engine)', () => {
+  test('desktop: "Click to aim" fades after a few seconds and returns on release; Esc prompt while locked', async ({ page }, info) => {
+    test.skip(info.project.name !== 'chromium', 'desktop only');
+    mkdirSync(FRAMES, { recursive: true });
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await enterStub(page);
+    const hint = page.getByText('Click to aim');
+    const esc = page.getByText('Press Esc to show cursor');
+    await expect(hint).toBeVisible();
+    await expect(esc).toHaveCount(0);
+    /* It sits right of the mute button and, while the music callout is up, under it rather than on it. */
+    const callout = page.getByText('Turn on the music');
+    await expect(callout).toBeVisible();
+    const mb = (await page.getByRole('button', { name: 'Play music' }).boundingBox())!;
+    const hb = (await hint.boundingBox())!;
+    const cb = (await callout.boundingBox())!;
+    expect(hb.x).toBeGreaterThanOrEqual(mb.x + mb.width);
+    expect(hb.y).toBeGreaterThanOrEqual(cb.y + cb.height - 1);
+    await expect(hint).toBeHidden({ timeout: 8000 });
+
+    await setLock(page, true);
+    await expect(esc).toBeVisible();
+    await expect(hint).toHaveCount(0);
+    await page.screenshot({ path: join(FRAMES, `${info.project.name}-esc-prompt.png`) });
+    await setLock(page, false);
+    await expect(esc).toHaveCount(0);
+    await expect(hint).toBeVisible();
+    await page.screenshot({ path: join(FRAMES, `${info.project.name}-click-to-aim.png`) });
+    await expect(hint).toBeHidden({ timeout: 8000 });
+  });
+
+  test('the bridge reports the lock state to Godot', async ({ page }, info) => {
+    test.skip(info.project.name !== 'chromium', 'desktop only');
+    await enterStub(page);
+    expect(await page.evaluate(() => window.museumBridge!.pointerLocked())).toBe(false);
+    await setLock(page, true);
+    expect(await page.evaluate(() => window.museumBridge!.pointerLocked())).toBe(true);
+  });
+
+  test('phones: neither prompt is ever shown', async ({ page }, info) => {
+    test.skip(info.project.name === 'chromium', 'phone projects only');
+    await enterStub(page);
+    await page.waitForTimeout(1200);
+    await expect(page.getByText('Click to aim')).toHaveCount(0);
+    await setLock(page, true);
+    await page.waitForTimeout(300);
+    await expect(page.getByText('Press Esc to show cursor')).toHaveCount(0);
+  });
+
+  test('the menu ends with a link back to the homepage, which lets go of the pointer', async ({ page }) => {
+    await enterStub(page);
+    await tour(page, 'touring');
+    await focus(page, 'scrandle');
+    await page.getByRole('button', { name: 'Project menu' }).click();
+    const back = page.getByRole('dialog', { name: 'Projects' }).getByRole('link', { name: 'Back to the homepage' });
+    await expect(back).toHaveAttribute('href', '/');
+    await back.click();
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('benadams.dev');
   });
 });
