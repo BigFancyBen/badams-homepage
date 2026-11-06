@@ -1,8 +1,20 @@
 import { getSongClock } from "./songClock";
 import { getSong } from "./songs";
 
-/** goto:stage flies to the stage hold, goto:entrance to the end-of-tour view of the marquee, goto:<id> to an exhibit. */
-export type MuseumCommand = "next" | "prev" | "home" | "browse" | "tour:pause" | "tour:play" | "goto:stage" | "goto:entrance" | `goto:${string}`;
+/** goto:stage flies to the stage hold, goto:entrance to the end-of-tour view of the marquee, goto:<id> to an exhibit.
+    mode:scroll (the default) moves between the views by scrolling; mode:free walks freely (WASD, the stick, pointer lock). */
+export type MuseumCommand =
+  | "next"
+  | "prev"
+  | "home"
+  | "browse"
+  | "tour:pause"
+  | "tour:play"
+  | "mode:scroll"
+  | "mode:free"
+  | "goto:stage"
+  | "goto:entrance"
+  | `goto:${string}`;
 
 /** What the tour is doing: stage (holding from the first frame, show Browse projects), touring, paused, end (at the marquee). */
 export type TourState = "stage" | "touring" | "paused" | "end";
@@ -13,6 +25,10 @@ export interface MuseumBridge {
   /** This visit's song as its cue sheet JSON (museum/songs/<id>.json): tempo, loop and sections. */
   songCues(): string;
   pollCommand(): string;
+  /** CSS px scrolled (wheel, trackpad, swipes) since Godot last asked; positive moves on toward the entrance. */
+  scrollDelta(): number;
+  /** True while a finger is down on the canvas or the wheel turned in the last moment: a gesture still going, so Godot does not snap yet. */
+  scrollHeld(): boolean;
   /** False while the hero is scrolled away or the tab is hidden; Godot throttles. */
   visible(): boolean;
   onFocus(id: string): void;
@@ -64,6 +80,8 @@ export function installMuseumBridge(handlers: {
   bottomInset(): number;
   rightInset(): number;
   pointerLocked(): boolean;
+  scrollDelta(): number;
+  scrollHeld(): boolean;
 }): BridgeHandle {
   const clock = getSongClock();
   const queue: string[] = [];
@@ -73,6 +91,11 @@ export function installMuseumBridge(handlers: {
     audible: () => clock.getState().audible,
     songCues: () => JSON.stringify(getSong()),
     pollCommand: () => queue.shift() ?? "",
+    scrollDelta: () => {
+      const v = handlers.scrollDelta();
+      return Number.isFinite(v) ? v : 0;
+    },
+    scrollHeld: () => Boolean(handlers.scrollHeld()),
     visible: () => onScreen && document.visibilityState === "visible",
     onFocus: (id) => handlers.onFocus(String(id ?? "")),
     onReady: () => handlers.onReady(),

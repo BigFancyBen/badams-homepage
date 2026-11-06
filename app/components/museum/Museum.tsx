@@ -9,6 +9,7 @@ import { MuteButton, type AimPrompt } from "./MuteButton";
 import { getSongClock } from "./songClock";
 import { chooseSong } from "./songs";
 import { Poster, type LoadPhase, type PosterStatus } from "./Poster";
+import { attachScrollInput, type ScrollInput } from "./scrollInput";
 
 /* The Engine class comes from the exported museum.js, which is a plain script. */
 interface GodotEngine {
@@ -58,8 +59,6 @@ export function Museum() {
   const [progress, setProgress] = useState(0);
   const [phase, setPhase] = useState<LoadPhase>("download");
   const receivedRef = useRef<Record<string, number>>({});
-  /* The engine cannot abort a download, so Cancel only takes the visitor back to
-     the poster; entering again picks the same load up where it got to. */
   const readyRef = useRef(false);
   const [focusId, setFocusId] = useState("");
   const [tour, setTour] = useState<TourState | "">("");
@@ -70,6 +69,11 @@ export function Museum() {
   /* When the load last moved (a download chunk, or a step of the hall's build). A
      failure that nothing reports would otherwise leave the bar sitting there forever. */
   const progressAtRef = useRef(0);
+  /* Scrolling moves between the views (the default); free roam walks instead. */
+  const [free, setFree] = useState(false);
+  const freeRef = useRef(false);
+  const readyStateRef = useRef(false);
+  const scrollRef = useRef<ScrollInput | null>(null);
 
   const start = useCallback(async () => {
     if (startedRef.current) {
@@ -102,6 +106,8 @@ export function Museum() {
         onTour: (state) => setTour(state as TourState),
         onWalk: () => {},
         pointerLocked: () => document.pointerLockElement === canvasRef.current,
+        scrollDelta: () => scrollRef.current?.take() ?? 0,
+        scrollHeld: () => scrollRef.current?.held() ?? false,
         bottomInset: () => insetRef.current(),
         rightInset: () => rightInsetRef.current(),
       });
@@ -204,7 +210,19 @@ export function Museum() {
     };
   }, []);
 
-  /* Pointer lock (desktop mouse aim, started by a click in Godot): the page shows a prompt for it. */
+  /* The wheel and swipes on the canvas scroll through the museum while it is ready and not in free roam. */
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const input = attachScrollInput(canvas, () => readyStateRef.current && !freeRef.current);
+    scrollRef.current = input;
+    return () => {
+      input.dispose();
+      scrollRef.current = null;
+    };
+  }, []);
+
+  /* Pointer lock (desktop mouse aim in free roam, started by a click in Godot): the page shows a prompt for it. */
   const [locked, setLocked] = useState(false);
   useEffect(() => {
     const onChange = () => setLocked(document.pointerLockElement === canvasRef.current);
@@ -282,7 +300,19 @@ export function Museum() {
   }, []);
   const ready = status === "ready";
   useEffect(() => {
-    if (!ready || !desktop || locked) {
+    readyStateRef.current = ready;
+  }, [ready]);
+  const toggleFree = useCallback(() => {
+    const on = !freeRef.current;
+    freeRef.current = on;
+    setFree(on);
+    bridgeRef.current?.send(on ? "mode:free" : "mode:scroll");
+    if (!on && document.pointerLockElement) document.exitPointerLock();
+    /* Keys go to the game straight away (WASD in free roam, arrows either way). */
+    canvasRef.current?.focus({ preventScroll: true });
+  }, []);
+  useEffect(() => {
+    if (!ready || !desktop || !free || locked) {
       setHint(null);
       return;
     }
@@ -293,8 +323,8 @@ export function Museum() {
       window.clearTimeout(fade);
       window.clearTimeout(gone);
     };
-  }, [ready, desktop, locked]);
-  const aim: AimPrompt = !ready || !desktop ? null : locked ? "locked" : hint === "in" ? "hint" : hint === "out" ? "hint-out" : null;
+  }, [ready, desktop, free, locked]);
+  const aim: AimPrompt = !ready || !desktop || !free ? null : locked ? "locked" : hint === "in" ? "hint" : hint === "out" ? "hint-out" : null;
 
   return (
     <section ref={sectionRef} id="museum" aria-label="Museum after hours" className="relative h-svh w-full overflow-hidden overscroll-x-none bg-[#06070a]">
@@ -302,14 +332,14 @@ export function Museum() {
         id="museum-canvas"
         ref={canvasRef}
         tabIndex={0}
-        aria-label="3D museum of Ben Adams's projects. Walk with WASD or the arrow keys, or use the controls."
+        aria-label="3D museum of Ben Adams's projects. Scroll, swipe or use the arrow keys to move between the exhibits, or turn on free roam to walk around."
         className={`absolute inset-0 block h-full w-full outline-none transition-opacity duration-700 ${ready ? "opacity-100" : "opacity-0"}`}
         style={{ touchAction: ready ? "none" : "pan-y", WebkitTouchCallout: "none", WebkitTapHighlightColor: "transparent", userSelect: "none" }}
       />
 
       <MuteButton ready={ready} aim={aim} />
 
-      {ready && <MuseumOverlay focusId={focusId} tour={tour} send={send} insetRef={insetRef} rightInsetRef={rightInsetRef} />}
+      {ready && <MuseumOverlay focusId={focusId} tour={tour} free={free} onToggleFree={toggleFree} touch={!desktop} send={send} insetRef={insetRef} rightInsetRef={rightInsetRef} />}
       <Poster
         status={status}
         detail={failDetail}

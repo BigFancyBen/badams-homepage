@@ -233,13 +233,13 @@ test.describe('museum project details (stub engine)', () => {
       expect(await rightInset(page)).toBe(0);
       return;
     }
-    const box = (await panel(page).boundingBox())!;
     await expect.poll(() => rightInset(page)).toBeGreaterThanOrEqual(380);
     const inset = await rightInset(page);
     expect(inset).toBeLessThanOrEqual(380 + 40);
-    /* The panel really does cover that strip. */
+    /* The panel really does cover that strip, once it has slid in (the inset is its width from the start). */
     const vw = page.viewportSize()!.width;
-    expect(vw - box.x).toBeCloseTo(inset, -1);
+    await expect.poll(async () => Math.abs(vw - (await panel(page).boundingBox())!.x - inset)).toBeLessThan(5);
+    const box = (await panel(page).boundingBox())!;
     expect(box.width).toBeCloseTo(380, 0);
     await panel(page).getByRole('button', { name: 'Close project details' }).click();
     await expect(panel(page)).toHaveCount(0);

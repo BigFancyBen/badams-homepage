@@ -120,16 +120,14 @@ test.describe('museum on phones', () => {
     await expect(page.getByText(CLOSED)).toBeVisible();
   });
 
-  test('loading shows progress, and Cancel goes back to the homepage', async ({ page }) => {
+  test('loading shows progress, with no Cancel link', async ({ page }) => {
     await page.route('**/museum/*/museum.js*', async (route) => {
       await new Promise((r) => setTimeout(r, 4000));
       await route.continue();
     });
     await page.goto('/museum');
     await expect(page.getByText(/Downloading, about \d+ MB/)).toBeVisible();
-    await page.getByRole('link', { name: 'Cancel' }).click();
-    await expect(page).toHaveURL(/\/$/);
-    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Cancel' })).toHaveCount(0);
   });
 
   test('boots the engine, caps the render size, and recovers from a lost GL context', async ({ page }, info) => {
@@ -181,7 +179,7 @@ async function readGlance(page: Page) {
 }
 
 test.describe('museum walk', () => {
-  test('opens on the stage hold, W walks, the stick walks on phones', async ({ page }, info) => {
+  test('opens on the stage hold, scrolls to exhibit 1 and back; in free roam W walks, the stick walks on phones', async ({ page }, info) => {
     test.setTimeout(540_000);
     await page.route('**/museum/*/museum.*', async (route) => {
       const name = new URL(route.request().url()).pathname.split('/').pop()!;
@@ -201,6 +199,39 @@ test.describe('museum walk', () => {
     await expect.poll(async () => (await readPos(page))?.mode, { timeout: 30_000 }).toBe(2);
     const start = (await readPos(page))!;
     expect(start.y).toBeCloseTo(1.65, 1);
+
+    /* Scrolling is the default: one wheel notch (a swipe up on phones) carries on to exhibit 1, the
+       other way comes back. Exhibit 1 is nearer the entrance (larger z) than the stage hold. */
+    const cdp = phone ? await page.context().newCDPSession(page) : null;
+    const scroll = async (dir: 1 | -1) => {
+      if (!cdp) {
+        const b = (await page.locator('canvas').boundingBox())!;
+        await page.mouse.move(b.x + b.width / 2, b.y + b.height * 0.4);
+        await page.mouse.wheel(0, 120 * dir);
+        return;
+      }
+      const vp = page.viewportSize()!;
+      const x = Math.round(vp.width / 2);
+      const y0 = Math.round(vp.height * 0.5);
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y: y0, id: 5 }] });
+      for (let i = 1; i <= 8; i++) {
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y0 - dir * i * 20, id: 5 }] });
+        await page.waitForTimeout(16);
+      }
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    };
+    await scroll(1);
+    await expect.poll(async () => (await readPos(page))!.z - start.z, { timeout: 60_000 }).toBeGreaterThan(0.5);
+    await expect.poll(async () => (await readPos(page))!.mode, { timeout: 60_000 }).toBe(2);
+    await expect(page.getByRole('button', { name: 'Browse projects' })).toHaveCount(0);
+    await scroll(-1);
+    await expect.poll(async () => Math.abs((await readPos(page))!.z - start.z), { timeout: 60_000 }).toBeLessThan(0.05);
+    await expect.poll(async () => (await readPos(page))!.mode, { timeout: 60_000 }).toBe(2);
+    await expect(page.getByRole('button', { name: 'Browse projects' })).toBeVisible();
+
+    /* Walking is free roam's. */
+    await page.getByRole('button', { name: 'Free roam' }).click();
+    await expect(page.getByRole('button', { name: 'Free roam' })).toHaveAttribute('aria-pressed', 'true');
 
     if (!phone) {
       const box = (await page.locator('canvas').boundingBox())!;
@@ -264,7 +295,7 @@ test.describe('museum walk', () => {
     }
 
     /* Phone: drag the stick with a real touch (CDP), keep the finger down for a screenshot. */
-    const cdp = await page.context().newCDPSession(page);
+    if (!cdp) return;
     const vp = page.viewportSize()!;
     const x0 = Math.round(vp.width * 0.2);
     const y0 = Math.round(vp.height * 0.55);
@@ -576,8 +607,13 @@ test.describe('pointer-lock prompts (stub engine)', () => {
     mkdirSync(FRAMES, { recursive: true });
     await page.emulateMedia({ reducedMotion: 'no-preference' });
     await enterStub(page);
+    await tour(page, 'stage');
     const hint = page.getByText('Click to aim');
     const esc = page.getByText('Press Esc to show cursor');
+    /* Scrolling (the default) has no pointer lock, so no prompt until free roam is on. */
+    await page.waitForTimeout(600);
+    await expect(hint).toHaveCount(0);
+    await page.getByRole('button', { name: 'Free roam' }).click();
     await expect(hint).toBeVisible();
     await expect(esc).toHaveCount(0);
     /* It sits right of the mute button and, while the music callout is up, under it rather than on it. */
@@ -617,6 +653,57 @@ test.describe('pointer-lock prompts (stub engine)', () => {
     await setLock(page, true);
     await page.waitForTimeout(300);
     await expect(page.getByText('Press Esc to show cursor')).toHaveCount(0);
+  });
+
+  test('the wheel and swipes on the canvas add up for Godot; free roam swallows them and toggles the mode', async ({ page }, info) => {
+    await enterStub(page);
+    await tour(page, 'stage');
+    await drain(page);
+    const take = () => page.evaluate(() => window.museumBridge!.scrollDelta());
+    await take();
+    const free = page.getByRole('button', { name: 'Free roam' });
+    await expect(free).toHaveAttribute('aria-pressed', 'false');
+    const box = (await page.locator('canvas').boundingBox())!;
+    if (info.project.name === 'chromium') {
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height * 0.3);
+      await page.mouse.wheel(0, 120);
+      await expect.poll(take).toBeGreaterThanOrEqual(120);
+      await page.mouse.wheel(0, -50);
+      await expect.poll(take).toBeLessThan(0);
+    } else {
+      const cdp = await page.context().newCDPSession(page);
+      const x = Math.round(box.x + box.width / 2);
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y: 500, id: 1 }] });
+      for (let i = 1; i <= 6; i++) {
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: 500 - i * 30, id: 1 }] });
+      }
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      /* A finger moving up scrolls on, like a page: at least the 180 px it travelled less the axis slop. */
+      expect(await take()).toBeGreaterThan(150);
+    }
+    await free.click();
+    await expect(free).toHaveAttribute('aria-pressed', 'true');
+    expect(await drain(page)).toEqual(['mode:free']);
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height * 0.3);
+    await page.mouse.wheel(0, 300);
+    await page.waitForTimeout(300);
+    expect(await take()).toBe(0);
+    await free.click();
+    expect(await drain(page)).toEqual(['mode:scroll']);
+  });
+
+  test('the stage hold shows a scroll hint and the Free roam toggle beside Browse projects', async ({ page }, info) => {
+    await enterStub(page);
+    await tour(page, 'stage');
+    await expect(page.getByText(info.project.name === 'chromium' ? 'Scroll' : 'Swipe up', { exact: true })).toBeVisible();
+    const browse = (await page.getByRole('button', { name: 'Browse projects' }).boundingBox())!;
+    const free = (await page.getByRole('button', { name: 'Free roam' }).boundingBox())!;
+    expect(Math.abs(free.y - browse.y)).toBeLessThan(2);
+    expect(free.x).toBeGreaterThan(browse.x + browse.width);
+    await page.screenshot({ path: join(FRAMES, `${info.project.name}-stage-controls.png`) });
+    /* Browsing, the toggle joins the icon bar. */
+    await tour(page, 'paused');
+    await expect(page.getByRole('navigation', { name: NAV }).getByRole('button', { name: 'Free roam' })).toBeVisible();
   });
 
   test('the menu ends with a link back to the homepage, which lets go of the pointer', async ({ page }) => {

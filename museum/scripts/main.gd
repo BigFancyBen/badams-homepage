@@ -16,9 +16,23 @@ extends Node3D
 ## stops the drift. Moves are TRANS mode; holds and free walk are PLAY mode (the player stands at the
 ## held pose).
 ##
-## Modes: TRANS (an eased timed move: a tour glide) and PLAY (holds and free walk).
-## Desktop: WASD strafe/walk, Up/Down walk, Left/Right turn, Shift fast, click (locked) on an exhibit's
-## wall at the centre of the view to fly there. Phones: the touch stick and look finger (touch_controls.gd), tap an exhibit to fly there.
+## Modes: TRANS (an eased timed move: a tour glide), PLAY (holds and free walk) and SCROLL (scrubbing
+## along the tour path).
+##
+## Navigation has two styles, picked by the page (`mode:scroll`, the default, and `mode:free`).
+## Scroll: like scrolling a web page. The page sums wheel, trackpad and swipe distance and Godot reads it
+## each frame (bridge scrollDelta(), CSS px, positive moves on toward the entrance); PX_PER_STOP px is one
+## tour position. While scrollHeld() (a finger down, or wheel events still coming) it does not snap. The camera scrubs along the same path the tour glides take (_scroll_pose: the move
+## curve between neighbouring positions), eased toward the scrolled-to goal, and SNAP_IDLE s after the
+## last input the goal snaps to a stop (a small scroll is enough to move on one: SNAP_BIAS). Arriving
+## holds there like the tour does. Scrolling during a one-step tour glide takes it over where it is;
+## during a longer flight (the menu) it is ignored. Keys: Down/Right/S/D/PageDown/Space next,
+## Up/Left/W/A/PageUp previous. A click or tap on an exhibit flies there. No walking, no stick, no
+## pointer lock.
+## Free: the walker below. Switching back to scroll glides to the nearest stop.
+## Desktop (free): WASD strafe/walk, Up/Down walk, Left/Right turn, Shift fast, click (locked) on an exhibit's
+## wall at the centre of the view to fly there. Phones (free): the touch stick and look finger
+## (touch_controls.gd), tap an exhibit to fly there.
 ##
 ## Look (the usual game convention: mouse right turns right, mouse up looks up; yaw grows to the LEFT,
 ## so a right turn lowers it). On desktop the mouse aims only while the pointer is locked: a click on the
@@ -44,7 +58,7 @@ extends Node3D
 ## pitches the exhibit poses up instead.
 ##
 ## Bridge (window.museumBridge, see museumBridge.ts): time(), visible(), pollCommand() (next / prev
-## / home / browse / tour:pause / tour:play / goto:<id>), reducedMotion(), pointerLocked() (is the canvas
+## / home / browse / tour:pause / tour:play / goto:<id> / mode:scroll / mode:free), scrollDelta(), reducedMotion(), pointerLocked() (is the canvas
 ## pointer-locked), bottomInset() and rightInset() (CSS px) in; onReady(), onFocus(id) ("" none, "stage"), onTour(state: stage, touring, paused, end),
 ## onIntroDone() (sent with onReady, kept for the page), onWalk(bool), onBuildProgress(f), and the
 ## debugPos string property out.
@@ -58,8 +72,8 @@ const Perf := preload("res://scripts/perf.gd")
 const Warm := preload("res://scripts/warm.gd")
 const FPS_CAP := 60
 
-## debugPos reports the mode as 1 (TRANS, an auto-walk) or 2 (PLAY, holds and free walk).
-enum Mode { TRANS = 1, PLAY = 2 }
+## debugPos reports the mode as 1 (TRANS, an auto-walk), 2 (PLAY, holds and free walk) or 3 (SCROLL).
+enum Mode { TRANS = 1, PLAY = 2, SCROLL = 3 }
 
 ## Mobile web render budget: at most this many physical pixels, and never above 2x device pixels.
 const MAX_PIXELS := 1_400_000.0
@@ -79,6 +93,15 @@ const GLANCE_RETURN := 0.8       # seconds for the glance to ease back to zero o
 const FOCUS_SETTLE := 0.25
 const DEFAULT_SONG := "after-hours"   # the bundled cue sheet (res://songs/) used without the page or --song
 const SHEET_EASE := 6.0               # rate (1/s) the pitch for the phone bottom sheet eases at
+const PX_PER_STOP := 360.0            # CSS px of scrolling that move one tour position
+const SCROLL_RATE := 7.0              # rate (1/s) the camera eases toward the scrolled-to position
+const SCROLL_MAX := 2.4               # fastest scrub, tour positions per second
+const SCROLL_MAX_PULL := 0.8          # ... on the long first leg, the stage to exhibit 1
+const SNAP_IDLE := 0.22               # seconds after the last scroll input before snapping to a stop
+const SNAP_BIAS := 0.15               # past this fraction of a leg, a scroll carries on to the next stop
+const FOCUS_NEAR := 0.3               # within this of a stop while scrubbing, that stop has focus
+const TAP_MS := 500
+const TAP_SLOP_CSS := 12.0
 
 var hall: Node3D
 var cam: Camera3D
@@ -145,6 +168,18 @@ var _glance := Vector2.ZERO        # bounded look added on top of a tour shot, d
 var _glance_return: float = 0.0    # seconds left of the ease back to zero after a new glide began
 var _inset_poll: float = 0.0
 var _dbg_poll: float = 0.0
+
+var _free: bool = false           # free roam (walk, stick, pointer lock) rather than scrolling
+var _s: float = 0.0               # scroll position along the tour: 0 the stage, 1..n the exhibits, n+1 the end
+var _s_goal: float = 0.0
+var _s_idle: float = 0.0          # seconds since the last scroll input
+var _s_dir: float = 0.0           # sign of the last scroll input
+var _s_fresh: bool = false        # scroll input arrived this frame (so the frame does not count as idle)
+var _tr_from_t: int = 0           # the tour position the current glide left from
+var _press_pos := Vector2.ZERO    # where a scroll-mode click or touch began
+var _press_ms: int = 0
+var _press_moved: bool = false
+var _press_id: int = -1
 
 var _shot: bool = false
 var _shot_stop: int = -1
@@ -356,6 +391,7 @@ func _process(delta: float) -> void:
 			if c == "":
 				break
 			_command(c)
+		_poll_scroll()
 	if not clock.visible:
 		return
 	if not _shot:
@@ -367,9 +403,11 @@ func _process(delta: float) -> void:
 				_tick_trans(delta)
 			Mode.PLAY:
 				_tick_play(delta)
+			Mode.SCROLL:
+				_tick_scroll(delta)
 		_poll_page(delta)
 		_tick_tour()
-	controls.enabled = _mobile and not _shot
+	controls.enabled = _mobile and not _shot and _free
 	controls.css = _css_per_unit()
 	controls.inset_css = _inset_css
 	_update_camera()
@@ -576,6 +614,7 @@ func _tour_pose(t: int) -> Dictionary:
 func _go(t: int, play: bool) -> void:
 	var n := exhibits.size()
 	var from_stage := _t == 0 and t == 1
+	_tr_from_t = _t
 	_t = clampi(t, 0, n + 1)
 	var to := _tour_pose(_t)
 	var from := _shown_state()
@@ -664,6 +703,10 @@ func _command(c: String) -> void:
 			if str(exhibits[i]["id"]) == id:
 				_go(i + 1, false)
 				return
+	elif c == "mode:free":
+		_set_free(true)
+	elif c == "mode:scroll":
+		_set_free(false)
 	elif c == "tour:pause":
 		if _tour == "touring":
 			_pause_tour()
@@ -678,9 +721,188 @@ func _command(c: String) -> void:
 			_go(1, true)
 
 
+# ---------------------------------------------------------------- scroll
+
+## Switch between free roam and scrolling. Into free roam the walker takes over exactly what is on
+## screen; back to scrolling the camera glides to the nearest stop and the pointer is let go.
+func _set_free(on: bool) -> void:
+	if on == _free:
+		return
+	_free = on
+	controls.reset()
+	_press_id = -1
+	if on:
+		if mode != Mode.PLAY:
+			player.set_state(_shown_state())
+			_fov_goal = _fov
+			_state = _player_state()
+			mode = Mode.PLAY
+		if _tour == "touring":
+			_pause_tour()
+		return
+	_release_lock()
+	_go(_nearest_stop(), false)
+
+
+## The tour position nearest the camera: the one in focus, else the closest pose.
+func _nearest_stop() -> int:
+	if _focus_code >= 0:
+		return _focus_code + 1
+	if _focus_code == Player.FOCUS_STAGE:
+		return 0
+	var p: Vector3 = _state["pos"]
+	var best := 0
+	var best_d := INF
+	for t in exhibits.size() + 2:
+		var d := p.distance_to(_tour_pose(t)["pos"] as Vector3)
+		if d < best_d:
+			best_d = d
+			best = t
+	return best
+
+
+## Read the page's scrolled distance (always, so none piles up while free roaming) and apply it.
+func _poll_scroll() -> void:
+	if bridge.scrollDelta == null:     # a page older than this build
+		return
+	var v = bridge.scrollDelta()
+	var px := float(v) if (typeof(v) == TYPE_FLOAT or typeof(v) == TYPE_INT) else 0.0
+	# a finger still down or a wheel still turning (page clock, so a slow frame cannot cut a gesture short)
+	if bridge.scrollHeld != null and bool(bridge.scrollHeld()) and mode == Mode.SCROLL:
+		_s_fresh = true
+	if px == 0.0 or _free or not _ready_sent:
+		return
+	_press_moved = true    # a press that scrolled is a swipe, not a tap
+	_scroll_by(px / PX_PER_STOP, false)
+
+
+## Where the scroll position is right now, from whatever the camera is doing. False during a long
+## flight (more than one step), which has to land first.
+func _scroll_origin() -> bool:
+	if mode == Mode.SCROLL:
+		return true
+	if mode == Mode.TRANS:
+		if absi(_t - _tr_from_t) != 1:
+			return false
+		_s = lerpf(float(_tr_from_t), float(_t), _ease(_tr_t / _tr_dur))
+	else:
+		_s = float(_t)
+	_s_goal = _s
+	return true
+
+
+## Scroll by ds tour positions (whole: snap at once, for keys).
+func _scroll_by(ds: float, whole: bool) -> void:
+	if not _scroll_origin():
+		return
+	var n := exhibits.size()
+	var goal: float
+	if whole:
+		goal = (floorf(_s_goal + 0.001) + 1.0) if ds > 0.0 else (ceilf(_s_goal - 0.001) - 1.0)
+	else:
+		goal = _s_goal + ds
+	goal = clampf(goal, 0.0, float(n + 1))
+	if mode != Mode.SCROLL and is_equal_approx(goal, _s_goal):
+		return     # already at the end it is pushing against
+	if mode != Mode.SCROLL:
+		mode = Mode.SCROLL
+		_playing = false
+		_depart_bar = -1.0
+		_glance_return = GLANCE_RETURN
+		_set_tour("paused")
+		if bridge != null:
+			bridge.onWalk(false)
+	_s_goal = goal
+	_s_dir = signf(ds)
+	_s_idle = SNAP_IDLE if whole else 0.0
+	_s_fresh = not whole
+
+
+## The camera at scroll position s: on the glide curve between the two tour positions either side.
+func _scroll_pose(s: float) -> Dictionary:
+	var n := exhibits.size()
+	var i := clampi(int(floorf(s)), 0, n)
+	var f := s - float(i)
+	if f <= 0.0005:
+		return _tour_pose(i).duplicate()
+	if f >= 0.9995:
+		return _tour_pose(i + 1).duplicate()
+	_setup_move(_tour_pose(i), _tour_pose(i + 1), i == 0)
+	return _mix_move(f)
+
+
+func _tick_scroll(delta: float) -> void:
+	var n := exhibits.size()
+	# only frames without input count as idle: on a slow device one swipe spans several long frames
+	if not _s_fresh:
+		_s_idle += delta
+	_s_fresh = false
+	if _s_idle >= SNAP_IDLE:
+		var base := floorf(_s_goal)
+		var fr := _s_goal - base
+		var snapped := roundf(_s_goal)
+		if fr > 0.001 and fr < 0.999:
+			if _s_dir > 0.0:
+				snapped = base + (1.0 if fr > SNAP_BIAS else 0.0)
+			elif _s_dir < 0.0:
+				snapped = base + (0.0 if fr < 1.0 - SNAP_BIAS else 1.0)
+		_s_goal = clampf(snapped, 0.0, float(n + 1))
+	var cap := SCROLL_MAX_PULL if _s < 1.0 else SCROLL_MAX
+	var step := (_s_goal - _s) * (1.0 - exp(-delta * SCROLL_RATE))
+	_s += clampf(step, -cap * delta, cap * delta)
+	if absf(_s - _s_goal) < 0.004:
+		_s = _s_goal
+	_state = _scroll_pose(_s)
+	_fov = float(_state["fov"])
+	_fov_goal = _fov
+	var k := int(roundf(_s))
+	var code := Player.FOCUS_NONE
+	if absf(_s - float(k)) <= FOCUS_NEAR:
+		code = Player.FOCUS_STAGE if k == 0 else (Player.FOCUS_NONE if k > n else k - 1)
+	if code != _focus_code:
+		_emit_focus(code, false)
+	if _s_idle < SNAP_IDLE or _s != _s_goal:
+		return
+	# landed on a stop: hold there as the tour does
+	_t = int(_s)
+	var to := _tour_pose(_t)
+	player.set_state(to)
+	_fov_goal = float(to["fov"])
+	_fov = _fov_goal
+	_state = _player_state()
+	mode = Mode.PLAY
+	_focus_cand = -99
+	_drift_w = 0.0
+	_arrive()
+
+
+## Scroll-mode clicks and taps: a short press that hardly moved flies to the exhibit under it.
+func _press(pos: Vector2, id: int) -> void:
+	_press_pos = pos
+	_press_ms = Time.get_ticks_msec()
+	_press_moved = false
+	_press_id = id
+
+
+func _press_drag(pos: Vector2, id: int) -> void:
+	if id == _press_id and pos.distance_to(_press_pos) * _css_per_unit() > TAP_SLOP_CSS:
+		_press_moved = true
+
+
+func _release(pos: Vector2, id: int) -> void:
+	if id != _press_id:
+		return
+	_press_id = -1
+	_press_drag(pos, id)
+	if not _press_moved and Time.get_ticks_msec() - _press_ms < TAP_MS and mode != Mode.TRANS:
+		_tap(pos)
+
+
 # ---------------------------------------------------------------- free walk
 
 func _move_input() -> Vector2:
+	if not _free:
+		return Vector2.ZERO
 	var k := Vector2.ZERO
 	if Input.is_physical_key_pressed(KEY_D):
 		k.x += 1.0
@@ -695,6 +917,8 @@ func _move_input() -> Vector2:
 
 
 func _turn_input() -> float:
+	if not _free:
+		return 0.0
 	var t := 0.0
 	if Input.is_physical_key_pressed(KEY_LEFT):
 		t += 1.0
@@ -786,6 +1010,12 @@ func _input(ev: InputEvent) -> void:
 		return
 	if ev is InputEventKey:
 		var k := ev as InputEventKey
+		if k.pressed and not k.echo and not _free and _ready_sent:
+			match k.keycode:
+				KEY_DOWN, KEY_RIGHT, KEY_S, KEY_D, KEY_PAGEDOWN, KEY_SPACE:
+					_scroll_by(1.0, true)
+				KEY_UP, KEY_LEFT, KEY_W, KEY_A, KEY_PAGEUP:
+					_scroll_by(-1.0, true)
 		if k.pressed and not k.echo:
 			if k.keycode == KEY_HOME:
 				_go(exhibits.size() + 1, false)
@@ -793,10 +1023,33 @@ func _input(ev: InputEvent) -> void:
 				_release_lock()       # a native run; in the browser Esc never reaches here while locked
 		return
 	if _mobile:
+		if not _free:
+			# scrolling comes from the page (swipes); here only taps
+			if ev is InputEventScreenTouch:
+				var st := ev as InputEventScreenTouch
+				if st.pressed:
+					_press(st.position, st.index)
+				else:
+					_release(st.position, st.index)
+			elif ev is InputEventScreenDrag:
+				var sd := ev as InputEventScreenDrag
+				_press_drag(sd.position, sd.index)
+			return
 		if ev is InputEventScreenTouch:
 			controls.handle(ev)
 		elif ev is InputEventScreenDrag:
 			controls.handle(ev)
+		return
+	if not _free:
+		# scrolling: the wheel is the page's; a plain click on an exhibit flies there, no pointer lock
+		if ev is InputEventMouseButton and (ev as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
+			var mb := ev as InputEventMouseButton
+			if mb.pressed:
+				_press(mb.position, 0)
+			else:
+				_release(mb.position, 0)
+		elif ev is InputEventMouseMotion:
+			_press_drag((ev as InputEventMouseMotion).position, 0)
 		return
 	# desktop: pointer events come from the mouse (touch is emulated from it, so it is ignored)
 	if ev is InputEventMouseButton:
@@ -845,6 +1098,8 @@ func _notification(what: int) -> void:
 func _tick_lock() -> void:
 	if _mobile or _shot:
 		return
+	if not _free and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		_release_lock()
 	if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		_locked = false
 		_lock_req_ms = -1
@@ -896,7 +1151,7 @@ func _tick_sheet(delta: float) -> void:
 
 ## Is the mouse aim a bounded glance (tour shots, glides, the stage hold) rather than a real turn?
 func _glancing() -> bool:
-	return mode == Mode.TRANS or _tour == "stage" or _tour == "touring"
+	return mode == Mode.TRANS or mode == Mode.SCROLL or _tour == "stage" or _tour == "touring"
 
 
 ## Apply the mouse aim for this frame (only while the pointer is locked; _look_pending is empty

@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent, type MutableRefObject } from "react";
 import Link from "next/link";
-import { ArrowUpRight, ChevronLeft, ChevronRight, Menu, Pause, Play } from "lucide-react";
+import { ArrowUpRight, ChevronDown, ChevronLeft, ChevronRight, Menu, Pause, Play } from "lucide-react";
 import { EXHIBITS } from "./exhibits";
+import { FreeRoamButton } from "./FreeRoamButton";
 import { LeaveModal } from "./LeaveModal";
 import { MuseumDetails } from "./MuseumDetails";
 import type { MuseumCommand, TourState } from "./museumBridge";
@@ -11,6 +12,11 @@ import type { MuseumCommand, TourState } from "./museumBridge";
 interface Props {
   focusId: string;
   tour: TourState | "";
+  /** Free roam (walking) is on; off, the visitor scrolls between the views. */
+  free: boolean;
+  onToggleFree: () => void;
+  /** A touch screen: the scroll hint says swipe. */
+  touch: boolean;
   send: (cmd: MuseumCommand) => void;
   /** Filled with a function returning the CSS px the controls and menu cover at the bottom. */
   insetRef: MutableRefObject<() => number>;
@@ -42,7 +48,7 @@ function useWide(): boolean {
  * canvas still gets swipes and taps; only the controls catch them. No text
  * except the one Browse button and the menu's list of titles.
  */
-export function MuseumOverlay({ focusId, tour, send, insetRef, rightInsetRef }: Props) {
+export function MuseumOverlay({ focusId, tour, free, onToggleFree, touch, send, insetRef, rightInsetRef }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -126,14 +132,25 @@ export function MuseumOverlay({ focusId, tour, send, insetRef, rightInsetRef }: 
 
       <div ref={bottomRef} className="relative flex flex-col">
         {tour === "stage" && (
-          <div className="pointer-events-none flex justify-center px-3" style={{ paddingBottom: "max(2rem, calc(env(safe-area-inset-bottom) + 1rem))" }}>
-            <button
-              type="button"
-              onClick={() => send("browse")}
-              className="pointer-events-auto h-11 min-w-44 bg-white px-6 text-sm font-bold uppercase tracking-widest text-black transition-colors hover:bg-[#ff2a2a] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
-            >
-              Browse projects
-            </button>
+          <div className="pointer-events-none flex flex-col items-center px-3" style={{ paddingBottom: "max(2rem, calc(env(safe-area-inset-bottom) + 1rem))" }}>
+            {!free && (
+              <div aria-hidden="true" className="museum-scroll-hint mb-4 flex flex-col items-center text-[11px] font-medium uppercase tracking-[0.2em] text-white/70">
+                {touch ? "Swipe up" : "Scroll"}
+                <ChevronDown className="mt-0.5 h-4 w-4" />
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => send("browse")}
+                className="pointer-events-auto h-11 min-w-44 bg-white px-6 text-sm font-bold uppercase tracking-widest text-black transition-colors hover:bg-[#ff2a2a] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
+              >
+                Browse projects
+              </button>
+              <div className="pointer-events-auto">
+                <FreeRoamButton on={free} onToggle={onToggleFree} />
+              </div>
+            </div>
           </div>
         )}
 
@@ -218,6 +235,7 @@ export function MuseumOverlay({ focusId, tour, send, insetRef, rightInsetRef }: 
             >
               <ArrowUpRight className="h-5 w-5" aria-hidden="true" />
             </button>
+            <FreeRoamButton on={free} onToggle={onToggleFree} compact />
           </nav>
         )}
       </div>
