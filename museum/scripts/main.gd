@@ -12,23 +12,23 @@ extends Node3D
 ## `next`/`prev` jump at once (the tour keeps running from there), `tour:pause` / `tour:play`,
 ## `goto:<id>` flies there and pauses (`goto:stage` the stage hold, `goto:entrance` the end view, like
 ## `home`: focus "" and tour "paused" while flying, then "end"), and any walk input pauses ("paused").
-## Glides are 2..3.4 s eased and turn the way the camera travels; reduced motion shortens them and
+## Glides are 2.6..3.8 s eased and turn the way the camera travels; reduced motion shortens them and
 ## stops the drift. Moves are TRANS mode; holds and free walk are PLAY mode (the player stands at the
 ## held pose).
 ##
-## Modes: TRANS (an eased timed move: a tour glide), PLAY (holds and free walk) and SCROLL (scrubbing
-## along the tour path).
+## Modes: TRANS (an eased timed move: a tour or scroll glide) and PLAY (holds and free walk).
 ##
 ## Navigation has two styles, picked by the page (`mode:scroll`, the default, and `mode:free`).
-## Scroll: like scrolling a web page. The page sums wheel, trackpad and swipe distance and Godot reads it
-## each frame (bridge scrollDelta(), CSS px, positive moves on toward the entrance); PX_PER_STOP px is one
-## tour position. While scrollHeld() (a finger down, or wheel events still coming) it does not snap. The camera scrubs along the same path the tour glides take (_scroll_pose: the move
-## curve between neighbouring positions), eased toward the scrolled-to goal, and SNAP_IDLE s after the
-## last input the goal snaps to a stop (a small scroll is enough to move on one: SNAP_BIAS). Arriving
-## holds there like the tour does. Scrolling during a one-step tour glide takes it over where it is;
-## during a longer flight (the menu) it is ignored. Keys: Down/Right/S/D/PageDown/Space next,
-## Up/Left/W/A/PageUp previous. A click or tap on an exhibit flies there. No walking, no stick, no
-## pointer lock.
+## Scroll: like scrolling a web page, a stop at a time. The page sums wheel, trackpad and swipe distance
+## and Godot reads it each frame (bridge scrollDelta(), CSS px, positive moves on toward the entrance;
+## scrollHeld() says a finger is still down or the wheel still turning). One gesture moves one stop:
+## once a gesture has scrolled STEP_PX, the camera takes the same calm, eased glide the tour and the
+## Next button take (_go), and the rest of that gesture (a trackpad's momentum, a long swipe) is spent.
+## Scrolling on while it glides queues one more stop for when it lands; scrolling the other way turns
+## back at once. No scrubbing and no snapping, so it never overshoots a stop and comes back. Going on,
+## the swing from wall to wall looks on down the hall; going back it looks back toward the stage. Keys:
+## Down/Right/S/D/PageDown/Space next, Up/Left/W/A/PageUp previous. A click or tap on an exhibit flies
+## there. No walking, no stick, no pointer lock.
 ## Free: the walker below. Switching back to scroll glides to the nearest stop.
 ## Desktop (free): WASD strafe/walk, Up/Down walk, Left/Right turn, Shift fast, click (locked) on an exhibit's
 ## wall at the centre of the view to fly there. Phones (free): the touch stick and look finger
@@ -75,8 +75,8 @@ const Warm := preload("res://scripts/warm.gd")
 const ExhibitVideo := preload("res://scripts/exhibit_video.gd")
 const FPS_CAP := 60
 
-## debugPos reports the mode as 1 (TRANS, an auto-walk), 2 (PLAY, holds and free walk) or 3 (SCROLL).
-enum Mode { TRANS = 1, PLAY = 2, SCROLL = 3 }
+## debugPos reports the mode as 1 (TRANS, an auto-walk or scroll glide) or 2 (PLAY, holds and free walk).
+enum Mode { TRANS = 1, PLAY = 2 }
 
 ## Mobile web render budget: at most this many physical pixels, and never above 2x device pixels.
 const MAX_PIXELS := 1_400_000.0
@@ -96,13 +96,7 @@ const GLANCE_RETURN := 0.8       # seconds for the glance to ease back to zero o
 const FOCUS_SETTLE := 0.25
 const DEFAULT_SONG := "after-hours"   # the bundled cue sheet (res://songs/) used without the page or --song
 const SHEET_EASE := 6.0               # rate (1/s) the pitch for the phone bottom sheet eases at
-const PX_PER_STOP := 360.0            # CSS px of scrolling that move one tour position
-const SCROLL_RATE := 7.0              # rate (1/s) the camera eases toward the scrolled-to position
-const SCROLL_MAX := 2.4               # fastest scrub, tour positions per second
-const SCROLL_MAX_PULL := 0.8          # ... on the long first leg, the stage to exhibit 1
-const SNAP_IDLE := 0.22               # seconds after the last scroll input before snapping to a stop
-const SNAP_BIAS := 0.15               # past this fraction of a leg, a scroll carries on to the next stop
-const FOCUS_NEAR := 0.3               # within this of a stop while scrubbing, that stop has focus
+const STEP_PX := 40.0                 # CSS px a scroll gesture must cover to move a stop
 const TAP_MS := 500
 const TAP_SLOP_CSS := 12.0
 
@@ -136,8 +130,7 @@ var _sheet_pitch: float = 0.0      # eased pitch offset (degrees, negative looks
 var _panel_yaw: float = 0.0        # unused: the framing is built into the exhibit poses (_frame_side / _frame_bottom)
 var _frame_side: float = 0.0       # share of the view's width the desktop details panel covers at an exhibit
 var _frame_bottom: float = 0.0     # share of the view's height the folded phone sheet and icon bar cover
-var _seg_i: int = -1               # the scroll leg the camera is on, and whether it entered it going back
-var _seg_back: bool = false
+
 
 var _stage_aspect: float = -1.0   # aspect the stage hold was last fitted for
 
@@ -178,12 +171,10 @@ var _inset_poll: float = 0.0
 var _dbg_poll: float = 0.0
 
 var _free: bool = false           # free roam (walk, stick, pointer lock) rather than scrolling
-var _s: float = 0.0               # scroll position along the tour: 0 the stage, 1..n the exhibits, n+1 the end
-var _s_goal: float = 0.0
-var _s_idle: float = 0.0          # seconds since the last scroll input
-var _s_dir: float = 0.0           # sign of the last scroll input
-var _s_fresh: bool = false        # scroll input arrived this frame (so the frame does not count as idle)
 var _tr_from_t: int = 0           # the tour position the current glide left from
+var _acc: float = 0.0             # CSS px scrolled in the current gesture, toward its next stop
+var _gesture_used: bool = false   # the current gesture has already moved a stop
+var _queued: int = 0              # one more stop (+1 on, -1 back) asked for during a glide
 var _press_pos := Vector2.ZERO    # where a scroll-mode click or touch began
 var _press_ms: int = 0
 var _press_moved: bool = false
@@ -413,8 +404,6 @@ func _process(delta: float) -> void:
 				_tick_trans(delta)
 			Mode.PLAY:
 				_tick_play(delta)
-			Mode.SCROLL:
-				_tick_scroll(delta)
 		_poll_page(delta)
 		_tick_tour()
 	controls.enabled = _mobile and not _shot and _free
@@ -599,6 +588,11 @@ func _tick_trans(delta: float) -> void:
 	_focus_cand = -99
 	_drift_w = 0.0
 	_arrive()
+	_gesture_used = false    # a wheel still spinning moves on from here
+	if _queued != 0:
+		var q := _queued
+		_queued = 0
+		_step(q)
 
 
 func _player_state() -> Dictionary:
@@ -651,7 +645,8 @@ func _go(t: int, play: bool) -> void:
 	var to := _tour_pose(_t)
 	var from := _shown_state()
 	var dist := (from["pos"] as Vector3).distance_to(to["pos"] as Vector3)
-	var dur := PULL_SECONDS if from_stage else clampf(1.5 + dist / 6.5, 2.0, 3.4)
+	# unhurried: a wall-to-wall swing between neighbours takes about 3.2 s, a long flight up to 3.8 s
+	var dur := PULL_SECONDS if from_stage else clampf(2.1 + dist / 6.5, 2.6, 3.8)
 	if _reduced:
 		dur = minf(dur * 0.4, 1.2)
 	_begin_trans(from, to, dur, from_stage)
@@ -797,131 +792,49 @@ func _nearest_stop() -> int:
 	return best
 
 
-## Read the page's scrolled distance (always, so none piles up while free roaming) and apply it.
+## Read the page's scrolled distance (always, so none piles up while free roaming) and turn each
+## gesture into one stop. A gesture ends when no distance came this frame and the page says nothing is
+## held (no finger down, no wheel in the last moment), or when its glide has landed (so a wheel kept
+## spinning carries on a stop at a time).
 func _poll_scroll() -> void:
 	if bridge.scrollDelta == null:     # a page older than this build
 		return
 	var v = bridge.scrollDelta()
 	var px := float(v) if (typeof(v) == TYPE_FLOAT or typeof(v) == TYPE_INT) else 0.0
-	# a finger still down or a wheel still turning (page clock, so a slow frame cannot cut a gesture short)
-	if bridge.scrollHeld != null and bool(bridge.scrollHeld()) and mode == Mode.SCROLL:
-		_s_fresh = true
-	if px == 0.0 or _free or not _ready_sent:
+	var held := bridge.scrollHeld != null and bool(bridge.scrollHeld())
+	if _free or not _ready_sent:
+		return
+	if px == 0.0:
+		if not held:
+			_gesture_used = false
+			_acc = 0.0
 		return
 	_press_moved = true    # a press that scrolled is a swipe, not a tap
-	_scroll_by(px / PX_PER_STOP, false)
+	if _acc != 0.0 and signf(px) != signf(_acc):
+		_acc = 0.0         # turned the other way: a new gesture
+		_gesture_used = false
+	_acc += px
+	if not _gesture_used and absf(_acc) >= STEP_PX:
+		_gesture_used = true
+		var dir := 1 if _acc > 0.0 else -1
+		_acc = 0.0
+		_step(dir)
 
 
-## Where the scroll position is right now, from whatever the camera is doing. False during a long
-## flight (more than one step), which has to land first.
-func _scroll_origin() -> bool:
-	if mode == Mode.SCROLL:
-		return true
+## Move one stop on (+1) or back (-1), on the eased glide. During a glide the same way it queues one
+## more stop for the landing; the other way turns back at once.
+func _step(dir: int) -> void:
+	var n := exhibits.size()
 	if mode == Mode.TRANS:
-		if absi(_t - _tr_from_t) != 1:
-			return false
-		_s = lerpf(float(_tr_from_t), float(_t), _ease(_tr_t / _tr_dur))
-		_seg_i = mini(_tr_from_t, _t)
-		_seg_back = _t < _tr_from_t
-	else:
-		_s = float(_t)
-	_s_goal = _s
-	return true
-
-
-## Scroll by ds tour positions (whole: snap at once, for keys).
-func _scroll_by(ds: float, whole: bool) -> void:
-	if not _scroll_origin():
-		return
-	var n := exhibits.size()
-	var goal: float
-	if whole:
-		goal = (floorf(_s_goal + 0.001) + 1.0) if ds > 0.0 else (ceilf(_s_goal - 0.001) - 1.0)
-	else:
-		goal = _s_goal + ds
-	goal = clampf(goal, 0.0, float(n + 1))
-	if mode != Mode.SCROLL and is_equal_approx(goal, _s_goal):
+		var going := signi(_t - _tr_from_t)
+		if going == dir:
+			_queued = dir
+			return
+	_queued = 0
+	var to := clampi(_t + dir, 0, n + 1)
+	if to == _t and mode != Mode.TRANS:
 		return     # already at the end it is pushing against
-	if mode != Mode.SCROLL:
-		mode = Mode.SCROLL
-		_playing = false
-		_depart_bar = -1.0
-		_glance_return = GLANCE_RETURN
-		_set_tour("paused")
-		if bridge != null:
-			bridge.onWalk(false)
-	_s_goal = goal
-	_s_dir = signf(ds)
-	_s_idle = SNAP_IDLE if whole else 0.0
-	_s_fresh = not whole
-
-
-## The camera at scroll position s: on the glide curve between the two tour positions either side.
-func _scroll_pose(s: float) -> Dictionary:
-	var n := exhibits.size()
-	var i := clampi(int(floorf(s)), 0, n)
-	var f := s - float(i)
-	if f <= 0.0005:
-		_seg_i = -1
-		return _tour_pose(i).duplicate()
-	if f >= 0.9995:
-		_seg_i = -1
-		return _tour_pose(i + 1).duplicate()
-	# A leg is flown the way it was entered: going on, the swing between walls looks on toward the
-	# entrance; going back, it looks back toward the stage. Reversing part way retraces the same curve.
-	if i != _seg_i:
-		_seg_i = i
-		_seg_back = _s_dir < 0.0
-	if _seg_back:
-		_setup_move(_tour_pose(i + 1), _tour_pose(i), i == 0)
-		return _mix_move(1.0 - f)
-	_setup_move(_tour_pose(i), _tour_pose(i + 1), i == 0)
-	return _mix_move(f)
-
-
-func _tick_scroll(delta: float) -> void:
-	var n := exhibits.size()
-	# only frames without input count as idle: on a slow device one swipe spans several long frames
-	if not _s_fresh:
-		_s_idle += delta
-	_s_fresh = false
-	if _s_idle >= SNAP_IDLE:
-		var base := floorf(_s_goal)
-		var fr := _s_goal - base
-		var snapped := roundf(_s_goal)
-		if fr > 0.001 and fr < 0.999:
-			if _s_dir > 0.0:
-				snapped = base + (1.0 if fr > SNAP_BIAS else 0.0)
-			elif _s_dir < 0.0:
-				snapped = base + (0.0 if fr < 1.0 - SNAP_BIAS else 1.0)
-		_s_goal = clampf(snapped, 0.0, float(n + 1))
-	var cap := SCROLL_MAX_PULL if _s < 1.0 else SCROLL_MAX
-	var step := (_s_goal - _s) * (1.0 - exp(-delta * SCROLL_RATE))
-	_s += clampf(step, -cap * delta, cap * delta)
-	if absf(_s - _s_goal) < 0.004:
-		_s = _s_goal
-	_state = _scroll_pose(_s)
-	_fov = float(_state["fov"])
-	_fov_goal = _fov
-	var k := int(roundf(_s))
-	var code := Player.FOCUS_NONE
-	if absf(_s - float(k)) <= FOCUS_NEAR:
-		code = Player.FOCUS_STAGE if k == 0 else (Player.FOCUS_NONE if k > n else k - 1)
-	if code != _focus_code:
-		_emit_focus(code, false)
-	if _s_idle < SNAP_IDLE or _s != _s_goal:
-		return
-	# landed on a stop: hold there as the tour does
-	_t = int(_s)
-	var to := _tour_pose(_t)
-	player.set_state(to)
-	_fov_goal = float(to["fov"])
-	_fov = _fov_goal
-	_state = _player_state()
-	mode = Mode.PLAY
-	_focus_cand = -99
-	_drift_w = 0.0
-	_arrive()
+	_go(to, false)
 
 
 ## Scroll-mode clicks and taps: a short press that hardly moved flies to the exhibit under it.
@@ -1063,9 +976,9 @@ func _input(ev: InputEvent) -> void:
 		if k.pressed and not k.echo and not _free and _ready_sent:
 			match k.keycode:
 				KEY_DOWN, KEY_RIGHT, KEY_S, KEY_D, KEY_PAGEDOWN, KEY_SPACE:
-					_scroll_by(1.0, true)
+					_step(1)
 				KEY_UP, KEY_LEFT, KEY_W, KEY_A, KEY_PAGEUP:
-					_scroll_by(-1.0, true)
+					_step(-1)
 		if k.pressed and not k.echo:
 			if k.keycode == KEY_HOME:
 				_go(exhibits.size() + 1, false)
@@ -1197,7 +1110,7 @@ func _tick_sheet(delta: float) -> void:
 
 ## Is the mouse aim a bounded glance (tour shots, glides, the stage hold) rather than a real turn?
 func _glancing() -> bool:
-	return mode == Mode.TRANS or mode == Mode.SCROLL or _tour == "stage" or _tour == "touring"
+	return mode == Mode.TRANS or _tour == "stage" or _tour == "touring"
 
 
 ## Apply the mouse aim for this frame (only while the pointer is locked; _look_pending is empty
