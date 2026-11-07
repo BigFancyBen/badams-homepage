@@ -646,6 +646,46 @@ test.describe('museum overlay (stub engine)', () => {
     await expect(page.getByText('Turn on the music')).toHaveCount(0);
   });
 
+  test('while the music plays a volume slider sits beside the button, and the level is remembered', async ({ page }) => {
+    /* A second of silence as a WAV stands in for the song: it decodes and plays like the mp3. */
+    const rate = 8000;
+    const wav = Buffer.alloc(44 + rate * 2);
+    wav.write('RIFF', 0);
+    wav.writeUInt32LE(36 + rate * 2, 4);
+    wav.write('WAVEfmt ', 8);
+    wav.writeUInt32LE(16, 16);
+    wav.writeUInt16LE(1, 20);
+    wav.writeUInt16LE(1, 22);
+    wav.writeUInt32LE(rate, 24);
+    wav.writeUInt32LE(rate * 2, 28);
+    wav.writeUInt16LE(2, 32);
+    wav.writeUInt16LE(16, 34);
+    wav.write('data', 36);
+    wav.writeUInt32LE(rate * 2, 40);
+    /* Reduced motion keeps the button still on the beat, so it can be clicked. */
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.route('**/songs/*.mp3', (route) => route.fulfill({ status: 200, body: wav, contentType: 'audio/wav' }));
+    await enterStub(page);
+    const volume = page.getByRole('slider', { name: 'Music volume' });
+    await expect(volume).toHaveCount(0);
+    await page.getByRole('button', { name: 'Play music' }).click();
+    await expect(page.getByRole('button', { name: 'Mute music' })).toBeVisible({ timeout: 15_000 });
+    await expect(volume).toBeVisible();
+    await expect(volume).toHaveValue('100');
+    const mb = (await page.getByRole('button', { name: 'Mute music' }).boundingBox())!;
+    const vb = (await volume.boundingBox())!;
+    expect(vb.x).toBeGreaterThanOrEqual(mb.x + mb.width);
+    await volume.fill('40');
+    await expect(volume).toHaveAttribute('aria-valuetext', '40%');
+    expect(await page.evaluate(() => localStorage.getItem('museum-volume'))).toBe('0.4');
+    /* Muted, the slider goes; on again, it comes back at the same level, and so it does on the next visit. */
+    await page.getByRole('button', { name: 'Mute music' }).click();
+    await expect(volume).toHaveCount(0);
+    await enterStub(page);
+    await page.getByRole('button', { name: 'Play music' }).click();
+    await expect(volume).toHaveValue('40', { timeout: 15_000 });
+  });
+
   test('overlay states screenshot; on phones the menu is a modal over the dimmed scene', async ({ page }, info) => {
     mkdirSync(FRAMES, { recursive: true });
     await enterStub(page);
