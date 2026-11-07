@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { Volume2, VolumeX, Loader2 } from "lucide-react";
 import { getSongClock } from "./songClock";
 import { getSong } from "./songs";
@@ -26,11 +26,12 @@ function sectionBoost(time: number): number {
  * filled red and, on every beat of the song, swells, glows and sends a ring out, harder in the drop.
  * Beside it the "Turn on the music" callout (red outline, glowing on the beat, equalizer bars
  * bouncing in time) stays up until the music is on; a tap on it turns the music on. Under reduced
- * motion both are shown still: the red fill and the callout, no movement.
+ * motion both are shown still: the red fill and the callout, no movement. While the music plays, a
+ * volume slider takes the callout's place beside the button (the level is remembered between visits).
  */
 export function MuteButton({ prompt = false, aim = null }: { prompt?: boolean; aim?: AimPrompt }) {
   const clock = getSongClock();
-  const { audible, loading } = useSyncExternalStore(
+  const { audible, loading, volume } = useSyncExternalStore(
     clock.subscribe,
     clock.getState,
     clock.getState,
@@ -149,10 +150,9 @@ export function MuteButton({ prompt = false, aim = null }: { prompt?: boolean; a
           <VolumeX className="h-4 w-4" aria-hidden="true" />
         )}
       </button>
-      {/* Always mounted so the live region exists before its text arrives. The music callout is the
-          first row, level with the button; the aim prompt takes that row alone, or sits under the callout. */}
+      {/* The first row, level with the button: the volume slider while the music plays, or the music
+          callout until it has been on. The aim prompt takes that row alone, or sits under it. */}
       <div
-        role="status"
         className="pointer-events-none fixed z-50 flex flex-col items-start"
         style={{
           top: inset.top,
@@ -160,41 +160,61 @@ export function MuteButton({ prompt = false, aim = null }: { prompt?: boolean; a
           right: "max(0.5rem, env(safe-area-inset-right))",
         }}
       >
-        {callout && (
-          <div className="flex h-11 items-center">
-            <div
-              ref={calloutRef}
-              onClick={() => {
-                setTapped(true);
-                void clock.toggle();
-              }}
-              className="pointer-events-auto relative flex h-11 cursor-pointer items-center gap-2.5 border-2 border-[#ff2a2a] bg-black/90 pl-3 pr-4 text-sm font-bold uppercase tracking-wider text-white backdrop-blur"
-            >
-              <span
-                aria-hidden="true"
-                className="absolute -left-[7px] top-1/2 h-3 w-3 -translate-y-1/2 rotate-45 border-b-2 border-l-2 border-[#ff2a2a] bg-black"
-              />
-              <span ref={barsRef} aria-hidden="true" className="flex h-4 items-end gap-[3px]">
-                <span className="h-full w-[3px] origin-bottom scale-y-50 bg-[#ff2a2a]" />
-                <span className="h-full w-[3px] origin-bottom scale-y-90 bg-[#ff2a2a]" />
-                <span className="h-full w-[3px] origin-bottom scale-y-75 bg-[#ff2a2a]" />
-              </span>
-              Turn on the music
-            </div>
+        {audible && (
+          <div className="pointer-events-auto flex h-11 items-center border border-white/15 bg-black/60 px-3 backdrop-blur">
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={1}
+              value={Math.round(volume * 100)}
+              onChange={(e) => clock.setVolume(Number(e.currentTarget.value) / 100)}
+              aria-label="Music volume"
+              aria-valuetext={`${Math.round(volume * 100)}%`}
+              title="Music volume"
+              className="museum-volume w-24"
+              style={{ "--fill": `${volume * 100}%` } as CSSProperties}
+            />
           </div>
         )}
-        {aim && (
-          <div className={`flex items-center ${callout ? "mt-1" : "h-11"}`}>
-            <div
-              data-aim={aim}
-              className={`border px-3 py-2 text-xs tracking-wide backdrop-blur transition-opacity duration-700 ${
-                aim === "locked" ? "border-white/25 bg-black/85 font-medium text-white" : "border-white/15 bg-black/60 text-gray-300"
-              } ${aim === "hint-out" ? "opacity-0" : "opacity-100"}`}
-            >
-              {aim === "locked" ? "Press Esc to show cursor" : "Click to aim"}
+        {/* Always mounted so the live region exists before its text arrives. */}
+        <div role="status" className="flex flex-col items-start">
+          {callout && (
+            <div className="flex h-11 items-center">
+              <div
+                ref={calloutRef}
+                onClick={() => {
+                  setTapped(true);
+                  void clock.toggle();
+                }}
+                className="pointer-events-auto relative flex h-11 cursor-pointer items-center gap-2.5 border-2 border-[#ff2a2a] bg-black/90 pl-3 pr-4 text-sm font-bold uppercase tracking-wider text-white backdrop-blur"
+              >
+                <span
+                  aria-hidden="true"
+                  className="absolute -left-[7px] top-1/2 h-3 w-3 -translate-y-1/2 rotate-45 border-b-2 border-l-2 border-[#ff2a2a] bg-black"
+                />
+                <span ref={barsRef} aria-hidden="true" className="flex h-4 items-end gap-[3px]">
+                  <span className="h-full w-[3px] origin-bottom scale-y-50 bg-[#ff2a2a]" />
+                  <span className="h-full w-[3px] origin-bottom scale-y-90 bg-[#ff2a2a]" />
+                  <span className="h-full w-[3px] origin-bottom scale-y-75 bg-[#ff2a2a]" />
+                </span>
+                Turn on the music
+              </div>
             </div>
-          </div>
-        )}
+          )}
+          {aim && (
+            <div className={`flex items-center ${callout || audible ? "mt-1" : "h-11"}`}>
+              <div
+                data-aim={aim}
+                className={`border px-3 py-2 text-xs tracking-wide backdrop-blur transition-opacity duration-700 ${
+                  aim === "locked" ? "border-white/25 bg-black/85 font-medium text-white" : "border-white/15 bg-black/60 text-gray-300"
+                } ${aim === "hint-out" ? "opacity-0" : "opacity-100"}`}
+              >
+                {aim === "locked" ? "Press Esc to show cursor" : "Click to aim"}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </>
   );

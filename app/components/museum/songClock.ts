@@ -9,7 +9,23 @@ export interface ClockState {
   loading: boolean;
   /** True if the song could not be loaded; the clock keeps running silently. */
   failed: boolean;
+  /** The music volume the visitor set, 0 to 1 (remembered between visits). */
+  volume: number;
 }
+
+const VOLUME_KEY = "museum-volume";
+
+function savedVolume(): number {
+  try {
+    const v = Number(localStorage.getItem(VOLUME_KEY));
+    return localStorage.getItem(VOLUME_KEY) !== null && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 1;
+  } catch {
+    return 1;
+  }
+}
+
+/** Loudness is heard roughly logarithmically: squaring the slider makes its travel feel even. */
+const volumeGain = (v: number) => v * v;
 
 /** A 0.1 s silent WAV. Playing it from a gesture moves iOS Safari's audio session to
  *  "playback", so Web Audio is not muted by the ringer (silent) switch. */
@@ -46,13 +62,21 @@ function silentWavUrl(): string {
  * elapsed since", with `ref` in the units of whichever clock is current.
  */
 export class SongClock {
-  private state: ClockState = { songId: getSong().id, audible: false, loading: false, failed: false };
+  private state: ClockState = {
+    songId: getSong().id,
+    audible: false,
+    loading: false,
+    failed: false,
+    volume: typeof window === "undefined" ? 1 : savedVolume(),
+  };
   private listeners = new Set<() => void>();
   private base = 0;
   private ref = typeof performance !== "undefined" ? performance.now() / 1000 : 0;
 
   private ctx: AudioContext | null = null;
   private gain: GainNode | null = null;
+  /** After `gain` (which the mute and seek fades own): the visitor's volume. */
+  private volumeNode: GainNode | null = null;
   private source: AudioBufferSourceNode | null = null;
   private buffer: Promise<AudioBuffer> | null = null;
   private bufferReady = false;
@@ -234,7 +258,10 @@ export class SongClock {
     const ctx = new Ctor();
     this.ctx = ctx;
     this.gain = ctx.createGain();
-    this.gain.connect(ctx.destination);
+    this.volumeNode = ctx.createGain();
+    this.volumeNode.gain.value = volumeGain(this.state.volume);
+    this.gain.connect(this.volumeNode);
+    this.volumeNode.connect(ctx.destination);
     /* iOS interrupts (calls, Siri, another app) without a pause event: the
        context goes "interrupted"/"suspended". Reflect that, so the button is honest. */
     ctx.addEventListener("statechange", () => {
@@ -293,6 +320,20 @@ export class SongClock {
     } catch {
       /* The first unmute fetches it. */
     }
+  }
+
+  /** Set the music volume, 0 to 1. Takes effect at once (a 20 ms glide, so a drag does not zipper) and is remembered. */
+  setVolume(v: number): void {
+    const volume = Math.min(1, Math.max(0, v));
+    if (volume === this.state.volume) return;
+    const { ctx, volumeNode } = this;
+    if (ctx && volumeNode) volumeNode.gain.setTargetAtTime(volumeGain(volume), ctx.currentTime, 0.02);
+    try {
+      localStorage.setItem(VOLUME_KEY, String(volume));
+    } catch {
+      /* private mode: this visit only */
+    }
+    this.set({ volume });
   }
 
   toggle(): Promise<void> {
