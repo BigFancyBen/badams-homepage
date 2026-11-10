@@ -256,7 +256,6 @@ const setting = (name) =>
 const weekly = [
   ["standings", "STANDINGS_WEEKDAY", "STANDINGS_HOUR_UTC"],
   ["place round", "PLACE_WEEKDAY", "PLACE_HOUR_UTC"],
-  ["person bonus", "PERSON_WEEKDAY", "PERSON_HOUR_UTC"],
   ["food round", "FOOD_ROUND_WEEKDAY", "FOOD_ROUND_HOUR_UTC"],
   ["drink round", "DRINK_ROUND_WEEKDAY", "DRINK_ROUND_HOUR_UTC"],
   ["caption contest", "CAPTION_WEEKDAY", "CAPTION_HOUR_UTC"],

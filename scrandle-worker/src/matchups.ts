@@ -379,14 +379,14 @@ function openResultsThread(env: Env, matchup: Matchup): Promise<Thread> {
 interface BonusSchedule {
   /**
    * The category it draws from — the one thing that makes a bonus a bonus.
-   * People, and drinks now that those have a slot of their own; places went to
-   * the weekly ranking round and are drawn there instead.
+   * Drinks, now that those have a slot of their own; places went to the weekly
+   * ranking round and are drawn there instead.
    */
-  category: "person" | "drink";
+  category: "drink";
   /** Weekdays it fires on, 0 = Sunday. Empty disables it. */
   weekdays: number[];
   hourUtc: number;
-  /** Minute of the hour it fires on. The cron has to tick on this minute too. */
+  /** Minute of the hour it fires on. The cron only ticks on :00. */
   minute: number;
   windowHours: number;
   /** State key for the once-per-slot guard. Each bonus keeps its own. */
@@ -411,7 +411,7 @@ interface BonusSchedule {
  * used. Its category is drawn only here — the everyday matchup filters it out.
  *
  * `weekdays` is a plain list rather than a setting because the drink slot
- * computes its own; the person bonus reads its list straight from the config.
+ * computes its own.
  */
 async function postBonusMatchupIfDue(
   env: Env,
@@ -420,9 +420,6 @@ async function postBonusMatchupIfDue(
   force: boolean
 ): Promise<boolean> {
   if (!force) {
-    // A bonus can want an off-the-hour minute (the person matchup fires at
-    // :11), which only lands if the cron ticks on that minute — see the second
-    // cron entry in wrangler.toml.
     if (!weeklySlotDue(now, schedule)) return false;
 
     // One per named slot, so an hourly retry cannot double-post. Same
@@ -458,35 +455,9 @@ async function postBonusMatchupIfDue(
 }
 
 /**
- * The person bonus: people rather than plates, on Tuesday at 11:11am Mountain.
- * The odd minute is deliberate; the second cron entry exists so a tick lands on
- * it. Same machinery as the place bonus, a different pool and a different day.
- */
-export function postPersonMatchupIfDue(
-  env: Env,
-  now: number,
-  { force = false }: { force?: boolean } = {}
-): Promise<boolean> {
-  return postBonusMatchupIfDue(
-    env,
-    now,
-    {
-      category: "person",
-      weekdays: parseWeekdays(env.PERSON_WEEKDAY),
-      hourUtc: Number(env.PERSON_HOUR_UTC || "17"),
-      minute: Number(env.PERSON_MINUTE || "11"),
-      windowHours: Number(env.PERSON_WINDOW_HOURS || "24"),
-      slotState: "last_person_slot",
-      preamble: "Bonus round — person vs person.",
-    },
-    force
-  );
-}
-
-/**
  * Drink against drink, on a slot of its own at a cadence set by how much drink
- * there is. Everything else about it is the person bonus: its own category, its
- * own hour, its own slot key, running alongside whatever is open.
+ * there is. Its own category, its own hour, its own slot key, running
+ * alongside whatever is open.
  *
  * What is different is that its days are computed rather than configured.
  * `DRINK_WEEKDAY` is normally left at "auto", which asks the catalog — see

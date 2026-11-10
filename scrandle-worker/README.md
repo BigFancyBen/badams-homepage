@@ -554,7 +554,6 @@ appears in two matchups at once, and it does not claim the hour's slot.
 ```bash
 curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/admin/post-matchup?place=1"
 curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/admin/post-matchup?placement=1"
-curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/admin/post-matchup?person=1"
 curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/admin/post-matchup?drink=1"
 curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/admin/post-matchup?caption=1"
 curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers.dev/admin/post-matchup?foodround=1"
@@ -562,7 +561,7 @@ curl -H "Authorization: Bearer <BACKFILL_SECRET>" "https://<your-worker>.workers
 ```
 
 Posts one of the other slots on demand — `place=1` for the five-photo place
-ranking round, `person=1` for person-vs-person, `drink=1` for drink-vs-drink,
+ranking round, `drink=1` for drink-vs-drink,
 `foodround=1` and `drinkround=1` for the themed fives, `placement=1` for the
 week's new cooking — the same thing the scheduled cron does. Always overlaps,
 always gets that slot's flat window. `place=1` answers `{"posted":false}` when
@@ -916,11 +915,9 @@ running it twice is a no-op.
   early.
 - **Cron hours are UTC and ignore DST.** `POST_HOURS_UTC = "15"` is 9am
   Mountain under MDT and 8am under MST — shift to `"16"` in November.
-  `PLACE_HOUR_UTC`, `PERSON_HOUR_UTC`, `DRINK_HOUR_UTC`, `CAPTION_HOUR_UTC` and `WEEKLY_HOUR_UTC`
+  `PLACE_HOUR_UTC`, `DRINK_HOUR_UTC`, `CAPTION_HOUR_UTC` and `WEEKLY_HOUR_UTC`
   are the same story and need shifting with it. The clock lives entirely in these vars: the cron stays broad and
-  UTC. It ticks on the hour and at `:11`, and `:11` is the only reason the
-  second entry exists — the person bonus fires at 11:11am, and an hourly cron
-  cannot reach that minute on its own.
+  UTC, and ticks on the hour.
 - **`MATCHUPS_PER_SLOT` matchups at a time**, with a single exception. The
   slot posts that many together and then refuses, even when forced, because a
   sixth live matchup on a slot of five splits the vote the same way a second
@@ -929,7 +926,7 @@ running it twice is a no-op.
   topped back up to five next time instead of being stacked on.
 
   The exception is a bonus: `?overlap=1` on `/admin/post-matchup`, and the
-  place, person and drink slots, which are meant to run beside the ordinary
+  place and drink slots, which are meant to run beside the ordinary
   ones. Closing already handles several being open, and a vote carries its
   matchup id on the button, so nothing else needs to know. "Open" here means an
   open *food* matchup, and that word is load-bearing: while it counted drinks,
@@ -959,11 +956,9 @@ running it twice is a no-op.
   day already proved. If that average starts sliding, this is the number to
   turn down.
 - **The 9am posts are cooking, and only cooking.** The everyday draw
-  is fixed to `food`. Everything else the classifier labels — `drink`,
-  `place`, `person` — is drawn on a slot of its own: a five-photo place
-  ranking round on `PLACE_WEEKDAY` (Monday noon by default), person against
-  person on `PERSON_WEEKDAY` (Tuesday 11:11am), drink against drink on
-  `DRINK_WEEKDAY` (happy hour, 5pm Mountain). Each overlaps whatever is open,
+  is fixed to `food`. `drink` and `place` are drawn on a slot of their
+  own: a five-photo place ranking round on `PLACE_WEEKDAY` (Monday noon by
+  default), drink against drink on `DRINK_WEEKDAY` (happy hour, 5pm Mountain). Each overlaps whatever is open,
   gets a flat window instead of closing on a posting hour, and keeps its own
   slot key so posting one never consumes a food slot. Setting any of the
   `*_WEEKDAY` vars to `"-1"` turns that slot off.
@@ -972,9 +967,10 @@ running it twice is a no-op.
   have to match category, so whenever the draw's primary came up a cocktail
   the day's cooking matchup was a drinks matchup instead — at a rate nobody
   chose and nobody could predict from the outside.
-- **Nine categories, and every one of them now has somewhere to go.** The
-  classifier labels `food`, `drink`, `place` and `person`, which each have a
-  slot, and five more — `ingredient`, `pet`, `document`, `screenshot`,
+- **Nine categories, and all but one of them have somewhere to go.** The
+  classifier labels `food`, `drink` and `place`, which each have a slot;
+  `person`, which has none since the Tuesday person-vs-person bonus was
+  retired; and five more — `ingredient`, `pet`, `document`, `screenshot`,
   `other` — which for a long time had none. They were unreachable rather
   than unscheduled: `CATEGORIES` in `matchmaking.ts` gated the draw and none
   of the five were in it.

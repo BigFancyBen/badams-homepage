@@ -90,8 +90,8 @@ export function nextPostTime(
  * Whether a weekly slot's day, hour and minute all land on this tick.
  *
  * Every slot that is not the everyday matchup asks the same three questions in
- * the same order, and there are five of them now — the place round, the
- * placement round, the person bonus, the drink slot and the caption contest.
+ * the same order, and there are four of them now — the place round, the
+ * placement round, the drink slot and the caption contest.
  * The once-per-slot guard stays at the call site because it is a database read
  * and this file is arithmetic, but the calendar part belongs in one place.
  *
@@ -198,7 +198,7 @@ const SWEEP_WEEKS = 4;
 /**
  * Which days each cadence uses, spread as evenly as seven allows. The single
  * day is Thursday: late enough in the week to be its own thing, and clear of
- * the Monday place round and the Tuesday person bonus.
+ * the Monday place round.
  */
 const DRINK_DAYS: Record<number, number[]> = {
   1: [4],

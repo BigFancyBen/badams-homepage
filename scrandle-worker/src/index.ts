@@ -9,7 +9,6 @@ import {
   closeDueMatchups,
   postDrinkMatchupIfDue,
   postMatchupIfDue,
-  postPersonMatchupIfDue,
   postStandingsIfDue,
   repairCard,
 } from "./matchups";
@@ -129,13 +128,6 @@ export default {
             post: () => postPlacementRoundIfDue(env, Date.now(), { force: true }),
             reason:
               "no new cooking inside the window, or its one new photograph has no legal opponent",
-          },
-          {
-            flag: "person",
-            label: "person",
-            post: () => postPersonMatchupIfDue(env, Date.now(), { force: true }),
-            reason:
-              "fewer than two people in the catalog, only one person's photographs, or both are already live",
           },
           {
             flag: "drink",
@@ -491,12 +483,6 @@ export default {
       await postPlacementRoundIfDue(env, now);
     } catch (error) {
       await logToDiscord(env, `Placement round failed: ${String(error)}`);
-    }
-
-    try {
-      await postPersonMatchupIfDue(env, now);
-    } catch (error) {
-      await logToDiscord(env, `Person matchup failed: ${String(error)}`);
     }
 
     try {

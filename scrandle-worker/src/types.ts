@@ -55,13 +55,6 @@ export interface Env {
   PLACEMENT_BALLOT_SIZE: string;
   /** How far back "new" reaches when the placement round draws. */
   PLACEMENT_RECENT_DAYS: string;
-  /** Weekdays for the person bonus, comma-separated, 0 = Sunday. Empty/-1 off. */
-  PERSON_WEEKDAY: string;
-  PERSON_HOUR_UTC: string;
-  /** Minute of the hour the person bonus fires on; the cron must tick on it. */
-  PERSON_MINUTE: string;
-  /** Flat window for the person bonus — it does not close on a posting hour. */
-  PERSON_WINDOW_HOURS: string;
   /**
    * Weekdays for the drink slot. "auto" (or empty) derives them from the size
    * of the drink catalog; an explicit comma-separated list overrides that, and
