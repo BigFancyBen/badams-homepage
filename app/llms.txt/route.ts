@@ -1,13 +1,11 @@
 import { AUTHOR, INDEXED_PAGES, SITE_DESCRIPTION, SITE_NAME, absoluteUrl } from "../site";
 import {
   MFRS,
-  MK64_SCENE,
   OATHKEEP,
   PROGNOSTICATOR_SCREENSHOTS,
-  SM64_SCENE,
   SUMMARIES,
   TESTQ,
-  WAREHOUSE_SCENE,
+  SCENES,
 } from "../components/homepage/projects";
 
 /**
@@ -60,19 +58,10 @@ Built with: ${OATHKEEP.tags.join(", ")}.`,
         PROGNOSTICATOR_SCREENSHOTS.map((s) => ({ label: s.label, text: s.description })),
       )}`,
     ),
-    project(
-      `Prognosticator visualizer: ${WAREHOUSE_SCENE.title}`,
-      `${WAREHOUSE_SCENE.description}\n\nBuilt with: ${WAREHOUSE_SCENE.tags.join(", ")}.`,
-    ),
-    project(
-      `Prognosticator visualizer: ${SM64_SCENE.title}`,
-      `${SM64_SCENE.description}\n\nBuilt with: ${SM64_SCENE.tags.join(", ")}.`,
-    ),
-    project(
-      `Prognosticator visualizer: ${MK64_SCENE.title}`,
-      `${MK64_SCENE.description}
+    ...SCENES.map((scene) =>
+      project(`Prognosticator visualizer: ${scene.title}`, `${scene.description}
 
-Built with: ${MK64_SCENE.tags.join(", ")}.`,
+Built with: ${scene.tags.join(", ")}.`),
     ),
     project(
       TESTQ.title,

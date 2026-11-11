@@ -13,9 +13,7 @@ import { useReducedMotion } from "../../hooks/useReducedMotion";
 import {
   MFRS,
   PROGNOSTICATOR_SCREENSHOTS,
-  WAREHOUSE_SCENE,
-  SM64_SCENE,
-  MK64_SCENE,
+  SCENES,
   OATHKEEP,
   TESTQ,
   RADIANCE_SCREENSHOTS,
@@ -177,7 +175,7 @@ export function BentoGrid() {
         colSpan={3}
         rowSpan={2}
         index={0}
-        fixedDescriptionHeight="7.5rem"
+        fixedDescriptionHeight="3rem"
        
        
         tags={PROGNOSTICATOR_CARD.tags}
@@ -241,9 +239,9 @@ export function BentoGrid() {
           {VISUALIZER_SCENES.description}
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[WAREHOUSE_SCENE, SM64_SCENE, MK64_SCENE].map((scene, i) => (
+          {SCENES.map((scene, i) => (
             <div key={scene.title} className="flex flex-col gap-3">
-              <ShotGallery shots={scene.shots} accentColor={ACCENT} autoPlayInterval={5000} autoPlayDelay={i * 1700} />
+              <ShotGallery shots={scene.shots} accentColor={ACCENT} autoPlayInterval={5000} autoPlayDelay={(i % 3) * 1700} />
               <div>
                 <h3 className="text-base font-bold text-white">{scene.title}</h3>
                 <p className="text-gray-400 text-sm leading-relaxed mt-1 mb-3">{scene.description}</p>

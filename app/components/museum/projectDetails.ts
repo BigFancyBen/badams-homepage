@@ -5,14 +5,13 @@ import {
   IRLSCAPE,
   MFRS,
   MFRS_LINKS,
-  MK64_SCENE,
   MTG_GROUP,
   OATHKEEP,
   PROGNOSTICATOR_CARD,
   PROGNOSTICATOR_SCREENSHOTS,
   SCRANBOT,
   SCRANDLE,
-  SM64_SCENE,
+  SCENES,
   SUMMARIES,
   TESTQ,
   TESTQ_LINK,
@@ -91,14 +90,14 @@ export const PROJECT_DETAILS: Record<string, ProjectDetail> = {
     tags: PROGNOSTICATOR_CARD.tags,
     sections: PROGNOSTICATOR_SCREENSHOTS.map((s) => ({ heading: s.label, text: [s.description] })),
   }),
-  /* The grid's visualizer group: its heading and intro, then the three scenes. */
+  /* The grid's visualizer group: its heading and intro, then the other scenes. */
   warehouse: detail({
     title: WAREHOUSE_SCENE.title,
     description: [WAREHOUSE_SCENE.description],
     tags: WAREHOUSE_SCENE.tags,
     sections: [
       { heading: VISUALIZER_SCENES.title, text: [VISUALIZER_SCENES.description] },
-      ...[SM64_SCENE, MK64_SCENE].map((scene) => ({ heading: scene.title, text: [scene.description], tags: scene.tags })),
+      ...SCENES.filter((scene) => scene !== WAREHOUSE_SCENE).map((scene) => ({ heading: scene.title, text: [scene.description], tags: scene.tags })),
     ],
   }),
   "hobbit-house": detail({
