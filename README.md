@@ -108,12 +108,12 @@ A desktop app that runs a DJ set end to end. It imports Spotify playlists, reads
     <td valign="top"><b>Live deck view.</b> Click a deck and the library filters to tracks that are harmonically compatible and within BPM range. Auto mix runs beat-synced crossfades of 16 to 128 beats.</td>
   </tr>
   <tr>
-    <td><img src="public/prognosticator/06-effect-picks.webp" alt="Effect Picks board dealing three cards, each pairing a light effect with a video look"></td>
-    <td><img src="public/prognosticator/10-gear-setup.webp" alt="Gear Setup canvas showing DMX devices with named channels"></td>
+    <td><img src="public/prognosticator/11-live-board.webp" alt="The Live board: venue buttons, two light effects and three video looks to fire, and a palette"></td>
+    <td><img src="public/prognosticator/12-song-moments.webp" alt="A song's moments: the scan's sections and drops on a timeline, with the lighting plan marked under it"></td>
   </tr>
   <tr>
-    <td valign="top"><b>Effect Picks.</b> Instead of a wall of pads, the board deals three cards, each pairing a light effect with a video look. Tap one and it fires on the next downbeat.</td>
-    <td valign="top"><b>Gear setup.</b> Every DMX device with named channels, from a library of 2000+ OpenFixtureLibrary definitions. With no interface plugged in, a virtual universe keeps the lighting working on screen.</td>
+    <td valign="top"><b>Live board.</b> One tap fires a light effect or video look on the next downbeat. Auto runs the board by itself.</td>
+    <td valign="top"><b>Song moments.</b> A scan finds each track's builds and drops, so the big hits land on them.</td>
   </tr>
 </table>
 
@@ -123,25 +123,30 @@ A desktop app that runs a DJ set end to end. It imports Spotify playlists, reads
 
 **Stack:** Electron, React, TypeScript, Node, Tailwind, DMX, OBS, VirtualDJ
 
-### The visualizer
+### The visualizer scenes
 
-Prognosticator sends its beat grid and DMX output to a Godot visualizer, so every light cue also plays in a venue that does not exist, or on a Nintendo 64 game.
+Prognosticator's beat grid and DMX output drive scenes built in Godot, so one light show plays in every venue.
 
 <table>
   <tr>
-    <td width="33%"><img src="public/prognosticator/warehouse/01-red-beams-wheel-megastructure.webp" alt="Red lasers and moving-head beams across a night plaza, with giant wheel and tower megastructures against a blue dusk"></td>
-    <td width="33%"><img src="public/prognosticator/sm64/01-jolly-roger-bay.webp" alt="Mario seen from behind running across Jolly Roger Bay's sandy ground, with a coin bank glowing at left, a pink star light and a vertical laser"></td>
-    <td width="33%"><img src="public/prognosticator/mk64/01-luigi-spotlight-sweep.webp" alt="Luigi Raceway at night, white spotlights sweeping down from a truss onto the track, a kart ahead"></td>
+    <td width="33%"><img src="public/prognosticator/stadium/01.webp" alt="White beams and red laser fans crossing above a crowd in front of a red-lit festival stage"></td>
+    <td width="33%"><img src="public/prognosticator/mainstage/01.webp" alt="A huge toothed wheel glowing red inside a dark stepped gate, white spotlights along the stage and a crowd below"></td>
+    <td width="33%"><img src="public/prognosticator/cattown/02.webp" alt="A ginger cat crossing a zebra crossing at night with red beams sweeping over the town"></td>
   </tr>
   <tr>
-    <td valign="top"><b>Warehouse.</b> An endless venue built out of code and lit only with DMX values. The rig that drives the real fixtures drives its 104 virtual ones, from concrete rooms and blacklight corridors to outdoor plazas ringed by kilometre-scale wheels and towers.</td>
-    <td valign="top"><b>Super Mario 64.</b> The same DMX kit re-skinned onto the game: pars are Power Stars, movers are cannon heads, and the lava is eight pars. The open-source decomp port runs as a library inside Godot. All 45 areas have a lighting plot, and an autopilot plays Mario on the beat.</td>
-    <td valign="top"><b>Mario Kart 64.</b> The PC port runs as a library that steps the game a frame at a time, and Godot draws it under the same rig. All 20 courses have a lighting plot. CPU drivers race while a director cuts on the downbeat, or up to four people play split screen.</td>
+    <td valign="top"><b>Stadium.</b> Washington-Grizzly Stadium as a night festival, from real terrain, aerial imagery and buildings.</td>
+    <td valign="top"><b>Main Stage.</b> A 96 m gate with a toothed wheel turning on the beat clock.</td>
+    <td valign="top"><b>Cat Town.</b> A PS1-style night town with a cat on autopilot.</td>
   </tr>
   <tr>
-    <td><img src="public/prognosticator/warehouse/06-red-pars-crowd-wheels.webp" alt="Three red par cans lighting the crowd at left, a diagonal red laser and a portal tower behind"></td>
-    <td><img src="public/prognosticator/sm64/05-bay-laser-vista.webp" alt="A wide high view of the bay with blue laser lines fanning out, pink stars, coin banks, green pipes and a small Mario in the middle"></td>
-    <td><img src="public/prognosticator/mk64/05-turnpike-pink-flare.webp" alt="Toad's Turnpike at night, a bus and a truck ahead under an overhead gantry with pink light"></td>
+    <td><img src="public/prognosticator/ceiling/01.webp" alt="Looking up into a hatch in the ceiling at a starfield, a saucer coming down through it"></td>
+    <td><img src="public/prognosticator/warehouse/01-red-beams-wheel-megastructure.webp" alt="Red lasers and moving-head beams across a night plaza, with giant wheel and tower megastructures against a blue dusk"></td>
+    <td><img src="public/prognosticator/mk64/01-luigi-spotlight-sweep.webp" alt="Luigi Raceway at night, white spotlights sweeping down from a truss onto the track, a kart ahead"></td>
+  </tr>
+  <tr>
+    <td valign="top"><b>Ceiling.</b> For a projector aimed at the ceiling: a hatch opens into a world above the room.</td>
+    <td valign="top"><b>Warehouse.</b> An endless club generated from code and lit only by DMX.</td>
+    <td valign="top"><b>Super Mario 64 and Mario Kart 64.</b> The decompiled PC ports run as libraries inside Godot, under the same rig.</td>
   </tr>
 </table>
 

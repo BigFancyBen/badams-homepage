@@ -3,7 +3,7 @@
     "id": "mfrs",
     "title": "Middle Fork Rafting Simulator",
     "kicker": "Godot game · in development",
-    "blurb": "Multiplayer whitewater. One raft, everyone paddles. A three-word trip code puts a friend in your boat, even on a trip already on the water.",
+    "blurb": "Multiplayer whitewater: one raft, everyone paddles. A three-word code puts a friend in your boat mid-trip.",
     "href": "/river",
     "linkLabel": "Visit the river",
     "images": [
@@ -25,7 +25,7 @@
     "id": "oathkeep",
     "title": "Oathkeep",
     "kicker": "Android · testing",
-    "blurb": "A guild chat that is also an async co-op idle ARPG. Once a day a bell asks whether you kept your oath, and keeping it powers your hero, the guild's hearth and the weekly raid.",
+    "blurb": "A guild chat app with an async co-op idle ARPG. A daily check-in powers your hero, the guild and the weekly raid.",
     "href": "/#oathkeep",
     "linkLabel": "Read more",
     "images": [
@@ -47,13 +47,13 @@
     "id": "prognosticator",
     "title": "Prognosticator",
     "kicker": "Electron · DJ companion",
-    "blurb": "A DJ companion app that runs alongside VirtualDJ. It tags every track with key, BPM, energy and vibe, filters the library to what mixes with the playing deck, and drives DMX lighting in time with the music.",
+    "blurb": "A DJ companion for VirtualDJ. It shows what mixes next and runs DMX lights, OBS and Godot visualizers on the beat.",
     "href": "/#prognosticator",
     "linkLabel": "Read more",
     "images": [
-      "/prognosticator/01-dashboard.webp",
-      "/prognosticator/06-effect-picks.webp",
-      "/prognosticator/08-lights.webp"
+      "/prognosticator/stadium/01.webp",
+      "/prognosticator/11-live-board.webp",
+      "/prognosticator/04-now-playing.webp"
     ],
     "palette": [
       "#ff2d55",
@@ -69,7 +69,7 @@
     "id": "warehouse",
     "title": "Warehouse",
     "kicker": "Godot 4 · DMX visualizer",
-    "blurb": "An endless venue that the Godot visualizer builds out of code and lights only with DMX values. The rig that drives the real fixtures drives its 104 virtual ones.",
+    "blurb": "An endless club generated from code and lit only by DMX. The rig that drives the real lights drives its 104 virtual ones.",
     "href": "/#warehouse",
     "linkLabel": "Read more",
     "images": [
@@ -91,7 +91,7 @@
     "id": "hobbit-house",
     "title": "hobbit.house",
     "kicker": "React · Docker · MQTT",
-    "blurb": "Phone control app for a living room mini PC. Launch games and streaming apps, run a music visualizer on the TV, and control lights, Kodi and cameras.",
+    "blurb": "Phone control for a living-room mini PC: games, streaming, a TV music visualizer, lights and Kodi.",
     "href": "https://github.com/BigFancyBen/hobbit-ccp",
     "linkLabel": "GitHub",
     "images": [
@@ -113,7 +113,7 @@
     "id": "testq",
     "title": "testq",
     "kicker": "Node · tooling",
-    "blurb": "One queue for every Godot run on the machine, so a dozen worktrees' tests stop fighting over the same cores and GPU.",
+    "blurb": "One queue for every Godot run on the machine, so a dozen worktrees stop fighting over the cores and GPU.",
     "href": "https://github.com/BigFancyBen/testq",
     "linkLabel": "GitHub",
     "images": [
@@ -131,7 +131,7 @@
     "id": "scrandle",
     "title": "Scrandle",
     "kicker": "Web game · weekly",
-    "blurb": "A weekly game built from my friends' dinner photos. Ten pairs of plates: pick the one the channel rated higher, then see the ratings and who cooked each.",
+    "blurb": "A weekly game made from friends' dinner photos: pick the plate the group rated higher.",
     "href": "/scrandle/play",
     "linkLabel": "Play",
     "images": [
@@ -153,7 +153,7 @@
     "id": "yut-hut",
     "title": "Yut Hut",
     "kicker": "Discord bot",
-    "blurb": "Turns workout check-ins into Old School RuneScape progress for a friend group. Each check-in is a Slayer session run on the game's real XP table and drop tables.",
+    "blurb": "Turns workout check-ins into Old School RuneScape Slayer sessions, run on the game's real XP and drop tables.",
     "href": "/yut-hut",
     "linkLabel": "Visit",
     "images": [
@@ -197,7 +197,7 @@
     "id": "floatwise",
     "title": "FloatWise",
     "kicker": "Trip planner",
-    "blurb": "Hourly forecast tables for multiple locations with the live Yellowstone River flow, and a map for pinning put-ins, take-outs and swim spots.",
+    "blurb": "Hourly forecasts, live Yellowstone River flow and a map of put-ins and take-outs.",
     "href": "/floatwise",
     "linkLabel": "Open",
     "images": [
@@ -215,7 +215,7 @@
     "id": "dota-randomizer",
     "title": "Dota Randomizer",
     "kicker": "Canvas toy",
-    "blurb": "Spin two wheels to get a random hero and a random item to build, fed by live OpenDota data, with sound and confetti.",
+    "blurb": "Two canvas wheels spin up a random hero and item from live OpenDota data.",
     "href": "/dota-randomizer",
     "linkLabel": "Spin",
     "images": [
@@ -233,7 +233,7 @@
     "id": "irlscape",
     "title": "IRLScape",
     "kicker": "Streaming overlay",
-    "blurb": "Old School RuneScape's game UI on a live camera feed, with Twitch chat integration and Joycon controls.",
+    "blurb": "Old School RuneScape's UI over a live camera feed, with Twitch chat and Joycon controls.",
     "href": "https://www.youtube.com/watch?v=gCofVhR5HUQ",
     "linkLabel": "Watch",
     "images": [
