@@ -77,6 +77,12 @@ export const INDEXED_PAGES = [
       "Spin the wheels to get a random Dota 2 hero and a random item to build for your next game.",
   },
   {
+    path: "/clave-boss",
+    title: "Clave Boss",
+    description:
+      "A tick-based salsa footwork trainer. Be on the right tile on every count as the target traces the mambo basic, side basic and break on 2, and build a streak and a consistency score, from 100 BPM (one 0.6s game tick per beat) up to 230.",
+  },
+  {
     path: "/scrandle",
     title: "Scrandle Build Plan",
     description:

@@ -1,0 +1,153 @@
+/* Clave Boss: night dance-floor arena (boss above a 3x3 tile floor) beside a
+   brass control rack; stacks on phones. Every rule is scoped under .clave so
+   the page's short class names cannot leak into the rest of the site. */
+
+@keyframes clave-grade {
+  0% { opacity: 1; transform: translateY(4px) }
+  70% { opacity: 1 }
+  100% { opacity: 0; transform: translateY(-4px) }
+}
+
+.clave {
+  --night: #140c12; --floor: #20131b; --tile: #2c1923; --tile-2: #35202b; --edge: #4c2e3d;
+  --ink: #f4e7d7; --muted: #b39aa6; --brass: #f0b84c; --safe: #52d6c3; --hit: #ff4d6a; --white: #ffffff;
+  --display: var(--font-bungee), Impact, "Arial Black", system-ui, sans-serif;
+  --body: var(--font-inter), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: var(--font-geist-mono), ui-monospace, Consolas, monospace;
+
+  color-scheme: dark;
+  min-height: 100dvh;
+  background: var(--night);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 15px;
+  line-height: 1.45;
+
+  .app { max-width: 1080px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 18px 32px; display: flex; flex-direction: column; gap: 16px }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap }
+  .logo { font-family: var(--display); font-size: 30px; letter-spacing: .02em; color: var(--brass); margin: 0; line-height: 1 }
+  .logo span { color: var(--hit) }
+  .tickread { font-family: var(--mono); color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums }
+  .headright { display: flex; align-items: center; gap: 12px }
+  .helpbtn { width: 34px; height: 34px; padding: 0; font-family: var(--display); font-size: 16px; color: var(--brass); border-color: var(--brass) }
+
+  .helpdlg { width: min(560px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; background: var(--floor); color: var(--ink); border: 2px solid var(--brass); padding: 20px; margin: auto }
+  .helpdlg::backdrop { background: rgba(10, 6, 9, .78) }
+  .helphead { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px }
+  .helphead h2 { font-family: var(--display); font-size: 22px; color: var(--brass); margin: 0; font-weight: 400 }
+  .helpclose { width: 34px; height: 34px; padding: 0 }
+  .legend { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px }
+  .legend li { display: grid; grid-template-columns: 112px 128px minmax(0, 1fr); gap: 12px; align-items: center; padding-bottom: 10px; border-bottom: 1px solid var(--edge) }
+  .legend .glyph { font-size: 20px; font-weight: 700; text-align: center; white-space: nowrap }
+  .legend .glyph.dim { color: var(--muted) }
+  .legend .keys { font-family: var(--mono); font-size: 12px; color: var(--muted) }
+  .legend .what { font-size: 14px }
+  .swatch { display: inline-block; width: 30px; height: 30px; background: var(--tile); vertical-align: middle }
+  .swatch.safe { box-shadow: inset 0 0 0 3px var(--safe) }
+  .swatch.hold { box-shadow: inset 0 0 0 3px var(--brass) }
+  kbd { font-family: var(--mono); font-size: 12px; color: var(--ink); background: var(--tile-2); border: 1px solid var(--edge); padding: 1px 6px }
+  .helpnote { margin: 14px 0 0; font-size: 14px; color: var(--muted); line-height: 1.7 }
+  @media (max-width: 520px) {
+    .legend li { grid-template-columns: 112px minmax(0, 1fr); }
+    header { flex-wrap: nowrap; align-items: center }
+    .tickread { display: none }
+    .legend .what { grid-column: 1 / -1 }
+  }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; align-items: start }
+  @media (max-width: 840px) { .layout { grid-template-columns: minmax(0, 1fr) } }
+
+  .stage { display: flex; flex-direction: column; gap: 12px; min-width: 0; align-items: center }
+  .consbar, .arena, .counts { width: min(100%, 460px) }
+  .consbar { display: flex; flex-direction: column; gap: 8px }
+  .consline { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap }
+  .consname { font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted) }
+  .conspct { font-family: var(--mono); font-size: 18px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; min-width: 4ch }
+  .phase { margin-left: auto; font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--brass); white-space: nowrap }
+  .bar { height: 6px; background: var(--tile); position: relative; overflow: hidden }
+  .bar i { position: absolute; inset: 0; background: var(--safe); transform-origin: left center; transform: scaleX(0); transition: transform .3s ease-out }
+
+  .arena { position: relative; background: var(--floor); border: 2px solid var(--edge); padding: 14px; display: flex; flex-direction: column; gap: 14px; align-items: center; overflow: hidden }
+  .beatrow { position: relative; width: 100%; display: flex; justify-content: center; height: 72px }
+  .beat { width: 68px; height: 68px; border-radius: 50%; background: var(--tile-2); border: 2px solid var(--brass); display: grid; place-items: center; will-change: transform }
+  .beat svg { width: 44px; height: 44px }
+  .bigcount { position: absolute; left: 0; top: 0; font-family: var(--display); font-size: 46px; line-height: 1; color: var(--brass); font-variant-numeric: tabular-nums; min-width: 1ch }
+  .bigcount.dim { color: var(--muted) }
+  .grade { position: absolute; right: 0; top: 4px; font-family: var(--display); font-size: 15px; text-align: right; opacity: 0 }
+  .grade.show { animation: clave-grade .5s ease-out forwards }
+  .grade.good { color: var(--safe) }
+  .grade.bad { color: var(--hit) }
+  .grade.meh { color: var(--brass) }
+
+  .grid { position: relative; width: 100%; aspect-ratio: 1; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); gap: 6px }
+  .tile { background: var(--tile); border: 1px solid var(--edge); position: relative; transition: background-color .12s }
+  .tile:nth-child(even) { background: var(--tile-2) }
+  .tile.target { box-shadow: inset 0 0 0 3px var(--safe) }
+  .tile.target.holdt { box-shadow: inset 0 0 0 3px var(--brass) }
+  .tile em { position: absolute; right: 6px; bottom: 4px; font-style: normal; font-family: var(--mono); font-size: 12px; color: var(--safe) }
+  .tile.holdt em { color: var(--brass) }
+  .player { position: absolute; left: 0; top: 0; width: calc((100% - 12px) / 3); aspect-ratio: 1; display: grid; place-items: center; pointer-events: none; transition: transform 60ms linear; z-index: 2 }
+  .player .me { width: 58%; aspect-ratio: 1; border-radius: 50%; background: var(--brass); border: 3px solid var(--ink); display: grid; place-items: center; transition: transform .08s }
+  .player .me svg { width: 62%; height: 62% }
+  .player.tap .me { transform: scale(.86) }
+  .player.miss .me { background: var(--hit) }
+
+  .counts { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 4px }
+  .cnt { border: 1px solid var(--edge); background: var(--floor); padding: 6px 0 5px; text-align: center; display: flex; flex-direction: column; gap: 2px }
+  .cnt b { font-family: var(--mono); font-size: 11px; color: var(--muted); font-weight: 500 }
+  .cnt span { font-size: 20px; line-height: 1.1; font-weight: 700; min-height: 1.1em }
+  .cnt.hold span { color: var(--muted) }
+  .cnt.now { border-color: var(--brass); background: var(--tile-2) }
+  .cnt.ok { border-bottom: 3px solid var(--safe) }
+  .cnt.bad { border-bottom: 3px solid var(--hit) }
+
+  .pad { display: none; grid-template-columns: repeat(3, 62px); grid-template-rows: repeat(2, 62px); gap: 6px; justify-content: center; touch-action: none; user-select: none }
+  @media (pointer: coarse) { .pad { display: grid } }
+  .pad button { font-size: 24px }
+  .pad .u { grid-column: 2; grid-row: 1 }
+  .pad .l { grid-column: 1; grid-row: 2 }
+  .pad .d { grid-column: 2; grid-row: 2 }
+  .pad .r { grid-column: 3; grid-row: 2 }
+  .pad .t { grid-column: 3; grid-row: 1 }
+
+  .overlay { position: absolute; inset: 0; z-index: 10; background: color-mix(in srgb, var(--night) 86%, transparent); display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 12px; padding: 24px; text-align: center }
+  .overlay[hidden], .overlay [hidden] { display: none }
+  .overlay h2 { font-family: var(--display); font-size: 26px; margin: 0; color: var(--brass); text-wrap: balance; line-height: 1.1 }
+  .overlay p { margin: 0; max-width: 34ch }
+  .results { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 22px; font-variant-numeric: tabular-nums; text-align: left }
+  .results div { display: flex; justify-content: space-between; gap: 14px; font-family: var(--mono); font-size: 13px }
+  .results span { color: var(--muted) }
+
+  button { font: inherit; color: var(--ink); background: var(--tile); border: 1px solid var(--edge); cursor: pointer; padding: 8px 12px }
+  button:hover { background: var(--tile-2) }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px }
+  .go { font-family: var(--display); font-size: 18px; background: var(--brass); color: var(--night); border: none; padding: 12px 26px }
+  .go:hover { background: var(--ink) }
+  .go.stop { background: var(--hit); color: var(--white) }
+  .panel { display: flex; flex-direction: column; gap: 16px; background: var(--floor); border: 1px solid var(--edge); padding: 16px; min-width: 0 }
+  fieldset { border: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 16px; min-width: 0 }
+  fieldset:disabled { opacity: .5 }
+  .group { display: flex; flex-direction: column; gap: 8px }
+  .label { font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted) }
+  .seg { display: flex; flex-wrap: wrap; gap: 4px }
+  .seg button { flex: 1 1 auto; padding: 7px 10px; font-size: 13px }
+  .seg button[aria-pressed="true"] { background: var(--brass); color: var(--night); border-color: var(--brass); font-weight: 700 }
+  .tempo { display: flex; align-items: baseline; gap: 8px; font-variant-numeric: tabular-nums }
+  .tempo strong { font-family: var(--display); font-size: 38px; line-height: 1; font-weight: 400 }
+  .tempo span { font-family: var(--mono); font-size: 12px; color: var(--muted) }
+  input[type="range"] { width: 100%; accent-color: var(--brass) }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-family: var(--mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums }
+  .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; border-top: 1px solid var(--edge); padding-top: 14px }
+  .stat { display: flex; flex-direction: column; gap: 2px; align-items: center }
+  .stat strong { font-family: var(--mono); font-size: 20px; font-variant-numeric: tabular-nums }
+  .stat .label { font-size: 10px }
+  .meter { position: relative; height: 26px; background: var(--tile); border: 1px solid var(--edge) }
+  .meter::before { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: var(--safe); opacity: .6 }
+  .meter::after { content: ""; position: absolute; left: 30%; width: 40%; top: 0; bottom: 0; background: color-mix(in srgb, var(--safe) 12%, transparent) }
+  .meter i { position: absolute; top: 50%; width: 6px; height: 14px; margin: -7px 0 0 -3px; background: var(--brass); z-index: 1 }
+  .meter i:last-child { background: var(--ink); height: 20px; margin-top: -10px }
+
+  @media (prefers-reduced-motion: reduce) {
+    .grade.show { animation-duration: .01s }
+    .player, .bar i { transition: none }
+  }
+}
