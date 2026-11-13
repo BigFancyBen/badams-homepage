@@ -77,6 +77,12 @@ export const INDEXED_PAGES = [
       "Spin the wheels to get a random Dota 2 hero and a random item to build for your next game.",
   },
   {
+    path: "/clave-boss",
+    title: "Clave Boss",
+    description:
+      "A rhythm boss fight for salsa footwork. Every beat the boss swings at the whole floor except one tile, and the safe tiles trace out the mambo basic, side basic and break on 2, from 100 BPM (one 0.6s game tick per beat) up to 230.",
+  },
+  {
     path: "/scrandle",
     title: "Scrandle Build Plan",
     description:
