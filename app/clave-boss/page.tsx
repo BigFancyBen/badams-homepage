@@ -142,7 +142,6 @@ export default function ClaveBossPage() {
               <div className="group">
                 <span className="label">Pattern</span>
                 <div className="seg" data-ref="mode">
-                  <button data-v="mix">Mix</button>
                   <button data-v="mambo">Mambo</button>
                   <button data-v="side">Side</button>
                   <button data-v="on2">Break on 2</button>

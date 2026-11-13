@@ -8,11 +8,10 @@
 type Step = "N" | "S" | "W" | "E" | "T" | "H"; // forward, back, left, right, tap in place, hold
 type Action = Exclude<Step, "H">;
 type PatternKey = "mambo" | "side" | "on2";
-type Mode = "mix" | PatternKey;
 
 interface Settings {
   bpm: number;
-  mode: Mode;
+  mode: PatternKey;
   role: "lead" | "follow";
   next: boolean;
   clave: boolean;
@@ -45,8 +44,6 @@ const PATTERNS: Record<PatternKey, { name: string; steps: Step[] }> = {
   side: { name: "Side basic", steps: ["W", "E", "T", "H", "E", "W", "T", "H"] },
   on2: { name: "Break on 2", steps: ["T", "S", "N", "H", "T", "N", "S", "H"] },
 };
-const MIX_ORDER: PatternKey[] = ["mambo", "side", "on2"];
-const MIX_BARS = 4; // bars per pattern in Mix
 const MIRROR: Record<Step, Step> = { N: "S", S: "N", W: "E", E: "W", T: "T", H: "H" };
 const DIR: Record<Step, [number, number]> = { N: [0, -1], S: [0, 1], W: [-1, 0], E: [1, 0], T: [0, 0], H: [0, 0] };
 const GLYPH: Record<Step, string> = { N: "↑", S: "↓", W: "←", E: "→", T: "●", H: "·" };
@@ -97,9 +94,9 @@ export function mountClaveBoss(root: HTMLElement): () => void {
 
   const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const stored = load<Settings>(SETTINGS_KEY) ?? {};
-  if ((stored.mode as string) === "boss") stored.mode = "mix"; // saved before Mix replaced Boss
+  if (!stored.mode || !(stored.mode in PATTERNS)) stored.mode = "mambo"; // "boss" and "mix" were removed
   const settings: Settings = {
-    bpm: 180, mode: "mix", role: "lead", next: true, clave: true, bell: true, conga: true, offset: 0,
+    bpm: 180, mode: "mambo", role: "lead", next: true, clave: true, bell: true, conga: true, offset: 0,
     ...stored,
   };
   const record = { streak: 0, bpm: 0, ...load<{ streak: number; bpm: number }>(RECORD_KEY) };
@@ -124,9 +121,10 @@ export function mountClaveBoss(root: HTMLElement): () => void {
   }
 
   /* ---------- pattern lookup ---------- */
-  function patKey(b: number): PatternKey {
-    if (settings.mode !== "mix") return settings.mode;
-    return MIX_ORDER[Math.floor(b / MIX_BARS) % MIX_ORDER.length];
+  // Every bar uses the selected pattern; the bar index is kept so a future
+  // sequence of patterns has one place to go.
+  function patKey(_bar: number): PatternKey {
+    return settings.mode;
   }
   function stepAt(n: number): Step | null {
     const g = n - COUNT_IN;
@@ -428,7 +426,7 @@ export function mountClaveBoss(root: HTMLElement): () => void {
       ref("ovResults").hidden = true;
     } else {
       save(RECORD_KEY, record);
-      const what = settings.mode === "mix" ? "Mix" : PATTERNS[settings.mode].name;
+      const what = PATTERNS[settings.mode].name;
       ref("ovTitle").textContent = `${pct(s.okTotal, s.judged)}% consistent`;
       ref("ovText").textContent = `${what}, ${settings.role}, ${settings.bpm} BPM.`;
       const avg = s.offsets.length ? s.offsets.reduce((a, b) => a + b, 0) / s.offsets.length : 0;
@@ -475,7 +473,7 @@ export function mountClaveBoss(root: HTMLElement): () => void {
       },
       { signal },
     );
-  onButton("mode", (b) => (settings.mode = b.dataset.v as Mode));
+  onButton("mode", (b) => (settings.mode = b.dataset.v as PatternKey));
   onButton("role", (b) => (settings.role = b.dataset.v as Settings["role"]));
   onButton("presets", (b) => (settings.bpm = Number(b.dataset.v)));
   onButton("toggles", (b) => {
