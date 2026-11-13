@@ -1,14 +1,14 @@
 /**
- * Clave Boss: a tick-based boss fight where the safe tile on each beat traces
- * a salsa step pattern. The audio clock is the only clock: beats are scheduled
- * on the AudioContext timeline and key presses are judged against the same
- * timeline, so the frame rate never affects timing.
+ * Clave Boss: a tick-based footwork trainer where the target tile on each beat
+ * traces a salsa step pattern. The audio clock is the only clock: beats are
+ * scheduled on the AudioContext timeline and key presses are judged against
+ * the same timeline, so the frame rate never affects timing.
  */
 
 type Step = "N" | "S" | "W" | "E" | "T" | "H"; // forward, back, left, right, tap in place, hold
 type Action = Exclude<Step, "H">;
 type PatternKey = "mambo" | "side" | "on2";
-type Mode = "boss" | PatternKey;
+type Mode = "mix" | PatternKey;
 
 interface Settings {
   bpm: number;
@@ -21,24 +21,22 @@ interface Settings {
   offset: number;
 }
 
-interface Game {
+interface Session {
   spb: number;
   win: number;
   start: number;
   inputs: Map<number, { a: Action; off: number; double?: boolean }>;
   resolved: number;
   schedE: number;
-  barPat: PatternKey[];
   results: Map<number, "ok" | "bad" | "hold">;
-  hp: number;
-  boss: number;
-  hits: number;
+  recent: boolean[]; // rolling window for the consistency bar
+  okTotal: number;
+  judged: number;
   streak: number;
   best: number;
   steps: number;
   perfect: number;
   offsets: number[];
-  over: boolean;
   disp: [number, number];
 }
 
@@ -47,12 +45,13 @@ const PATTERNS: Record<PatternKey, { name: string; steps: Step[] }> = {
   side: { name: "Side basic", steps: ["W", "E", "T", "H", "E", "W", "T", "H"] },
   on2: { name: "Break on 2", steps: ["T", "S", "N", "H", "T", "N", "S", "H"] },
 };
+const MIX_ORDER: PatternKey[] = ["mambo", "side", "on2"];
+const MIX_BARS = 4; // bars per pattern in Mix
 const MIRROR: Record<Step, Step> = { N: "S", S: "N", W: "E", E: "W", T: "T", H: "H" };
 const DIR: Record<Step, [number, number]> = { N: [0, -1], S: [0, 1], W: [-1, 0], E: [1, 0], T: [0, 0], H: [0, 0] };
 const GLYPH: Record<Step, string> = { N: "↑", S: "↓", W: "←", E: "→", T: "●", H: "·" };
-const BOSS_MAX = 400;
-const HP_MAX = 99;
 const COUNT_IN = 8;
+const WINDOW = 32; // judged counts the consistency bar looks back over
 const CLAVE = new Set([0, 3, 6, 10, 12]); // 3-2 son clave, in eighth notes over one 8-count
 const CONGA = new Set([6, 7, 14, 15]); // tumbao open tones on 4, 4&, 8, 8&
 const KEYS: Record<string, Action> = {
@@ -60,7 +59,7 @@ const KEYS: Record<string, Action> = {
   ArrowLeft: "W", KeyA: "W", ArrowRight: "E", KeyD: "E", Space: "T",
 };
 const SETTINGS_KEY = "clave-boss-settings";
-const RECORD_KEY = "clave-boss-record";
+const RECORD_KEY = "clave-boss-best";
 
 function load<T>(k: string): Partial<T> | null {
   try {
@@ -77,6 +76,8 @@ function save(k: string, v: unknown) {
   }
 }
 const clamp = (v: number) => Math.max(0, Math.min(2, v));
+const pct = (ok: number, n: number) => (n ? Math.round((100 * ok) / n) : null);
+const signedMs = (s: number) => `${s >= 0 ? "+" : "−"}${Math.abs(s * 1000).toFixed(0)} ms`;
 
 export function mountClaveBoss(root: HTMLElement): () => void {
   const ref = <T extends HTMLElement = HTMLElement>(name: string) =>
@@ -95,47 +96,37 @@ export function mountClaveBoss(root: HTMLElement): () => void {
   };
 
   const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const stored = load<Settings>(SETTINGS_KEY) ?? {};
+  if ((stored.mode as string) === "boss") stored.mode = "mix"; // saved before Mix replaced Boss
   const settings: Settings = {
-    bpm: 180, mode: "boss", role: "lead", next: true, clave: true, bell: true, conga: true, offset: 0,
-    ...load<Settings>(SETTINGS_KEY),
+    bpm: 180, mode: "mix", role: "lead", next: true, clave: true, bell: true, conga: true, offset: 0,
+    ...stored,
   };
-  const record = { kills: 0, flawless: 0, ...load<{ kills: number; flawless: number }>(RECORD_KEY) };
+  const record = { streak: 0, bpm: 0, ...load<{ streak: number; bpm: number }>(RECORD_KEY) };
 
   let actx: AudioContext | null = null;
   let master: GainNode | null = null;
-  let G: Game | null = null;
+  let S: Session | null = null;
   let running = false;
   let schedTimer = 0;
   let raf = 0;
   const tiles = all(".tile");
   const player = ref("player");
-  const bossEl = ref("boss");
-  const arena = ref("arena");
+  const beatEl = ref("beat");
 
-  function newGame(): Game {
+  function newSession(): Session {
     const spb = 60 / settings.bpm;
     return {
       spb, win: Math.min(0.15, spb * 0.45), start: 0, inputs: new Map(), resolved: COUNT_IN - 1, schedE: 0,
-      barPat: [], results: new Map(), hp: HP_MAX, boss: BOSS_MAX, hits: 0, streak: 0, best: 0, steps: 0,
-      perfect: 0, offsets: [], over: false, disp: [1, 1],
+      results: new Map(), recent: [], okTotal: 0, judged: 0, streak: 0, best: 0, steps: 0, perfect: 0,
+      offsets: [], disp: [1, 1],
     };
   }
 
   /* ---------- pattern lookup ---------- */
   function patKey(b: number): PatternKey {
-    if (settings.mode !== "boss") return settings.mode;
-    if (!G) return "mambo";
-    if (G.barPat[b]) return G.barPat[b];
-    const f = G.boss / BOSS_MAX;
-    const keys: PatternKey[] = ["mambo", "side", "on2"];
-    const k: PatternKey =
-      f > 2 / 3 ? "mambo" : f > 1 / 3 ? "side" : f > 0.15 ? "on2" : keys[Math.floor(Math.random() * 3)];
-    return (G.barPat[b] = k);
-  }
-  function phaseName() {
-    if (settings.mode !== "boss") return "Drill";
-    const f = G ? G.boss / BOSS_MAX : 1;
-    return f > 2 / 3 ? "Phase 1" : f > 1 / 3 ? "Phase 2" : f > 0.15 ? "Phase 3" : "Final";
+    if (settings.mode !== "mix") return settings.mode;
+    return MIX_ORDER[Math.floor(b / MIX_BARS) % MIX_ORDER.length];
   }
   function stepAt(n: number): Step | null {
     const g = n - COUNT_IN;
@@ -216,123 +207,99 @@ export function mountClaveBoss(root: HTMLElement): () => void {
     if (settings.conga && CONGA.has(p)) conga(t, p % 2 === 1);
   }
   function scheduler() {
-    if (!running || !G || G.over || !actx) return;
-    const h = G.spb / 2, until = actx.currentTime + 0.15;
-    while (G.start + G.schedE * h < until) {
-      playEighth(G.schedE, G.start + G.schedE * h);
-      G.schedE++;
+    if (!running || !S || !actx) return;
+    const h = S.spb / 2, until = actx.currentTime + 0.15;
+    while (S.start + S.schedE * h < until) {
+      playEighth(S.schedE, S.start + S.schedE * h);
+      S.schedE++;
     }
   }
   /** Seconds since beat 0 as the player hears it. */
   function relT() {
-    return actx!.currentTime - (actx!.outputLatency || actx!.baseLatency || 0) - settings.offset / 1000 - G!.start;
+    return actx!.currentTime - (actx!.outputLatency || actx!.baseLatency || 0) - settings.offset / 1000 - S!.start;
   }
 
   /* ---------- input & judging ---------- */
   function press(a: Action) {
-    if (!running || !G || G.over) return;
-    const t = relT(), n = Math.round(t / G.spb), off = t - n * G.spb;
-    if (n < COUNT_IN || n <= G.resolved) return;
-    if (Math.abs(off) > G.win) {
+    if (!running || !S) return;
+    const t = relT(), n = Math.round(t / S.spb), off = t - n * S.spb;
+    if (n < COUNT_IN || n <= S.resolved) return;
+    if (Math.abs(off) > S.win) {
       showGrade("Off beat", "meh");
       return;
     }
-    const ex = G.inputs.get(n);
+    const ex = S.inputs.get(n);
     if (ex) {
       ex.double = true;
       return;
     }
-    G.inputs.set(n, { a, off });
+    S.inputs.set(n, { a, off });
     const base = tileAt(n - 1);
-    G.disp = [clamp(base[0] + DIR[a][0]), clamp(base[1] + DIR[a][1])];
+    S.disp = [clamp(base[0] + DIR[a][0]), clamp(base[1] + DIR[a][1])];
     renderPlayer();
     player.classList.add("tap");
     later(() => player.classList.remove("tap"), 70);
   }
+  function judge(ok: boolean) {
+    const s = S!;
+    s.recent.push(ok);
+    if (s.recent.length > WINDOW) s.recent.shift();
+    s.judged++;
+    if (ok) s.okTotal++;
+  }
   function resolve(n: number) {
-    const g = G!;
-    const s = stepAt(n);
-    if (!s) return;
-    const inp = g.inputs.get(n);
-    g.inputs.delete(n);
+    const s = S!;
+    const step = stepAt(n);
+    if (!step) return;
+    const inp = s.inputs.get(n);
+    s.inputs.delete(n);
     let res: "ok" | "bad" | "hold";
-    if (s === "H") res = inp ? fail("Moved on the hold", false) : "hold";
-    else if (!inp) res = fail("Missed step", true);
-    else if (inp.double) res = fail("Double step", true);
-    else if (inp.a !== s) res = fail("Wrong step", true);
+    if (step === "H") res = inp ? miss("Moved on the hold") : "hold";
+    else if (!inp) res = miss("Missed");
+    else if (inp.double) res = miss("Double step");
+    else if (inp.a !== step) res = miss("Wrong step");
     else res = land(inp.off);
-    g.results.set(n, res);
-    g.disp = tileAt(n);
+    s.results.set(n, res);
+    s.disp = tileAt(n);
     renderPlayer();
-    if (s !== "H") swing(g.disp);
   }
   function land(off: number): "ok" {
-    const g = G!;
+    const s = S!;
     const a = Math.abs(off);
-    let grade: string, dmg: number, cls = "good";
+    let grade: string, cls = "good";
     if (a <= 0.04) {
       grade = "Perfect";
-      dmg = 4;
-      g.perfect++;
-    } else if (a <= 0.08) {
-      grade = "Good";
-      dmg = 3;
-    } else {
+      s.perfect++;
+    } else if (a <= 0.08) grade = "Good";
+    else {
       grade = off < 0 ? "Early" : "Late";
-      dmg = 1;
       cls = "meh";
     }
-    g.steps++;
-    g.streak++;
-    g.best = Math.max(g.best, g.streak);
-    g.offsets.push(off);
-    if (g.offsets.length > 24) g.offsets.shift();
-    showGrade(grade, cls);
-    if (settings.mode === "boss") {
-      g.boss = Math.max(0, g.boss - dmg);
-      splat(bossEl, dmg, "dmg");
-      if (g.boss <= 0) end(true);
+    s.steps++;
+    s.streak++;
+    s.best = Math.max(s.best, s.streak);
+    if (s.streak > record.streak) {
+      record.streak = s.streak;
+      record.bpm = settings.bpm;
     }
+    s.offsets.push(off);
+    if (s.offsets.length > 24) s.offsets.shift();
+    judge(true);
+    showGrade(grade, cls);
     return "ok";
   }
-  function fail(msg: string, isStep: boolean): "bad" {
-    const g = G!;
-    const dmg = 7 + Math.floor(Math.random() * 12);
-    g.hp = Math.max(0, g.hp - dmg);
-    g.hits++;
-    g.streak = 0;
-    if (isStep) g.steps++;
-    splat(player, dmg, "hit");
+  function miss(msg: string): "bad" {
+    const s = S!;
+    s.streak = 0;
+    s.steps++;
+    judge(false);
     showGrade(msg, "bad");
-    player.classList.add("ouch");
-    later(() => player.classList.remove("ouch"), 180);
-    if (g.hp <= 0) {
-      if (settings.mode === "boss") end(false);
-      else g.hp = HP_MAX;
-    }
+    player.classList.add("miss");
+    later(() => player.classList.remove("miss"), 180);
     return "bad";
   }
 
   /* ---------- effects ---------- */
-  function swing(safe: [number, number]) {
-    bossEl.classList.remove("swing");
-    void bossEl.offsetWidth;
-    bossEl.classList.add("swing");
-    tiles.forEach((t, i) => {
-      if (i !== safe[1] * 3 + safe[0]) t.classList.add("hot");
-    });
-    later(() => tiles.forEach((t) => t.classList.remove("hot")), Math.min(130, G!.spb * 450));
-  }
-  function splat(el: HTMLElement, num: number, cls: string) {
-    const ar = arena.getBoundingClientRect(), r = el.getBoundingClientRect();
-    const d = document.createElement("div");
-    d.className = "splat " + cls;
-    d.textContent = String(num);
-    d.style.left = r.left - ar.left + r.width / 2 + (Math.random() * 16 - 8) + "px";
-    d.style.top = r.top - ar.top + r.height / 2 + "px";
-    arena.appendChild(d);
-    later(() => d.remove(), 720);
-  }
   function showGrade(txt: string, cls: string) {
     const g = ref("grade");
     g.className = "grade";
@@ -343,38 +310,33 @@ export function mountClaveBoss(root: HTMLElement): () => void {
 
   /* ---------- render ---------- */
   function renderPlayer() {
-    const [x, y] = G ? G.disp : [1, 1];
+    const [x, y] = S ? S.disp : [1, 1];
     player.style.transform = `translate(calc(${x} * (100% + 6px)), calc(${y} * (100% + 6px)))`;
   }
   function renderStrip(bar: number, cur: number) {
     const base = COUNT_IN + bar * 8;
     const cells = ref("counts").children;
     for (let k = 0; k < 8; k++) {
-      const n = base + k, s = stepAt(n)!, c = cells[k] as HTMLElement, r = G ? G.results.get(n) : undefined;
+      const n = base + k, s = stepAt(n)!, c = cells[k] as HTMLElement, r = S ? S.results.get(n) : undefined;
       (c.lastElementChild as HTMLElement).textContent = GLYPH[s];
       c.className =
         "cnt" + (s === "H" ? " hold" : "") + (n === cur ? " now" : "") + (r === "ok" ? " ok" : r === "bad" ? " bad" : "");
     }
   }
   function renderStats() {
-    const hp = G ? G.hp : HP_MAX;
-    ref("hp").textContent = String(hp);
-    ref("orb").style.setProperty("--p", String(hp / HP_MAX));
-    ref("hits").textContent = String(G ? G.hits : 0);
-    ref("streak").textContent = String(G ? G.streak : 0);
-    ref("perf").textContent = G && G.steps ? Math.round((100 * G.perfect) / G.steps) + "%" : "–";
-    const boss = G ? G.boss : BOSS_MAX, isBoss = settings.mode === "boss";
-    ref("bossfill").style.transform = `scaleX(${isBoss ? boss / BOSS_MAX : 1})`;
-    ref("bosshp").textContent = isBoss ? `${boss} / ${BOSS_MAX}` : "∞";
-    const offs = G ? G.offsets : [];
+    const recentOk = S ? S.recent.filter(Boolean).length : 0;
+    const c = S ? pct(recentOk, S.recent.length) : null;
+    ref("consfill").style.transform = `scaleX(${c === null ? 0 : c / 100})`;
+    ref("conspct").textContent = c === null ? "–" : `${c}%`;
+    ref("streak").textContent = String(S ? S.streak : 0);
+    ref("best").textContent = String(record.streak);
+    const p = S ? pct(S.perfect, S.steps) : null;
+    ref("perf").textContent = p === null ? "–" : `${p}%`;
+    const offs = S ? S.offsets : [];
     ref("meter").innerHTML = offs
-      .map((o) => `<i style="left:${50 + Math.max(-1, Math.min(1, o / G!.win)) * 50}%"></i>`)
+      .map((o) => `<i style="left:${50 + Math.max(-1, Math.min(1, o / S!.win)) * 50}%"></i>`)
       .join("");
-    if (offs.length) {
-      const avg = (offs.reduce((a, b) => a + b, 0) / offs.length) * 1000;
-      ref("avg").textContent = `Avg ${avg >= 0 ? "+" : "−"}${Math.abs(avg).toFixed(0)} ms`;
-    } else ref("avg").textContent = "Avg –";
-    ref("kc").textContent = `Kills ${record.kills} · Flawless ${record.flawless}`;
+    ref("avg").textContent = offs.length ? `Avg ${signedMs(offs.reduce((a, b) => a + b, 0) / offs.length)}` : "Avg –";
   }
   function clearTargets() {
     tiles.forEach((t) => {
@@ -387,45 +349,44 @@ export function mountClaveBoss(root: HTMLElement): () => void {
     renderPlayer();
     renderStats();
     clearTargets();
-    ref("phase").textContent = `${phaseName()} · ${PATTERNS[patKey(0)].name}`;
+    ref("phase").textContent = PATTERNS[patKey(0)].name;
     ref("bigcount").textContent = "";
     ref("tickread").textContent = "Tick 0 · Bar 0";
   }
   function frame() {
-    if (!running || !G) return;
-    const g = G;
+    if (!running || !S) return;
+    const s = S;
     const t = relT();
-    while (!g.over && (g.resolved + 1) * g.spb + g.win < t) resolve(++g.resolved);
-    if (!running) return;
-    const cur = Math.floor(t / g.spb), gb = cur - COUNT_IN, bar = Math.max(0, Math.floor(gb / 8));
-    const frac = t / g.spb - cur;
+    while ((s.resolved + 1) * s.spb + s.win < t) resolve(++s.resolved);
+    const cur = Math.floor(t / s.spb), g = cur - COUNT_IN, bar = Math.max(0, Math.floor(g / 8));
+    const frac = t / s.spb - cur;
 
     const bc = ref("bigcount");
-    if (gb < 0) {
+    if (g < 0) {
       bc.textContent = cur >= 4 ? String(cur + 1) : "";
       bc.className = "bigcount";
     } else {
-      const c = (gb % 8) + 1;
+      const c = (g % 8) + 1;
       bc.textContent = String(c);
       bc.className = "bigcount" + (c === 4 || c === 8 ? " dim" : "");
     }
-    if (!reduced && cur >= 0) bossEl.style.scale = String(1 + 0.07 * Math.pow(Math.max(0, 1 - frac), 3));
+    if (!reduced && cur >= 0) beatEl.style.scale = String(1 + 0.08 * Math.pow(Math.max(0, 1 - frac), 3));
 
     clearTargets();
     if (settings.next) {
-      let m = Math.round(t / g.spb);
-      if (g.inputs.has(m) || m <= g.resolved) m++;
-      const s = stepAt(m);
-      if (s) {
+      let m = Math.round(t / s.spb);
+      if (s.inputs.has(m) || m <= s.resolved) m++;
+      const step = stepAt(m);
+      if (step) {
         const [x, y] = tileAt(m), tl = tiles[y * 3 + x];
         tl.classList.add("target");
-        if (s === "H") tl.classList.add("holdt");
+        if (step === "H") tl.classList.add("holdt");
         tl.innerHTML = `<em>${((m - COUNT_IN) % 8) + 1}</em>`;
       }
     }
     renderStrip(bar, cur);
-    ref("phase").textContent = `${phaseName()} · ${PATTERNS[patKey(bar)].name}`;
-    ref("tickread").textContent = `Tick ${Math.max(0, cur)} · Bar ${gb < 0 ? 0 : bar + 1}`;
+    ref("phase").textContent = g < 0 ? "Count-in" : PATTERNS[patKey(bar)].name;
+    ref("tickread").textContent = `Tick ${Math.max(0, cur)} · Bar ${g < 0 ? 0 : bar + 1}`;
     renderStats();
     raf = requestAnimationFrame(frame);
   }
@@ -434,8 +395,8 @@ export function mountClaveBoss(root: HTMLElement): () => void {
   async function start() {
     await ensureAudio();
     if (signal.aborted) return;
-    G = newGame();
-    G.start = actx!.currentTime + 0.25;
+    S = newSession();
+    S.start = actx!.currentTime + 0.25;
     running = true;
     ref("overlay").hidden = true;
     ref<HTMLFieldSetElement>("setup").disabled = true;
@@ -456,53 +417,31 @@ export function mountClaveBoss(root: HTMLElement): () => void {
     ref("go").textContent = "Start";
     ref("go").classList.remove("stop");
   }
-  function showOverlay(title: string, text: string, button: string) {
-    ref("ovTitle").textContent = title;
-    ref("ovText").textContent = text;
-    ref("ovSub").hidden = true;
-    ref("ovGo").textContent = button;
-    root.querySelector(".badge")?.remove();
-    ref("overlay").hidden = false;
-  }
-  function end(win: boolean) {
-    const g = G!;
-    g.over = true;
-    const secs = Math.max(0, relT() - COUNT_IN * g.spb);
+  /** Stop and show the session summary. */
+  function finish() {
+    const s = S;
+    const secs = s && actx ? Math.max(0, relT() - COUNT_IN * s.spb) : 0;
     stop();
-    if (win) {
-      record.kills++;
-      if (g.hits === 0) record.flawless++;
+    if (!s || s.judged === 0) {
+      ref("ovTitle").textContent = "Clave Boss";
+      ref("ovText").textContent = "Stopped before the first count.";
+      ref("ovResults").hidden = true;
+    } else {
       save(RECORD_KEY, record);
+      const what = settings.mode === "mix" ? "Mix" : PATTERNS[settings.mode].name;
+      ref("ovTitle").textContent = `${pct(s.okTotal, s.judged)}% consistent`;
+      ref("ovText").textContent = `${what}, ${settings.role}, ${settings.bpm} BPM.`;
+      const avg = s.offsets.length ? s.offsets.reduce((a, b) => a + b, 0) / s.offsets.length : 0;
+      const r = ref("ovResults");
+      r.hidden = false;
+      r.innerHTML =
+        `<div><span>Time</span>${secs.toFixed(1)}s</div><div><span>Steps</span>${s.steps}</div>` +
+        `<div><span>Perfect</span>${pct(s.perfect, s.steps) ?? 0}%</div><div><span>Best streak</span>${s.best}</div>` +
+        `<div><span>Avg</span>${signedMs(avg)}</div><div><span>All-time best</span>${record.streak}</div>`;
     }
-    const avg = g.offsets.length ? (g.offsets.reduce((a, b) => a + b, 0) / g.offsets.length) * 1000 : 0;
-    showOverlay(
-      win ? "El Clavero is down" : "You got stepped on",
-      win
-        ? g.hits === 0
-          ? "Not a single hit taken."
-          : `${g.hits} hit${g.hits === 1 ? "" : "s"} taken at ${settings.bpm} BPM.`
-        : `El Clavero had ${g.boss} HP left.`,
-      "Fight again",
-    );
-    const r = ref("ovResults");
-    r.hidden = false;
-    r.innerHTML =
-      `<div><span>Time</span>${secs.toFixed(1)}s</div><div><span>Hits</span>${g.hits}</div>` +
-      `<div><span>Perfect</span>${g.steps ? Math.round((100 * g.perfect) / g.steps) : 0}%</div><div><span>Best streak</span>${g.best}</div>` +
-      `<div><span>Avg</span>${avg >= 0 ? "+" : "−"}${Math.abs(avg).toFixed(0)} ms</div><div><span>Tempo</span>${settings.bpm}</div>`;
-    if (win && g.hits === 0) {
-      const b = document.createElement("div");
-      b.className = "badge";
-      b.textContent = "Flawless";
-      r.before(b);
-    }
+    ref("ovGo").textContent = "Go again";
+    ref("overlay").hidden = false;
     renderStats();
-  }
-  function userStop() {
-    stop();
-    const bar = G ? Math.max(0, Math.floor((G.resolved - COUNT_IN) / 8) + 1) : 0;
-    showOverlay("Paused", `Stopped at bar ${bar}.`, "Start over");
-    ref("ovResults").hidden = true;
   }
 
   /* ---------- controls ---------- */
@@ -518,10 +457,9 @@ export function mountClaveBoss(root: HTMLElement): () => void {
     ref("msv").textContent = Math.round(60000 / settings.bpm) + " ms";
     ref<HTMLInputElement>("offset").value = String(settings.offset);
     ref("offv").textContent = (settings.offset > 0 ? "+" : "") + settings.offset + " ms";
-    ref("bossbar").classList.toggle("mine", settings.mode !== "boss");
     save(SETTINGS_KEY, settings);
     if (!running) {
-      G = null;
+      S = null;
       renderIdle();
     }
   }
@@ -560,8 +498,19 @@ export function mountClaveBoss(root: HTMLElement): () => void {
     },
     { signal },
   );
-  ref("go").addEventListener("click", () => (running ? userStop() : void start()), { signal });
+  ref("go").addEventListener("click", () => (running ? finish() : void start()), { signal });
   ref("ovGo").addEventListener("click", () => void start(), { signal });
+
+  const helpDlg = ref<HTMLDialogElement>("helpdlg");
+  const openHelp = () => {
+    if (running) finish();
+    if (!helpDlg.open) helpDlg.showModal();
+  };
+  ref("help").addEventListener("click", openHelp, { signal });
+  ref("helpclose").addEventListener("click", () => helpDlg.close(), { signal });
+  // A click on the backdrop lands on the dialog element itself.
+  helpDlg.addEventListener("click", (e) => e.target === helpDlg && helpDlg.close(), { signal });
+
   ref("pad").addEventListener(
     "pointerdown",
     (e) => {
@@ -576,6 +525,12 @@ export function mountClaveBoss(root: HTMLElement): () => void {
   window.addEventListener(
     "keydown",
     (e) => {
+      if (e.key === "?") {
+        e.preventDefault();
+        openHelp();
+        return;
+      }
+      if (helpDlg.open) return;
       const a = KEYS[e.code];
       if (running && a) {
         e.preventDefault();
@@ -583,7 +538,7 @@ export function mountClaveBoss(root: HTMLElement): () => void {
         return;
       }
       if (e.code === "Escape" && running) {
-        userStop();
+        finish();
         return;
       }
       const target = e.target as HTMLElement | null;
@@ -604,7 +559,7 @@ export function mountClaveBoss(root: HTMLElement): () => void {
   document.addEventListener(
     "visibilitychange",
     () => {
-      if (document.hidden && running) userStop();
+      if (document.hidden && running) finish();
     },
     { signal },
   );

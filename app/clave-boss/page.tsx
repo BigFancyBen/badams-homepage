@@ -4,8 +4,8 @@ import { useEffect, useRef } from "react";
 import { mountClaveBoss } from "./engine";
 
 /**
- * The markup is static; everything that changes during a fight (tiles, splats,
- * counts, bars) is written straight to the DOM by the engine at frame rate,
+ * The markup is static; everything that changes during a session (tiles,
+ * counts, meters) is written straight to the DOM by the engine at frame rate,
  * which keeps React out of the 60fps loop and the audio clock.
  */
 export default function ClaveBossPage() {
@@ -23,26 +23,68 @@ export default function ClaveBossPage() {
           <h1 className="logo">
             Clave <span>Boss</span>
           </h1>
-          <div className="tickread" data-ref="tickread">Tick 0 · Bar 0</div>
+          <div className="headright">
+            <div className="tickread" data-ref="tickread">Tick 0 · Bar 0</div>
+            <button className="helpbtn" data-ref="help" aria-label="Controls" title="Controls">?</button>
+          </div>
         </header>
+
+        <dialog className="helpdlg" data-ref="helpdlg" aria-labelledby="clave-help-title">
+          <div className="helphead">
+            <h2 id="clave-help-title">Controls</h2>
+            <button className="helpclose" data-ref="helpclose" aria-label="Close" title="Close">✕</button>
+          </div>
+          <ul className="legend">
+            <li>
+              <span className="glyph">↑ ↓ ← →</span>
+              <span className="keys"><kbd>Arrows</kbd> <kbd>WASD</kbd></span>
+              <span className="what">Step to the next tile: forward, back, left, right.</span>
+            </li>
+            <li>
+              <span className="glyph">●</span>
+              <span className="keys"><kbd>Space</kbd></span>
+              <span className="what">Tap in place. Put your weight down on the spot without moving, like the close on 3 and 7.</span>
+            </li>
+            <li>
+              <span className="glyph dim">·</span>
+              <span className="keys"><kbd>Nothing</kbd></span>
+              <span className="what">Hold. The pause on 4 and 8. Pressing anything counts as a miss.</span>
+            </li>
+            <li>
+              <span className="glyph"><i className="swatch safe" /></span>
+              <span className="keys">Teal outline</span>
+              <span className="what">The tile you need to be on for the next count.</span>
+            </li>
+            <li>
+              <span className="glyph"><i className="swatch hold" /></span>
+              <span className="keys">Brass outline</span>
+              <span className="what">Stay on this tile and hold still.</span>
+            </li>
+          </ul>
+          <p className="helpnote">
+            Press on the beat. Within 40 ms is Perfect, within 80 ms is Good. Consistency is the share of your
+            last 32 counts that were on time, and a miss resets your streak. On a phone, the on-screen pad works
+            the same way. <kbd>Enter</kbd> starts, <kbd>Esc</kbd> stops, <kbd>?</kbd> opens this.
+          </p>
+        </dialog>
 
         <div className="layout">
           <section className="stage">
-            <div className="bossbar">
-              <div className="bossline">
-                <span className="bossname">El Clavero</span>
-                <span className="phase" data-ref="phase">Phase 1 · Mambo basic</span>
+            <div className="consbar">
+              <div className="consline">
+                <span className="consname">Consistency</span>
+                <span className="conspct" data-ref="conspct">–</span>
+                <span className="phase" data-ref="phase">Mambo basic</span>
               </div>
-              <div className="bar" data-ref="bossbar">
-                <i data-ref="bossfill" />
-                <b data-ref="bosshp">400 / 400</b>
+              <div className="bar">
+                <i data-ref="consfill" />
               </div>
             </div>
 
             <div className="arena" data-ref="arena">
-              <div className="bossrow">
+              <div className="beatrow">
                 <div className="bigcount dim" data-ref="bigcount" />
-                <div className="boss" data-ref="boss" aria-label="El Clavero">
+                <div className="beat" data-ref="beat" aria-hidden="true">
                   <svg viewBox="0 0 56 56" aria-hidden="true">
                     <rect x="8" y="24" width="42" height="9" rx="4.5" fill="#f0b84c" transform="rotate(-28 28 28)" />
                     <rect x="8" y="24" width="42" height="9" rx="4.5" fill="#c98a2a" transform="rotate(28 28 28)" />
@@ -67,10 +109,8 @@ export default function ClaveBossPage() {
               <div className="overlay" data-ref="overlay">
                 <h2 data-ref="ovTitle">Clave Boss</h2>
                 <p data-ref="ovText">
-                  Step on the beat. Arrows or WASD move, Space taps in place. Stay still on 4 and 8.
-                </p>
-                <p className="sub" data-ref="ovSub">
-                  Every beat El Clavero swings at the whole floor except one tile. Be on it.
+                  Be on the outlined tile on every count. Arrows or WASD step, Space taps in place, and you hold
+                  still on 4 and 8.
                 </p>
                 <div className="results" data-ref="ovResults" hidden />
                 <button className="go" data-ref="ovGo">Start</button>
@@ -100,9 +140,9 @@ export default function ClaveBossPage() {
 
             <fieldset data-ref="setup">
               <div className="group">
-                <span className="label">Fight</span>
+                <span className="label">Pattern</span>
                 <div className="seg" data-ref="mode">
-                  <button data-v="boss">Boss</button>
+                  <button data-v="mix">Mix</button>
                   <button data-v="mambo">Mambo</button>
                   <button data-v="side">Side</button>
                   <button data-v="on2">Break on 2</button>
@@ -154,18 +194,12 @@ export default function ClaveBossPage() {
 
             <div className="stats">
               <div className="stat">
-                <div className="orb" data-ref="orb">
-                  <b data-ref="hp">99</b>
-                </div>
-                <span className="label">HP</span>
-              </div>
-              <div className="stat">
-                <strong data-ref="hits">0</strong>
-                <span className="label">Hits</span>
-              </div>
-              <div className="stat">
                 <strong data-ref="streak">0</strong>
                 <span className="label">Streak</span>
+              </div>
+              <div className="stat">
+                <strong data-ref="best">0</strong>
+                <span className="label">Best</span>
               </div>
               <div className="stat">
                 <strong data-ref="perf">–</strong>
@@ -181,7 +215,6 @@ export default function ClaveBossPage() {
               </div>
               <div className="meter" data-ref="meter" />
             </div>
-            <div className="kc" data-ref="kc">Kills 0 · Flawless 0</div>
           </aside>
         </div>
       </div>

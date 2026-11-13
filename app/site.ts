@@ -80,7 +80,7 @@ export const INDEXED_PAGES = [
     path: "/clave-boss",
     title: "Clave Boss",
     description:
-      "A rhythm boss fight for salsa footwork. Every beat the boss swings at the whole floor except one tile, and the safe tiles trace out the mambo basic, side basic and break on 2, from 100 BPM (one 0.6s game tick per beat) up to 230.",
+      "A tick-based salsa footwork trainer. Be on the right tile on every count as the target traces the mambo basic, side basic and break on 2, and build a streak and a consistency score, from 100 BPM (one 0.6s game tick per beat) up to 230.",
   },
   {
     path: "/scrandle",
