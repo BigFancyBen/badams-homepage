@@ -201,7 +201,7 @@ test.describe('museum walk', () => {
     expect(start.y).toBeCloseTo(1.65, 1);
 
     /* Scrolling is the default: one wheel notch (a swipe up on phones) carries on to exhibit 1, the
-       other way comes back. Exhibit 1 is nearer the entrance (larger z) than the stage hold. */
+       other way comes back. Exhibit 1 is on the gallery wall: the camera turns to face it (+x, yaw -90). */
     const cdp = phone ? await page.context().newCDPSession(page) : null;
     const scroll = async (dir: 1 | -1) => {
       if (!cdp) {
@@ -221,7 +221,16 @@ test.describe('museum walk', () => {
       await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
     };
     await scroll(1);
-    await expect.poll(async () => (await readPos(page))!.z - start.z, { timeout: 60_000 }).toBeGreaterThan(0.5);
+    await expect.poll(async () => (await readPos(page))!.yaw, { timeout: 60_000 }).toBeLessThan(-80);
+    await expect.poll(async () => (await readPos(page))!.mode, { timeout: 60_000 }).toBe(2);
+    /* The next exhibit is further along the same wall: the camera slides toward the entrance, no turn. */
+    const first = (await readPos(page))!;
+    await scroll(1);
+    await expect.poll(async () => (await readPos(page))!.z - first.z, { timeout: 60_000 }).toBeGreaterThan(2);
+    await expect.poll(async () => (await readPos(page))!.mode, { timeout: 60_000 }).toBe(2);
+    expect(Math.abs((await readPos(page))!.yaw - first.yaw)).toBeLessThan(2);
+    await scroll(-1);
+    await expect.poll(async () => Math.abs((await readPos(page))!.z - first.z), { timeout: 60_000 }).toBeLessThan(0.05);
     await expect.poll(async () => (await readPos(page))!.mode, { timeout: 60_000 }).toBe(2);
     await expect(page.getByRole('button', { name: 'Browse projects' })).toHaveCount(0);
     await scroll(-1);

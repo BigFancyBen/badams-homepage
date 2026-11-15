@@ -25,28 +25,29 @@ static func _build_bay(root: Node3D, exhibits: Array, b: int) -> void:
 	var side := Layout.bay_side(b)
 	var z := Layout.bay_z(b)
 	var tex_paths: Array = exhibits[b].get("textures", [])
+	# where each picture goes and how big, laid out from the pictures' shapes (Layout.plan)
+	var plan: Array = Layout.bay_pics(b)
 	var mats: Array = []
 	var frm: Array = []
-	for i in mini(tex_paths.size(), 3):
+	for i in mini(tex_paths.size(), plan.size()):
 		var tex: Texture2D = load(str(tex_paths[i]))
 		if tex == null:
 			continue
-		var sl: Array = Layout.ART_SLOTS[i]
-		var ts := tex.get_size()
-		var sc := minf(float(sl[1]) / ts.x, float(sl[2]) / ts.y)
-		var w := ts.x * sc
-		var h := ts.y * sc
-		var zoff: float = sl[0]
-		var cy: float = float(sl[3]) + 0.2   # lifted clear of the dado rail
+		var at: Vector2 = plan[i][0]
+		var sz: Vector2 = plan[i][1]
+		var w := sz.x
+		var h := sz.y
+		var zoff := at.x
+		var cy := Layout.ART_CY + at.y
 		var pm := Materials.art(tex)
 		var q := QuadMesh.new()
 		q.size = Vector2(w, h)
-		var pic := Architecture.mi(root, q, pm, Vector3(side * 6.92, cy, z + zoff))
+		var pic := Architecture.mi(root, q, pm, Vector3(side * Layout.PIC_X, cy, z + zoff))
 		pic.rotation.y = Layout.bay_yaw(b)
 		mats.append(pm)
 		Architecture.frame(side, cy, z + zoff, w, h)
-		frm.append([Vector3(side * 6.92, cy, z + zoff), Vector2(w, h)])
-		# spot(s) on the picture: two for the big one
+		frm.append([Vector3(side * Layout.PIC_X, cy, z + zoff), Vector2(w, h)])
+		# spot(s) on the picture: two for the lead one
 		var nsp := 2 if i == 0 else 1
 		for sidx in nsp:
 			var off := 0.0 if nsp == 1 else (-1.0 if sidx == 0 else 1.0) * w * 0.28

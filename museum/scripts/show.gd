@@ -195,7 +195,11 @@ static func _bay(clock: Clock, b: int, focus_bay: int) -> void:
 	ExhibitsBuild.set_art_level(b, g)
 
 
-## Cross-hall lasers from the truss on the drop; skipped near the focused bay.
+## Cross-hall lasers from the truss on the drop; none within reach (LASER_CLEAR) of the focused bay,
+## where they would cut across its pictures right in front of the camera.
+const LASER_CLEAR := 26.0
+
+
 static func _lasers(clock: Clock, focus_bay: int) -> void:
 	if not clock.is_drop:
 		return
@@ -203,7 +207,7 @@ static func _lasers(clock: Clock, focus_bay: int) -> void:
 	var bar := clock.dbar
 	var n := 7
 	for bi in range(0, _pal.size(), 3):
-		if focus_bay >= 0 and absi(bi - focus_bay) <= 1:
+		if focus_bay >= 0 and absf(Layout.bay_z(bi) - Layout.bay_z(focus_bay)) < LASER_CLEAR:
 			continue
 		var o := Vector3(0, Layout.TRUSS_Y - 0.2, Layout.bay_z(bi))
 		var zd := -1.0 if int(bi / 3.0) % 2 == 0 else 1.0

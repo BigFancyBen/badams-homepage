@@ -8,7 +8,7 @@ extends RefCounted
 ## anything slides along it.
 ##
 ## Focus: focus_code() is the bay whose art the player is standing level with (within FOCUS_DZ m
-## along the hall) and facing (within FOCUS_ANGLE degrees); FOCUS_STAGE near the stage and facing
+## along the hall, or the bay's half width and a little more for wide ones) and facing (within FOCUS_ANGLE degrees); FOCUS_STAGE near the stage and facing
 ## it; FOCUS_NONE otherwise.
 
 const Layout := preload("res://scripts/layout.gd")
@@ -129,7 +129,7 @@ func focus_code() -> int:
 	var best_a := FOCUS_ANGLE
 	for b in n_bays:
 		var bz := Layout.bay_z(b)
-		if absf(pos.z - bz) > FOCUS_DZ:
+		if absf(pos.z - bz) > maxf(FOCUS_DZ, Layout.bay_size(b).x * 0.5 + 0.8):
 			continue
 		var to := Vector2(Layout.bay_side(b) * Layout.WALL_X - pos.x, bz - pos.z)
 		if to.length() > 14.5:

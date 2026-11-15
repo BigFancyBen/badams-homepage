@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent, type MutableRefObject } from "react";
 import { AnimatePresence } from "motion/react";
-import { ArrowUpRight, ChevronDown, ChevronLeft, ChevronRight, Menu, Pause, Play, X } from "lucide-react";
+import { ArrowUpRight, ChevronDown, ChevronLeft, ChevronRight, Info, Menu, Pause, Play, X } from "lucide-react";
 import { EXHIBITS } from "./exhibits";
 import { FreeRoamButton } from "./FreeRoamButton";
 import { LeaveModal } from "./LeaveModal";
@@ -25,8 +25,9 @@ interface Props {
   rightInsetRef: MutableRefObject<() => number>;
   /** Filled with a function returning how the art should be framed at an exhibit, as "side,bottom,width,height" in
       CSS px: what the details panel (side) or the folded sheet and icon bar (bottom) will cover once there, whether
-      or not they are open yet, and the view's size. Godot builds it into the exhibit poses, so the camera lands
-      framed and does not move again when the panel opens. */
+      or not they are open yet (nothing for a panel the visitor has closed), and the view's size. Godot builds it
+      into the exhibit shots, so the camera lands framed and does not move again when the panel opens; closing or
+      reopening the panel slides the shot over. */
   framingRef: MutableRefObject<() => string>;
 }
 
@@ -66,6 +67,8 @@ export function MuseumOverlay({ focusId, tour, free, onToggleFree, touch, send, 
   const navRef = useRef<HTMLElement>(null);
   const openBtnRef = useRef<HTMLButtonElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  /* The details panel: closed by the visitor (x or Esc) it stays closed until they reopen it here. */
+  const [detailsClosed, setDetailsClosed] = useState(false);
   const wide = useWide();
   /* The exhibit whose link the visitor asked for; the modal asks before leaving the game. */
   const [leaving, setLeaving] = useState<{ title: string; href: string; resume: boolean } | null>(null);
@@ -86,14 +89,15 @@ export function MuseumOverlay({ focusId, tour, free, onToggleFree, touch, send, 
     framingRef.current = () => {
       const r = rootRef.current?.getBoundingClientRect();
       if (!r) return "";
-      if (wide) return `${PANEL_WIDTH + PANEL_MARGIN},0,${Math.round(r.width)},${Math.round(r.height)}`;
+      /* The icon bar is along the bottom either way: the art is fitted above it. */
       const nav = navRef.current?.getBoundingClientRect().height ?? NAV_PX;
-      return `0,${Math.round(nav + SHEET_PEEK_PX)},${Math.round(r.width)},${Math.round(r.height)}`;
+      if (wide) return `${detailsClosed ? 0 : PANEL_WIDTH + PANEL_MARGIN},${Math.round(nav)},${Math.round(r.width)},${Math.round(r.height)}`;
+      return `0,${Math.round(nav + (detailsClosed ? 0 : SHEET_PEEK_PX))},${Math.round(r.width)},${Math.round(r.height)}`;
     };
     return () => {
       framingRef.current = () => "";
     };
-  }, [framingRef, wide]);
+  }, [framingRef, wide, detailsClosed]);
 
   /* Move focus into the menu on open; hand it back to the menu button on close. */
   useEffect(() => {
@@ -152,7 +156,16 @@ export function MuseumOverlay({ focusId, tour, free, onToggleFree, touch, send, 
 
   return (
     <div ref={rootRef} className="pointer-events-none absolute inset-0 z-10 flex flex-col justify-end">
-      {wide && <MuseumDetails exhibitId={detailId} mode="side" onOpenLink={askToLeave} rightInsetRef={rightInsetRef} />}
+      {wide && (
+        <MuseumDetails
+          exhibitId={detailId}
+          mode="side"
+          closed={detailsClosed}
+          onClose={() => setDetailsClosed(true)}
+          onOpenLink={askToLeave}
+          rightInsetRef={rightInsetRef}
+        />
+      )}
 
       <div ref={bottomRef} className="relative flex flex-col">
         {tour === "stage" && (
@@ -178,7 +191,16 @@ export function MuseumOverlay({ focusId, tour, free, onToggleFree, touch, send, 
           </div>
         )}
 
-        {!wide && <MuseumDetails exhibitId={detailId} mode="sheet" onOpenLink={askToLeave} suspended={menuOpen} />}
+        {!wide && (
+          <MuseumDetails
+            exhibitId={detailId}
+            mode="sheet"
+            closed={detailsClosed}
+            onClose={() => setDetailsClosed(true)}
+            onOpenLink={askToLeave}
+            suspended={menuOpen}
+          />
+        )}
 
         <AnimatePresence>
           {browsing && menuOpen && (
@@ -224,6 +246,16 @@ export function MuseumOverlay({ focusId, tour, free, onToggleFree, touch, send, 
               onClick={() => setMenuOpen((o) => !o)}
             >
               {menuOpen ? <X className="h-5 w-5" aria-hidden="true" /> : <Menu className="h-5 w-5" aria-hidden="true" />}
+            </button>
+            <button
+              type="button"
+              className={BTN}
+              aria-label="Project details"
+              aria-pressed={!detailsClosed}
+              disabled={!exhibit}
+              onClick={() => setDetailsClosed((c) => !c)}
+            >
+              <Info className="h-5 w-5" aria-hidden="true" />
             </button>
             <button
               ref={openBtnRef}

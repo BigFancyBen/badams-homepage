@@ -6,7 +6,9 @@
  * Reads app/components/museum/exhibits.ts (Node strips its types), writes
  * museum/exhibits.json, and writes each image as a 1024px-wide JPEG under
  * museum/exhibits/ so the exported .pck stays small. The JSON's `textures`
- * are res:// paths in the same order as `images`.
+ * are res:// paths in the same order as `images`, and `sizes` their pixel
+ * sizes ([w, h]): the scene lays each exhibit's wall out from them before
+ * any texture is loaded (museum/scripts/layout.gd).
  */
 
 import { mkdirSync, writeFileSync, rmSync, readdirSync, existsSync } from "node:fs";
@@ -28,16 +30,18 @@ mkdirSync(outDir, { recursive: true });
 const json = [];
 for (const ex of EXHIBITS) {
   const textures = [];
+  const sizes = [];
   for (const [i, src] of ex.images.entries()) {
     const name = `${ex.id}-${i + 1}.jpg`;
-    await sharp(join(ROOT, "public", src))
+    const info = await sharp(join(ROOT, "public", src))
       .resize({ width: 1024, height: 1024, fit: "inside", withoutEnlargement: true })
       .flatten({ background: "#000000" })
       .jpeg({ quality: 82 })
       .toFile(join(outDir, name));
     textures.push(`res://exhibits/${name}`);
+    sizes.push([info.width, info.height]);
   }
-  json.push({ ...ex, textures });
+  json.push({ ...ex, textures, sizes });
 }
 
 writeFileSync(join(ROOT, "museum", "exhibits.json"), JSON.stringify(json, null, 2) + "\n");
