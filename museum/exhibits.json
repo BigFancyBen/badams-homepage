@@ -19,6 +19,20 @@
       "res://exhibits/mfrs-1.jpg",
       "res://exhibits/mfrs-2.jpg",
       "res://exhibits/mfrs-3.jpg"
+    ],
+    "sizes": [
+      [
+        1024,
+        576
+      ],
+      [
+        1024,
+        576
+      ],
+      [
+        1024,
+        576
+      ]
     ]
   },
   {
@@ -41,6 +55,20 @@
       "res://exhibits/oathkeep-1.jpg",
       "res://exhibits/oathkeep-2.jpg",
       "res://exhibits/oathkeep-3.jpg"
+    ],
+    "sizes": [
+      [
+        540,
+        960
+      ],
+      [
+        540,
+        960
+      ],
+      [
+        540,
+        960
+      ]
     ]
   },
   {
@@ -63,6 +91,20 @@
       "res://exhibits/prognosticator-1.jpg",
       "res://exhibits/prognosticator-2.jpg",
       "res://exhibits/prognosticator-3.jpg"
+    ],
+    "sizes": [
+      [
+        1024,
+        576
+      ],
+      [
+        1024,
+        672
+      ],
+      [
+        1008,
+        729
+      ]
     ]
   },
   {
@@ -85,6 +127,20 @@
       "res://exhibits/warehouse-1.jpg",
       "res://exhibits/warehouse-2.jpg",
       "res://exhibits/warehouse-3.jpg"
+    ],
+    "sizes": [
+      [
+        960,
+        540
+      ],
+      [
+        960,
+        540
+      ],
+      [
+        960,
+        540
+      ]
     ]
   },
   {
@@ -107,6 +163,20 @@
       "res://exhibits/hobbit-house-1.jpg",
       "res://exhibits/hobbit-house-2.jpg",
       "res://exhibits/hobbit-house-3.jpg"
+    ],
+    "sizes": [
+      [
+        453,
+        1024
+      ],
+      [
+        453,
+        1024
+      ],
+      [
+        453,
+        1024
+      ]
     ]
   },
   {
@@ -125,6 +195,12 @@
     ],
     "textures": [
       "res://exhibits/testq-1.jpg"
+    ],
+    "sizes": [
+      [
+        1024,
+        746
+      ]
     ]
   },
   {
@@ -147,6 +223,20 @@
       "res://exhibits/scrandle-1.jpg",
       "res://exhibits/scrandle-2.jpg",
       "res://exhibits/scrandle-3.jpg"
+    ],
+    "sizes": [
+      [
+        1024,
+        640
+      ],
+      [
+        1024,
+        640
+      ],
+      [
+        800,
+        420
+      ]
     ]
   },
   {
@@ -169,6 +259,20 @@
       "res://exhibits/yut-hut-1.jpg",
       "res://exhibits/yut-hut-2.jpg",
       "res://exhibits/yut-hut-3.jpg"
+    ],
+    "sizes": [
+      [
+        660,
+        722
+      ],
+      [
+        660,
+        392
+      ],
+      [
+        900,
+        560
+      ]
     ]
   },
   {
@@ -191,6 +295,20 @@
       "res://exhibits/magic-1.jpg",
       "res://exhibits/magic-2.jpg",
       "res://exhibits/magic-3.jpg"
+    ],
+    "sizes": [
+      [
+        960,
+        720
+      ],
+      [
+        960,
+        720
+      ],
+      [
+        960,
+        720
+      ]
     ]
   },
   {
@@ -209,6 +327,12 @@
     ],
     "textures": [
       "res://exhibits/floatwise-1.jpg"
+    ],
+    "sizes": [
+      [
+        1024,
+        576
+      ]
     ]
   },
   {
@@ -227,6 +351,12 @@
     ],
     "textures": [
       "res://exhibits/dota-randomizer-1.jpg"
+    ],
+    "sizes": [
+      [
+        1024,
+        576
+      ]
     ]
   },
   {
@@ -247,6 +377,16 @@
     "textures": [
       "res://exhibits/irlscape-1.jpg",
       "res://exhibits/irlscape-2.jpg"
+    ],
+    "sizes": [
+      [
+        1024,
+        576
+      ],
+      [
+        330,
+        285
+      ]
     ]
   },
   {
@@ -265,6 +405,12 @@
     ],
     "textures": [
       "res://exhibits/resume-1.jpg"
+    ],
+    "sizes": [
+      [
+        823,
+        1024
+      ]
     ]
   }
 ]

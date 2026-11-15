@@ -51,6 +51,8 @@ static var _p_idx: Array[int] = []
 static var _p_ph: Array[float] = []
 static var _p_kind: Array[int] = []
 static var _p_grp: Array[int] = []
+## How far down the hall the beams may reach while an exhibit is in view (eased, see update()).
+static var _z_cap: float = 0.0
 
 
 static func build(root: Node3D) -> void:
@@ -376,6 +378,14 @@ static func update(clock: Clock, focus: Dictionary) -> void:
 		sb = kp * 0.08
 	# beams shorten as the camera nears the stage, so they never wrap around it; down the hall they run long
 	var z_end := lerpf(-102.0, 0.0, smoothstep(-100.0, -70.0, cam_pos.z))
+	# and stop well short of the exhibit in view, so they never cut across its pictures (eased, so
+	# moving along the wall does not make them jump)
+	var fb: int = focus["bay"]
+	var cap := 0.0
+	if fb >= 0:
+		cap = maxf(Layout.bay_z(fb) - Layout.bay_size(fb).x * 0.5 - 9.0, -102.0)
+	_z_cap = cap if clock.dt <= 0.0 else lerpf(_z_cap, cap, 1.0 - exp(-clock.dt * 2.5))
+	z_end = minf(z_end, _z_cap)
 	# ---- movers
 	var n_m := _m_pos.size()
 	for i in n_m:

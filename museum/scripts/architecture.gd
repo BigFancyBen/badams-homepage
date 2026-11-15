@@ -447,8 +447,8 @@ static func _tri_count(m: Mesh) -> int:
 # ---------------------------------------------------------------- shell
 
 ## Floor, side walls with skirting, wainscot, dado, panels, rail and cornice, the coffered
-## ceiling, the entrance end wall, the portal architrave, and the fluted columns (opposite each
-## bay, plus both ends). n_bays = exhibit count.
+## ceiling, the entrance end wall, the portal architrave, and the fluted columns (a pair across the
+## hall in each gap between exhibits, plus both ends). n_bays = exhibit count.
 ## `tick` is awaited between the parts, so the page gets to repaint between them (see hall.gd).
 static func build(root: Node3D, n_bays: int, tick: Callable) -> void:
 	_batches.clear()
@@ -467,8 +467,9 @@ static func build(root: Node3D, n_bays: int, tick: Callable) -> void:
 
 	# fluted columns
 	var cps: Array[Vector3] = []
-	for b in n_bays:
-		cps.append(Vector3(-Layout.bay_side(b) * COL_X, 0, Layout.bay_z(b)))
+	for z in Layout.columns():
+		for sx: float in [-1.0, 1.0]:
+			cps.append(Vector3(sx * COL_X, 0, z))
 	for sx: float in [-1.0, 1.0]:
 		cps.append(Vector3(sx * COL_X, 0, 4.0))
 		cps.append(Vector3(sx * COL_X, 0, Layout.HALL_Z1 + 2.0))
@@ -652,7 +653,8 @@ static func plinth(b: int) -> void:
 	var side := Layout.bay_side(b)
 	var z := Layout.bay_z(b)
 	var stone := _mb("stone")
-	var cx := side * 5.2
+	# out from the wall, so from the exhibit shot it sits just below the frame instead of peeking in
+	var cx := side * 4.75
 	var c := Vector3(cx, 0, z)
 	var die_w := Vector3(0.98, 0.0, 2.78)
 	stone.bevel_box(c + Vector3(0, 0.27, 0), Vector3(die_w.x, 0.4, die_w.z), 0.012)
@@ -667,11 +669,12 @@ static func plinth(b: int) -> void:
 	wood.xf = Transform3D.IDENTITY
 
 
-## Four brass stanchions with a draped velvet rope between them, along bay b.
+## Four brass stanchions with a draped velvet rope between them, along bay b's pictures.
 static func stanchions(b: int) -> void:
 	var side := Layout.bay_side(b)
 	var z := Layout.bay_z(b)
-	var pz: Array[float] = [-3.6, -1.2, 1.2, 3.6]
+	var e := Layout.bay_size(b).x * 0.5 - 0.1
+	var pz: Array[float] = [-e, -e / 3.0, e / 3.0, e]
 	var tops: Array[Vector3] = []
 	for pzv in pz:
 		var px := side * 3.0

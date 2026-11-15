@@ -5,30 +5,37 @@ extends Node3D
 ##
 ## Flow: the game opens on the stage hold (Layout.stage_pose) and stays there, with only a faint idle
 ## drift, tour state "stage", until the page sends `browse` (the Browse projects button). There is no
-## opening move. `browse` pulls back out from the stage on a crane arc and glides to exhibit 1; each
-## exhibit is held HOLD_BARS (8) bars (moves start on bar lines, clock.gd), through the last, then the
-## camera glides to the entrance and looks up at the marquee (Layout.end_pose), "end", and holds.
+## opening move. `browse` steps back from the stage, turns to the gallery wall and settles on exhibit 1;
+## each exhibit is held HOLD_BARS (8) bars (moves start on bar lines, clock.gd), through the last, then
+## the camera goes to the entrance and looks up at the marquee (Layout.end_pose), "end", and holds.
 ## Tour position _t: 0 the stage, 1..n the exhibits, n+1 the end.
-## `next`/`prev` jump at once (the tour keeps running from there), `tour:pause` / `tour:play`,
-## `goto:<id>` flies there and pauses (`goto:stage` the stage hold, `goto:entrance` the end view, like
+## `next`/`prev` move at once (the tour keeps running from there), `tour:pause` / `tour:play`,
+## `goto:<id>` goes there and pauses (`goto:stage` the stage hold, `goto:entrance` the end view, like
 ## `home`: focus "" and tour "paused" while flying, then "end"), and any walk input pauses ("paused").
-## Glides are 2.6..3.8 s eased and turn the way the camera travels; reduced motion shortens them and
-## stops the drift. Moves are TRANS mode; holds and free walk are PLAY mode (the player stands at the
-## held pose).
 ##
-## Modes: TRANS (an eased timed move: a tour or scroll glide) and PLAY (holds and free walk).
+## Modes: TRANS (a timed, eased move with a turn: to and from the stage hold and the end, and flights
+## in free roam), GALLERY (along the gallery wall, see below) and PLAY (the stage hold, the end and free
+## walk; the player stands at the held pose). Reduced motion shortens the moves and stops the drift.
+##
+## Gallery: every exhibit is on one wall (layout.gd), so from one to the next the camera only slides
+## along it, square on, the way a page scrolls; it never turns. Its place is a position _gs along the
+## tour (1..n, fractional between exhibits; _gallery_state blends the two exhibit shots either side), and
+## a slide (_glide_to, _tick_gallery: an eased cubic) carries _gs to the exhibit in view: GLIDE_STEP_S for
+## a visitor's step (scroll, keys, Next, a tap), GLIDE_TOUR_S for the tour's own. Each slide starts from
+## the camera's current speed, so a second step while one is under way carries on without a stop. A
+## jump of more than DIP_STOPS exhibits (the menu) dips to black, cuts to just short of the exhibit and
+## slides the rest; so do long timed flights. The shots are worked out every frame, so the camera
+## follows the page's panels (and a resize) as they change.
 ##
 ## Navigation has two styles, picked by the page (`mode:scroll`, the default, and `mode:free`).
 ## Scroll: like scrolling a web page, a stop at a time. The page sums wheel, trackpad and swipe distance
 ## and Godot reads it each frame (bridge scrollDelta(), CSS px, positive moves on toward the entrance;
 ## scrollHeld() says a finger is still down or the wheel still turning). One gesture moves one stop:
-## once a gesture has scrolled STEP_PX, the camera takes the same calm, eased glide the tour and the
-## Next button take (_go), and the rest of that gesture (a trackpad's momentum, a long swipe) is spent.
-## Scrolling on while it glides queues one more stop for when it lands; scrolling the other way turns
-## back at once. No scrubbing and no snapping, so it never overshoots a stop and comes back. Going on,
-## the swing from wall to wall looks on down the hall; going back it looks back toward the stage. Keys:
-## Down/Right/S/D/PageDown/Space next, Up/Left/W/A/PageUp previous. A click or tap on an exhibit flies
-## there. No walking, no stick, no pointer lock.
+## once a gesture has scrolled STEP_PX the camera starts for the next exhibit (_step), and the rest of
+## that gesture (a trackpad's momentum, a long swipe) is spent until the camera has nearly arrived.
+## Scrolling the other way turns back at once. During a timed move (from the stage) scrolling on queues
+## one more stop for when it lands. Keys: Down/Right/S/D/PageDown/Space next, Up/Left/W/A/PageUp
+## previous. A click or tap on an exhibit goes there. No walking, no stick, no pointer lock.
 ## Free: the walker below. Switching back to scroll glides to the nearest stop.
 ## Desktop (free): WASD strafe/walk, Up/Down walk, Left/Right turn, Shift fast, click (locked) on an exhibit's
 ## wall at the centre of the view to fly there. Phones (free): the touch stick and look finger
@@ -54,10 +61,12 @@ extends Node3D
 ##
 ## Panel framing: the page's details panel covers the right of the screen on desktop, the folded
 ## bottom sheet and icon bar the bottom on phones. The page says how much they will cover at an
-## exhibit, open yet or not (bridge framing(): "side,bottom,width,height" CSS px), and the exhibit poses
-## (_tour_pose) are built with that turn to the right / pitch up, so every move lands already framed and
-## nothing moves when the panel opens a moment later. Only unfolding the phone sheet further (the visitor's
-## own doing) pitches up more, eased (_tick_sheet, from bottomInset()).
+## exhibit, open yet or not (bridge framing(): "side,bottom,width,height" CSS px; 0 for a panel the
+## visitor has closed), and the exhibit shots (Layout.gallery_pose) fit the pictures into the rest by
+## moving the camera along the wall and up, so every move lands already framed and nothing moves when
+## the panel opens a moment later. When the visitor closes or reopens the panel the shot eases over
+## (_tick_panel). Only unfolding the phone sheet further pitches up more, eased (_tick_sheet, from
+## bottomInset()).
 ##
 ## Bridge (window.museumBridge, see museumBridge.ts): time(), visible(), pollCommand() (next / prev
 ## / home / browse / tour:pause / tour:play / goto:<id> / mode:scroll / mode:free / song: re-read songCues()), scrollDelta(), reducedMotion(), pointerLocked() (is the canvas
@@ -75,17 +84,24 @@ const Warm := preload("res://scripts/warm.gd")
 const ExhibitVideo := preload("res://scripts/exhibit_video.gd")
 const FPS_CAP := 60
 
-## debugPos reports the mode as 1 (TRANS, an auto-walk or scroll glide) or 2 (PLAY, holds and free walk).
-enum Mode { TRANS = 1, PLAY = 2 }
+## debugPos reports the mode as 1 while the camera is moving (TRANS, or GALLERY on its way) and 2 while
+## it holds (PLAY, or GALLERY settled on an exhibit) or walks freely.
+enum Mode { TRANS = 1, PLAY = 2, GALLERY = 3 }
 
 ## Mobile web render budget: at most this many physical pixels, and never above 2x device pixels.
 const MAX_PIXELS := 1_400_000.0
 const MAX_DPR := 2.0
 ## Of the page's build progress (0..1) the hall construction takes this share, shader warm-up the rest.
 const BUILD_SHARE := 0.35
-const PULL_SECONDS := 4.2        # the pull-out from the stage hold to exhibit 1
+const PULL_SECONDS := 3.2        # the move between the stage hold and the gallery
 const HOLD_BARS := 8.0           # an exhibit is held about this many bars (~15 s, time to read the details), then the move starts on a bar line
-const PANEL_EASE := 6.0          # rate (1/s) the framing shift for the page's right panel eases at (~0.5 s)
+const PANEL_EASE := 5.0          # rate (1/s) the shot follows the page's panels opening or closing at (~0.6 s)
+const GLIDE_STEP_S := 0.85       # a visitor's step to the neighbouring exhibit along the wall (s); a bit longer per extra exhibit
+const GLIDE_TOUR_S := 2.6        # the tour's own move to the next exhibit (s)
+const DIP_STOPS := 2             # a jump along the wall of more exhibits than this dips to black
+const DIP_DIST := 24.0           # so does a timed flight longer than this (m)
+const DIP_OUT := 0.16            # seconds to black
+const DIP_IN := 0.4              # and back
 const MOUSE_DEG_PER_PX := 0.15
 const MOUSE_SPIKE := 400.0       # a single motion event this large (px) is a browser glitch on locking, not a look
 const LOCK_WAIT_MS := 1200       # how long a requested pointer lock may take before it is taken as refused
@@ -126,10 +142,22 @@ var _fov: float = 60.0
 var _fov_goal: float = 60.0
 var _inset_css: float = 0.0
 var _right_inset_css: float = 0.0  # CSS px the page's desktop details panel covers on the right (0 when closed, on phones, or absent)
-var _sheet_pitch: float = 0.0      # eased pitch offset (degrees, negative looks up) that keeps the art above the phone bottom sheet
-var _panel_yaw: float = 0.0        # unused: the framing is built into the exhibit poses (_frame_side / _frame_bottom)
-var _frame_side: float = 0.0       # share of the view's width the desktop details panel covers at an exhibit
-var _frame_bottom: float = 0.0     # share of the view's height the folded phone sheet and icon bar cover
+var _sheet_pitch: float = 0.0      # eased pitch offset (degrees, negative looks down) that keeps the art above the unfolded phone sheet
+var _frame_side: float = 0.0       # share of the view's width the desktop details panel covers at an exhibit (eased)
+var _frame_bottom: float = 0.0     # share of the view's height the folded phone sheet and icon bar cover (eased)
+var _frame_side_goal: float = 0.0  # what the page says now
+var _frame_bottom_goal: float = 0.0
+
+var _gs: float = 1.0              # GALLERY: where the camera is along the tour (1..n, fractional between exhibits)
+var _gv: float = 0.0              # and how fast it is moving (exhibits per second)
+var _g_p0: float = 1.0            # the slide under way: from here, at this speed, to _t, over _g_dur seconds
+var _g_v0: float = 0.0
+var _g_dur: float = 0.0
+var _g_el: float = 0.0            # how far into it (s)
+var _g_settled: bool = true       # at rest on exhibit _t
+var _dip: float = 0.0             # 0..1 how far the view has faded to black
+var _dip_phase: int = 0           # 0 none, 1 fading out, 2 fading back in
+var _fade: ColorRect
 
 
 var _stage_aspect: float = -1.0   # aspect the stage hold was last fitted for
@@ -183,6 +211,7 @@ var _press_id: int = -1
 var _shot: bool = false
 var _shot_stop: int = -1
 var _shot_pull: float = -1.0
+var _shot_glide: float = -1.0     # glideN: the way on from exhibit N to the next
 var _shot_end: bool = false
 var _shot_cam: Dictionary = {}    # from --shot: {"cam": Transform3D, "fov": float}
 var _dbg_cam: Array = []
@@ -192,6 +221,8 @@ func _ready() -> void:
 	Perf.setup()
 	Perf.mark("main._ready (engine ticks: %d ms)" % Time.get_ticks_msec())
 	exhibits = _load_json("res://exhibits.json", [])
+	# where every exhibit goes on the gallery wall, before anything is built or placed
+	Layout.plan(exhibits)
 	for a in OS.get_cmdline_user_args():
 		if a == "--tier=mobile":
 			_force_mobile = true
@@ -219,9 +250,27 @@ func _ready() -> void:
 	controls = TouchControls.new()
 	controls.tapped.connect(_tap)
 	add_child(controls)
+	# the black a long jump dips through
+	var fade_layer := CanvasLayer.new()
+	fade_layer.layer = 20
+	add_child(fade_layer)
+	_fade = ColorRect.new()
+	_fade.color = Color(0, 0, 0, 0)
+	_fade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_fade.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_fade.visible = false
+	fade_layer.add_child(_fade)
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--shot="):
 			_apply_shot(a.substr(7))
+		elif a.begins_with("--frame="):
+			# shots: frame exhibits as the page would with its panels ("side,bottom" shares of the view)
+			var fr := a.substr(8).split(",")
+			if fr.size() == 2:
+				_frame_side = clampf(float(fr[0]), 0.0, 0.6)
+				_frame_bottom = clampf(float(fr[1]), 0.0, 0.5)
+				_frame_side_goal = _frame_side
+				_frame_bottom_goal = _frame_bottom
 		elif a.begins_with("--stop="):
 			_shot = true
 			_shot_stop = clampi(int(a.substr(7)), 0, exhibits.size() + 1)
@@ -365,6 +414,8 @@ func _apply_shot(shot_name: String) -> void:
 	_shot_stop = int(sh["stop"])
 	if sh.has("pull"):
 		_shot_pull = float(sh["pull"])
+	if sh.has("glide"):
+		_shot_glide = float(sh["glide"])
 	_shot_end = bool(sh.get("end", false))
 	clock.set_fixed(float(sh["t"]))
 	if sh.has("cam"):
@@ -404,6 +455,9 @@ func _process(delta: float) -> void:
 				_tick_trans(delta)
 			Mode.PLAY:
 				_tick_play(delta)
+			Mode.GALLERY:
+				_tick_gallery(delta)
+		_tick_dip(delta)
 		_poll_page(delta)
 		_tick_tour()
 	controls.enabled = _mobile and not _shot and _free
@@ -449,15 +503,18 @@ func _poll_page(delta: float) -> void:
 		if fr != null:
 			var parts := str(bridge.framing()).split(",")
 			if parts.size() == 4 and float(parts[2]) > 1.0 and float(parts[3]) > 1.0:
-				_frame_side = clampf(float(parts[0]) / float(parts[2]), 0.0, 0.6) if not _mobile else 0.0
-				_frame_bottom = clampf(float(parts[1]) / float(parts[3]), 0.0, 0.5)
+				_frame_side_goal = clampf(float(parts[0]) / float(parts[2]), 0.0, 0.6)
+				_frame_bottom_goal = clampf(float(parts[1]) / float(parts[3]), 0.0, 0.5)
 	_dbg_poll -= delta
 	if _dbg_poll <= 0.0:
 		_dbg_poll = 0.2
 		var rm = bridge.reducedMotion()
 		_reduced = typeof(rm) == TYPE_BOOL and rm
 		var p: Vector3 = _state["pos"]
-		bridge.debugPos = "%.2f,%.2f,%.2f,%.1f,%d" % [p.x, p.y, p.z, float(_state["yaw"]), mode]
+		var dm: int = mode
+		if mode == Mode.GALLERY:
+			dm = Mode.PLAY if _g_settled else Mode.TRANS
+		bridge.debugPos = "%.2f,%.2f,%.2f,%.1f,%d" % [p.x, p.y, p.z, float(_state["yaw"]), dm]
 		bridge.debugGlance = "%.1f,%.1f" % [_glance.x, _glance.y]
 
 
@@ -479,6 +536,8 @@ func _update_camera() -> void:
 			ps = _mix_move(_ease(_shot_pull))
 		elif _shot_end:
 			ps = Layout.end_pose(a)
+		elif _shot_stop >= 1 and _shot_stop <= exhibits.size():
+			ps = _gallery_state(float(_shot_stop) + maxf(_shot_glide, 0.0))
 		else:
 			ps = Layout.pose(maxi(_shot_stop, 0), a, exhibits.size())
 		st = ps
@@ -491,12 +550,12 @@ func _update_camera() -> void:
 		yaw = _dbg_cam[3]
 		pitch = _dbg_cam[4]
 		fov = _dbg_cam[5]
-	if not _shot and mode == Mode.PLAY:
+	if not _shot and mode != Mode.TRANS:
 		pos += _drift["pos"] as Vector3
 		yaw += float(_drift["yaw"])
 		pitch += float(_drift["pitch"])
 	if not _shot:
-		yaw += _glance.x + _panel_yaw
+		yaw += _glance.x
 		pitch += _glance.y + _sheet_pitch
 	cam.fov = fov
 	cam.global_transform = Transform3D(Basis.from_euler(Vector3(deg_to_rad(pitch), deg_to_rad(yaw), 0.0)), pos)
@@ -523,14 +582,14 @@ func _hold_stage() -> void:
 	_t = 0
 
 
-## Set up a move: a quadratic curve through the midpoint plus half of the lift, and a yaw sweep
-## that turns the way the camera is travelling (so swinging from one wall to the other looks
-## ahead down the hall instead of whipping round).
-func _setup_move(from: Dictionary, to: Dictionary, from_stage: bool) -> void:
+## Set up a timed move: a quadratic curve through the midpoint plus half of the lift, and a yaw sweep
+## that turns the way the camera is travelling (so a half turn looks ahead down the hall instead of
+## whipping round). stage_move: to or from the stage hold, with the turn eased into the middle.
+func _setup_move(from: Dictionary, to: Dictionary, stage_move: bool) -> void:
 	_tr_from = from.duplicate()
 	_tr_to = to
-	_tr_lift = Layout.glide_lift(from_stage)
-	_tr_slow_turn = from_stage
+	_tr_lift = Layout.glide_lift(stage_move)
+	_tr_slow_turn = stage_move
 	var raw := fposmod(float(to["yaw"]) - float(from["yaw"]), 360.0)
 	var d := wrapf(float(to["yaw"]) - float(from["yaw"]), -180.0, 180.0)
 	if absf(d) > 150.0:
@@ -580,11 +639,21 @@ func _tick_trans(delta: float) -> void:
 		return
 	if u < 1.0:
 		return
-	player.set_state(_tr_to)
 	_fov_goal = float(_tr_to["fov"])
 	_fov = _fov_goal
-	_state = _player_state()
-	mode = Mode.PLAY
+	if not _free and _t >= 1 and _t <= exhibits.size():
+		# landed on an exhibit: from here the camera is on the gallery wall
+		mode = Mode.GALLERY
+		_gs = float(_t)
+		_gv = 0.0
+		_g_dur = 0.0
+		_g_el = 0.0
+		_g_settled = true
+		_state = _gallery_state(_gs)
+	else:
+		player.set_state(_tr_to)
+		_state = _player_state()
+		mode = Mode.PLAY
 	_focus_cand = -99
 	_drift_w = 0.0
 	_arrive()
@@ -593,6 +662,102 @@ func _tick_trans(delta: float) -> void:
 		var q := _queued
 		_queued = 0
 		_step(q)
+
+
+# ---------------------------------------------------------------- the gallery wall
+
+## Slide along the wall to exhibit t (GALLERY mode). A visitor's step takes GLIDE_STEP_S (a little
+## longer for each extra exhibit), the tour's own move GLIDE_TOUR_S. The slide starts from where the
+## camera is and how fast it is already going, so a step taken during a slide carries on into the
+## next without stopping. A jump of more than DIP_STOPS exhibits dips to black on the way (_tick_dip).
+func _glide_to(t: int, auto: bool) -> void:
+	_t = t
+	_g_settled = false
+	var dist := absf(float(t) - _gs)
+	var dur := GLIDE_TOUR_S if auto else GLIDE_STEP_S * minf(1.0 + 0.3 * maxf(dist - 1.0, 0.0), 1.6)
+	_slide(_gs, _gv, dur * (0.5 if _reduced else 1.0))
+	if dist > float(DIP_STOPS) + 0.5 and _dip_phase == 0:
+		_dip_phase = 1
+	_queued = 0
+	_glance_return = GLANCE_RETURN
+
+
+## Start a slide from p0 at speed v0 (exhibits per second) to _t, eased to rest, over dur seconds.
+func _slide(p0: float, v0: float, dur: float) -> void:
+	_g_p0 = p0
+	_g_v0 = v0
+	_g_dur = maxf(dur, 0.05)
+	_g_el = 0.0
+
+
+func _tick_gallery(delta: float) -> void:
+	var moving := _g_el < _g_dur
+	if moving:
+		_g_el = minf(_g_el + delta, _g_dur)
+		# a cubic from (p0, v0) to (_t, at rest): eases in from a standstill, carries on from a slide
+		var d := _g_dur
+		var u := _g_el / d
+		var p1 := float(_t)
+		var u2 := u * u
+		var u3 := u2 * u
+		_gs = (2.0 * u3 - 3.0 * u2 + 1.0) * _g_p0 + (u3 - 2.0 * u2 + u) * d * _g_v0 + (3.0 * u2 - 2.0 * u3) * p1
+		_gv = ((6.0 * u2 - 6.0 * u) * _g_p0 + (3.0 * u2 - 4.0 * u + 1.0) * d * _g_v0 + (6.0 * u - 6.0 * u2) * p1) / d
+		# nearly there: a wheel still turning (or a long swipe) may take the next step
+		if u > 0.85:
+			_gesture_used = false
+	else:
+		_gs = float(_t)
+		_gv = 0.0
+		if not _g_settled:
+			_g_settled = true
+			_drift_w = 0.0
+			_arrive()
+			_gesture_used = false
+	_tick_drift(delta, moving)
+	_state = _gallery_state(_gs)
+	_fov = float(_state["fov"])
+	_fov_goal = _fov
+
+
+## The camera at position s along the gallery: the two exhibit shots either side, blended.
+func _gallery_state(s: float) -> Dictionary:
+	var n := exhibits.size()
+	var i0 := clampi(int(floor(s)), 1, maxi(n, 1))
+	var i1 := mini(i0 + 1, maxi(n, 1))
+	var f := clampf(s - float(i0), 0.0, 1.0)
+	var a := _tour_pose(i0)
+	if i1 == i0 or f <= 0.0:
+		return a
+	var b := _tour_pose(i1)
+	return {
+		"pos": (a["pos"] as Vector3).lerp(b["pos"] as Vector3, f),
+		"yaw": lerpf(float(a["yaw"]), float(b["yaw"]), f),
+		"pitch": lerpf(float(a["pitch"]), float(b["pitch"]), f),
+		"fov": lerpf(float(a["fov"]), float(b["fov"]), f),
+	}
+
+
+## The dip to black on a long jump: fade out, cut (along the wall: to just short of the exhibit, still
+## sliding in; a timed flight: most of the way along it), fade back in.
+func _tick_dip(delta: float) -> void:
+	if _dip_phase == 1:
+		_dip = minf(1.0, _dip + delta / DIP_OUT)
+		if _dip >= 1.0:
+			if mode == Mode.GALLERY:
+				var gap := float(_t) - _gs
+				if absf(gap) > 0.6:
+					_gs = float(_t) - signf(gap) * 0.6
+					_gv = signf(gap) * 1.2
+					_slide(_gs, _gv, GLIDE_STEP_S * (0.5 if _reduced else 1.0))
+			elif mode == Mode.TRANS:
+				_tr_t = maxf(_tr_t, _tr_dur * 0.72)
+			_dip_phase = 2
+	elif _dip_phase == 2:
+		_dip = maxf(0.0, _dip - delta / DIP_IN)
+		if _dip <= 0.0:
+			_dip_phase = 0
+	_fade.visible = _dip > 0.0
+	_fade.color = Color(0, 0, 0, _dip * _dip * (3.0 - 2.0 * _dip))
 
 
 func _player_state() -> Dictionary:
@@ -605,7 +770,7 @@ func _player_state() -> Dictionary:
 ## exactly what is on screen.
 func _shown_state() -> Dictionary:
 	var st := _state.duplicate()
-	if mode == Mode.PLAY:
+	if mode != Mode.TRANS:
 		st["pos"] = (st["pos"] as Vector3) + (_drift["pos"] as Vector3)
 		st["yaw"] = float(st["yaw"]) + float(_drift["yaw"])
 		st["pitch"] = float(st["pitch"]) + float(_drift["pitch"])
@@ -620,43 +785,46 @@ func _tour_pose(t: int) -> Dictionary:
 		return Layout.stage_pose(a)
 	if t > n:
 		return Layout.end_pose(a)
-	var to := Layout.walk_pose(t, a, n)
-	return _framed(to)
+	# square on to the wall, fitted into what the page's panels leave clear
+	return Layout.gallery_pose(t - 1, a, _frame_side, _frame_bottom)
 
 
-## An exhibit pose turned right (desktop panel) or pitched up (phone sheet) so the art sits in the middle
-## of the part of the view the page leaves clear.
-func _framed(pose: Dictionary) -> Dictionary:
-	var fov := float(pose.get("fov", _fov))
-	var tan_v := tan(deg_to_rad(fov) * 0.5)
-	pose["yaw"] = float(pose["yaw"]) - rad_to_deg(atan(_frame_side * tan_v * _aspect()))
-	if _aspect() < 0.9:
-		pose["pitch"] = float(pose["pitch"]) - rad_to_deg(atan(_frame_bottom * tan_v))
-	return pose
-
-
-## Fly to tour position t (0 stage, 1..n exhibits, n+1 the end at the marquee). play: keep the tour
-## running from there; otherwise pause there.
-func _go(t: int, play: bool) -> void:
+## Go to tour position t (0 stage, 1..n exhibits, n+1 the end at the marquee). play: keep the tour
+## running from there; otherwise pause there. auto: the tour's own move (slower along the wall).
+## Between exhibits on the wall it slides (_glide_to); anything else is a timed move (_begin_trans).
+func _go(t: int, play: bool, auto: bool = false) -> void:
 	var n := exhibits.size()
-	var from_stage := _t == 0 and t == 1
+	t = clampi(t, 0, n + 1)
 	_tr_from_t = _t
-	_t = clampi(t, 0, n + 1)
-	var to := _tour_pose(_t)
-	var from := _shown_state()
-	var dist := (from["pos"] as Vector3).distance_to(to["pos"] as Vector3)
-	# unhurried: a wall-to-wall swing between neighbours takes about 3.2 s, a long flight up to 3.8 s
-	var dur := PULL_SECONDS if from_stage else clampf(2.1 + dist / 6.5, 2.6, 3.8)
-	if _reduced:
-		dur = minf(dur * 0.4, 1.2)
-	_begin_trans(from, to, dur, from_stage)
 	_playing = play
 	_depart_bar = -1.0
 	_set_tour("touring" if play else "paused")
-	var code := Player.FOCUS_STAGE if _t == 0 else (Player.FOCUS_NONE if _t > n else _t - 1)
-	_emit_focus(code, true)
 	if bridge != null:
 		bridge.onWalk(false)
+	if mode == Mode.GALLERY and t >= 1 and t <= n:
+		_glide_to(t, auto)
+		_emit_focus(t - 1, true)
+		return
+	var stage_move := (_t == 0) != (t == 0)
+	_t = t
+	var to := _tour_pose(_t)
+	if _free and _t >= 1 and _t <= n:
+		# free roam walks on from here: land at eye height, looking up at the pictures
+		var p: Vector3 = to["pos"]
+		var up := Layout.ART_CY - Layout.EYE_H
+		to["pitch"] = rad_to_deg(atan2(up, absf(Layout.SIDE * Layout.WALL_X - p.x)))
+		p.y = Layout.EYE_H
+		to["pos"] = p
+	var from := _shown_state()
+	var dist := (from["pos"] as Vector3).distance_to(to["pos"] as Vector3)
+	var dur := PULL_SECONDS if stage_move else clampf(1.8 + dist / 8.0, 2.2, 3.4)
+	if _reduced:
+		dur = minf(dur * 0.4, 1.2)
+	_begin_trans(from, to, dur, stage_move)
+	if dist > DIP_DIST and _dip_phase == 0:
+		_dip_phase = 1
+	var code := Player.FOCUS_STAGE if _t == 0 else (Player.FOCUS_NONE if _t > n else _t - 1)
+	_emit_focus(code, true)
 
 
 ## A move is done: hold. A playing tour sets its next departure to a bar line about HOLD_BARS on;
@@ -698,10 +866,15 @@ func _track_bars() -> void:
 	_bar_last = b
 
 
+## Holding: at rest on the stage hold, an exhibit or the end (not on the way to one).
+func _holding() -> bool:
+	return mode == Mode.PLAY or (mode == Mode.GALLERY and _g_settled)
+
+
 func _tick_tour() -> void:
-	if mode == Mode.PLAY and _playing and _depart_bar >= 0.0 and _bar_abs >= _depart_bar:
+	if _holding() and _playing and _depart_bar >= 0.0 and _bar_abs >= _depart_bar:
 		_depart_bar = -1.0
-		_go(_t + 1, true)
+		_go(_t + 1, true, true)
 
 
 func _command(c: String) -> void:
@@ -745,7 +918,7 @@ func _command(c: String) -> void:
 		if _tour == "paused" and _t > 0 and _t <= n:
 			_playing = true
 			_set_tour("touring")
-			if mode == Mode.PLAY:
+			if _holding():
 				_depart_bar = ceilf(_bar_abs + 1.5)
 		elif _tour != "touring":
 			# at the stage or the end (or paused there): start the tour over
@@ -1084,22 +1257,24 @@ func _release_lock() -> void:
 	_look_pending = Vector2.ZERO
 
 
-## Frame the art around the page's right-hand details panel: while an exhibit is held (touring or
-## paused at it) and the panel covers `_right_inset_css`, turn the view a little to the right so the
-## art sits in the middle of the uncovered part. Eased, so the panel opening or closing does not jump.
+## Follow the page's panels: the share of the view they will cover at an exhibit (framing()) eases
+## toward what the page says, so closing or reopening the details panel slides the shot over rather
+## than jumping. The exhibit shots read these every frame (_tour_pose).
 func _tick_panel(delta: float) -> void:
-	# the desktop panel's framing is in the exhibit poses; nothing turns when it opens or closes
-	_panel_yaw = lerpf(_panel_yaw, 0.0, 1.0 - exp(-delta * PANEL_EASE))
+	var k := 1.0 - exp(-delta * PANEL_EASE)
+	_frame_side = lerpf(_frame_side, _frame_side_goal, k)
+	_frame_bottom = lerpf(_frame_bottom, _frame_bottom_goal, k)
 
 
 ## Phones: the bottom sheet covers part of the screen, so while an exhibit is held pitch up (eased)
 ## so the art sits in the clear part above it. Follows the sheet as its height changes (it opens,
-## grows and shrinks), not just at the moment of arrival.
+## grows and shrinks), not just at the moment of arrival. Only where the page has a bottom sheet
+## (it says so with a bottom share in framing()).
 func _tick_sheet(delta: float) -> void:
 	var goal := 0.0
 	var holding := _t >= 1 and _t <= exhibits.size() and (_tour == "touring" or _tour == "paused")
-	if holding and _aspect() < 0.9 and _inset_css > 0.0:
-		# the folded sheet is already in the pose (_framed); pitch up only for what is unfolded beyond it
+	if holding and _frame_bottom_goal > 0.0 and _inset_css > 0.0:
+		# the folded sheet is already in the shot (gallery_pose); pitch for what is unfolded beyond it
 		var vs := get_viewport().get_visible_rect().size
 		var cover := clampf(_inset_css / maxf(vs.y * _css_per_unit(), 1.0), 0.0, 0.5)
 		if cover > _frame_bottom:
@@ -1138,20 +1313,18 @@ func _tick_look(delta: float) -> void:
 			_state = _player_state()
 
 
-## A tap or click: if it lands on an exhibit's wall, auto-walk to that bay.
+## A tap or click: if it lands on the gallery wall, go to the exhibit there.
 func _tap(p: Vector2) -> void:
 	var o := cam.project_ray_origin(p)
 	var d := cam.project_ray_normal(p)
-	for side: float in [-1.0, 1.0]:
-		if absf(d.x) < 0.001:
-			continue
-		var t := (side * Layout.WALL_X - o.x) / d.x
-		if t <= 0.0:
-			continue
-		var hit := o + d * t
-		if hit.y < 0.0 or hit.y > 7.0:
-			continue
-		for b in exhibits.size():
-			if Layout.bay_side(b) == side and absf(hit.z - Layout.bay_z(b)) < 6.0:
-				_go(b + 1, false)
-				return
+	if absf(d.x) < 0.001:
+		return
+	var t := (Layout.SIDE * Layout.WALL_X - o.x) / d.x
+	if t <= 0.0:
+		return
+	var hit := o + d * t
+	if hit.y < 0.0 or hit.y > 7.0:
+		return
+	var b := Layout.bay_at(hit.z)
+	if b >= 0 and b < exhibits.size():
+		_go(b + 1, false)

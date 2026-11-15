@@ -7,7 +7,7 @@ import { ACCENT, Tags } from "../homepage/Tags";
 import { useReducedMotion } from "../../hooks/useReducedMotion";
 import { PROJECT_DETAILS, type DetailLink, type ProjectDetail } from "./projectDetails";
 
-/* A beat before the panel opens, so it doesn't flash while the camera flies past an exhibit. */
+/* A beat before the panel first opens on the way into the gallery, so it doesn't land before the camera does. */
 const OPEN_DELAY_MS = 400;
 /* The desktop panel's width and its gap to the viewport's right edge, in CSS px. */
 export const PANEL_WIDTH = 380;
@@ -22,6 +22,9 @@ interface Props {
   exhibitId: string | null;
   /** "side": a right-hand panel on wide screens. "sheet": a bottom sheet in the overlay's flow, on phones. */
   mode: "side" | "sheet";
+  /** The visitor closed the panel (x or Esc); it stays closed from exhibit to exhibit until they reopen it. */
+  closed: boolean;
+  onClose: () => void;
   /** A link was chosen; the overlay asks "Leave the game?" before opening it. */
   onOpenLink: (title: string, href: string) => void;
   /** Filled with a function returning the CSS px the open side panel covers at the right, else 0. */
@@ -113,37 +116,44 @@ function Body({ detail, onOpenLink, compact }: { detail: ProjectDetail; onOpenLi
 
 /**
  * The homepage's copy for the project the camera is at. Opens by itself a moment after the camera
- * arrives, slides away when it moves on, never pauses the tour, and is not a dialog: no focus trap.
- * Closing it with the x or Esc keeps it shut until the camera goes to another exhibit.
+ * first reaches an exhibit, then stays where it is while the camera moves along the wall: only its
+ * contents change, with a quick crossfade. It never pauses the tour and is not a dialog: no focus trap.
+ * Closing it with the x or Esc keeps it shut, exhibit after exhibit, until the visitor reopens it.
  * On phones it opens as a slim bar (title and tagline) that a tap or a swipe up unfolds.
  */
-export function MuseumDetails({ exhibitId, mode, onOpenLink, rightInsetRef, suspended }: Props) {
+export function MuseumDetails({ exhibitId, mode, closed, onClose, onOpenLink, rightInsetRef, suspended }: Props) {
   const reduced = useReducedMotion();
-  /* The exhibit the delay has elapsed for. The panel is open while this is the exhibit in view. */
-  const [armed, setArmed] = useState<string | null>(null);
+  /* Set a beat after the camera first reaches an exhibit, and kept until it leaves the gallery
+     (the stage, the entrance, walking off), so the panel stays up from one exhibit to the next. */
+  const [arrived, setArrived] = useState<string | null>(null);
   const panelRef = useRef<HTMLElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
   /* Phones: the sheet starts as a slim bar and unfolds on a tap or a swipe up. Each exhibit starts folded. */
   const [expanded, setExpanded] = useState(false);
   const detail = exhibitId ? PROJECT_DETAILS[exhibitId] : undefined;
-  const open = !!exhibitId && !!detail && armed === exhibitId && !suspended;
+  const inGallery = !!exhibitId;
+  const open = inGallery && !!detail && arrived !== null && !closed && !suspended;
 
   useEffect(() => {
-    if (!exhibitId) return;
-    const t = window.setTimeout(() => setArmed(exhibitId), OPEN_DELAY_MS);
-    return () => {
-      window.clearTimeout(t);
-      /* Moving on shuts the panel and clears a close, so the next arrival opens it. */
-      setArmed(null);
-      setExpanded(false);
-    };
+    if (!exhibitId || arrived) return;
+    const t = window.setTimeout(() => setArrived(exhibitId), OPEN_DELAY_MS);
+    return () => window.clearTimeout(t);
+  }, [exhibitId, arrived]);
+  useEffect(() => {
+    if (!inGallery) return;
+    /* Left the gallery: the next arrival waits its beat again. */
+    return () => setArrived(null);
+  }, [inGallery]);
+  useEffect(() => {
+    /* Each exhibit starts folded on phones. */
+    return () => setExpanded(false);
   }, [exhibitId]);
 
   const close = useCallback(() => {
     /* Hand the keys back to the game rather than dropping focus on the page. */
     if (panelRef.current?.contains(document.activeElement)) document.getElementById("museum-canvas")?.focus({ preventScroll: true });
-    setArmed(null);
-  }, []);
+    onClose();
+  }, [onClose]);
 
   useEffect(() => {
     if (!open) return;
@@ -232,13 +242,15 @@ export function MuseumDetails({ exhibitId, mode, onOpenLink, rightInsetRef, susp
   const shown = { opacity: 1, x: 0, y: 0 };
   const transition = reduced ? { duration: 0 } : { duration: 0.28, ease: [0.25, 0.1, 0.25, 1] as const };
   const unfold = reduced ? { duration: 0 } : { duration: 0.24, ease: [0.25, 0.1, 0.25, 1] as const };
+  /* From one exhibit to the next the panel stays put and its contents swap: out, then in. */
+  const swap = { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 }, transition: reduced ? { duration: 0 } : { duration: 0.14, ease: "easeOut" as const } };
   const peek = detail ? (detail.tagline ?? detail.kicker ?? "") : "";
 
   return (
     <AnimatePresence>
       {open && detail && !side && (
         <motion.aside
-          key={exhibitId}
+          key="sheet"
           ref={panelRef}
           role="complementary"
           aria-label={`${detail.title}: project details`}
@@ -259,21 +271,25 @@ export function MuseumDetails({ exhibitId, mode, onOpenLink, rightInsetRef, susp
             }}
           >
             <div className="flex min-w-0 flex-1 cursor-pointer flex-col justify-center pl-4 pr-1" onClick={toggle}>
-              <h2 className="truncate text-base font-bold leading-tight text-white">
-                <button
-                  type="button"
-                  aria-expanded={expanded}
-                  aria-controls="museum-sheet-body"
-                  className="max-w-full truncate text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggle();
-                  }}
-                >
-                  {detail.title}
-                </button>
-              </h2>
-              {peek && <p className="mt-0.5 truncate text-xs text-gray-400">{peek}</p>}
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.div key={exhibitId} className="min-w-0" {...swap}>
+                  <h2 className="truncate text-base font-bold leading-tight text-white">
+                    <button
+                      type="button"
+                      aria-expanded={expanded}
+                      aria-controls="museum-sheet-body"
+                      className="max-w-full truncate text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggle();
+                      }}
+                    >
+                      {detail.title}
+                    </button>
+                  </h2>
+                  {peek && <p className="mt-0.5 truncate text-xs text-gray-400">{peek}</p>}
+                </motion.div>
+              </AnimatePresence>
             </div>
             <button
               type="button"
@@ -301,6 +317,7 @@ export function MuseumDetails({ exhibitId, mode, onOpenLink, rightInsetRef, susp
             className="overflow-hidden border-t border-white/10"
           >
             <div
+              key={exhibitId}
               ref={scrollerRef}
               className="overflow-y-auto overscroll-contain px-4 pb-3 pt-2"
               style={{ maxHeight: `calc(40svh - ${BAR_HEIGHT}px - 2px)`, overscrollBehavior: "contain", touchAction: "pan-y" }}
@@ -312,7 +329,7 @@ export function MuseumDetails({ exhibitId, mode, onOpenLink, rightInsetRef, susp
       )}
       {open && detail && side && (
         <motion.aside
-          key={exhibitId}
+          key="side"
           ref={panelRef}
           role="complementary"
           aria-label={`${detail.title}: project details`}
@@ -323,20 +340,24 @@ export function MuseumDetails({ exhibitId, mode, onOpenLink, rightInsetRef, susp
           className="pointer-events-auto absolute top-4 bottom-[5.5rem] flex flex-col border border-white/15 bg-black/80 text-gray-200 backdrop-blur-md"
           style={{ width: PANEL_WIDTH, maxWidth: `calc(100% - ${PANEL_MARGIN * 2}px)`, right: `max(${PANEL_MARGIN}px, env(safe-area-inset-right))` }}
         >
-          <div className="flex shrink-0 items-start justify-between gap-2 border-b border-white/10 py-2 pl-4 pr-1">
-            <h2 className="py-1.5 text-lg font-bold leading-tight text-white">{detail.title}</h2>
-            <button
-              type="button"
-              onClick={close}
-              aria-label="Close project details"
-              className="flex h-11 w-11 shrink-0 items-center justify-center text-gray-300 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-white"
-            >
-              <X className="h-5 w-5" aria-hidden="true" />
-            </button>
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4 pt-3">
-            <Body detail={detail} onOpenLink={onOpenLink} />
-          </div>
+          <button
+            type="button"
+            onClick={close}
+            aria-label="Close project details"
+            className="absolute right-1 top-2 z-10 flex h-11 w-11 items-center justify-center text-gray-300 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-white"
+          >
+            <X className="h-5 w-5" aria-hidden="true" />
+          </button>
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div key={exhibitId} className="flex min-h-0 flex-1 flex-col" {...swap}>
+              <div className="shrink-0 border-b border-white/10 py-2 pl-4 pr-12">
+                <h2 className="py-1.5 text-lg font-bold leading-tight text-white">{detail.title}</h2>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4 pt-3">
+                <Body detail={detail} onOpenLink={onOpenLink} />
+              </div>
+            </motion.div>
+          </AnimatePresence>
         </motion.aside>
       )}
     </AnimatePresence>

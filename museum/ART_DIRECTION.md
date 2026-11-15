@@ -1,7 +1,8 @@
 # Museum after hours: art direction
 
 The homepage of benadams.dev is a walk down one grand museum hall. Ben's
-projects hang in bays along both walls, and the hall ends at a festival main
+projects hang along one long gallery wall, each arranged to suit its own
+pictures, with a colonnade opposite, and the hall ends at a festival main
 stage. A house track at 128 BPM runs the whole building's lighting.
 
 The bar: it should read as a finished, current game, like a polished indie
@@ -39,7 +40,10 @@ room is mostly dark and lit in pools.
 - **Post**: a filmic tonemap (AgX, or ACES if AgX isn't in compatibility), glow
   on emissives with a soft wide halo, slight vignette, and gentle contrast. It
   should look exposed for the highlights, the way a phone camera shoots a show.
-- **Motion**: the camera glides with eased moves. The lights do the dancing.
+- **Motion**: the camera glides with eased moves, and between projects it only
+  slides along the wall, square on, never turning. The lights do the dancing.
+- **Content first**: at a project the pictures fill the part of the screen the
+  page's panels leave clear, and no beam crosses them.
 
 ## Constraints
 

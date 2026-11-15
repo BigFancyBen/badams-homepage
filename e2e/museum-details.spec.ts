@@ -63,7 +63,7 @@ test.describe('museum project details (stub engine)', () => {
     await expect(p.getByRole('heading', { name: 'Middle Fork Rafting Simulator', level: 2 })).toBeVisible();
     await unfold(page);
     await expect(p).toContainText('A co-op rafting game where everyone paddles the same raft.');
-    await expect(p).toContainText("A multiplayer rafting game I'm making in Godot.");
+    await expect(p).toContainText('Otters in oversized helmets paddle one raft down a generated Idaho canyon');
     await expect(p).toContainText('Join by code.');
     await expect(p).toContainText('Host-authoritative netcode');
     await expect(p.getByRole('link', { name: /Game page/ })).toHaveAttribute('target', '_blank');
@@ -111,7 +111,7 @@ test.describe('museum project details (stub engine)', () => {
     await expect(panel(page).getByRole('link')).toHaveCount(1);
   });
 
-  test('when focus leaves for the stage, the entrance or another exhibit, the panel goes', async ({ page }) => {
+  test('when focus leaves for the stage or the entrance the panel goes; from exhibit to exhibit it stays and its contents swap', async ({ page }) => {
     await enterStub(page);
     await tour(page, 'touring');
     await focus(page, 'oathkeep');
@@ -124,9 +124,12 @@ test.describe('museum project details (stub engine)', () => {
     await expect(panel(page)).toHaveCount(0);
     await focus(page, 'floatwise');
     await expect(panel(page).getByRole('heading', { name: 'FloatWise' })).toBeVisible();
+    /* The same panel, not a new one sliding in: the element stays and only its contents change. */
+    const el = await panel(page).elementHandle();
     await focus(page, 'dota-randomizer');
     await expect(panel(page).getByRole('heading', { name: 'Dota 2 Randomizer' })).toBeVisible();
     await expect(panel(page)).toHaveCount(1);
+    expect(await el!.evaluate((node) => node.isConnected)).toBe(true);
   });
 
   test('the stage and the entrance show no panel', async ({ page }) => {
@@ -146,24 +149,37 @@ test.describe('museum project details (stub engine)', () => {
     expect(await rightInset(page)).toBe(0);
   });
 
-  test('the x closes it until focus changes; paused and end states open it too', async ({ page }) => {
+  test('the x closes it until the details button reopens it; the art is framed for what is showing', async ({ page }, info) => {
     await enterStub(page);
     await tour(page, 'paused');
     await focus(page, 'mfrs');
     await expect(panel(page)).toBeVisible();
+    const framing = () => page.evaluate(() => window.museumBridge!.framing().split(',').map(Number));
+    const phone = info.project.name !== 'chromium';
+    const [side0, bottom0] = await framing();
+    if (phone) expect(side0).toBe(0);
+    else expect(side0).toBeGreaterThanOrEqual(380);
     await panel(page).getByRole('button', { name: 'Close project details' }).click();
     await expect(panel(page)).toHaveCount(0);
-    await page.waitForTimeout(900);
-    await expect(panel(page)).toHaveCount(0);
-    /* Tour state changes do not reopen it. */
+    /* Closed, the art gets the room: no side panel, and on phones no sheet under it. */
+    const [side1, bottom1] = await framing();
+    expect(side1).toBe(0);
+    if (phone) expect(bottom1).toBeLessThan(bottom0);
+    /* Tour state changes do not reopen it, and nor do other exhibits. */
     await tour(page, 'touring');
     await page.waitForTimeout(600);
     await expect(panel(page)).toHaveCount(0);
-    /* Another exhibit does, and coming back to the first opens it again. */
     await focus(page, 'oathkeep');
+    await page.waitForTimeout(900);
+    await expect(panel(page)).toHaveCount(0);
+    /* The details button does. */
+    const details = page.getByRole('button', { name: 'Project details', exact: true });
+    await expect(details).toHaveAttribute('aria-pressed', 'false');
+    await details.click();
+    await expect(details).toHaveAttribute('aria-pressed', 'true');
     await expect(panel(page).getByRole('heading', { name: 'Oathkeep' })).toBeVisible();
-    await focus(page, 'mfrs');
-    await expect(panel(page).getByRole('heading', { name: 'Middle Fork Rafting Simulator' })).toBeVisible();
+    expect((await framing()).slice(0, 2)).toEqual([side0, bottom0]);
+    /* Paused and end states show it too. */
     await tour(page, 'end');
     await focus(page, 'resume');
     await expect(panel(page).getByRole('heading', { name: 'Résumé' })).toBeVisible();
